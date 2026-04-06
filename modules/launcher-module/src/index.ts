@@ -58,6 +58,16 @@ export interface NetworkInfo {
   isVpn: boolean;
 }
 
+export interface CallLogEntry {
+  id: string;
+  number: string;
+  name: string;
+  type: 'incoming' | 'outgoing' | 'missed' | 'rejected' | 'unknown';
+  date: number;
+  dateFormatted: string;
+  duration: number;
+}
+
 export interface DeviceNotification {
   id: string;
   packageName: string;
@@ -89,6 +99,12 @@ interface LauncherModuleType {
   openSystemSettings(panel: string): Promise<boolean>;
   // Network
   getNetworkInfo(): Promise<NetworkInfo>;
+  // Flashlight
+  setFlashlight(enabled: boolean): Promise<boolean>;
+  isFlashlightOn(): Promise<boolean>;
+  // Call Log
+  getCallLog(limit: number): Promise<CallLogEntry[]>;
+  makeCall(number: string): Promise<boolean>;
   // Notifications
   getNotifications(): Promise<DeviceNotification[]>;
   isNotificationAccessGranted(): Promise<boolean>;
@@ -112,6 +128,10 @@ const stub: LauncherModuleType = {
   getRecentMessages: async () => [],
   openSystemSettings: async () => false,
   getNetworkInfo: async () => ({ isConnected: false, isWifi: false, isCellular: false, isVpn: false }),
+  setFlashlight: async () => false,
+  isFlashlightOn: async () => false,
+  getCallLog: async () => [],
+  makeCall: async () => false,
   getNotifications: async () => [],
   isNotificationAccessGranted: async () => false,
   openNotificationAccessSettings: async () => false,

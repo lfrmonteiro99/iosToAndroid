@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,14 @@ import {
   StatusBar,
   Dimensions,
 } from 'react-native';
+
+const getLauncher = async () => {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -81,14 +89,20 @@ function ToggleButton({
 interface ShortcutButtonProps {
   iconName: keyof typeof Ionicons.glyphMap;
   label: string;
+  active?: boolean;
   onPress: () => void;
 }
 
-function ShortcutButton({ iconName, label, onPress }: ShortcutButtonProps) {
+function ShortcutButton({ iconName, label, active = false, onPress }: ShortcutButtonProps) {
   return (
     <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={label}>
-      <View style={styles.shortcutCircle}>
-        <Ionicons name={iconName} size={22} color="#ffffff" />
+      <View
+        style={[
+          styles.shortcutCircle,
+          active ? { backgroundColor: '#FFFFFF' } : null,
+        ]}
+      >
+        <Ionicons name={iconName} size={22} color={active ? '#000000' : '#ffffff'} />
       </View>
       <Text style={styles.shortcutLabel}>{label}</Text>
     </Pressable>
@@ -108,6 +122,54 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
 
   const [volume, setVolume] = useState(0.5);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [flashlightOn, setFlashlightOn] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const mod = await getLauncher();
+      if (mod) {
+        try {
+          const state = await mod.isFlashlightOn();
+          setFlashlightOn(!!state);
+        } catch {
+          // ignore
+        }
+      }
+    })();
+  }, []);
+
+  const toggleFlashlight = async () => {
+    const mod = await getLauncher();
+    if (mod) {
+      const newState = !flashlightOn;
+      try {
+        const success = await mod.setFlashlight(newState);
+        if (success) setFlashlightOn(newState);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const launchCalculator = async () => {
+    const mod = await getLauncher();
+    if (mod) {
+      const launched =
+        (await mod.launchApp('com.google.android.calculator').catch(() => false)) ||
+        (await mod.launchApp('com.android.calculator2').catch(() => false));
+      if (!launched) Alert.alert('Calculator not found');
+    }
+  };
+
+  const launchCamera = async () => {
+    const mod = await getLauncher();
+    if (mod) {
+      const launched =
+        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
+        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
+      if (!launched) Alert.alert('Camera not found');
+    }
+  };
 
   // Swipe-down gesture to close
   const translateY = useSharedValue(0);
@@ -323,22 +385,23 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               <ShortcutButton
                 iconName="flashlight"
                 label="Torch"
-                onPress={() => Alert.alert('Torch', 'Not available in demo.')}
+                active={flashlightOn}
+                onPress={toggleFlashlight}
               />
               <ShortcutButton
-                iconName="timer-outline"
-                label="Timer"
-                onPress={() => Alert.alert('Timer', 'Not available in demo.')}
+                iconName="radio-button-on"
+                label="Screen Rec"
+                onPress={() => Alert.alert('Screen Recording', 'Screen recording requires system permission.')}
               />
               <ShortcutButton
                 iconName="calculator-outline"
                 label="Calculator"
-                onPress={() => device.openSystemPanel('calculator')}
+                onPress={launchCalculator}
               />
               <ShortcutButton
                 iconName="camera-outline"
                 label="Camera"
-                onPress={() => Alert.alert('Camera', 'Not available in demo.')}
+                onPress={launchCamera}
               />
             </View>
           </View>
