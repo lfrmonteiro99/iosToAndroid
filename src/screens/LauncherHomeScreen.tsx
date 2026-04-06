@@ -525,7 +525,7 @@ export function LauncherHomeScreen() {
           runOnJS(navigateTo)('ControlCenter');
         }
       } else if (translationY > 60 && velocityY > 200 && absoluteY >= 350) {
-        runOnJS(navigateToWithParams)('AppLibrary', { searchFocused: true });
+        runOnJS(navigateTo)('SpotlightSearch');
       }
     });
 
@@ -1002,7 +1002,7 @@ export function LauncherHomeScreen() {
       <PageDots total={totalPages} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
-        onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppLibrary')}
+        onPress={isJiggling ? exitJiggle : () => navigation.navigate('SpotlightSearch')}
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
