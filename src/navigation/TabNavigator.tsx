@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
 import { AppDrawerScreen } from '../screens/AppDrawerScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { MessagesScreen } from '../screens/MessagesScreen';
+import { ConversationScreen } from '../screens/ConversationScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { ContactDetailScreen } from '../screens/contacts/ContactDetailScreen';
 import { ContactEditScreen } from '../screens/contacts/ContactEditScreen';
@@ -36,6 +38,7 @@ import { CupertinoTabBar } from '../components';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
+const MessagesStack = createNativeStackNavigator();
 const ContactsStack = createNativeStackNavigator();
 const SettingsStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
@@ -47,6 +50,15 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AppDrawer" component={AppDrawerScreen} />
       <HomeStack.Screen name="Dashboard" component={HomeScreen} />
     </HomeStack.Navigator>
+  );
+}
+
+function MessagesStackScreen() {
+  return (
+    <MessagesStack.Navigator screenOptions={{ headerShown: false }}>
+      <MessagesStack.Screen name="MessagesMain" component={MessagesScreen} />
+      <MessagesStack.Screen name="Conversation" component={ConversationScreen} />
+    </MessagesStack.Navigator>
   );
 }
 
@@ -106,6 +118,7 @@ export function TabNavigator() {
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
+      <Tab.Screen name="Messages" component={MessagesStackScreen} />
       <Tab.Screen name="Contacts" component={ContactsStackScreen} />
       <Tab.Screen name="Settings" component={SettingsStackScreen} />
       <Tab.Screen name="Profile" component={ProfileStackScreen} />

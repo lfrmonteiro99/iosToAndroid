@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 
 const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Home: { active: 'home', inactive: 'home-outline' },
+  Messages: { active: 'chatbubble', inactive: 'chatbubble-outline' },
   Contacts: { active: 'people', inactive: 'people-outline' },
   Settings: { active: 'settings', inactive: 'settings-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },

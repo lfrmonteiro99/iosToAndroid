@@ -1,16 +1,17 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, SectionList, StyleSheet, Pressable, RefreshControl, Linking } from 'react-native';
+import { View, Text, Image, SectionList, StyleSheet, Pressable, RefreshControl, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
-import { useContacts, Contact } from '../store/ContactsStore';
-import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoSwipeableRow, CupertinoActionSheet } from '../components';
+import { useContacts } from '../store/ContactsStore';
+import { useDevice, DeviceContact } from '../store/DeviceStore';
+import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton } from '../components';
 
-function groupByLetter(contacts: Contact[]) {
-  const groups: Record<string, Contact[]> = {};
+function groupByLetter(contacts: DeviceContact[]) {
+  const groups: Record<string, DeviceContact[]> = {};
   for (const contact of contacts) {
-    const letter = contact.lastName[0].toUpperCase();
+    const letter = (contact.lastName[0] || contact.firstName[0] || '#').toUpperCase();
     if (!groups[letter]) groups[letter] = [];
     groups[letter].push(contact);
   }
@@ -28,64 +29,57 @@ const ContactRow = React.memo(function ContactRow({
   typography,
   isLast,
   onPress,
-  onDelete,
   onLongPress,
 }: {
-  contact: Contact;
+  contact: DeviceContact;
   colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   isLast: boolean;
   onPress: () => void;
-  onDelete: () => void;
   onLongPress: () => void;
 }) {
   return (
-    <CupertinoSwipeableRow
-      trailingActions={[
-        { label: 'Delete', color: '#FF3B30', onPress: onDelete },
+    <Pressable
+      style={({ pressed }) => [
+        styles.row,
+        {
+          backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground,
+        },
       ]}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${contact.firstName} ${contact.lastName}`}
     >
-      <Pressable
-        style={({ pressed }) => [
-          styles.row,
-          {
-            backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground,
+      <View style={[styles.avatar, { backgroundColor: colors.systemGray4 }]}>
+        {contact.imageUri ? (
+          <Image source={{ uri: contact.imageUri }} style={styles.avatarImage} />
+        ) : (
+          <Text style={[styles.avatarText, { color: colors.label }]}>
+            {contact.firstName[0] || ''}{contact.lastName[0] || ''}
+          </Text>
+        )}
+      </View>
+      <View
+        style={[
+          styles.rowContent,
+          !isLast && {
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.separator,
           },
         ]}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        accessibilityRole="button"
-        accessibilityLabel={`${contact.firstName} ${contact.lastName}`}
       >
-        <View style={[styles.avatar, { backgroundColor: contact.isFavorite ? colors.systemBlue : colors.systemGray4 }]}>
-          <Text style={[styles.avatarText, { color: contact.isFavorite ? '#FFFFFF' : colors.label }]}>
-            {contact.firstName[0]}{contact.lastName[0]}
+        <Text style={[typography.body, { color: colors.label }]}>
+          <Text style={{ fontWeight: '400' }}>{contact.firstName} </Text>
+          <Text style={{ fontWeight: '600' }}>{contact.lastName}</Text>
+        </Text>
+        {contact.company ? (
+          <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+            {contact.company}
           </Text>
-        </View>
-        <View
-          style={[
-            styles.rowContent,
-            !isLast && {
-              borderBottomWidth: StyleSheet.hairlineWidth,
-              borderBottomColor: colors.separator,
-            },
-          ]}
-        >
-          <Text style={[typography.body, { color: colors.label }]}>
-            <Text style={{ fontWeight: '400' }}>{contact.firstName} </Text>
-            <Text style={{ fontWeight: '600' }}>{contact.lastName}</Text>
-          </Text>
-          {contact.company ? (
-            <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-              {contact.company}
-            </Text>
-          ) : null}
-        </View>
-        {contact.isFavorite && (
-          <Ionicons name="star" size={14} color={colors.systemYellow} style={{ marginRight: 12 }} />
-        )}
-      </Pressable>
-    </CupertinoSwipeableRow>
+        ) : null}
+      </View>
+    </Pressable>
   );
 });
 
@@ -94,29 +88,25 @@ export function ContactsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { contacts, favorites, deleteContact, toggleFavorite } = useContacts();
+  // Keep useContacts available for ContactDetail navigation compatibility
+  useContacts();
+  const { contacts: deviceContacts, requestContactsPermission } = useDevice();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [contextContact, setContextContact] = useState<Contact | null>(null);
+  const [contextContact, setContextContact] = useState<DeviceContact | null>(null);
 
   const filteredContacts = useMemo(() => {
-    if (!searchQuery.trim()) return contacts;
+    if (!searchQuery.trim()) return deviceContacts;
     const q = searchQuery.toLowerCase();
-    return contacts.filter(
+    return deviceContacts.filter(
       (c) =>
         c.firstName.toLowerCase().includes(q) ||
         c.lastName.toLowerCase().includes(q) ||
         c.phone.includes(q),
     );
-  }, [searchQuery, contacts]);
+  }, [searchQuery, deviceContacts]);
 
-  const sections = useMemo(() => {
-    const groups = groupByLetter(filteredContacts);
-    if (!searchQuery.trim() && favorites.length > 0) {
-      return [{ title: '★ Favorites', data: favorites }, ...groups];
-    }
-    return groups;
-  }, [filteredContacts, favorites, searchQuery]);
+  const sections = useMemo(() => groupByLetter(filteredContacts), [filteredContacts]);
 
   const sectionLetters = useMemo(() => sections.map((s) => s.title), [sections]);
 
@@ -126,18 +116,17 @@ export function ContactsScreen() {
   }, []);
 
   const renderItem = useCallback(
-    ({ item, section, index }: { item: Contact; section: { data: Contact[] }; index: number }) => (
+    ({ item, section, index }: { item: DeviceContact; section: { data: DeviceContact[] }; index: number }) => (
       <ContactRow
         contact={item}
         colors={colors}
         typography={typography}
         isLast={index === section.data.length - 1}
         onPress={() => navigation.navigate('ContactDetail', { contactId: item.id })}
-        onDelete={() => deleteContact(item.id)}
         onLongPress={() => setContextContact(item)}
       />
     ),
-    [colors, typography, navigation, deleteContact],
+    [colors, typography, navigation],
   );
 
   const renderSectionHeader = useCallback(
@@ -166,11 +155,6 @@ export function ContactsScreen() {
       <CupertinoNavigationBar
         title="Contacts"
         largeTitle={false}
-        rightButton={
-          <Pressable onPress={() => navigation.navigate('ContactEdit')}>
-            <Ionicons name="add" size={28} color={colors.systemBlue} />
-          </Pressable>
-        }
       />
 
       <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs, backgroundColor: colors.systemGroupedBackground }}>
@@ -198,6 +182,13 @@ export function ContactsScreen() {
             <Text style={[typography.body, { color: colors.secondaryLabel, marginTop: 12 }]}>
               No contacts found
             </Text>
+            <View style={{ marginTop: 16 }}>
+              <CupertinoButton
+                title="Grant Contacts Permission"
+                variant="filled"
+                onPress={requestContactsPermission}
+              />
+            </View>
           </View>
         }
       />
@@ -208,7 +199,7 @@ export function ContactsScreen() {
             key={letter}
             style={[styles.indexLetter, { color: colors.systemBlue }]}
           >
-            {letter.length === 1 ? letter : '★'}
+            {letter}
           </Text>
         ))}
       </View>
@@ -223,17 +214,12 @@ export function ContactsScreen() {
             onPress: () => Linking.openURL(`tel:${contextContact.phone}`),
           },
           {
-            label: contextContact.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-            onPress: () => toggleFavorite(contextContact.id),
-          },
-          {
             label: 'Send Message',
             onPress: () => Linking.openURL(`sms:${contextContact.phone}`),
           },
           {
-            label: 'Delete',
-            onPress: () => deleteContact(contextContact.id),
-            destructive: true,
+            label: 'Add to Favorites',
+            onPress: () => { /* future: persist to local favorites */ },
           },
         ] : []}
         cancelLabel="Cancel"
@@ -261,6 +247,11 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  avatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   rowContent: {
     flex: 1,
