@@ -129,7 +129,7 @@ const FAKE_NOTIFICATIONS: FakeNotification[] = [
 
 function NotificationCard({ item }: { item: FakeNotification }) {
   return (
-    <BlurView intensity={40} tint="dark" style={styles.notifCard}>
+    <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
       <View style={styles.notifHeader}>
         <View style={[styles.notifIconWrap, { backgroundColor: item.iconColor }]}>
           <Ionicons name={item.iconName} size={14} color="#fff" />
@@ -310,7 +310,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Flashlight', 'Not available in demo.'); }}
             accessibilityLabel="Flashlight"
           >
-            <BlurView intensity={40} tint="dark" style={styles.circleBlur}>
+            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
               <Ionicons name="flashlight" size={22} color="#fff" />
             </BlurView>
           </Pressable>
@@ -336,7 +336,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Camera', 'Not available in demo.'); }}
             accessibilityLabel="Camera"
           >
-            <BlurView intensity={40} tint="dark" style={styles.circleBlur}>
+            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
               <Ionicons name="camera" size={22} color="#fff" />
             </BlurView>
           </Pressable>

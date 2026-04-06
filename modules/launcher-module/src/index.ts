@@ -101,6 +101,7 @@ interface LauncherModuleType {
   getAppIcon(packageName: string): Promise<string>;
   isDefaultLauncher(): Promise<boolean>;
   openLauncherSettings(): Promise<boolean>;
+  uninstallApp(packageName: string): Promise<boolean>;
   // Wi-Fi
   getWifiInfo(): Promise<WifiInfo>;
   setWifiEnabled(enabled: boolean): Promise<boolean>;
@@ -145,6 +146,7 @@ const stub: LauncherModuleType = {
   getAppIcon: async () => '',
   isDefaultLauncher: async () => false,
   openLauncherSettings: async () => false,
+  uninstallApp: async () => false,
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
   getWifiNetworks: async () => [],

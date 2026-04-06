@@ -240,6 +240,7 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
       <BlurView
         intensity={80}
         tint={dark ? 'dark' : 'light'}
+        experimentalBlurMethod="dimezisBlurView"
         style={[
           styles.navBar,
           {

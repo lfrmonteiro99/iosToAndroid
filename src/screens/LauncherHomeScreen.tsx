@@ -31,6 +31,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import * as NavigationBar from 'expo-navigation-bar';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useSettings } from '../store/SettingsStore';
@@ -334,7 +335,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onRename }: {
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <Pressable style={styles.folderOverlayBackdrop} onPress={onClose}>
         <Pressable onPress={e => e.stopPropagation()}>
-          <BlurView intensity={60} tint="dark" style={styles.folderOverlayCard}>
+          <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput
                 style={styles.folderOverlayTitleInput}
@@ -462,6 +463,7 @@ export function LauncherHomeScreen() {
     isDefaultLauncher,
     openLauncherSettings,
     addToDock,
+    removeFromDock,
     removeFromHome,
   } = useApps();
   const { settings } = useSettings();
@@ -524,6 +526,16 @@ export function LauncherHomeScreen() {
         }
       } catch { /* ignore */ }
     })();
+  }, []);
+
+  // Immersive mode — hide system bars so the launcher owns the full screen
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+    }
   }, []);
 
   // Clock state
@@ -648,11 +660,14 @@ export function LauncherHomeScreen() {
     pages.push([]);
   }
 
+  // +1 for the App Library page appended at the end
+  const totalPages = pages.length + 1;
+
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     scrollX.value = offsetX;
     const page = Math.round(offsetX / SCREEN_WIDTH);
-    if (page !== currentPage && page >= 0 && page < pages.length) {
+    if (page !== currentPage && page >= 0 && page < totalPages) {
       setCurrentPage(page);
       Haptics.selectionAsync();
     }
@@ -708,42 +723,79 @@ export function LauncherHomeScreen() {
     return actions;
   };
 
+  // Helper to call native module lazily
+  const getLauncher = async () => {
+    try { return (await import('../../modules/launcher-module/src')).default; } catch { return null; }
+  };
+
   // Action sheet options for the selected app
-  const actionSheetOptions = actionSheet.app
-    ? [
-        ...getQuickActions(actionSheet.app),
-        {
-          label: 'Open',
-          onPress: () => {
-            closeActionSheet();
-            if (actionSheet.app) handleAppPress(actionSheet.app);
-          },
+  const actionSheetOptions = (() => {
+    if (!actionSheet.app) return [];
+    const app = actionSheet.app;
+    const options: Array<{ label: string; onPress: () => void; destructive?: boolean }> = [];
+
+    // Quick actions (3D Touch style)
+    options.push(...getQuickActions(app));
+
+    // Open
+    options.push({
+      label: 'Open',
+      onPress: () => { closeActionSheet(); handleAppPress(app); },
+    });
+
+    // Dock: add or remove depending on current state
+    const isInDock = dockApps.some(d => d.packageName === app.packageName);
+    if (isInDock) {
+      options.push({
+        label: 'Remove from Dock',
+        onPress: () => { closeActionSheet(); removeFromDock(app.packageName); },
+      });
+    } else {
+      options.push({
+        label: 'Add to Dock',
+        onPress: () => { closeActionSheet(); addToDock(app.packageName); },
+      });
+    }
+
+    // Move to folder
+    options.push(...buildMoveToFolderOptions(app));
+
+    // Edit home screen
+    options.push({
+      label: 'Edit Home Screen',
+      onPress: () => { closeActionSheet(); setIsJiggling(true); },
+    });
+
+    // Launcher Settings
+    options.push({
+      label: 'Launcher Settings',
+      onPress: () => { closeActionSheet(); navigation.navigate('LauncherSettings'); },
+    });
+
+    // Uninstall — only for real, non-system apps
+    const isVirtual = !!BUILT_IN_APPS[app.packageName];
+    const isSystem = app.isSystem;
+    if (!isVirtual && !isSystem) {
+      options.push({
+        label: 'Uninstall',
+        destructive: true,
+        onPress: async () => {
+          closeActionSheet();
+          const mod = await getLauncher();
+          if (mod) await mod.uninstallApp(app.packageName);
         },
-        {
-          label: 'Add to Dock',
-          onPress: () => {
-            closeActionSheet();
-            if (actionSheet.app) addToDock(actionSheet.app.packageName);
-          },
-        },
-        ...buildMoveToFolderOptions(actionSheet.app),
-        {
-          label: 'Edit Home Screen',
-          onPress: () => {
-            closeActionSheet();
-            setIsJiggling(true);
-          },
-        },
-        {
-          label: 'Remove from Home',
-          destructive: true,
-          onPress: () => {
-            closeActionSheet();
-            if (actionSheet.app) removeFromHome(actionSheet.app.packageName);
-          },
-        },
-      ]
-    : [];
+      });
+    }
+
+    // Remove from home
+    options.push({
+      label: 'Remove from Home',
+      destructive: true,
+      onPress: () => { closeActionSheet(); removeFromHome(app.packageName); },
+    });
+
+    return options;
+  })();
 
   return (
     <GestureDetector gesture={panGesture}>
@@ -895,12 +947,25 @@ export function LauncherHomeScreen() {
             </View>
           </View>
         ))}
+
+        {/* App Library page — always the last swipeable page */}
+        <Pressable
+          key="app-library"
+          style={[styles.page, styles.appLibraryPage]}
+          onPress={() => navigation.navigate('AppLibrary')}
+          accessibilityLabel="Open App Library"
+          accessibilityRole="button"
+        >
+          <Ionicons name="grid" size={52} color="rgba(255,255,255,0.7)" />
+          <Text style={styles.appLibraryText}>App Library</Text>
+          <Text style={styles.appLibrarySubtext}>Tap to open all apps</Text>
+        </Pressable>
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
       {/* Page dots + Search label (iOS 16/17 style)                         */}
       {/* ---------------------------------------------------------------- */}
-      <PageDots total={pages.length} current={currentPage} />
+      <PageDots total={totalPages} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
         onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppDrawer')}
@@ -917,6 +982,7 @@ export function LauncherHomeScreen() {
         <BlurView
           intensity={90}
           tint="dark"
+          experimentalBlurMethod="dimezisBlurView"
           style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
@@ -1243,6 +1309,26 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // App Library page
+  appLibraryPage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  appLibraryText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 22,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  appLibrarySubtext: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+    fontWeight: '400',
   },
 
   // Fallback

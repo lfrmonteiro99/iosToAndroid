@@ -91,6 +91,7 @@ export function CupertinoNavigationBar({
         <BlurView
           intensity={80}
           tint={theme.dark ? 'dark' : 'light'}
+          experimentalBlurMethod="dimezisBlurView"
           style={[
             styles.bar,
             {
@@ -142,6 +143,7 @@ export function CupertinoNavigationBar({
         <BlurView
           intensity={80}
           tint={theme.dark ? 'dark' : 'light'}
+          experimentalBlurMethod="dimezisBlurView"
           style={[
             styles.bar,
             {

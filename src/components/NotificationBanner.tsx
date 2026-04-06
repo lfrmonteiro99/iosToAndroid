@@ -113,6 +113,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         <BlurView
           intensity={95}
           tint={theme.dark ? 'dark' : 'light'}
+          experimentalBlurMethod="dimezisBlurView"
           style={styles.blur}
         >
           <View style={styles.content}>

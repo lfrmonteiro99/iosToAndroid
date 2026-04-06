@@ -48,6 +48,7 @@ import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
+import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -107,6 +108,7 @@ export function TabNavigator() {
       <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: 'slide_from_left' }} />
+      <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   );
 }

@@ -236,7 +236,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
         <Animated.View
           style={[styles.sheet, { paddingBottom: insets.bottom + 16 }, sheetStyle]}
         >
-          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={80} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
 
           {/* Drag handle */}
           <View style={styles.handle} />
@@ -286,7 +286,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
           {/* ------------------------------------------------------------ */}
           <View style={styles.section}>
             <View style={styles.musicCard}>
-              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
               <View style={styles.musicInner}>
                 <View style={styles.musicAlbumArt}>
                   <Ionicons name="musical-notes" size={28} color="rgba(255,255,255,0.4)" />
@@ -433,7 +433,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               onPress={() => Alert.alert('Screen Mirroring', 'Not available in demo.')}
               accessibilityLabel="Screen Mirroring"
             >
-              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
               <View style={styles.mirrorInner}>
                 <Ionicons name="tv-outline" size={18} color="#ffffff" />
                 <Text style={styles.mirrorLabel}>Screen Mirroring</Text>

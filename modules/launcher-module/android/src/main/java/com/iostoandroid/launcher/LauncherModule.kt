@@ -93,6 +93,15 @@ class LauncherModule : Module() {
             resolveInfo?.activityInfo?.packageName == context.packageName
         }
 
+        AsyncFunction("uninstallApp") { packageName: String ->
+            try {
+                val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
         AsyncFunction("openLauncherSettings") {
             val intent = Intent(Settings.ACTION_HOME_SETTINGS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

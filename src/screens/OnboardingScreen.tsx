@@ -117,7 +117,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         {/* ── Page 1: Welcome ──────────────────────────────────────────── */}
         <View style={[styles.page, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
           <View style={styles.iconWrap}>
-            <BlurView intensity={20} tint="light" style={styles.iconBlur}>
+            <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
               <Ionicons name="phone-portrait" size={72} color="#FFFFFF" />
             </BlurView>
           </View>
@@ -153,7 +153,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         {/* ── Page 3: Default Launcher ─────────────────────────────────── */}
         <View style={[styles.page, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
           <View style={styles.iconWrap}>
-            <BlurView intensity={20} tint="light" style={styles.iconBlur}>
+            <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
               <Ionicons name="phone-portrait-outline" size={64} color="#FFFFFF" />
               <Ionicons
                 name="square"

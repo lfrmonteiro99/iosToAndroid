@@ -518,6 +518,7 @@ export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-dis
       <BlurView
         intensity={80}
         tint={theme.dark ? 'dark' : 'light'}
+        experimentalBlurMethod="dimezisBlurView"
         style={[
           styles.navBar,
           {
