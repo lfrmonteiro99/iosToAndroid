@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
-import { View, Text, Pressable, Modal, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
@@ -59,8 +60,8 @@ export function CupertinoActionSheet({
   }));
 
   const groupBg = theme.dark
-    ? 'rgba(44, 44, 46, 0.9)'
-    : 'rgba(255, 255, 255, 0.9)';
+    ? 'rgba(44, 44, 46, 0.85)'
+    : 'rgba(255, 255, 255, 0.85)';
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -77,7 +78,9 @@ export function CupertinoActionSheet({
           ]}
         >
           {/* Options group */}
-          <View
+          <BlurView
+            intensity={60}
+            tint={theme.dark ? 'dark' : 'light'}
             style={[
               styles.group,
               { backgroundColor: groupBg, borderRadius: borderRadius.large },
@@ -119,6 +122,7 @@ export function CupertinoActionSheet({
                   },
                 ]}
                 onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   option.onPress();
                   onClose();
                 }}
@@ -138,7 +142,7 @@ export function CupertinoActionSheet({
                 </Text>
               </Pressable>
             ))}
-          </View>
+          </BlurView>
 
           {/* Cancel button */}
           <Pressable

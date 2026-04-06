@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { TabNavigator } from './src/navigation/TabNavigator';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 function AppContent() {
   const { isDark } = useTheme();
@@ -21,9 +22,11 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <NavigationContainer>
-            <AppContent />
-          </NavigationContainer>
+          <ErrorBoundary>
+            <NavigationContainer>
+              <AppContent />
+            </NavigationContainer>
+          </ErrorBoundary>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

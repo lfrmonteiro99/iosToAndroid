@@ -1,6 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 type ButtonVariant = 'filled' | 'tinted' | 'plain';
 
@@ -13,7 +22,7 @@ interface CupertinoButtonProps {
   style?: ViewStyle;
 }
 
-export function CupertinoButton({
+export const CupertinoButton = React.memo(function CupertinoButton({
   title,
   onPress,
   variant = 'filled',
@@ -26,7 +35,7 @@ export function CupertinoButton({
 
   const baseColor = destructive ? colors.systemRed : colors.systemBlue;
 
-  const getContainerStyle = (): ViewStyle => {
+  const containerStyle = useMemo((): ViewStyle => {
     switch (variant) {
       case 'filled':
         return {
@@ -37,9 +46,7 @@ export function CupertinoButton({
         };
       case 'tinted':
         return {
-          backgroundColor: destructive
-            ? 'rgba(255, 59, 48, 0.15)'
-            : 'rgba(0, 122, 255, 0.15)',
+          backgroundColor: hexToRgba(baseColor, 0.15),
           borderRadius: borderRadius.pill,
           paddingVertical: 12,
           paddingHorizontal: 20,
@@ -50,42 +57,41 @@ export function CupertinoButton({
           paddingHorizontal: 4,
         };
     }
-  };
+  }, [variant, disabled, baseColor, colors.systemGray4, borderRadius.pill]);
 
-  const getTextStyle = (): TextStyle => {
+  const textStyle = useMemo((): TextStyle => {
     switch (variant) {
       case 'filled':
         return { color: disabled ? colors.secondaryLabel : '#FFFFFF' };
       case 'tinted':
-        return { color: disabled ? colors.secondaryLabel : baseColor };
       case 'plain':
         return { color: disabled ? colors.secondaryLabel : baseColor };
     }
-  };
+  }, [variant, disabled, baseColor, colors.secondaryLabel]);
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress?.();
+      }}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.base,
-        getContainerStyle(),
+        containerStyle,
         { opacity: pressed ? 0.6 : 1 },
         style,
       ]}
     >
-      <Text
-        style={[
-          typography.headline,
-          styles.text,
-          getTextStyle(),
-        ]}
-      >
+      <Text style={[typography.headline, styles.text, textStyle]}>
         {title}
       </Text>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   base: {

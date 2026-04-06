@@ -13,7 +13,31 @@ import {
   CupertinoListTile,
   CupertinoActionSheet,
   CupertinoAlertDialog,
+  CupertinoSlider,
+  CupertinoProgressBar,
+  CupertinoActivityIndicator,
+  CupertinoPicker,
+  CupertinoSwipeableRow,
 } from '../components';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SectionHeader({ title, typography, color }: { title: string; typography: any; color: string }) {
+  return (
+    <Text
+      style={[
+        typography.footnote,
+        {
+          color,
+          textTransform: 'uppercase',
+          marginBottom: 8,
+          marginTop: 24,
+        },
+      ]}
+    >
+      {title}
+    </Text>
+  );
+}
 
 export function ComponentsGalleryScreen() {
   const { theme, typography, spacing } = useTheme();
@@ -25,22 +49,9 @@ export function ComponentsGalleryScreen() {
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
-
-  const SectionHeader = ({ title }: { title: string }) => (
-    <Text
-      style={[
-        typography.footnote,
-        {
-          color: colors.secondaryLabel,
-          textTransform: 'uppercase',
-          marginBottom: 8,
-          marginTop: 24,
-        },
-      ]}
-    >
-      {title}
-    </Text>
-  );
+  const [sliderValue, setSliderValue] = useState(0.5);
+  const [progressValue, setProgressValue] = useState(0.65);
+  const [pickerIndex, setPickerIndex] = useState(2);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -62,7 +73,7 @@ export function ComponentsGalleryScreen() {
         </View>
 
         {/* Buttons */}
-        <SectionHeader title="Buttons" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Buttons" />
         <View style={styles.buttonRow}>
           <CupertinoButton title="Filled" variant="filled" />
           <CupertinoButton title="Tinted" variant="tinted" />
@@ -74,7 +85,7 @@ export function ComponentsGalleryScreen() {
         </View>
 
         {/* Switch */}
-        <SectionHeader title="Switch" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Switch" />
         <CupertinoCard>
           <View style={styles.switchRow}>
             <Text style={[typography.body, { color: colors.label }]}>
@@ -87,8 +98,84 @@ export function ComponentsGalleryScreen() {
           </Text>
         </CupertinoCard>
 
+        {/* Slider */}
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Slider" />
+        <CupertinoCard>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 8 }]}>
+            Brightness: {Math.round(sliderValue * 100)}%
+          </Text>
+          <CupertinoSlider
+            value={sliderValue}
+            onValueChange={setSliderValue}
+          />
+        </CupertinoCard>
+
+        {/* Progress Bar */}
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Progress Bar" />
+        <CupertinoCard>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 12 }]}>
+            Download: {Math.round(progressValue * 100)}%
+          </Text>
+          <CupertinoProgressBar progress={progressValue} />
+          <View style={[styles.buttonRow, { marginTop: 12 }]}>
+            <CupertinoButton
+              title="Reset"
+              variant="tinted"
+              onPress={() => setProgressValue(0)}
+            />
+            <CupertinoButton
+              title="50%"
+              variant="tinted"
+              onPress={() => setProgressValue(0.5)}
+            />
+            <CupertinoButton
+              title="100%"
+              variant="tinted"
+              onPress={() => setProgressValue(1)}
+            />
+          </View>
+        </CupertinoCard>
+
+        {/* Activity Indicator */}
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Activity Indicator" />
+        <CupertinoCard>
+          <View style={styles.indicatorRow}>
+            <View style={styles.indicatorItem}>
+              <CupertinoActivityIndicator size="small" />
+              <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 8 }]}>
+                Small
+              </Text>
+            </View>
+            <View style={styles.indicatorItem}>
+              <CupertinoActivityIndicator size="large" />
+              <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 8 }]}>
+                Large
+              </Text>
+            </View>
+            <View style={styles.indicatorItem}>
+              <CupertinoActivityIndicator size="large" color={colors.systemBlue} />
+              <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 8 }]}>
+                Colored
+              </Text>
+            </View>
+          </View>
+        </CupertinoCard>
+
+        {/* Picker */}
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Picker" />
+        <CupertinoCard>
+          <CupertinoPicker
+            items={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']}
+            selectedIndex={pickerIndex}
+            onIndexChange={setPickerIndex}
+          />
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, textAlign: 'center', marginTop: 8 }]}>
+            Selected: {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][pickerIndex]}
+          </Text>
+        </CupertinoCard>
+
         {/* Text Field */}
-        <SectionHeader title="Text Field" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Text Field" />
         <CupertinoTextField
           placeholder="Search..."
           value={textValue}
@@ -101,7 +188,7 @@ export function ComponentsGalleryScreen() {
         />
 
         {/* Segmented Control */}
-        <SectionHeader title="Segmented Control" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Segmented Control" />
         <CupertinoSegmentedControl
           values={['First', 'Second', 'Third']}
           selectedIndex={segmentIndex}
@@ -117,7 +204,7 @@ export function ComponentsGalleryScreen() {
         </Text>
 
         {/* Cards */}
-        <SectionHeader title="Cards" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Cards" />
         <CupertinoCard
           title="Cupertino Card"
           subtitle="With title and subtitle"
@@ -128,8 +215,33 @@ export function ComponentsGalleryScreen() {
           </Text>
         </CupertinoCard>
 
+        {/* Swipeable Row */}
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Swipeable Row" />
+        <View style={{ borderRadius: 12, overflow: 'hidden' }}>
+          <CupertinoSwipeableRow
+            trailingActions={[
+              { label: 'Delete', color: '#FF3B30', onPress: () => {} },
+            ]}
+            leadingActions={[
+              { label: 'Pin', color: '#FF9500', onPress: () => {} },
+            ]}
+          >
+            <View style={[
+              styles.swipeRow,
+              { backgroundColor: colors.secondarySystemGroupedBackground },
+            ]}>
+              <Text style={[typography.body, { color: colors.label }]}>
+                Swipe me left or right
+              </Text>
+              <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+                ← Pin | Delete →
+              </Text>
+            </View>
+          </CupertinoSwipeableRow>
+        </View>
+
         {/* List Section */}
-        <SectionHeader title="List Section" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="List Section" />
         <CupertinoListSection header="Favorites" footer="These are your favorite items.">
           <CupertinoListTile
             title="Messages"
@@ -154,7 +266,7 @@ export function ComponentsGalleryScreen() {
         </CupertinoListSection>
 
         {/* Modals */}
-        <SectionHeader title="Modals" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Modals" />
         <View style={styles.buttonRow}>
           <CupertinoButton
             title="Action Sheet"
@@ -218,6 +330,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  indicatorRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  indicatorItem: {
+    alignItems: 'center',
+  },
+  swipeRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   badgeCount: {
     minWidth: 20,

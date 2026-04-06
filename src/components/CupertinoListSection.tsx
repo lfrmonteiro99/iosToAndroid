@@ -21,7 +21,7 @@ interface CupertinoListTileProps {
   isLast?: boolean;
 }
 
-export function CupertinoListTile({
+export const CupertinoListTile = React.memo(function CupertinoListTile({
   title,
   subtitle,
   leading,
@@ -30,12 +30,14 @@ export function CupertinoListTile({
   onPress,
   isLast = false,
 }: CupertinoListTileProps) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
       style={({ pressed }) => [
         styles.tile,
         {
@@ -97,7 +99,7 @@ export function CupertinoListTile({
       </View>
     </Pressable>
   );
-}
+});
 
 // ─── ListSection ─────────────────────────────────────────────
 
@@ -114,7 +116,7 @@ export function CupertinoListSection({
   children,
   style,
 }: CupertinoListSectionProps) {
-  const { theme, typography, spacing, borderRadius } = useTheme();
+  const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
 
   const childArray = React.Children.toArray(children);

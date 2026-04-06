@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
-  CupertinoCard,
   CupertinoListSection,
   CupertinoListTile,
 } from '../components';
@@ -128,7 +127,7 @@ export function HomeScreen() {
         {/* Recent Activity */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Recent Activity">
-            {RECENT_ACTIVITY.map((item, index) => (
+            {RECENT_ACTIVITY.map((item) => (
               <CupertinoListTile
                 key={item.title}
                 title={item.title}
