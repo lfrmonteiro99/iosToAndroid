@@ -634,21 +634,39 @@ export function LauncherHomeScreen() {
       />
     );
 
-  // Build display items: folders appear as single grid cells, their member apps are hidden
+  // Build display items: virtual built-in apps + real apps + folders
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const gridItems = useMemo((): GridItem[] => {
     const items: GridItem[] = [];
     const appsInFolders = new Set(folders.flatMap(f => f.apps));
+    const dockPkgs = new Set(dockApps.map(a => a.packageName));
+
+    // Add virtual built-in apps to the grid (if not in dock)
+    const virtualApps: InstalledApp[] = Object.entries(BUILT_IN_APPS).map(([pkg, name]) => ({
+      name,
+      packageName: pkg,
+      icon: '',
+      isSystem: false,
+    }));
+    for (const vApp of virtualApps) {
+      if (!dockPkgs.has(vApp.packageName) && !appsInFolders.has(vApp.packageName)) {
+        items.push({ type: 'app', app: vApp });
+      }
+    }
+
+    // Add folders
     for (const folder of folders) {
       items.push({ type: 'folder', folder });
     }
+
+    // Add real installed apps (not in dock, not in folders)
     for (const app of nonDockApps) {
       if (!appsInFolders.has(app.packageName)) {
         items.push({ type: 'app', app });
       }
     }
     return items;
-  }, [nonDockApps, folders]);
+  }, [nonDockApps, dockApps, folders]);
 
   // Paginate grid items
   const pages: GridItem[][] = [];
