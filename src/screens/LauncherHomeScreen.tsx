@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,30 @@ import {
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
+import { useFolders, AppFolder } from '../store/FoldersStore';
 import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
@@ -93,33 +106,69 @@ interface AppIconProps {
   cellWidth: number;
   onPress: () => void;
   onLongPress: () => void;
+  isJiggling?: boolean;
+  onDelete?: () => void;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress }: AppIconProps) {
+function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (isJiggling) {
+      rotation.value = withRepeat(
+        withSequence(
+          withTiming(-2, { duration: 100 }),
+          withTiming(2, { duration: 100 }),
+        ),
+        -1,
+        true,
+      );
+    } else {
+      rotation.value = withTiming(0, { duration: 100 });
+    }
+  }, [isJiggling]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
 
   return (
     <Pressable
       style={[styles.appIconWrapper, { width: cellWidth }]}
-      onPress={onPress}
+      onPress={isJiggling ? undefined : onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
+      android_ripple={isJiggling ? null : { color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
     >
-      {virtualCfg ? (
-        <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
-          <Ionicons name={virtualCfg.icon} size={28} color="#fff" />
-        </View>
-      ) : app.icon ? (
-        <Image
-          source={{ uri: app.icon }}
-          style={styles.appIconImage}
-          resizeMode="contain"
-        />
-      ) : (
-        <View style={styles.appIconPlaceholder}>
-          <Ionicons name="apps" size={28} color="#fff" />
-        </View>
-      )}
+      <Animated.View style={animatedStyle}>
+        {virtualCfg ? (
+          <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
+            <Ionicons name={virtualCfg.icon} size={28} color="#fff" />
+          </View>
+        ) : app.icon ? (
+          <Image
+            source={{ uri: app.icon }}
+            style={styles.appIconImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={styles.appIconPlaceholder}>
+            <Ionicons name="apps" size={28} color="#fff" />
+          </View>
+        )}
+        {isJiggling && (
+          <Pressable
+            style={styles.jiggleDeleteBtn}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onDelete?.();
+            }}
+            hitSlop={4}
+          >
+            <Text style={styles.jiggleDeleteX}>✕</Text>
+          </Pressable>
+        )}
+      </Animated.View>
       <Text style={styles.appIconLabel} numberOfLines={1} ellipsizeMode="tail">
         {app.name}
       </Text>
@@ -146,6 +195,120 @@ function PageDots({ total, current }: PageDotsProps) {
         />
       ))}
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Grid item type
+// ---------------------------------------------------------------------------
+
+type GridItem =
+  | { type: 'app'; app: InstalledApp }
+  | { type: 'folder'; folder: AppFolder };
+
+// ---------------------------------------------------------------------------
+// FolderIcon
+// ---------------------------------------------------------------------------
+
+function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
+  folder: AppFolder;
+  cellWidth: number;
+  apps: InstalledApp[];
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const folderApps = folder.apps
+    .map(pkg => apps.find(a => a.packageName === pkg))
+    .filter(Boolean)
+    .slice(0, 9) as InstalledApp[];
+
+  return (
+    <Pressable
+      style={[styles.appIconWrapper, { width: cellWidth }]}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
+    >
+      <View style={[styles.folderIcon, { backgroundColor: folder.color }]}>
+        <View style={styles.folderGrid}>
+          {folderApps.map((app, i) =>
+            app?.icon ? (
+              <Image key={i} source={{ uri: app.icon }} style={styles.folderMiniIcon} />
+            ) : (
+              <View key={i} style={[styles.folderMiniIcon, { backgroundColor: 'rgba(255,255,255,0.3)' }]} />
+            )
+          )}
+        </View>
+      </View>
+      <Text style={styles.appIconLabel} numberOfLines={1}>{folder.name}</Text>
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FolderOverlay
+// ---------------------------------------------------------------------------
+
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onRename }: {
+  folder: AppFolder;
+  apps: InstalledApp[];
+  onClose: () => void;
+  onLaunchApp: (app: InstalledApp) => void;
+  onRename: (newName: string) => void;
+}) {
+  const folderApps = folder.apps
+    .map(pkg => apps.find(a => a.packageName === pkg))
+    .filter(Boolean) as InstalledApp[];
+
+  const [editing, setEditing] = useState(false);
+  const [nameValue, setNameValue] = useState(folder.name);
+
+  const commitRename = useCallback(() => {
+    const trimmed = nameValue.trim();
+    if (trimmed && trimmed !== folder.name) {
+      onRename(trimmed);
+    } else {
+      setNameValue(folder.name);
+    }
+    setEditing(false);
+  }, [nameValue, folder.name, onRename]);
+
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <Pressable style={styles.folderOverlayBackdrop} onPress={onClose}>
+        <Pressable onPress={e => e.stopPropagation()}>
+          <BlurView intensity={60} tint="dark" style={styles.folderOverlayCard}>
+            {editing ? (
+              <TextInput
+                style={styles.folderOverlayTitleInput}
+                value={nameValue}
+                onChangeText={setNameValue}
+                onBlur={commitRename}
+                onSubmitEditing={commitRename}
+                autoFocus
+                selectTextOnFocus
+                returnKeyType="done"
+              />
+            ) : (
+              <Pressable onPress={() => setEditing(true)}>
+                <Text style={styles.folderOverlayTitle}>{folder.name}</Text>
+              </Pressable>
+            )}
+            <View style={styles.folderOverlayGrid}>
+              {folderApps.map(app => (
+                <AppIcon
+                  key={app.packageName}
+                  app={app}
+                  cellWidth={70}
+                  onPress={() => onLaunchApp(app)}
+                  onLongPress={() => {}}
+                />
+              ))}
+            </View>
+          </BlurView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -234,6 +397,7 @@ export function LauncherHomeScreen() {
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const {
+    apps,
     nonDockApps,
     dockApps,
     isLoading,
@@ -245,6 +409,10 @@ export function LauncherHomeScreen() {
   } = useApps();
   const { settings } = useSettings();
   const device = useDevice();
+  const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
+
+  // Folder open state
+  const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
 
   // Unified app press handler — routes built-in apps to internal screens
   const handleAppPress = useCallback((app: InstalledApp) => {
@@ -255,6 +423,25 @@ export function LauncherHomeScreen() {
       launchApp(app.packageName);
     }
   }, [navigation, launchApp]);
+
+  // Vertical swipe gesture: up → App Drawer, down-top → Control Center, down-mid → Spotlight
+  const panGesture = Gesture.Pan()
+    .activeOffsetY([-20, 20])
+    .onEnd((event) => {
+      'worklet';
+      const { translationY, absoluteY, velocityY } = event;
+
+      if (translationY < -80 && velocityY < -300) {
+        // Swipe up → App Drawer
+        runOnJS(navigation.navigate)('AppDrawer');
+      } else if (translationY > 80 && velocityY > 300 && absoluteY < 300) {
+        // Swipe down from top → Control Center
+        runOnJS(navigation.navigate)('ControlCenter');
+      } else if (translationY > 80 && velocityY > 300 && absoluteY >= 300) {
+        // Swipe down from middle → AppDrawer with search focused
+        runOnJS(navigation.navigate)('AppDrawer', { searchFocused: true });
+      }
+    });
 
   // Request permissions on first launch
   useEffect(() => {
@@ -276,6 +463,19 @@ export function LauncherHomeScreen() {
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
+  }, []);
+
+  // Jiggle (edit) mode state
+  const [isJiggling, setIsJiggling] = useState(false);
+
+  const handleLongPress = useCallback((app: InstalledApp) => {
+    if (isJiggling) return;
+    setIsJiggling(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [isJiggling]);
+
+  const exitJiggle = useCallback(() => {
+    setIsJiggling(false);
   }, []);
 
   // Action sheet state
@@ -315,10 +515,26 @@ export function LauncherHomeScreen() {
     WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
   const wallpaperDark = darkenHex(wallpaperColor, 0.28);
 
-  // Split non-dock apps into pages of 24
-  const pages: InstalledApp[][] = [];
-  for (let i = 0; i < nonDockApps.length; i += APPS_PER_PAGE) {
-    pages.push(nonDockApps.slice(i, i + APPS_PER_PAGE));
+  // Build display items: folders appear as single grid cells, their member apps are hidden
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const gridItems = useMemo((): GridItem[] => {
+    const items: GridItem[] = [];
+    const appsInFolders = new Set(folders.flatMap(f => f.apps));
+    for (const folder of folders) {
+      items.push({ type: 'folder', folder });
+    }
+    for (const app of nonDockApps) {
+      if (!appsInFolders.has(app.packageName)) {
+        items.push({ type: 'app', app });
+      }
+    }
+    return items;
+  }, [nonDockApps, folders]);
+
+  // Paginate grid items
+  const pages: GridItem[][] = [];
+  for (let i = 0; i < gridItems.length; i += APPS_PER_PAGE) {
+    pages.push(gridItems.slice(i, i + APPS_PER_PAGE));
   }
   // Ensure at least one page
   if (pages.length === 0) {
@@ -331,6 +547,31 @@ export function LauncherHomeScreen() {
     if (page !== currentPage && page >= 0 && page < pages.length) {
       setCurrentPage(page);
     }
+  };
+
+  // Build "Move to Folder" sub-options for action sheet
+  const buildMoveToFolderOptions = (app: InstalledApp) => {
+    const currentFolder = getFolderForApp(app.packageName);
+    const moveToExisting = folders
+      .filter(f => f.id !== currentFolder?.id)
+      .map(f => ({
+        label: `Move to "${f.name}"`,
+        onPress: () => {
+          closeActionSheet();
+          addToFolder(f.id, app.packageName);
+        },
+      }));
+
+    return [
+      {
+        label: 'Create New Folder',
+        onPress: () => {
+          closeActionSheet();
+          createFolder('New Folder', [app.packageName]);
+        },
+      },
+      ...moveToExisting,
+    ];
   };
 
   // Action sheet options for the selected app
@@ -350,6 +591,7 @@ export function LauncherHomeScreen() {
             if (actionSheet.app) addToDock(actionSheet.app.packageName);
           },
         },
+        ...buildMoveToFolderOptions(actionSheet.app),
         {
           label: 'Remove from Home',
           destructive: true,
@@ -362,16 +604,28 @@ export function LauncherHomeScreen() {
     : [];
 
   return (
-    <LinearGradient
-      colors={[wallpaperColor, wallpaperDark]}
-      style={styles.root}
-    >
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={{ flex: 1 }}>
+        <LinearGradient
+          colors={[wallpaperColor, wallpaperDark]}
+          style={styles.root}
+        >
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Jiggle-mode background tap target (exits edit mode)               */}
+      {/* ---------------------------------------------------------------- */}
+      {isJiggling && (
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={exitJiggle}
+        />
+      )}
 
       {/* ---------------------------------------------------------------- */}
       {/* Set-as-default banner                                             */}
       {/* ---------------------------------------------------------------- */}
-      {!isDefaultLauncher && (
+      {!isDefaultLauncher && !isJiggling && (
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={styles.defaultBannerText}>Set as default launcher</Text>
           <Pressable
@@ -417,6 +671,17 @@ export function LauncherHomeScreen() {
               </Text>
             </View>
           )}
+          {/* Done button — visible only in jiggle mode */}
+          {isJiggling && (
+            <Pressable
+              style={styles.jiggleDoneBtn}
+              onPress={exitJiggle}
+              accessibilityLabel="Done"
+              accessibilityRole="button"
+            >
+              <Text style={styles.jiggleDoneBtnText}>Done</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -433,19 +698,39 @@ export function LauncherHomeScreen() {
         onMomentumScrollEnd={handleScroll}
         style={styles.pagerContainer}
         contentContainerStyle={styles.pagerContent}
+        scrollEnabled={!isJiggling}
       >
-        {pages.map((pageApps, pageIndex) => (
+        {pages.map((pageItems, pageIndex) => (
           <View key={pageIndex} style={styles.page}>
             <View style={styles.pageGrid}>
-              {pageApps.map((app) => (
-                <AppIcon
-                  key={app.packageName}
-                  app={app}
-                  cellWidth={CELL_WIDTH}
-                  onPress={() => handleAppPress(app)}
-                  onLongPress={() => openActionSheet(app)}
-                />
-              ))}
+              {pageItems.map((item) => {
+                if (item.type === 'folder') {
+                  return (
+                    <FolderIcon
+                      key={`folder-${item.folder.id}`}
+                      folder={item.folder}
+                      cellWidth={CELL_WIDTH}
+                      apps={apps}
+                      onPress={() => setOpenFolder(item.folder)}
+                      onLongPress={() => {/* future: folder jiggle */}}
+                    />
+                  );
+                }
+                return (
+                  <AppIcon
+                    key={item.app.packageName}
+                    app={item.app}
+                    cellWidth={CELL_WIDTH}
+                    onPress={() => handleAppPress(item.app)}
+                    onLongPress={() => handleLongPress(item.app)}
+                    isJiggling={isJiggling}
+                    onDelete={() => {
+                      removeFromHome(item.app.packageName);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  />
+                );
+              })}
             </View>
           </View>
         ))}
@@ -457,11 +742,11 @@ export function LauncherHomeScreen() {
       <PageDots total={pages.length} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
-        onPress={() => navigation.navigate('AppDrawer')}
+        onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppDrawer')}
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
-        <Text style={styles.searchLabelText}>Search</Text>
+        <Text style={styles.searchLabelText}>{isJiggling ? 'Tap background to exit' : 'Search'}</Text>
       </Pressable>
 
       {/* ---------------------------------------------------------------- */}
@@ -480,7 +765,12 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 onPress={() => handleAppPress(app)}
-                onLongPress={() => openActionSheet(app)}
+                onLongPress={() => handleLongPress(app)}
+                isJiggling={isJiggling}
+                onDelete={() => {
+                  removeFromHome(app.packageName);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
               />
             ))}
             {/* Fill empty dock slots */}
@@ -492,6 +782,25 @@ export function LauncherHomeScreen() {
       </View>
 
       {/* ---------------------------------------------------------------- */}
+      {/* Folder overlay                                                     */}
+      {/* ---------------------------------------------------------------- */}
+      {openFolder && (
+        <FolderOverlay
+          folder={openFolder}
+          apps={apps}
+          onClose={() => setOpenFolder(null)}
+          onLaunchApp={(app) => {
+            setOpenFolder(null);
+            handleAppPress(app);
+          }}
+          onRename={(newName) => {
+            renameFolder(openFolder.id, newName);
+            setOpenFolder(prev => prev ? { ...prev, name: newName } : null);
+          }}
+        />
+      )}
+
+      {/* ---------------------------------------------------------------- */}
       {/* Action sheet                                                       */}
       {/* ---------------------------------------------------------------- */}
       <CupertinoActionSheet
@@ -500,7 +809,9 @@ export function LauncherHomeScreen() {
         title={actionSheet.app?.name}
         options={actionSheetOptions}
       />
-    </LinearGradient>
+        </LinearGradient>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -670,6 +981,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
+  },
+
+  // Folder icon (grid cell)
+  folderIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    padding: 6,
+    overflow: 'hidden',
+  },
+  folderGrid: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+  },
+  folderMiniIcon: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+  },
+
+  // Folder overlay
+  folderOverlayBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  folderOverlayCard: {
+    width: SCREEN_WIDTH * 0.8,
+    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(30,30,30,0.6)',
+  },
+  folderOverlayTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  folderOverlayTitleInput: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.4)',
+    paddingBottom: 4,
+  },
+  folderOverlayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+
+  // Jiggle (edit) mode
+  jiggleDeleteBtn: {
+    position: 'absolute',
+    top: -5,
+    left: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(90,90,90,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  jiggleDeleteX: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
+  jiggleDoneBtn: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  jiggleDoneBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // Fallback

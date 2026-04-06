@@ -25,13 +25,6 @@ const getLauncher = async () => {
   }
 };
 
-const makeCallNative = async (number: string) => {
-  const mod = await getLauncher();
-  if (mod) {
-    await mod.makeCall(number);
-  }
-};
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getInitials(contact: DeviceContact): string {
@@ -82,15 +75,15 @@ function ContactAvatar({ contact, size = 40 }: { contact: DeviceContact; size?: 
 
 // ─── Favorites Tab ──────────────────────────────────────────────────────────
 
-function FavoritesTab({ contacts }: { contacts: DeviceContact[] }) {
+function FavoritesTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const favorites = contacts.slice(0, 8);
 
-  const handleCall = useCallback(async (phone: string) => {
+  const handleCall = useCallback((phone: string, name?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await makeCallNative(phone);
-  }, []);
+    onCall(phone, name);
+  }, [onCall]);
 
   if (favorites.length === 0) {
     return (
@@ -122,7 +115,7 @@ function FavoritesTab({ contacts }: { contacts: DeviceContact[] }) {
             <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>mobile</Text>
           </View>
           <TouchableOpacity
-            onPress={() => handleCall(item.phone)}
+            onPress={() => handleCall(item.phone, getFullName(item))}
             style={styles.callBtn}
             accessibilityLabel={`Call ${getFullName(item)}`}
             accessibilityRole="button"
@@ -137,7 +130,7 @@ function FavoritesTab({ contacts }: { contacts: DeviceContact[] }) {
 
 // ─── Recents Tab ────────────────────────────────────────────────────────────
 
-function RecentsTab() {
+function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
@@ -157,10 +150,10 @@ function RecentsTab() {
     })();
   }, []);
 
-  const handleCall = useCallback(async (number: string) => {
+  const handleCall = useCallback((number: string, name?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await makeCallNative(number);
-  }, []);
+    onCall(number, name);
+  }, [onCall]);
 
   const callDirectionIcon = (type: CallLogEntry['type']) => {
     switch (type) {
@@ -226,7 +219,7 @@ function RecentsTab() {
           return (
             <Pressable
               key={call.id}
-              onPress={() => handleCall(call.number)}
+              onPress={() => handleCall(call.number, call.name && call.name !== call.number ? call.name : undefined)}
               style={({ pressed }) => [
                 styles.recentRow,
                 !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
@@ -266,7 +259,7 @@ function RecentsTab() {
 
 // ─── Contacts Tab ────────────────────────────────────────────────────────────
 
-function ContactsTab({ contacts }: { contacts: DeviceContact[] }) {
+function ContactsTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
 
@@ -278,10 +271,10 @@ function ContactsTab({ contacts }: { contacts: DeviceContact[] }) {
     [contacts],
   );
 
-  const handleCall = useCallback(async (phone: string) => {
+  const handleCall = useCallback((phone: string, name?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await makeCallNative(phone);
-  }, []);
+    onCall(phone, name);
+  }, [onCall]);
 
   if (sorted.length === 0) {
     return (
@@ -306,7 +299,7 @@ function ContactsTab({ contacts }: { contacts: DeviceContact[] }) {
       getItemLayout={(_, index) => ({ length: 60, offset: 60 * index, index })}
       renderItem={({ item }) => (
         <Pressable
-          onPress={() => handleCall(item.phone)}
+          onPress={() => handleCall(item.phone, getFullName(item))}
           style={({ pressed }) => [
             styles.contactRow,
             { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },
@@ -331,7 +324,7 @@ function ContactsTab({ contacts }: { contacts: DeviceContact[] }) {
 
 // ─── Keypad Tab ──────────────────────────────────────────────────────────────
 
-function KeypadTab() {
+function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -347,11 +340,11 @@ function KeypadTab() {
     setNumber((prev) => prev.slice(0, -1));
   }, []);
 
-  const handleCall = useCallback(async () => {
+  const handleCall = useCallback(() => {
     if (!number) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await makeCallNative(number);
-  }, [number]);
+    onCall(number);
+  }, [number, onCall]);
 
   const keypadBg = theme.dark ? colors.systemGray4 : colors.systemGray5;
 
@@ -444,14 +437,14 @@ function KeypadTab() {
 
 // ─── Voicemail Tab ───────────────────────────────────────────────────────────
 
-function VoicemailTab() {
+function VoicemailTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
 
-  const handleCallVoicemail = useCallback(async () => {
+  const handleCallVoicemail = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await makeCallNative('*86');
-  }, []);
+    onCall('*86', 'Voicemail');
+  }, [onCall]);
 
   return (
     <View style={styles.emptyState}>
@@ -490,13 +483,17 @@ export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-dis
     setSelectedTab(index);
   }, []);
 
+  const handleCall = useCallback((phone: string, name?: string) => {
+    navigation.navigate('CallScreen', { number: phone, name });
+  }, [navigation]);
+
   const renderContent = () => {
     switch (selectedTab) {
-      case 0: return <FavoritesTab contacts={device.contacts} />;
-      case 1: return <RecentsTab />;
-      case 2: return <ContactsTab contacts={device.contacts} />;
-      case 3: return <KeypadTab />;
-      case 4: return <VoicemailTab />;
+      case 0: return <FavoritesTab contacts={device.contacts} onCall={handleCall} />;
+      case 1: return <RecentsTab onCall={handleCall} />;
+      case 2: return <ContactsTab contacts={device.contacts} onCall={handleCall} />;
+      case 3: return <KeypadTab onCall={handleCall} />;
+      case 4: return <VoicemailTab onCall={handleCall} />;
       default: return null;
     }
   };

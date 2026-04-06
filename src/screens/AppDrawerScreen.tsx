@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
+import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoNavigationBar } from '../components/CupertinoNavigationBar';
@@ -30,10 +31,22 @@ const ICON_SIZE = 56;
 const ICON_BORDER_RADIUS = 14;
 const NUM_COLUMNS = 4;
 
+const SETTINGS_ITEMS = [
+  { name: 'Wi-Fi', route: 'WiFi', icon: 'wifi' as const },
+  { name: 'Bluetooth', route: 'Bluetooth', icon: 'bluetooth' as const },
+  { name: 'Display & Brightness', route: 'DisplayBrightness', icon: 'sunny' as const },
+  { name: 'Wallpaper', route: 'Wallpaper', icon: 'image' as const },
+  { name: 'General', route: 'General', icon: 'settings' as const },
+  { name: 'Battery', route: 'Battery', icon: 'battery-half' as const },
+  { name: 'Privacy', route: 'Privacy', icon: 'shield-checkmark' as const },
+  { name: 'Notifications', route: 'Notifications', icon: 'notifications' as const },
+];
+
 export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const { apps, dockApps, launchApp, addToDock, isLoading } = useApps();
+  const device = useDevice();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -63,6 +76,22 @@ export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
     const q = query.trim().toLowerCase();
     return sorted.filter(app => app.name.toLowerCase().includes(q));
   }, [apps, query]);
+
+  const contactResults = useMemo(() => {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase();
+    return device.contacts.filter(c =>
+      (c.firstName + ' ' + c.lastName).toLowerCase().includes(q)
+    ).slice(0, 5);
+  }, [query, device.contacts]);
+
+  const settingsResults = useMemo(() => {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase();
+    return SETTINGS_ITEMS.filter(s => s.name.toLowerCase().includes(q));
+  }, [query]);
+
+  const isSearching = query.trim().length > 0;
 
   const dockPackageNames = useMemo(
     () => new Set(dockApps.map(a => a.packageName)),
@@ -201,13 +230,63 @@ export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
         />
       </View>
 
+      {isSearching && (settingsResults.length > 0 || contactResults.length > 0) && (
+        <View style={styles.searchSections}>
+          {settingsResults.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>Settings</Text>
+              {settingsResults.map(item => (
+                <Pressable
+                  key={item.route}
+                  style={[styles.settingsRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+                  onPress={() => navigation.navigate(item.route)}
+                >
+                  <View style={[styles.settingsIconWrap, { backgroundColor: colors.systemBlue }]}>
+                    <Ionicons name={item.icon} size={18} color="#fff" />
+                  </View>
+                  <Text style={[typography.body, { color: colors.label, marginLeft: 12 }]}>{item.name}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 'auto' }} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {contactResults.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>Contacts</Text>
+              {contactResults.map(contact => (
+                <Pressable
+                  key={contact.id}
+                  style={[styles.contactRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+                  onPress={() => navigation.navigate('ContactDetail', { contactId: contact.id })}
+                >
+                  <View style={[styles.contactAvatar, { backgroundColor: colors.systemBlue }]}>
+                    <Text style={styles.contactAvatarText}>
+                      {(contact.firstName?.[0] ?? '') + (contact.lastName?.[0] ?? '')}
+                    </Text>
+                  </View>
+                  <Text style={[typography.body, { color: colors.label, marginLeft: 12 }]}>
+                    {contact.firstName} {contact.lastName}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 'auto' }} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {filteredApps.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>Apps</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       <FlatList
         data={filteredApps}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         numColumns={NUM_COLUMNS}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={ListEmptyComponent}
+        ListEmptyComponent={isSearching && settingsResults.length === 0 && contactResults.length === 0 ? ListEmptyComponent : undefined}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: insets.bottom + spacing.lg },
@@ -275,5 +354,53 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 4,
+  },
+  searchSections: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  sectionBlock: {
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  settingsIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  contactAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactAvatarText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,9 +13,25 @@ import { DeviceProvider } from './src/store/DeviceStore';
 import { FoldersProvider } from './src/store/FoldersStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { LockScreen } from './src/screens/LockScreen';
 
 function AppContent() {
   const { isDark } = useTheme();
+  const [isLocked, setIsLocked] = useState(true);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        setIsLocked(true);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  if (isLocked) {
+    return <LockScreen onUnlock={() => setIsLocked(false)} />;
+  }
+
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
