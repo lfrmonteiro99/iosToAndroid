@@ -11,6 +11,7 @@ import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoProgressBar,
 } from '../components';
 
 function getGreeting() {
@@ -160,6 +161,77 @@ export function HomeScreen() {
           </View>
         </View>
 
+        <View style={{ paddingHorizontal: spacing.md, marginBottom: spacing.lg }}>
+          <Text
+            style={[
+              typography.footnote,
+              { color: colors.secondaryLabel, marginBottom: 6, textTransform: 'uppercase' },
+            ]}
+          >
+            Widgets
+          </Text>
+          <View style={styles.widgetsRow}>
+            {/* Battery Widget */}
+            <View
+              style={[
+                styles.widgetCard,
+                shadows.small,
+                {
+                  backgroundColor: colors.secondarySystemGroupedBackground,
+                  borderRadius: borderRadius.large,
+                },
+              ]}
+            >
+              <View style={styles.widgetHeader}>
+                <Ionicons name="battery-half" size={16} color={colors.secondaryLabel} />
+                <Text style={[typography.caption1, { color: colors.secondaryLabel, marginLeft: 4 }]}>
+                  Battery
+                </Text>
+              </View>
+              <Text style={[typography.title1, { color: colors.label, marginTop: 8 }]}>
+                {settings.lowPowerMode ? '48%' : '72%'}
+              </Text>
+              <View style={{ marginTop: 8 }}>
+                <CupertinoProgressBar
+                  progress={settings.lowPowerMode ? 0.48 : 0.72}
+                  progressColor={settings.lowPowerMode ? '#FFCC00' : '#34C759'}
+                />
+              </View>
+            </View>
+
+            {/* Storage Widget */}
+            <View
+              style={[
+                styles.widgetCard,
+                shadows.small,
+                {
+                  backgroundColor: colors.secondarySystemGroupedBackground,
+                  borderRadius: borderRadius.large,
+                },
+              ]}
+            >
+              <View style={styles.widgetHeader}>
+                <Ionicons name="folder" size={16} color={colors.secondaryLabel} />
+                <Text style={[typography.caption1, { color: colors.secondaryLabel, marginLeft: 4 }]}>
+                  Storage
+                </Text>
+              </View>
+              <Text style={[typography.title1, { color: colors.label, marginTop: 8 }]}>
+                89.3 GB
+              </Text>
+              <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+                of 128 GB
+              </Text>
+              <View style={{ marginTop: 8 }}>
+                <CupertinoProgressBar
+                  progress={0.70}
+                  progressColor={colors.systemBlue}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Recent Activity">
             {recentActivity.map((item) => (
@@ -212,5 +284,17 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  widgetsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  widgetCard: {
+    flex: 1,
+    padding: 16,
+  },
+  widgetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

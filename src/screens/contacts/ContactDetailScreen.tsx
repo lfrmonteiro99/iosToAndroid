@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Linking } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -54,7 +54,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
   const actionButtons = [
     { icon: 'call' as const, label: 'call', onPress: () => Linking.openURL(`tel:${contact.phone}`) },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
-    { icon: 'videocam' as const, label: 'FaceTime', onPress: () => {} },
+    { icon: 'videocam' as const, label: 'FaceTime', onPress: () => Alert.alert('FaceTime', 'FaceTime is not available on this device') },
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
   ];
 

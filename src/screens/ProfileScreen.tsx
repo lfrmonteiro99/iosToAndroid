@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -30,6 +30,7 @@ export function ProfileScreen() {
 
   const [showSignOut, setShowSignOut] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showAvatarSheet, setShowAvatarSheet] = useState(false);
 
   const stats = [
     { label: 'Contacts', value: String(contacts.length) },
@@ -57,17 +58,22 @@ export function ProfileScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[
-            styles.avatar,
-            {
-              backgroundColor: colors.systemGray5,
-              borderColor: colors.systemBackground,
-            },
-          ]}
-        >
-          <Ionicons name="person" size={60} color={colors.systemGray} />
-        </View>
+        <Pressable onPress={() => setShowAvatarSheet(true)} style={styles.avatarWrapper}>
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: colors.systemGray5,
+                borderColor: colors.systemBackground,
+              },
+            ]}
+          >
+            <Ionicons name="person" size={60} color={colors.systemGray} />
+          </View>
+          <View style={[styles.cameraBadge, { backgroundColor: colors.systemBlue }]}>
+            <Ionicons name="camera" size={14} color="#FFFFFF" />
+          </View>
+        </Pressable>
 
         <Text style={[typography.title1, { color: colors.label, marginTop: 16 }]}>
           {profile.name}
@@ -187,6 +193,34 @@ export function ProfileScreen() {
         cancelLabel="Cancel"
         onClose={() => setShowShare(false)}
       />
+
+      <CupertinoActionSheet
+        visible={showAvatarSheet}
+        title="Profile Photo"
+        options={[
+          {
+            label: 'Take Photo',
+            onPress: () => {
+              setShowAvatarSheet(false);
+              Alert.alert('Camera not available in demo');
+            },
+          },
+          {
+            label: 'Choose from Library',
+            onPress: () => {
+              setShowAvatarSheet(false);
+              Alert.alert('Photo library not available in demo');
+            },
+          },
+          {
+            label: 'Remove Photo',
+            destructive: true,
+            onPress: () => setShowAvatarSheet(false),
+          },
+        ]}
+        cancelLabel="Cancel"
+        onClose={() => setShowAvatarSheet(false)}
+      />
     </View>
   );
 }
@@ -194,14 +228,27 @@ export function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
+  avatarWrapper: {
+    marginTop: 16,
+    position: 'relative',
+  },
   avatar: {
     width: 120,
     height: 120,
     borderRadius: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
     borderWidth: 4,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statsRow: {
     flexDirection: 'row',

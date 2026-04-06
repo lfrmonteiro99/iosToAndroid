@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -9,6 +9,7 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoSegmentedControl,
+  CupertinoActionSheet,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,6 +18,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const [showAutoLock, setShowAutoLock] = useState(false);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -107,7 +109,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
                   {settings.autoLock}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => setShowAutoLock(true)}
             />
             <CupertinoListTile
               title="Raise to Wake"
@@ -122,6 +124,21 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
       </ScrollView>
+
+      <CupertinoActionSheet
+        visible={showAutoLock}
+        onClose={() => setShowAutoLock(false)}
+        title="Auto-Lock"
+        options={[
+          { label: '30 Seconds', onPress: () => { update('autoLock', '30 Seconds'); setShowAutoLock(false); } },
+          { label: '1 Minute', onPress: () => { update('autoLock', '1 Minute'); setShowAutoLock(false); } },
+          { label: '2 Minutes', onPress: () => { update('autoLock', '2 Minutes'); setShowAutoLock(false); } },
+          { label: '3 Minutes', onPress: () => { update('autoLock', '3 Minutes'); setShowAutoLock(false); } },
+          { label: '5 Minutes', onPress: () => { update('autoLock', '5 Minutes'); setShowAutoLock(false); } },
+          { label: 'Never', onPress: () => { update('autoLock', 'Never'); setShowAutoLock(false); } },
+        ]}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }
