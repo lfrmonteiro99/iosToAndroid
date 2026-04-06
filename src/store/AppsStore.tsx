@@ -90,15 +90,25 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       if (savedLayout) {
         try {
           const parsed = JSON.parse(savedLayout);
-          dockApps = parsed.dockApps || DEFAULT_DOCK;
           homeApps = parsed.homeApps || [];
+          // Only use saved dock if it contains our virtual apps (otherwise it's stale data)
+          const savedDock = parsed.dockApps || [];
+          const hasVirtualApps = DEFAULT_DOCK.some((pkg: string) => savedDock.includes(pkg));
+          dockApps = hasVirtualApps ? savedDock : DEFAULT_DOCK;
         } catch { /* ignore */ }
+      }
+
+      // Ensure our built-in apps are always in the dock
+      for (const pkg of DEFAULT_DOCK) {
+        if (!dockApps.includes(pkg)) {
+          dockApps = [...dockApps.slice(0, 3), pkg]; // keep max 4, ensure built-in present
+        }
       }
 
       // Filter dock apps to only include installed or virtual ones
       dockApps = dockApps.filter((pkg: string) =>
         apps.some((app: InstalledApp) => app.packageName === pkg) || VIRTUAL_APPS_MAP[pkg]
-      );
+      ).slice(0, 4); // max 4 in dock
 
       setState({
         allApps: apps,
