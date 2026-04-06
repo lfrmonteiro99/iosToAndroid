@@ -8,3 +8,4 @@ export { CupertinoNavigationBar } from './CupertinoNavigationBar';
 export { CupertinoActionSheet } from './CupertinoActionSheet';
 export { CupertinoAlertDialog } from './CupertinoAlertDialog';
 export { CupertinoTabBar } from './CupertinoTabBar';
+export { ErrorBoundary } from './ErrorBoundary';

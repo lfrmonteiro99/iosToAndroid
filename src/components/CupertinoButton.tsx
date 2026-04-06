@@ -1,6 +1,15 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 type ButtonVariant = 'filled' | 'tinted' | 'plain';
 
@@ -37,9 +46,7 @@ export function CupertinoButton({
         };
       case 'tinted':
         return {
-          backgroundColor: destructive
-            ? 'rgba(255, 59, 48, 0.15)'
-            : 'rgba(0, 122, 255, 0.15)',
+          backgroundColor: hexToRgba(baseColor, 0.15),
           borderRadius: borderRadius.pill,
           paddingVertical: 12,
           paddingHorizontal: 20,
@@ -65,7 +72,10 @@ export function CupertinoButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress?.();
+      }}
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,

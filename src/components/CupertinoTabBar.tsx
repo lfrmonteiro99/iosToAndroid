@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,6 +50,7 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
             });
 
             if (!isFocused && !event.defaultPrevented) {
+              Haptics.selectionAsync();
               navigation.navigate(route.name);
             }
           };

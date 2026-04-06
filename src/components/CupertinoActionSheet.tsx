@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, Pressable, Modal, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -119,6 +120,7 @@ export function CupertinoActionSheet({
                   },
                 ]}
                 onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   option.onPress();
                   onClose();
                 }}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 import { CupertinoTheme, getTheme, Typography, Spacing, BorderRadius, Shadows, AnimationConfig } from './CupertinoTheme';
 
@@ -19,12 +19,21 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useColorScheme();
   const [isDark, setIsDark] = useState(systemColorScheme === 'dark');
+  const userOverride = useRef(false);
+
+  useEffect(() => {
+    if (!userOverride.current && systemColorScheme !== null) {
+      setIsDark(systemColorScheme === 'dark');
+    }
+  }, [systemColorScheme]);
 
   const toggleTheme = useCallback(() => {
+    userOverride.current = true;
     setIsDark((prev) => !prev);
   }, []);
 
   const setDark = useCallback((dark: boolean) => {
+    userOverride.current = true;
     setIsDark(dark);
   }, []);
 

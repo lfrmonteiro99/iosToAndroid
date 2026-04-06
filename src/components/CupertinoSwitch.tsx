@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -60,6 +61,7 @@ export function CupertinoSwitch({
 
   const handlePress = () => {
     if (!disabled) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       onValueChange?.(!value);
     }
   };
