@@ -21,14 +21,19 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": ["android.permission.QUERY_ALL_PACKAGES"],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    },
     "plugins": [
-      "./plugins/withAsyncStorageRepo"
+      "./plugins/withAsyncStorageRepo",
+      "./plugins/withLauncherIntent"
     ]
   }
 }

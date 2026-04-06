@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { SettingsProvider } from './src/store/SettingsStore';
 import { ContactsProvider } from './src/store/ContactsStore';
 import { ProfileProvider } from './src/store/ProfileStore';
+import { AppsProvider } from './src/store/AppsStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -28,11 +29,13 @@ export default function App() {
           <SettingsProvider>
             <ContactsProvider>
               <ProfileProvider>
+                <AppsProvider>
                 <ErrorBoundary>
                   <NavigationContainer>
                     <AppContent />
                   </NavigationContainer>
                 </ErrorBoundary>
+                </AppsProvider>
               </ProfileProvider>
             </ContactsProvider>
           </SettingsProvider>
