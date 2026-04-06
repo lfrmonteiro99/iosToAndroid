@@ -1,10 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useContacts } from '../../store/ContactsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -12,6 +13,14 @@ import {
   CupertinoButton,
   CupertinoAlertDialog,
 } from '../../components';
+
+const getLauncher = async () => {
+  try {
+    return (await import('../../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
 
 function getInitials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -23,10 +32,33 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const { getContact, toggleFavorite, deleteContact } = useContacts();
+  const { contacts: deviceContacts } = useDevice();
   const insets = useSafeAreaInsets();
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
 
-  const contact = getContact(contactId);
+  const contact = useMemo(() => {
+    const deviceContact = deviceContacts.find(c => c.id === contactId);
+    if (deviceContact) {
+      return {
+        id: deviceContact.id,
+        firstName: deviceContact.firstName,
+        lastName: deviceContact.lastName,
+        phone: deviceContact.phone,
+        email: deviceContact.email,
+        company: deviceContact.company,
+        notes: '',
+        isFavorite: false,
+        createdAt: '',
+        _imageUri: deviceContact.imageUri,
+        _isDeviceContact: true,
+      };
+    }
+    const mockContact = getContact(contactId);
+    return mockContact ? { ...mockContact, _imageUri: undefined, _isDeviceContact: false } : null;
+  }, [contactId, deviceContacts, getContact]);
+
+  const isDeviceContact = contact?._isDeviceContact ?? false;
+  const imageUri = contact?._imageUri;
 
   if (!contact) {
     return (
@@ -51,8 +83,17 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
   const initials = getInitials(contact.firstName, contact.lastName);
   const fullName = `${contact.firstName} ${contact.lastName}`;
 
+  const handleCall = async () => {
+    const mod = await getLauncher();
+    if (mod && contact.phone) {
+      await mod.makeCall(contact.phone);
+    } else if (contact.phone) {
+      Linking.openURL(`tel:${contact.phone}`);
+    }
+  };
+
   const actionButtons = [
-    { icon: 'call' as const, label: 'call', onPress: () => Linking.openURL(`tel:${contact.phone}`) },
+    { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
     { icon: 'videocam' as const, label: 'FaceTime', onPress: () => Alert.alert('FaceTime', 'FaceTime is not available on this device') },
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
@@ -101,9 +142,13 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
       >
         {/* Avatar + name */}
         <View style={styles.header}>
-          <View style={[styles.avatar, { backgroundColor: colors.systemBlue }]}>
-            <Text style={[typography.title1, styles.avatarText]}>{initials}</Text>
-          </View>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: colors.systemBlue }]}>
+              <Text style={[typography.title1, styles.avatarText]}>{initials}</Text>
+            </View>
+          )}
           <Text style={[typography.title1, { color: colors.label, marginTop: spacing.md }]}>
             {fullName}
           </Text>
@@ -144,7 +189,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
           <CupertinoListTile
             title={contact.phone}
             showChevron={false}
-            onPress={() => Linking.openURL(`tel:${contact.phone}`)}
+            onPress={handleCall}
             trailing={
               <Text style={[typography.body, { color: colors.secondaryLabel }]}>mobile</Text>
             }
@@ -175,15 +220,17 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
           </CupertinoListSection>
         ) : null}
 
-        {/* Delete */}
-        <View style={[styles.deleteContainer, { marginTop: spacing.lg }]}>
-          <CupertinoButton
-            title="Delete Contact"
-            variant="plain"
-            destructive
-            onPress={() => setShowDeleteAlert(true)}
-          />
-        </View>
+        {/* Delete — only for mock contacts */}
+        {!isDeviceContact ? (
+          <View style={[styles.deleteContainer, { marginTop: spacing.lg }]}>
+            <CupertinoButton
+              title="Delete Contact"
+              variant="plain"
+              destructive
+              onPress={() => setShowDeleteAlert(true)}
+            />
+          </View>
+        ) : null}
       </ScrollView>
 
       <CupertinoAlertDialog

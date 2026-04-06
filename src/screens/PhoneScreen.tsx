@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,31 +7,30 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Vibration,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
-
+import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+const getLauncher = async () => {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
 
-type CallStatus = 'incoming' | 'outgoing' | 'missed';
-
-interface RecentCall {
-  id: string;
-  contact: DeviceContact;
-  status: CallStatus;
-  time: string;
-  dateGroup: string;
-  timestamp: number;
-}
+const makeCallNative = async (number: string) => {
+  const mod = await getLauncher();
+  if (mod) {
+    await mod.makeCall(number);
+  }
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -56,21 +55,6 @@ function avatarColor(contact: DeviceContact): string {
   return AVATAR_COLORS[seed % AVATAR_COLORS.length];
 }
 
-const DATE_GROUPS = ['Today', 'Yesterday', 'Monday', 'Tuesday', 'Wednesday', 'Last Week'];
-const TIMES = ['9:41 AM', '2:14 PM', '7:03 PM', '11:30 AM', '4:56 PM', '8:22 AM', '1:07 PM', '6:45 PM'];
-const STATUSES: CallStatus[] = ['incoming', 'outgoing', 'missed', 'outgoing', 'incoming'];
-
-function generateRecentCalls(contacts: DeviceContact[]): RecentCall[] {
-  const slice = contacts.slice(0, 15);
-  return slice.map((contact, i) => ({
-    id: `recent-${contact.id}-${i}`,
-    contact,
-    status: STATUSES[i % STATUSES.length],
-    time: TIMES[i % TIMES.length],
-    dateGroup: DATE_GROUPS[Math.floor(i / 3) % DATE_GROUPS.length],
-    timestamp: Date.now() - i * 3_600_000,
-  }));
-}
 
 const KEYPAD_ROWS = [
   [{ digit: '1', letters: '' }, { digit: '2', letters: 'ABC' }, { digit: '3', letters: 'DEF' }],
@@ -103,9 +87,9 @@ function FavoritesTab({ contacts }: { contacts: DeviceContact[] }) {
   const { colors } = theme;
   const favorites = contacts.slice(0, 8);
 
-  const handleCall = useCallback((phone: string) => {
+  const handleCall = useCallback(async (phone: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Linking.openURL(`tel:${phone}`);
+    await makeCallNative(phone);
   }, []);
 
   if (favorites.length === 0) {
@@ -153,35 +137,76 @@ function FavoritesTab({ contacts }: { contacts: DeviceContact[] }) {
 
 // ─── Recents Tab ────────────────────────────────────────────────────────────
 
-function RecentsTab({ contacts }: { contacts: DeviceContact[] }) {
+function RecentsTab() {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const recents = useMemo(() => generateRecentCalls(contacts), [contacts]);
+  const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, RecentCall[]>();
-    for (const call of recents) {
-      const arr = map.get(call.dateGroup) ?? [];
-      arr.push(call);
-      map.set(call.dateGroup, arr);
-    }
-    return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
-  }, [recents]);
-
-  const handleCall = useCallback((phone: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Linking.openURL(`tel:${phone}`);
+  useEffect(() => {
+    (async () => {
+      const mod = await getLauncher();
+      if (mod) {
+        try {
+          const log = await mod.getCallLog(50);
+          setCallLog(log);
+        } catch {
+          setPermissionDenied(true);
+        }
+      }
+    })();
   }, []);
 
-  const callDirectionIcon = (status: CallStatus) => {
-    switch (status) {
+  const handleCall = useCallback(async (number: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await makeCallNative(number);
+  }, []);
+
+  const callDirectionIcon = (type: CallLogEntry['type']) => {
+    switch (type) {
       case 'incoming': return { name: 'arrow-down-circle' as const, color: colors.systemGreen };
       case 'outgoing': return { name: 'arrow-up-circle' as const, color: colors.systemBlue };
       case 'missed': return { name: 'close-circle' as const, color: colors.systemRed };
+      case 'rejected': return { name: 'close-circle' as const, color: colors.systemRed };
+      default: return { name: 'call' as const, color: colors.systemGray };
     }
   };
 
-  if (recents.length === 0) {
+  const callTypeLabel = (type: CallLogEntry['type']) => {
+    switch (type) {
+      case 'outgoing': return 'Outgoing';
+      case 'missed': return 'Missed';
+      case 'rejected': return 'Rejected';
+      default: return 'Incoming';
+    }
+  };
+
+  if (permissionDenied) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="time-outline" size={52} color={colors.systemGray3} />
+        <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>Call Log Unavailable</Text>
+        <TouchableOpacity
+          style={[styles.voicemailBtn, { backgroundColor: colors.systemBlue, marginTop: 16 }]}
+          onPress={async () => {
+            const mod = await getLauncher();
+            if (mod) {
+              try {
+                const log = await mod.getCallLog(50);
+                setCallLog(log);
+                setPermissionDenied(false);
+              } catch { /* still denied */ }
+            }
+          }}
+          accessibilityRole="button"
+        >
+          <Text style={[typography.subhead, { color: '#FFFFFF', fontWeight: '600' }]}>Grant Call Log Permission</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (callLog.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="time-outline" size={52} color={colors.systemGray3} />
@@ -192,57 +217,49 @@ function RecentsTab({ contacts }: { contacts: DeviceContact[] }) {
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-      {grouped.map(({ title, data }) => (
-        <View key={title}>
-          <View style={[styles.sectionHeader, { borderBottomColor: colors.separator }]}>
-            <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase', letterSpacing: 0.5 }]}>
-              {title}
-            </Text>
-          </View>
-          <View style={{ backgroundColor: colors.secondarySystemGroupedBackground }}>
-            {data.map((call, idx) => {
-              const icon = callDirectionIcon(call.status);
-              const isMissed = call.status === 'missed';
-              const isLast = idx === data.length - 1;
-              return (
-                <Pressable
-                  key={call.id}
-                  onPress={() => handleCall(call.contact.phone)}
-                  style={({ pressed }) => [
-                    styles.recentRow,
-                    !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
-                    pressed && { backgroundColor: colors.systemGray5 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${call.status} call from ${getFullName(call.contact)}, ${call.time}`}
-                >
-                  <View style={styles.recentLeft}>
-                    <Ionicons name={icon.name} size={18} color={icon.color} style={{ marginRight: 10 }} />
-                    <View>
-                      <Text
-                        style={[
-                          typography.body,
-                          { color: isMissed ? colors.systemRed : colors.label, fontWeight: isMissed ? '600' : '400' },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {getFullName(call.contact)}
-                      </Text>
-                      <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-                        {call.status === 'outgoing' ? 'Outgoing' : call.status === 'missed' ? 'Missed' : 'Incoming'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.recentRight}>
-                    <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>{call.time}</Text>
-                    <Ionicons name="information-circle-outline" size={20} color={colors.systemBlue} style={{ marginLeft: 12 }} />
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      ))}
+      <View style={{ backgroundColor: colors.secondarySystemGroupedBackground }}>
+        {callLog.map((call, idx) => {
+          const icon = callDirectionIcon(call.type);
+          const isMissed = call.type === 'missed' || call.type === 'rejected';
+          const isLast = idx === callLog.length - 1;
+          const displayName = call.name && call.name !== call.number ? call.name : call.number;
+          return (
+            <Pressable
+              key={call.id}
+              onPress={() => handleCall(call.number)}
+              style={({ pressed }) => [
+                styles.recentRow,
+                !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+                pressed && { backgroundColor: colors.systemGray5 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${call.type} call ${displayName}, ${call.dateFormatted}`}
+            >
+              <View style={styles.recentLeft}>
+                <Ionicons name={icon.name} size={18} color={icon.color} style={{ marginRight: 10 }} />
+                <View>
+                  <Text
+                    style={[
+                      typography.body,
+                      { color: isMissed ? colors.systemRed : colors.label, fontWeight: isMissed ? '600' : '400' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                  <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+                    {callTypeLabel(call.type)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.recentRight}>
+                <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>{call.dateFormatted}</Text>
+                <Ionicons name="information-circle-outline" size={20} color={colors.systemBlue} style={{ marginLeft: 12 }} />
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
     </ScrollView>
   );
 }
@@ -261,9 +278,9 @@ function ContactsTab({ contacts }: { contacts: DeviceContact[] }) {
     [contacts],
   );
 
-  const handleCall = useCallback((phone: string) => {
+  const handleCall = useCallback(async (phone: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Linking.openURL(`tel:${phone}`);
+    await makeCallNative(phone);
   }, []);
 
   if (sorted.length === 0) {
@@ -330,10 +347,10 @@ function KeypadTab() {
     setNumber((prev) => prev.slice(0, -1));
   }, []);
 
-  const handleCall = useCallback(() => {
+  const handleCall = useCallback(async () => {
     if (!number) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Linking.openURL(`tel:${number}`);
+    await makeCallNative(number);
   }, [number]);
 
   const keypadBg = theme.dark ? colors.systemGray4 : colors.systemGray5;
@@ -431,9 +448,9 @@ function VoicemailTab() {
   const { theme, typography } = useTheme();
   const { colors } = theme;
 
-  const handleCallVoicemail = useCallback(() => {
+  const handleCallVoicemail = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Linking.openURL('tel:*86');
+    await makeCallNative('*86');
   }, []);
 
   return (
@@ -476,7 +493,7 @@ export function PhoneScreen() {
   const renderContent = () => {
     switch (selectedTab) {
       case 0: return <FavoritesTab contacts={device.contacts} />;
-      case 1: return <RecentsTab contacts={device.contacts} />;
+      case 1: return <RecentsTab />;
       case 2: return <ContactsTab contacts={device.contacts} />;
       case 3: return <KeypadTab />;
       case 4: return <VoicemailTab />;

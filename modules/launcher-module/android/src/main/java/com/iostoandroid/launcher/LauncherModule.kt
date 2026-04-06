@@ -11,14 +11,18 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.hardware.camera2.CameraManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Environment
 import android.os.StatFs
+import android.provider.CallLog
+import android.provider.ContactsContract
 import android.provider.Settings
 import android.provider.Telephony
+import android.telecom.TelecomManager
 import android.util.Base64
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -28,6 +32,10 @@ import java.util.Date
 import java.util.Locale
 
 class LauncherModule : Module() {
+    companion object {
+        var flashlightState = false
+    }
+
     private val context: Context
         get() = appContext.reactContext ?: throw Exception("React context is not available")
 
@@ -272,6 +280,91 @@ class LauncherModule : Module() {
             )
         }
 
+        // ── Flashlight ───────────────────────────────────────────────────
+
+        AsyncFunction("setFlashlight") { enabled: Boolean ->
+            try {
+                val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                val cameraId = cameraManager.cameraIdList[0]
+                cameraManager.setTorchMode(cameraId, enabled)
+                flashlightState = enabled
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isFlashlightOn") {
+            // No direct API to check; track state in companion object
+            flashlightState
+        }
+
+        // ── Call Log ─────────────────────────────────────────────────────
+
+        AsyncFunction("getCallLog") { limit: Int ->
+            try {
+                val cursor: Cursor? = context.contentResolver.query(
+                    CallLog.Calls.CONTENT_URI,
+                    arrayOf(
+                        CallLog.Calls._ID,
+                        CallLog.Calls.NUMBER,
+                        CallLog.Calls.CACHED_NAME,
+                        CallLog.Calls.TYPE,
+                        CallLog.Calls.DATE,
+                        CallLog.Calls.DURATION
+                    ),
+                    null, null,
+                    "${CallLog.Calls.DATE} DESC"
+                )
+
+                val calls = mutableListOf<Map<String, Any?>>()
+                cursor?.use { c ->
+                    var count = 0
+                    while (c.moveToNext() && count < limit) {
+                        val number = c.getString(c.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: ""
+                        val cachedName = c.getString(c.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
+                        val callType = c.getInt(c.getColumnIndexOrThrow(CallLog.Calls.TYPE))
+                        val date = c.getLong(c.getColumnIndexOrThrow(CallLog.Calls.DATE))
+                        val duration = c.getLong(c.getColumnIndexOrThrow(CallLog.Calls.DURATION))
+
+                        // Resolve contact name if not cached
+                        val name = cachedName ?: resolveContactName(number)
+
+                        val typeStr = when (callType) {
+                            CallLog.Calls.INCOMING_TYPE -> "incoming"
+                            CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                            CallLog.Calls.MISSED_TYPE -> "missed"
+                            CallLog.Calls.REJECTED_TYPE -> "rejected"
+                            else -> "unknown"
+                        }
+
+                        calls.add(mapOf(
+                            "id" to c.getLong(c.getColumnIndexOrThrow(CallLog.Calls._ID)).toString(),
+                            "number" to number,
+                            "name" to (name ?: ""),
+                            "type" to typeStr,
+                            "date" to date,
+                            "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
+                            "duration" to duration
+                        ))
+                        count++
+                    }
+                }
+                calls
+            } catch (e: Exception) {
+                emptyList<Map<String, Any?>>()
+            }
+        }
+
+        // ── Make Call (via TelecomManager) ────────────────────────────────
+
+        AsyncFunction("makeCall") { number: String ->
+            try {
+                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
         // ── Notifications ────────────────────────────────────────────────
 
         AsyncFunction("getNotifications") {
@@ -296,6 +389,26 @@ class LauncherModule : Module() {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private fun resolveContactName(phoneNumber: String): String? {
+        try {
+            val uri = Uri.withAppendedPath(
+                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                Uri.encode(phoneNumber)
+            )
+            val cursor = context.contentResolver.query(
+                uri,
+                arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
+                null, null, null
+            )
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    return c.getString(0)
+                }
+            }
+        } catch (_: Exception) {}
+        return null
+    }
 
     private fun intToIp(ip: Int): String {
         return "${ip and 0xFF}.${ip shr 8 and 0xFF}.${ip shr 16 and 0xFF}.${ip shr 24 and 0xFF}"
