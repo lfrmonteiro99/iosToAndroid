@@ -44,7 +44,7 @@ const MessageBubble = React.memo(function MessageBubble({
   const isSent = message.type === 2;
 
   const bubbleBackground = isSent
-    ? '#007AFF'
+    ? '#34C759'
     : isDark
     ? '#38383A'
     : '#E5E5EA';
@@ -68,6 +68,36 @@ const MessageBubble = React.memo(function MessageBubble({
         <Text style={[typography.callout, { color: textColor }]}>
           {message.body}
         </Text>
+        {isSent ? (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: -6,
+              width: 0,
+              height: 0,
+              borderLeftWidth: 8,
+              borderLeftColor: '#34C759',
+              borderTopWidth: 8,
+              borderTopColor: 'transparent',
+              borderBottomWidth: 0,
+            }}
+          />
+        ) : (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: -6,
+              width: 0,
+              height: 0,
+              borderRightWidth: 8,
+              borderRightColor: bubbleBackground,
+              borderTopWidth: 8,
+              borderTopColor: 'transparent',
+            }}
+          />
+        )}
       </View>
       <Text
         style={[
@@ -238,6 +268,15 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
           },
         ]}
       >
+        <Pressable
+          onPress={() => {}}
+          hitSlop={8}
+          style={styles.plusButton}
+          accessibilityRole="button"
+          accessibilityLabel="Add attachment"
+        >
+          <Ionicons name="add-circle" size={32} color={colors.systemBlue} />
+        </Pressable>
         <CupertinoTextField
           value={inputText}
           onChangeText={setInputText}
@@ -335,6 +374,9 @@ const styles = StyleSheet.create({
   },
   textFieldContainer: {
     flex: 1,
+  },
+  plusButton: {
+    paddingBottom: 6,
   },
   sendButton: {
     paddingBottom: 10,

@@ -65,10 +65,10 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
               accessibilityState={{ selected: isFocused }}
               style={styles.tab}
             >
-              <Ionicons name={iconName} size={24} color={color} />
+              <Ionicons name={iconName} size={25} color={color} />
               <Text
                 style={[
-                  typography.caption2,
+                  typography.tabLabel,
                   { color, marginTop: 2 },
                 ]}
               >

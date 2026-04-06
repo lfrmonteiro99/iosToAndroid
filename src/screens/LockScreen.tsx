@@ -249,8 +249,8 @@ export function LockScreen({ navigation }: { navigation: any; route: any }) {
         {/* Large clock                                                        */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.clockArea}>
-          <Text style={styles.bigClock}>{formatLargeClock(now, settings.use24Hour)}</Text>
           <Text style={styles.fullDate}>{formatFullDate(now)}</Text>
+          <Text style={styles.bigClock}>{formatLargeClock(now, settings.use24Hour)}</Text>
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -277,8 +277,7 @@ export function LockScreen({ navigation }: { navigation: any; route: any }) {
           </Pressable>
 
           <View style={styles.swipeHintWrap}>
-            <Ionicons name="chevron-up" size={14} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.swipeHint}>Swipe up to unlock</Text>
+            <View style={styles.homeIndicator} />
           </View>
 
           <Pressable
@@ -343,17 +342,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   bigClock: {
-    fontSize: 80,
+    fontSize: 96,
     fontWeight: '200',
     color: '#ffffff',
     letterSpacing: -3,
-    lineHeight: 88,
+    lineHeight: 104,
   },
   fullDate: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '400',
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 2,
     letterSpacing: 0.2,
   },
 
@@ -362,13 +361,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     gap: 8,
+    justifyContent: 'flex-end',
   },
   notifCard: {
     borderRadius: 14,
     overflow: 'hidden',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.08)',
+    height: 70,
+    justifyContent: 'center',
   },
   notifHeader: {
     flexDirection: 'row',
@@ -425,12 +427,12 @@ const styles = StyleSheet.create({
   },
   swipeHintWrap: {
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
   },
-  swipeHint: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '400',
-    letterSpacing: 0.1,
+  homeIndicator: {
+    width: 134,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
 });

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
@@ -115,6 +116,34 @@ export function SettingsScreen() {
   };
 
   const renderItem = (item: SettingsItem) => {
+    if (item.key === 'profile') {
+      return (
+        <Pressable
+          key={item.key}
+          onPress={() => item.route && navigation.navigate(item.route)}
+          style={({ pressed }) => [
+            styles.profileCard,
+            { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={item.title}
+        >
+          <View style={[styles.profileAvatar, { backgroundColor: colors.systemGray4 }]}>
+            <Ionicons name="person" size={28} color={colors.secondaryLabel} />
+          </View>
+          <View style={styles.profileMeta}>
+            <Text style={[typography.headline, { color: colors.label }]}>{item.title}</Text>
+            {item.subtitle ? (
+              <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: 2 }]} numberOfLines={2}>
+                {item.subtitle}
+              </Text>
+            ) : null}
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.systemGray3} />
+        </Pressable>
+      );
+    }
+
     if (item.type === 'switch' && item.settingsKey) {
       const key = item.settingsKey as keyof typeof settings;
       const isSearching = searchQuery.trim().length > 0;
@@ -215,6 +244,23 @@ export function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  profileAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileMeta: {
     flex: 1,
   },
 });

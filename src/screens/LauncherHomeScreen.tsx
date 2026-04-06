@@ -54,9 +54,9 @@ const COLS = 4;
 const ROWS = 6;
 const APPS_PER_PAGE = COLS * ROWS; // 24
 const ICON_SIZE = 60;
-const GRID_HORIZONTAL_PADDING = 16;
+const GRID_HORIZONTAL_PADDING = 20;
 const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
-const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 24) / 4; // dock has 12px padding each side
+const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,14 +66,6 @@ function formatTime(date: Date): string {
   const h = date.getHours().toString().padStart(2, '0');
   const m = date.getMinutes().toString().padStart(2, '0');
   return `${h}:${m}`;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +208,6 @@ function NonAndroidFallback() {
 // ---------------------------------------------------------------------------
 
 export function LauncherHomeScreen() {
-  const { borderRadius } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -382,32 +373,7 @@ export function LauncherHomeScreen() {
         </View>
       </View>
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Clock widget (first page only — always visible above grid)        */}
-      {/* ---------------------------------------------------------------- */}
-      {currentPage === 0 && (
-        <View style={styles.clockWidget}>
-          <Text style={styles.clockTime}>{formatTime(now)}</Text>
-          <Text style={styles.clockDate}>{formatDate(now)}</Text>
-        </View>
-      )}
-
-      {/* ---------------------------------------------------------------- */}
-      {/* Search bar — iOS Spotlight style                                   */}
-      {/* ---------------------------------------------------------------- */}
-      <Pressable
-        style={styles.searchWrapper}
-        onPress={() => {
-          navigation.navigate('Contacts');
-        }}
-        accessibilityLabel="Search apps"
-        accessibilityRole="search"
-      >
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={16} color="rgba(255,255,255,0.5)" />
-          <Text style={styles.searchText}>Search</Text>
-        </View>
-      </Pressable>
+      {/* No clock widget — iOS home screen has no clock (lock screen only) */}
 
       {/* ---------------------------------------------------------------- */}
       {/* Swipeable app pages                                                */}
@@ -439,18 +405,26 @@ export function LauncherHomeScreen() {
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
-      {/* Page dots                                                          */}
+      {/* Page dots + Search label (iOS 16/17 style)                         */}
       {/* ---------------------------------------------------------------- */}
       <PageDots total={pages.length} current={currentPage} />
+      <Pressable
+        style={styles.searchLabel}
+        onPress={() => navigation.navigate('Contacts')}
+        accessibilityLabel="Search apps"
+        accessibilityRole="search"
+      >
+        <Text style={styles.searchLabelText}>Search</Text>
+      </Pressable>
 
       {/* ---------------------------------------------------------------- */}
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
       <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 8 }]}>
         <BlurView
-          intensity={40}
+          intensity={90}
           tint="dark"
-          style={[styles.dockBlur, { borderRadius: borderRadius.extraLarge }]}
+          style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
             {dockApps.slice(0, 4).map((app) => (
@@ -534,9 +508,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statusTime: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12,
-    fontWeight: '500',
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   statusRight: {
     flexDirection: 'row',
@@ -553,44 +527,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Clock widget
-  clockWidget: {
+  // Search label — iOS 16/17 style (small text below page dots)
+  searchLabel: {
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 12,
+    paddingBottom: 6,
   },
-  clockTime: {
-    fontSize: 72,
-    fontWeight: '200',
-    color: '#ffffff',
-    letterSpacing: -2,
-    lineHeight: 80,
-  },
-  clockDate: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 2,
-  },
-
-  // Search — iOS Spotlight style
-  searchWrapper: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 10,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  searchText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 16,
-    fontWeight: '400',
+  searchLabelText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '500',
   },
 
   // Swipeable pages
@@ -612,17 +557,21 @@ const styles = StyleSheet.create({
   // App icons
   appIconWrapper: {
     alignItems: 'center',
-    paddingVertical: 6,
+    height: 88,
+    justifyContent: 'flex-start',
+    paddingTop: 5,
   },
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 14,
+    borderRadius: 13.5,
+    overflow: 'hidden',
   },
   appIconPlaceholder: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 14,
+    borderRadius: 13.5,
+    overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -630,6 +579,7 @@ const styles = StyleSheet.create({
   appIconLabel: {
     marginTop: 4,
     fontSize: 11,
+    fontWeight: '500',
     color: '#ffffff',
     textAlign: 'center',
     width: '90%',
@@ -643,13 +593,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 6,
+    paddingVertical: 4,
+    gap: 4,
   },
   pageDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   pageDotFilled: {
     backgroundColor: '#ffffff',
@@ -664,9 +614,10 @@ const styles = StyleSheet.create({
   },
   dockBlur: {
     overflow: 'hidden',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   dockRow: {
     flexDirection: 'row',
