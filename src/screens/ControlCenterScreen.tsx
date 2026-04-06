@@ -122,16 +122,20 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const { colors } = theme;
 
   const [volume, setVolume] = useState(0.5);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [flashlightOn, setFlashlightOn] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState({ title: '', artist: '', album: '', isPlaying: false, packageName: '' });
 
   useEffect(() => {
     (async () => {
       const mod = await getLauncher();
       if (mod) {
         try {
-          const state = await mod.isFlashlightOn();
-          setFlashlightOn(!!state);
+          const [flashState, np] = await Promise.all([
+            mod.isFlashlightOn(),
+            mod.getNowPlaying(),
+          ]);
+          setFlashlightOn(!!flashState);
+          setNowPlaying(np);
         } catch {
           // ignore
         }
@@ -286,8 +290,12 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   <Ionicons name="musical-notes" size={28} color="rgba(255,255,255,0.4)" />
                 </View>
                 <View style={styles.musicMeta}>
-                  <Text style={styles.musicTitle}>Not Playing</Text>
-                  <Text style={styles.musicArtist}>—</Text>
+                  <Text style={styles.musicTitle} numberOfLines={1}>
+                    {nowPlaying.title || 'Not Playing'}
+                  </Text>
+                  <Text style={styles.musicArtist} numberOfLines={1}>
+                    {nowPlaying.artist || '—'}
+                  </Text>
                 </View>
                 <View style={styles.musicControls}>
                   <Pressable
@@ -298,12 +306,12 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     <Ionicons name="play-skip-back" size={20} color="#ffffff" />
                   </Pressable>
                   <Pressable
-                    onPress={() => setIsPlaying((p) => !p)}
-                    accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+                    onPress={() => setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }))}
+                    accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
                     style={styles.musicPlayBtn}
                   >
                     <Ionicons
-                      name={isPlaying ? 'pause' : 'play'}
+                      name={nowPlaying.isPlaying ? 'pause' : 'play'}
                       size={22}
                       color="#ffffff"
                     />

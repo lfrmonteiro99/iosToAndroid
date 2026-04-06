@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -14,10 +15,18 @@ import { FoldersProvider } from './src/store/FoldersStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { LockScreen } from './src/screens/LockScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 
 function AppContent() {
   const { isDark } = useTheme();
   const [isLocked, setIsLocked] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('@iostoandroid/onboarding_done').then(val => {
+      setShowOnboarding(val !== 'true');
+    });
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -27,6 +36,19 @@ function AppContent() {
     });
     return () => sub.remove();
   }, []);
+
+  if (showOnboarding === null) return null;
+
+  if (showOnboarding) {
+    return (
+      <OnboardingScreen
+        onDone={() => {
+          setShowOnboarding(false);
+          AsyncStorage.setItem('@iostoandroid/onboarding_done', 'true');
+        }}
+      />
+    );
+  }
 
   if (isLocked) {
     return <LockScreen onUnlock={() => setIsLocked(false)} />;

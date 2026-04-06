@@ -478,19 +478,25 @@ export function LauncherHomeScreen() {
     }
   }, [navigation, launchApp]);
 
-  // Vertical swipe gesture: up → App Drawer, down-top → Control Center, down-mid → Spotlight
+  // Vertical swipe gesture: up → App Drawer, down-top-left → Notification Center, down-top-right → Control Center, down-mid → Spotlight
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
     .onEnd((event) => {
       'worklet';
-      const { translationY, absoluteY, velocityY } = event;
+      const { translationY, absoluteY, absoluteX, velocityY } = event;
 
       if (translationY < -80 && velocityY < -300) {
         // Swipe up → App Drawer
         runOnJS(navigation.navigate)('AppDrawer');
       } else if (translationY > 80 && velocityY > 300 && absoluteY < 300) {
-        // Swipe down from top → Control Center
-        runOnJS(navigation.navigate)('ControlCenter');
+        // Swipe down from top area — split by horizontal position
+        if (absoluteX < SCREEN_WIDTH / 2) {
+          // Left half → Notification Center
+          runOnJS(navigation.navigate)('NotificationCenter');
+        } else {
+          // Right half → Control Center
+          runOnJS(navigation.navigate)('ControlCenter');
+        }
       } else if (translationY > 80 && velocityY > 300 && absoluteY >= 300) {
         // Swipe down from middle → AppDrawer with search focused
         runOnJS(navigation.navigate)('AppDrawer', { searchFocused: true });
