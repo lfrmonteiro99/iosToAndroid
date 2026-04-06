@@ -4,12 +4,12 @@ import { PhoneScreen } from '../PhoneScreen';
 
 describe('PhoneScreen', () => {
   it('renders Phone title', () => {
-    const { getByText } = render(<PhoneScreen />);
+    const { getByText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
     expect(getByText('Phone')).toBeTruthy();
   });
 
   it('renders segmented control with 5 tabs', () => {
-    const { getByText } = render(<PhoneScreen />);
+    const { getByText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
     expect(getByText('Favorites')).toBeTruthy();
     expect(getByText('Recents')).toBeTruthy();
     expect(getByText('Contacts')).toBeTruthy();
@@ -18,7 +18,7 @@ describe('PhoneScreen', () => {
   });
 
   it('keypad tab renders number buttons', () => {
-    const { getByText, getAllByText } = render(<PhoneScreen />);
+    const { getByText, getAllByText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
     // Switch to Keypad tab (index 3)
     fireEvent.press(getByText('Keypad'));
 
@@ -38,7 +38,7 @@ describe('PhoneScreen', () => {
   });
 
   it('keypad shows typed number', () => {
-    const { getByText, getByLabelText } = render(<PhoneScreen />);
+    const { getByText, getByLabelText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
     fireEvent.press(getByText('Keypad'));
 
     // Press digit buttons via accessibilityLabel

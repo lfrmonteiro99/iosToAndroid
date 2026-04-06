@@ -16,6 +16,16 @@ import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoTextField } from '../components';
 
+// ─── Native module helper ─────────────────────────────────────────────────────
+
+const getLauncher = async () => {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function findContactByPhone(phone: string, contacts: DeviceContact[]): DeviceContact | undefined {
@@ -152,12 +162,20 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
     Linking.openURL(`tel:${address}`);
   }, [address]);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text) return;
-    Linking.openURL(`sms:${address}?body=${encodeURIComponent(text)}`);
-    setInputText('');
-  }, [inputText, address]);
+    const mod = await getLauncher();
+    if (mod) {
+      const success = await mod.sendSms(address, text);
+      if (success) {
+        setInputText('');
+        await device.refresh();
+        // FlatList is inverted — index 0 is the newest message
+        listRef.current?.scrollToIndex({ index: 0, animated: true });
+      }
+    }
+  }, [inputText, address, device]);
 
   const renderItem = useCallback(
     ({ item }: { item: DeviceSms }) => (

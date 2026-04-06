@@ -5,7 +5,6 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
-  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -192,8 +191,8 @@ export function MessagesScreen() {
   }, [conversations, searchQuery, device.contacts]);
 
   const handleComposePress = useCallback(() => {
-    Linking.openURL('sms:');
-  }, []);
+    navigation.navigate('Conversation', { address: '' });
+  }, [navigation]);
 
   const handleConversationPress = useCallback(
     (address: string) => {

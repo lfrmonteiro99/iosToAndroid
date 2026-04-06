@@ -116,10 +116,9 @@ class LauncherModule : Module() {
 
         AsyncFunction("setWifiEnabled") { enabled: Boolean ->
             try {
-                // Android 10+ can't programmatically toggle Wi-Fi, open settings panel
                 val intent = Intent(Settings.Panel.ACTION_WIFI)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
+                // Don't add FLAG_ACTIVITY_NEW_TASK — we want the panel to appear over our activity
+                appContext.currentActivity?.startActivity(intent)
                 true
             } catch (e: Exception) { false }
         }
@@ -162,11 +161,19 @@ class LauncherModule : Module() {
 
         AsyncFunction("setBluetoothEnabled") { enabled: Boolean ->
             try {
-                val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
+                // Panel shows inline overlay, not full settings app
+                val panelIntent = Intent("android.settings.panel.action.BLUETOOTH")
+                appContext.currentActivity?.startActivity(panelIntent)
                 true
-            } catch (e: Exception) { false }
+            } catch (e: Exception) {
+                // Fallback for older devices
+                try {
+                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    true
+                } catch (e2: Exception) { false }
+            }
         }
 
         // ── Storage ──────────────────────────────────────────────────────
@@ -386,9 +393,61 @@ class LauncherModule : Module() {
             context.startActivity(intent)
             true
         }
+
+        // ── SMS Send ─────────────────────────────────────────────────────
+
+        AsyncFunction("sendSms") { address: String, body: String ->
+            try {
+                val smsManager = android.telephony.SmsManager.getDefault()
+                smsManager.sendTextMessage(address, null, body, null, null)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        // ── Permissions ──────────────────────────────────────────────────
+
+        AsyncFunction("requestAllPermissions") {
+            val activity = appContext.currentActivity ?: throw Exception("No activity")
+            val permissions = arrayOf(
+                android.Manifest.permission.READ_CONTACTS,
+                android.Manifest.permission.READ_CALL_LOG,
+                android.Manifest.permission.CALL_PHONE,
+                android.Manifest.permission.READ_SMS,
+                android.Manifest.permission.SEND_SMS,
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.READ_PHONE_STATE
+            )
+            val REQUEST_CODE = 1001
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                activity.requestPermissions(permissions, REQUEST_CODE)
+            }
+            true
+        }
+
+        AsyncFunction("checkPermissions") {
+            val perms = mapOf(
+                "contacts" to hasPermission(android.Manifest.permission.READ_CONTACTS),
+                "callLog" to hasPermission(android.Manifest.permission.READ_CALL_LOG),
+                "phone" to hasPermission(android.Manifest.permission.CALL_PHONE),
+                "sms" to hasPermission(android.Manifest.permission.READ_SMS),
+                "sendSms" to hasPermission(android.Manifest.permission.SEND_SMS),
+                "camera" to hasPermission(android.Manifest.permission.CAMERA),
+                "location" to hasPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            )
+            perms
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private fun hasPermission(permission: String): Boolean {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            context, permission
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
 
     private fun resolveContactName(phoneNumber: String): String? {
         try {
