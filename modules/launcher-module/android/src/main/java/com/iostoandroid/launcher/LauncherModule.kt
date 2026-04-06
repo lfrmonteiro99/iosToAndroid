@@ -275,7 +275,7 @@ class LauncherModule : Module() {
         // ── Notifications ────────────────────────────────────────────────
 
         AsyncFunction("getNotifications") {
-            NotificationService.activeNotifications.toList()
+            NotificationService.getNotificationMaps()
         }
 
         AsyncFunction("isNotificationAccessGranted") {
