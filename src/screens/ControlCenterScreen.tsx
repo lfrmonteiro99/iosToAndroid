@@ -1,0 +1,566 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  Pressable,
+  StatusBar,
+  Dimensions,
+} from 'react-native';
+import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+
+import { useDevice } from '../store/DeviceStore';
+import { useSettings } from '../store/SettingsStore';
+import { useTheme } from '../theme/ThemeContext';
+import { CupertinoSlider } from '../components';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const TOGGLE_SIZE = 70;
+const SHORTCUT_SIZE = 50;
+
+// ---------------------------------------------------------------------------
+// Toggle button component
+// ---------------------------------------------------------------------------
+
+interface ToggleButtonProps {
+  iconName: keyof typeof Ionicons.glyphMap;
+  label: string;
+  sublabel?: string;
+  active: boolean;
+  activeColor?: string;
+  onPress: () => void;
+}
+
+function ToggleButton({
+  iconName,
+  label,
+  sublabel,
+  active,
+  activeColor = '#0A84FF',
+  onPress,
+}: ToggleButtonProps) {
+  return (
+    <Pressable onPress={onPress} style={styles.toggleWrap} accessibilityLabel={label}>
+      <View
+        style={[
+          styles.toggleButton,
+          { backgroundColor: active ? activeColor : 'rgba(255,255,255,0.18)' },
+        ]}
+      >
+        <Ionicons name={iconName} size={26} color="#ffffff" />
+      </View>
+      <Text style={styles.toggleLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      {sublabel ? (
+        <Text style={styles.toggleSublabel} numberOfLines={1}>
+          {sublabel}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shortcut button
+// ---------------------------------------------------------------------------
+
+interface ShortcutButtonProps {
+  iconName: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}
+
+function ShortcutButton({ iconName, label, onPress }: ShortcutButtonProps) {
+  return (
+    <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={label}>
+      <View style={styles.shortcutCircle}>
+        <Ionicons name={iconName} size={22} color="#ffffff" />
+      </View>
+      <Text style={styles.shortcutLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Screen
+// ---------------------------------------------------------------------------
+
+export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) {
+  const insets = useSafeAreaInsets();
+  const device = useDevice();
+  const { settings, update } = useSettings();
+  const { theme } = useTheme();
+  const { colors } = theme;
+
+  const [volume, setVolume] = useState(0.5);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Swipe-down gesture to close
+  const translateY = useSharedValue(0);
+  const backdropOpacity = useSharedValue(1);
+
+  const handleClose = () => {
+    navigation.goBack();
+  };
+
+  const swipeDownGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (e.translationY > 0) {
+        translateY.value = e.translationY;
+        backdropOpacity.value = Math.max(0, 1 - e.translationY / (SCREEN_HEIGHT * 0.4));
+      }
+    })
+    .onEnd((e) => {
+      if (e.translationY > 80 || e.velocityY > 600) {
+        translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 });
+        backdropOpacity.value = withTiming(0, { duration: 250 }, () => {
+          runOnJS(handleClose)();
+        });
+      } else {
+        translateY.value = withTiming(0, { duration: 200 });
+        backdropOpacity.value = withTiming(1, { duration: 200 });
+      }
+    });
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
+
+  // Focus mode toggle
+  const toggleFocus = () => {
+    update('focusMode', settings.focusMode === 'off' ? 'doNotDisturb' : 'off');
+  };
+
+  const batteryLevel = Math.round(device.battery.level * 100);
+
+  return (
+    <View style={styles.root}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+
+      {/* Backdrop — tap to close */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+      </Animated.View>
+
+      {/* Control Center sheet */}
+      <GestureDetector gesture={swipeDownGesture}>
+        <Animated.View
+          style={[styles.sheet, { paddingBottom: insets.bottom + 12 }, sheetStyle]}
+        >
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+
+          {/* Drag handle */}
+          <View style={styles.handle} />
+
+          {/* ------------------------------------------------------------ */}
+          {/* Top 2x2 toggle grid                                            */}
+          {/* ------------------------------------------------------------ */}
+          <View style={styles.section}>
+            <View style={styles.toggleGrid}>
+              <ToggleButton
+                iconName="airplane"
+                label="Airplane"
+                active={settings.airplaneMode}
+                onPress={() => {
+                  update('airplaneMode', !settings.airplaneMode);
+                  device.openSystemPanel('airplane');
+                }}
+              />
+              <ToggleButton
+                iconName="wifi"
+                label="Wi-Fi"
+                sublabel={device.wifi.enabled ? (device.wifi.ssid || 'On') : 'Off'}
+                active={device.wifi.enabled}
+                onPress={device.toggleWifi}
+              />
+              <ToggleButton
+                iconName="bluetooth"
+                label="Bluetooth"
+                sublabel={device.bluetooth.enabled ? 'On' : 'Off'}
+                active={device.bluetooth.enabled}
+                onPress={device.toggleBluetooth}
+              />
+              <ToggleButton
+                iconName="moon"
+                label="Focus"
+                sublabel={settings.focusMode !== 'off' ? 'Do Not Disturb' : 'Off'}
+                active={settings.focusMode !== 'off'}
+                activeColor={colors.systemPurple}
+                onPress={toggleFocus}
+              />
+            </View>
+          </View>
+
+          {/* ------------------------------------------------------------ */}
+          {/* Music controls                                                  */}
+          {/* ------------------------------------------------------------ */}
+          <View style={styles.section}>
+            <View style={styles.musicCard}>
+              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.musicInner}>
+                <View style={styles.musicAlbumArt}>
+                  <Ionicons name="musical-notes" size={28} color="rgba(255,255,255,0.4)" />
+                </View>
+                <View style={styles.musicMeta}>
+                  <Text style={styles.musicTitle}>Not Playing</Text>
+                  <Text style={styles.musicArtist}>—</Text>
+                </View>
+                <View style={styles.musicControls}>
+                  <Pressable
+                    onPress={() => {}}
+                    accessibilityLabel="Previous track"
+                    style={styles.musicBtn}
+                  >
+                    <Ionicons name="play-skip-back" size={20} color="#ffffff" />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setIsPlaying((p) => !p)}
+                    accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+                    style={styles.musicPlayBtn}
+                  >
+                    <Ionicons
+                      name={isPlaying ? 'pause' : 'play'}
+                      size={22}
+                      color="#ffffff"
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {}}
+                    accessibilityLabel="Next track"
+                    style={styles.musicBtn}
+                  >
+                    <Ionicons name="play-skip-forward" size={20} color="#ffffff" />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* ------------------------------------------------------------ */}
+          {/* Brightness slider                                               */}
+          {/* ------------------------------------------------------------ */}
+          <View style={styles.section}>
+            <View style={styles.sliderCard}>
+              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.sliderRow}>
+                <Ionicons name="sunny-outline" size={16} color="rgba(255,255,255,0.7)" />
+                <View style={styles.sliderTrack}>
+                  <CupertinoSlider
+                    value={device.brightness}
+                    onValueChange={device.setBrightness}
+                    minimumTrackColor="#FFFFFF"
+                    maximumTrackColor="rgba(255,255,255,0.25)"
+                  />
+                </View>
+                <Ionicons name="sunny" size={22} color="rgba(255,255,255,0.9)" />
+              </View>
+            </View>
+          </View>
+
+          {/* ------------------------------------------------------------ */}
+          {/* Volume slider                                                   */}
+          {/* ------------------------------------------------------------ */}
+          <View style={styles.section}>
+            <View style={styles.sliderCard}>
+              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.sliderRow}>
+                <Ionicons name="volume-low-outline" size={16} color="rgba(255,255,255,0.7)" />
+                <View style={styles.sliderTrack}>
+                  <CupertinoSlider
+                    value={volume}
+                    onValueChange={setVolume}
+                    minimumTrackColor="#FFFFFF"
+                    maximumTrackColor="rgba(255,255,255,0.25)"
+                  />
+                </View>
+                <Ionicons name="volume-high" size={22} color="rgba(255,255,255,0.9)" />
+              </View>
+            </View>
+          </View>
+
+          {/* ------------------------------------------------------------ */}
+          {/* Bottom shortcut row                                             */}
+          {/* ------------------------------------------------------------ */}
+          <View style={styles.section}>
+            <View style={styles.shortcutRow}>
+              <ShortcutButton
+                iconName="flashlight"
+                label="Torch"
+                onPress={() => Alert.alert('Torch', 'Not available in demo.')}
+              />
+              <ShortcutButton
+                iconName="timer-outline"
+                label="Timer"
+                onPress={() => Alert.alert('Timer', 'Not available in demo.')}
+              />
+              <ShortcutButton
+                iconName="calculator-outline"
+                label="Calculator"
+                onPress={() => device.openSystemPanel('calculator')}
+              />
+              <ShortcutButton
+                iconName="camera-outline"
+                label="Camera"
+                onPress={() => Alert.alert('Camera', 'Not available in demo.')}
+              />
+            </View>
+          </View>
+
+          {/* ------------------------------------------------------------ */}
+          {/* Screen mirroring tile                                           */}
+          {/* ------------------------------------------------------------ */}
+          <View style={styles.section}>
+            <Pressable
+              style={styles.mirrorTile}
+              onPress={() => Alert.alert('Screen Mirroring', 'Not available in demo.')}
+              accessibilityLabel="Screen Mirroring"
+            >
+              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.mirrorInner}>
+                <Ionicons name="tv-outline" size={18} color="#ffffff" />
+                <Text style={styles.mirrorLabel}>Screen Mirroring</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color="rgba(255,255,255,0.5)"
+                  style={{ marginLeft: 'auto' as unknown as number }}
+                />
+              </View>
+            </Pressable>
+          </View>
+
+          {/* Battery info row */}
+          <View style={[styles.section, styles.batteryInfoRow]}>
+            <Ionicons
+              name={device.battery.isCharging ? 'battery-charging' : 'battery-half-outline'}
+              size={16}
+              color="rgba(255,255,255,0.6)"
+            />
+            <Text style={styles.batteryInfoText}>
+              {batteryLevel}% {device.battery.isCharging ? '· Charging' : ''}
+            </Text>
+          </View>
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+  },
+
+  backdrop: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+
+  sheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+    paddingTop: 8,
+    backgroundColor: 'rgba(20,20,25,0.85)',
+  },
+
+  handle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+
+  section: {
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+
+  // Toggle grid
+  toggleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  toggleWrap: {
+    alignItems: 'center',
+    width: TOGGLE_SIZE,
+  },
+  toggleButton: {
+    width: TOGGLE_SIZE,
+    height: TOGGLE_SIZE,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleLabel: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  toggleSublabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 10,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+
+  // Music card
+  musicCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  musicInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  musicAlbumArt: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  musicMeta: {
+    flex: 1,
+  },
+  musicTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  musicArtist: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 1,
+  },
+  musicControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  musicBtn: {
+    padding: 6,
+  },
+  musicPlayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 2,
+  },
+
+  // Slider card
+  sliderCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sliderTrack: {
+    flex: 1,
+  },
+
+  // Shortcut row
+  shortcutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+  },
+  shortcutWrap: {
+    alignItems: 'center',
+    width: SHORTCUT_SIZE + 8,
+  },
+  shortcutCircle: {
+    width: SHORTCUT_SIZE,
+    height: SHORTCUT_SIZE,
+    borderRadius: SHORTCUT_SIZE / 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortcutLabel: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '400',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+
+  // Mirror tile
+  mirrorTile: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  mirrorInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  mirrorLabel: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+  },
+
+  // Battery info
+  batteryInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  batteryInfoText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '400',
+  },
+});

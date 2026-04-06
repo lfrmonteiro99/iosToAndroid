@@ -271,6 +271,28 @@ class LauncherModule : Module() {
                 "isVpn" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false)
             )
         }
+
+        // ── Notifications ────────────────────────────────────────────────
+
+        AsyncFunction("getNotifications") {
+            NotificationService.activeNotifications.toList()
+        }
+
+        AsyncFunction("isNotificationAccessGranted") {
+            val cn = android.content.ComponentName(context, NotificationService::class.java)
+            val flat = android.provider.Settings.Secure.getString(
+                context.contentResolver,
+                "enabled_notification_listeners"
+            )
+            flat != null && flat.contains(cn.flattenToString())
+        }
+
+        AsyncFunction("openNotificationAccessSettings") {
+            val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

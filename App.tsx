@@ -9,6 +9,7 @@ import { ContactsProvider } from './src/store/ContactsStore';
 import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
 import { DeviceProvider } from './src/store/DeviceStore';
+import { FoldersProvider } from './src/store/FoldersStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -32,11 +33,13 @@ export default function App() {
               <ProfileProvider>
                 <AppsProvider>
                 <DeviceProvider>
+                <FoldersProvider>
                 <ErrorBoundary>
                   <NavigationContainer>
                     <AppContent />
                   </NavigationContainer>
                 </ErrorBoundary>
+                </FoldersProvider>
                 </DeviceProvider>
                 </AppsProvider>
               </ProfileProvider>

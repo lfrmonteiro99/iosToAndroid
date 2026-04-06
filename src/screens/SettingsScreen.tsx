@@ -38,7 +38,7 @@ export function SettingsScreen() {
     {
       section: 'profile',
       items: [
-        { key: 'profile', title: 'John Appleseed', subtitle: 'Apple ID, iCloud+, Media & Purchases', icon: 'person-circle', iconBg: '#8E8E93', type: 'navigate' },
+        { key: 'profile', title: 'John Appleseed', subtitle: 'Apple ID, iCloud+, Media & Purchases', icon: 'person-circle', iconBg: '#8E8E93', type: 'navigate', route: 'ProfileMain' },
       ],
     },
     {
