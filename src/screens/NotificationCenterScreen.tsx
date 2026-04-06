@@ -67,7 +67,7 @@ function formatDateHeader(date: Date): string {
 }
 
 export function NotificationCenterScreen() {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { apps, launchApp } = useApps();
@@ -150,10 +150,10 @@ export function NotificationCenterScreen() {
       <View style={[styles.panel, { paddingTop: insets.top + 8 }]}>
         {/* Date header row */}
         <View style={styles.headerRow}>
-          <Text style={styles.dateText}>{formatDateHeader(today)}</Text>
+          <Text style={[styles.dateText, typography.title1]}>{formatDateHeader(today)}</Text>
           {notifications.length > 0 && (
             <Pressable onPress={handleClearAll} hitSlop={12}>
-              <Text style={styles.clearAllText}>Clear All</Text>
+              <Text style={[styles.clearAllText, typography.subhead, { fontWeight: '600' }]}>Clear All</Text>
             </Pressable>
           )}
         </View>
@@ -162,12 +162,12 @@ export function NotificationCenterScreen() {
         {!hasAccess && (
           <BlurView intensity={40} tint="dark" style={styles.accessCard}>
             <Ionicons name="notifications-off" size={28} color="#FFFFFF" style={{ marginBottom: 8 }} />
-            <Text style={styles.accessTitle}>Notification Access Required</Text>
-            <Text style={styles.accessSubtitle}>
+            <Text style={[styles.accessTitle, typography.headline]}>Notification Access Required</Text>
+            <Text style={[styles.accessSubtitle, typography.subhead]}>
               Allow access to see your notifications here.
             </Text>
             <Pressable style={styles.accessButton} onPress={handleEnableAccess}>
-              <Text style={styles.accessButtonText}>Enable Notification Access</Text>
+              <Text style={[styles.accessButtonText, typography.subhead, { fontWeight: '600' }]}>Enable Notification Access</Text>
             </Pressable>
           </BlurView>
         )}
@@ -182,7 +182,7 @@ export function NotificationCenterScreen() {
             {groups.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="notifications" size={48} color="rgba(255,255,255,0.4)" />
-                <Text style={styles.emptyText}>No Notifications</Text>
+                <Text style={[styles.emptyText, typography.subhead, { fontWeight: '500' }]}>No Notifications</Text>
               </View>
             ) : (
               groups.map(group => (
@@ -196,7 +196,7 @@ export function NotificationCenterScreen() {
                         <Ionicons name="apps" size={14} color="#FFFFFF" />
                       </View>
                     )}
-                    <Text style={styles.groupAppName}>{group.appName}</Text>
+                    <Text style={[styles.groupAppName, typography.footnote, { fontWeight: '700' }]}>{group.appName}</Text>
                   </View>
 
                   {/* Notification cards */}
@@ -208,15 +208,15 @@ export function NotificationCenterScreen() {
                     >
                       <BlurView intensity={50} tint="dark" style={styles.notifCard}>
                         <View style={styles.notifCardHeader}>
-                          <Text style={styles.notifTitle} numberOfLines={1}>
+                          <Text style={[styles.notifTitle, typography.subhead, { fontWeight: '700' }]} numberOfLines={1}>
                             {notif.title || group.appName}
                           </Text>
-                          <Text style={styles.notifTime}>
+                          <Text style={[styles.notifTime, typography.caption1]}>
                             {formatNotifTime(notif.time)}
                           </Text>
                         </View>
                         {!!notif.text && (
-                          <Text style={styles.notifBody} numberOfLines={2}>
+                          <Text style={[styles.notifBody, typography.footnote]} numberOfLines={2}>
                             {notif.text}
                           </Text>
                         )}

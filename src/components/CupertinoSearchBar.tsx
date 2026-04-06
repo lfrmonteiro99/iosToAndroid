@@ -64,8 +64,8 @@ export function CupertinoSearchBar({
           styles.inputContainer,
           {
             backgroundColor: theme.dark
-              ? colors.systemGray5
-              : colors.systemGray6,
+              ? 'rgba(118, 118, 128, 0.24)'
+              : 'rgba(118, 118, 128, 0.12)',
           },
         ]}
       >

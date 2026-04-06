@@ -154,6 +154,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const { settings } = useSettings();
 
   const [now, setNow] = useState(new Date());
+  const [authFailed, setAuthFailed] = useState(false);
+
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
@@ -173,6 +175,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         });
         if (result.success) {
           handleUnlock();
+        } else {
+          setAuthFailed(true);
+          setTimeout(() => setAuthFailed(false), 2000);
         }
       }
     } catch { /* biometrics not available */ }
@@ -237,7 +242,11 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
   return (
     <GestureDetector gesture={swipeGesture}>
-      <Animated.View style={[styles.root, animatedStyle]}>
+      <Animated.View
+        style={[styles.root, animatedStyle]}
+        accessibilityLabel="Swipe up to unlock"
+        accessibilityRole="button"
+      >
         <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
         <LinearGradient
           colors={[wallpaperColor, wallpaperDark, '#000000']}
@@ -314,6 +323,11 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             >
               <Ionicons name="finger-print" size={28} color="rgba(255,255,255,0.75)" />
             </Pressable>
+            {authFailed && (
+              <Text style={styles.authFailedText}>
+                Authentication failed. Swipe up to unlock.
+              </Text>
+            )}
             <View style={styles.homeIndicator} />
           </View>
 
@@ -471,6 +485,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 4,
+  },
+  authFailedText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 16,
   },
   homeIndicator: {
     width: 134,

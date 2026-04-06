@@ -3,6 +3,7 @@ import { View, Text, Image, SectionList, StyleSheet, Pressable, RefreshControl, 
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useContacts } from '../store/ContactsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
@@ -153,6 +154,7 @@ export function ContactsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
       <CupertinoNavigationBar
         title="Contacts"
         largeTitle={false}

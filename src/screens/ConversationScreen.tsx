@@ -9,9 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoTextField } from '../components';
@@ -54,10 +58,10 @@ const MessageBubble = React.memo(function MessageBubble({
   const isSent = message.type === 2;
 
   const bubbleBackground = isSent
-    ? '#34C759'
+    ? colors.systemGreen
     : isDark
     ? '#38383A'
-    : '#E5E5EA';
+    : colors.systemGray5;
 
   const textColor = isSent ? '#FFFFFF' : colors.label;
 
@@ -71,7 +75,17 @@ const MessageBubble = React.memo(function MessageBubble({
       <View
         style={[
           styles.bubble,
-          { backgroundColor: bubbleBackground, maxWidth: BUBBLE_MAX_WIDTH },
+          {
+            backgroundColor: bubbleBackground,
+            maxWidth: BUBBLE_MAX_WIDTH,
+            elevation: isSent ? 1 : 0,
+            ...(isSent && Platform.OS === 'ios' ? {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+            } : {}),
+          },
           isSent ? styles.bubbleSent : styles.bubbleReceived,
         ]}
       >
@@ -87,7 +101,7 @@ const MessageBubble = React.memo(function MessageBubble({
               width: 0,
               height: 0,
               borderLeftWidth: 8,
-              borderLeftColor: '#34C759',
+              borderLeftColor: colors.systemGreen,
               borderTopWidth: 8,
               borderTopColor: 'transparent',
               borderBottomWidth: 0,
@@ -134,6 +148,7 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
   const device = useDevice();
 
   const [inputText, setInputText] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   // Match contact
@@ -164,18 +179,27 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
 
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || isSending) return;
     const mod = await getLauncher();
     if (mod) {
-      const success = await mod.sendSms(address, text);
-      if (success) {
-        setInputText('');
-        await device.refresh();
-        // FlatList is inverted — index 0 is the newest message
-        listRef.current?.scrollToIndex({ index: 0, animated: true });
+      setIsSending(true);
+      try {
+        const success = await mod.sendSms(address, text);
+        if (success) {
+          setInputText('');
+          await device.refresh();
+          // FlatList is inverted — index 0 is the newest message
+          listRef.current?.scrollToIndex({ index: 0, animated: true });
+        } else {
+          Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
+        }
+      } catch {
+        Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
+      } finally {
+        setIsSending(false);
       }
     }
-  }, [inputText, address, device]);
+  }, [inputText, isSending, address, device]);
 
   const renderItem = useCallback(
     ({ item }: { item: DeviceSms }) => (
@@ -211,13 +235,15 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
+      <StatusBar style={dark ? 'light' : 'dark'} />
       {/* Nav Bar */}
-      <View
+      <BlurView
+        intensity={80}
+        tint={dark ? 'dark' : 'light'}
         style={[
           styles.navBar,
           {
             paddingTop: insets.top,
-            backgroundColor: colors.systemBackground,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.separator,
           },
@@ -256,7 +282,7 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
             </Pressable>
           </View>
         </View>
-      </View>
+      </BlurView>
 
       {/* Message List */}
       <FlatList
@@ -310,12 +336,17 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
           style={styles.sendButton}
           accessibilityRole="button"
           accessibilityLabel="Send message"
+          disabled={isSending}
         >
-          <Ionicons
-            name="send"
-            size={24}
-            color={inputText.trim() ? colors.systemBlue : colors.systemGray3}
-          />
+          {isSending ? (
+            <ActivityIndicator size="small" color={colors.systemBlue} />
+          ) : (
+            <Ionicons
+              name="send"
+              size={24}
+              color={inputText.trim() ? colors.systemBlue : colors.systemGray3}
+            />
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
