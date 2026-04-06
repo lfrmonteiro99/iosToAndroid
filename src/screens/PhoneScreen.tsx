@@ -479,7 +479,7 @@ function VoicemailTab() {
 
 const TABS = ['Favorites', 'Recents', 'Contacts', 'Keypad', 'Voicemail'];
 
-export function PhoneScreen() {
+export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -517,7 +517,18 @@ export function PhoneScreen() {
         ]}
       >
         <View style={styles.navBarContent}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+            style={styles.navBackButton}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
+          </Pressable>
           <Text style={[typography.headline, { color: colors.label }]}>Phone</Text>
+          {/* Right slot keeps title centered */}
+          <View style={styles.navBackButton} />
         </View>
 
         {/* Segmented Control */}
@@ -555,8 +566,13 @@ const styles = StyleSheet.create({
     height: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  navBackButton: {
+    minWidth: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   segmentedWrapper: {
     paddingHorizontal: 10,

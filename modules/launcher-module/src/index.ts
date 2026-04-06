@@ -109,6 +109,11 @@ interface LauncherModuleType {
   getNotifications(): Promise<DeviceNotification[]>;
   isNotificationAccessGranted(): Promise<boolean>;
   openNotificationAccessSettings(): Promise<boolean>;
+  // SMS Send
+  sendSms(address: string, body: string): Promise<boolean>;
+  // Permissions
+  requestAllPermissions(): Promise<boolean>;
+  checkPermissions(): Promise<Record<string, boolean>>;
 }
 
 const isAndroid = Platform.OS === 'android';
@@ -135,6 +140,9 @@ const stub: LauncherModuleType = {
   getNotifications: async () => [],
   isNotificationAccessGranted: async () => false,
   openNotificationAccessSettings: async () => false,
+  sendSms: async () => false,
+  requestAllPermissions: async () => false,
+  checkPermissions: async () => ({}),
 };
 
 const LauncherModule: LauncherModuleType = isAndroid

@@ -41,12 +41,20 @@ interface AppsContextValue {
 
 const AppsContext = createContext<AppsContextValue | null>(null);
 
-// Default dock apps (common Android package names)
+// Virtual built-in apps (our own screens, not real Android packages)
+const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
+  'com.iostoandroid.phone': { name: 'Phone', packageName: 'com.iostoandroid.phone', icon: '', isSystem: false },
+  'com.iostoandroid.messages': { name: 'Messages', packageName: 'com.iostoandroid.messages', icon: '', isSystem: false },
+  'com.iostoandroid.contacts': { name: 'Contacts', packageName: 'com.iostoandroid.contacts', icon: '', isSystem: false },
+  'com.iostoandroid.settings': { name: 'Settings', packageName: 'com.iostoandroid.settings', icon: '', isSystem: false },
+};
+
+// Default dock apps — our built-in screens
 const DEFAULT_DOCK = [
-  'com.android.dialer',
-  'com.android.mms',
-  'com.android.chrome',
-  'com.android.camera2',
+  'com.iostoandroid.phone',
+  'com.iostoandroid.messages',
+  'com.iostoandroid.contacts',
+  'com.iostoandroid.settings',
 ];
 
 export function AppsProvider({ children }: { children: React.ReactNode }) {
@@ -87,9 +95,9 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         } catch { /* ignore */ }
       }
 
-      // Filter dock apps to only include installed ones
+      // Filter dock apps to only include installed or virtual ones
       dockApps = dockApps.filter((pkg: string) =>
-        apps.some((app: InstalledApp) => app.packageName === pkg)
+        apps.some((app: InstalledApp) => app.packageName === pkg) || VIRTUAL_APPS_MAP[pkg]
       );
 
       setState({
@@ -170,7 +178,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
 
   const dockApps = useMemo(() =>
     state.dockApps
-      .map(pkg => state.allApps.find(a => a.packageName === pkg))
+      .map(pkg => state.allApps.find(a => a.packageName === pkg) || VIRTUAL_APPS_MAP[pkg])
       .filter(Boolean) as InstalledApp[],
     [state.dockApps, state.allApps]
   );

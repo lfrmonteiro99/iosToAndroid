@@ -58,6 +58,22 @@ const GRID_HORIZONTAL_PADDING = 20;
 const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
+// Built-in app routing: packageName → navigation screen name
+const BUILT_IN_APPS: Record<string, string> = {
+  'com.iostoandroid.phone': 'Phone',
+  'com.iostoandroid.messages': 'Messages',
+  'com.iostoandroid.contacts': 'Contacts',
+  'com.iostoandroid.settings': 'Settings',
+};
+
+// Icon config for virtual (built-in) apps rendered in dock/grid
+const VIRTUAL_ICON_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; bg: string }> = {
+  'com.iostoandroid.phone': { icon: 'call', bg: '#34C759' },
+  'com.iostoandroid.messages': { icon: 'chatbubble', bg: '#34C759' },
+  'com.iostoandroid.contacts': { icon: 'people', bg: '#FF9500' },
+  'com.iostoandroid.settings': { icon: 'settings', bg: '#8E8E93' },
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -80,6 +96,8 @@ interface AppIconProps {
 }
 
 function AppIcon({ app, cellWidth, onPress, onLongPress }: AppIconProps) {
+  const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
+
   return (
     <Pressable
       style={[styles.appIconWrapper, { width: cellWidth }]}
@@ -87,7 +105,11 @@ function AppIcon({ app, cellWidth, onPress, onLongPress }: AppIconProps) {
       onLongPress={onLongPress}
       android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
     >
-      {app.icon ? (
+      {virtualCfg ? (
+        <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
+          <Ionicons name={virtualCfg.icon} size={28} color="#fff" />
+        </View>
+      ) : app.icon ? (
         <Image
           source={{ uri: app.icon }}
           style={styles.appIconImage}
@@ -224,6 +246,31 @@ export function LauncherHomeScreen() {
   const { settings } = useSettings();
   const device = useDevice();
 
+  // Unified app press handler — routes built-in apps to internal screens
+  const handleAppPress = useCallback((app: InstalledApp) => {
+    const internalRoute = BUILT_IN_APPS[app.packageName];
+    if (internalRoute) {
+      navigation.navigate(internalRoute);
+    } else {
+      launchApp(app.packageName);
+    }
+  }, [navigation, launchApp]);
+
+  // Request permissions on first launch
+  useEffect(() => {
+    (async () => {
+      if (Platform.OS !== 'android') return;
+      try {
+        const mod = (await import('../../modules/launcher-module/src')).default;
+        const perms = await mod.checkPermissions();
+        const needsPermission = Object.values(perms).some(v => !v);
+        if (needsPermission) {
+          await mod.requestAllPermissions();
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
   // Clock state
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -293,7 +340,7 @@ export function LauncherHomeScreen() {
           label: 'Open',
           onPress: () => {
             closeActionSheet();
-            if (actionSheet.app) launchApp(actionSheet.app.packageName);
+            if (actionSheet.app) handleAppPress(actionSheet.app);
           },
         },
         {
@@ -395,7 +442,7 @@ export function LauncherHomeScreen() {
                   key={app.packageName}
                   app={app}
                   cellWidth={CELL_WIDTH}
-                  onPress={() => launchApp(app.packageName)}
+                  onPress={() => handleAppPress(app)}
                   onLongPress={() => openActionSheet(app)}
                 />
               ))}
@@ -410,7 +457,7 @@ export function LauncherHomeScreen() {
       <PageDots total={pages.length} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
-        onPress={() => navigation.navigate('Contacts')}
+        onPress={() => navigation.navigate('AppDrawer')}
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
@@ -432,7 +479,7 @@ export function LauncherHomeScreen() {
                 key={app.packageName}
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
-                onPress={() => launchApp(app.packageName)}
+                onPress={() => handleAppPress(app)}
                 onLongPress={() => openActionSheet(app)}
               />
             ))}

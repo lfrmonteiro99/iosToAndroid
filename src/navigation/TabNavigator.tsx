@@ -1,18 +1,21 @@
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+// Launcher
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
 import { AppDrawerScreen } from '../screens/AppDrawerScreen';
-import { HomeScreen } from '../screens/HomeScreen';
 import { LockScreen } from '../screens/LockScreen';
 import { ControlCenterScreen } from '../screens/ControlCenterScreen';
+
+// Built-in "apps" (opened from dock/grid, not tabs)
+import { PhoneScreen } from '../screens/PhoneScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
 import { ConversationScreen } from '../screens/ConversationScreen';
-import { PhoneScreen } from '../screens/PhoneScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { ContactDetailScreen } from '../screens/contacts/ContactDetailScreen';
 import { ContactEditScreen } from '../screens/contacts/ContactEditScreen';
-import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
+
+// Settings (opened from grid like a real app)
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
@@ -37,97 +40,53 @@ import { BatteryScreen } from '../screens/settings/BatteryScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
-import { CupertinoTabBar } from '../components';
+import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 
-const Tab = createBottomTabNavigator();
-const HomeStack = createNativeStackNavigator();
-const PhoneStack = createNativeStackNavigator();
-const MessagesStack = createNativeStackNavigator();
-const ContactsStack = createNativeStackNavigator();
-const SettingsStack = createNativeStackNavigator();
-
-function HomeStackScreen() {
-  return (
-    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
-      <HomeStack.Screen name="HomeMain" component={LauncherHomeScreen} />
-      <HomeStack.Screen name="AppDrawer" component={AppDrawerScreen} />
-      <HomeStack.Screen name="Dashboard" component={HomeScreen} />
-      <HomeStack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade' }} />
-      <HomeStack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
-    </HomeStack.Navigator>
-  );
-}
-
-function PhoneStackScreen() {
-  return (
-    <PhoneStack.Navigator screenOptions={{ headerShown: false }}>
-      <PhoneStack.Screen name="PhoneMain" component={PhoneScreen} />
-    </PhoneStack.Navigator>
-  );
-}
-
-function MessagesStackScreen() {
-  return (
-    <MessagesStack.Navigator screenOptions={{ headerShown: false }}>
-      <MessagesStack.Screen name="MessagesMain" component={MessagesScreen} />
-      <MessagesStack.Screen name="Conversation" component={ConversationScreen} />
-    </MessagesStack.Navigator>
-  );
-}
-
-function ContactsStackScreen() {
-  return (
-    <ContactsStack.Navigator screenOptions={{ headerShown: false }}>
-      <ContactsStack.Screen name="ContactsMain" component={ContactsScreen} />
-      <ContactsStack.Screen name="ContactDetail" component={ContactDetailScreen} />
-      <ContactsStack.Screen name="ContactEdit" component={ContactEditScreen} />
-    </ContactsStack.Navigator>
-  );
-}
-
-function SettingsStackScreen() {
-  return (
-    <SettingsStack.Navigator screenOptions={{ headerShown: false }}>
-      <SettingsStack.Screen name="SettingsMain" component={SettingsScreen} />
-      <SettingsStack.Screen name="WiFi" component={WifiScreen} />
-      <SettingsStack.Screen name="Bluetooth" component={BluetoothScreen} />
-      <SettingsStack.Screen name="Cellular" component={CellularScreen} />
-      <SettingsStack.Screen name="Hotspot" component={HotspotScreen} />
-      <SettingsStack.Screen name="Notifications" component={NotificationsScreen} />
-      <SettingsStack.Screen name="SoundsHaptics" component={SoundsHapticsScreen} />
-      <SettingsStack.Screen name="Focus" component={FocusScreen} />
-      <SettingsStack.Screen name="ScreenTime" component={ScreenTimeScreen} />
-      <SettingsStack.Screen name="General" component={GeneralScreen} />
-      <SettingsStack.Screen name="About" component={AboutScreen} />
-      <SettingsStack.Screen name="DisplayBrightness" component={DisplayBrightnessScreen} />
-      <SettingsStack.Screen name="Wallpaper" component={WallpaperScreen} />
-      <SettingsStack.Screen name="Accessibility" component={AccessibilityScreen} />
-      <SettingsStack.Screen name="Battery" component={BatteryScreen} />
-      <SettingsStack.Screen name="Privacy" component={PrivacyScreen} />
-      <SettingsStack.Screen name="Storage" component={StorageScreen} />
-      <SettingsStack.Screen name="SoftwareUpdate" component={SoftwareUpdateScreen} />
-      <SettingsStack.Screen name="DateTime" component={DateTimeScreen} />
-      <SettingsStack.Screen name="Keyboard" component={KeyboardScreen} />
-      <SettingsStack.Screen name="LanguageRegion" component={LanguageRegionScreen} />
-      <SettingsStack.Screen name="Vpn" component={VpnScreen} />
-      <SettingsStack.Screen name="ProfileMain" component={ProfileScreen} />
-      <SettingsStack.Screen name="EditProfile" component={EditProfileScreen} />
-      <SettingsStack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} />
-    </SettingsStack.Navigator>
-  );
-}
+const Stack = createNativeStackNavigator();
 
 export function TabNavigator() {
   return (
-    <Tab.Navigator
-      tabBar={(props) => <CupertinoTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen name="Home" component={HomeStackScreen} />
-      <Tab.Screen name="Phone" component={PhoneStackScreen} />
-      <Tab.Screen name="Messages" component={MessagesStackScreen} />
-      <Tab.Screen name="Contacts" component={ContactsStackScreen} />
-      <Tab.Screen name="Settings" component={SettingsStackScreen} />
-    </Tab.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {/* Launcher home — the ROOT screen, fullscreen, no tabs */}
+      <Stack.Screen name="HomeMain" component={LauncherHomeScreen} />
+      <Stack.Screen name="AppDrawer" component={AppDrawerScreen} />
+      <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade' }} />
+      <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
+
+      {/* Built-in apps — opened from dock/grid, slide in like real iOS apps */}
+      <Stack.Screen name="Phone" component={PhoneScreen} />
+      <Stack.Screen name="Messages" component={MessagesScreen} />
+      <Stack.Screen name="Conversation" component={ConversationScreen} />
+      <Stack.Screen name="Contacts" component={ContactsScreen} />
+      <Stack.Screen name="ContactDetail" component={ContactDetailScreen} />
+      <Stack.Screen name="ContactEdit" component={ContactEditScreen} />
+
+      {/* Settings app — opened from grid */}
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="WiFi" component={WifiScreen} />
+      <Stack.Screen name="Bluetooth" component={BluetoothScreen} />
+      <Stack.Screen name="Cellular" component={CellularScreen} />
+      <Stack.Screen name="Hotspot" component={HotspotScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="SoundsHaptics" component={SoundsHapticsScreen} />
+      <Stack.Screen name="Focus" component={FocusScreen} />
+      <Stack.Screen name="ScreenTime" component={ScreenTimeScreen} />
+      <Stack.Screen name="General" component={GeneralScreen} />
+      <Stack.Screen name="About" component={AboutScreen} />
+      <Stack.Screen name="DisplayBrightness" component={DisplayBrightnessScreen} />
+      <Stack.Screen name="Wallpaper" component={WallpaperScreen} />
+      <Stack.Screen name="Accessibility" component={AccessibilityScreen} />
+      <Stack.Screen name="Battery" component={BatteryScreen} />
+      <Stack.Screen name="Privacy" component={PrivacyScreen} />
+      <Stack.Screen name="Storage" component={StorageScreen} />
+      <Stack.Screen name="SoftwareUpdate" component={SoftwareUpdateScreen} />
+      <Stack.Screen name="DateTime" component={DateTimeScreen} />
+      <Stack.Screen name="Keyboard" component={KeyboardScreen} />
+      <Stack.Screen name="LanguageRegion" component={LanguageRegionScreen} />
+      <Stack.Screen name="Vpn" component={VpnScreen} />
+      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} />
+    </Stack.Navigator>
   );
 }
