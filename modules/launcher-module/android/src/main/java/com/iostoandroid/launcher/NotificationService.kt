@@ -23,11 +23,11 @@ data class NotificationData(
 
 class NotificationService : NotificationListenerService() {
     companion object {
-        val activeNotifications = mutableListOf<NotificationData>()
+        private val notifications = java.util.concurrent.CopyOnWriteArrayList<NotificationData>()
         var instance: NotificationService? = null
 
         fun getNotificationMaps(): List<Map<String, Any?>> {
-            return activeNotifications.map { it.toMap() }
+            return notifications.map { it.toMap() }
         }
     }
 
@@ -47,18 +47,33 @@ class NotificationService : NotificationListenerService() {
             isOngoing = sbn.isOngoing
         )
 
-        activeNotifications.removeAll { n -> n.id == data.id && n.packageName == data.packageName }
-        activeNotifications.add(0, data)
+        // Remove existing with same id+package using iterator
+        val iter = notifications.iterator()
+        while (iter.hasNext()) {
+            val existing = iter.next()
+            if (existing.id == data.id && existing.packageName == data.packageName) {
+                notifications.remove(existing)
+            }
+        }
 
-        while (activeNotifications.size > 50) {
-            activeNotifications.removeAt(activeNotifications.lastIndex)
+        notifications.add(0, data)
+
+        // Trim to max 50
+        while (notifications.size > 50) {
+            notifications.removeAt(notifications.size - 1)
         }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        val id = sbn.id.toString()
-        val pkg = sbn.packageName
-        activeNotifications.removeAll { n -> n.id == id && n.packageName == pkg }
+        val targetId = sbn.id.toString()
+        val targetPkg = sbn.packageName
+        val iter = notifications.iterator()
+        while (iter.hasNext()) {
+            val existing = iter.next()
+            if (existing.id == targetId && existing.packageName == targetPkg) {
+                notifications.remove(existing)
+            }
+        }
     }
 
     override fun onDestroy() {
