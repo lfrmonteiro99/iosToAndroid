@@ -102,7 +102,7 @@ export const Typography = {
     fontSize: 34,
     lineHeight: 41,
     fontWeight: '700' as const,
-    letterSpacing: 0.37,
+    letterSpacing: 0.41,
   },
   title1: {
     fontSize: 28,
@@ -163,6 +163,12 @@ export const Typography = {
     lineHeight: 13,
     fontWeight: '400' as const,
     letterSpacing: 0.07,
+  },
+  tabLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '500' as const,
+    letterSpacing: 0,
   },
 };
 

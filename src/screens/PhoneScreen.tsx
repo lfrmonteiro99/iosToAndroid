@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 16,
-    minHeight: 60,
+    minHeight: 44,
   },
   contactInfo: {
     flex: 1,
@@ -672,11 +672,11 @@ const styles = StyleSheet.create({
   },
   keypadDigit: {
     fontSize: 28,
-    fontWeight: '300',
+    fontWeight: '600',
     lineHeight: 34,
   },
   keypadLetters: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '500',
     letterSpacing: 1.5,
     marginTop: -4,

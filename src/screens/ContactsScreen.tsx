@@ -79,6 +79,7 @@ const ContactRow = React.memo(function ContactRow({
           </Text>
         ) : null}
       </View>
+      <Ionicons name="chevron-forward" size={14} color={colors.systemGray3} style={{ marginRight: 12 }} />
     </Pressable>
   );
 });
@@ -139,8 +140,8 @@ export function ContactsScreen() {
       >
         <Text
           style={[
-            typography.subhead,
-            { color: colors.label, fontWeight: '700' },
+            typography.footnote,
+            { color: colors.label, fontWeight: '600' },
           ]}
         >
           {section.title}

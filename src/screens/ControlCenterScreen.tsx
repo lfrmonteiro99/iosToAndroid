@@ -22,7 +22,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
-import { CupertinoSlider } from '../components';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -256,43 +255,62 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
           </View>
 
           {/* ------------------------------------------------------------ */}
-          {/* Brightness slider                                               */}
+          {/* Brightness + Volume vertical sliders (side by side)             */}
           {/* ------------------------------------------------------------ */}
           <View style={styles.section}>
-            <View style={styles.sliderCard}>
-              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-              <View style={styles.sliderRow}>
-                <Ionicons name="sunny-outline" size={16} color="rgba(255,255,255,0.7)" />
-                <View style={styles.sliderTrack}>
-                  <CupertinoSlider
-                    value={device.brightness}
-                    onValueChange={device.setBrightness}
-                    minimumTrackColor="#FFFFFF"
-                    maximumTrackColor="rgba(255,255,255,0.25)"
+            <View style={styles.verticalSlidersRow}>
+              {/* Brightness */}
+              <View style={styles.verticalSliderWrap}>
+                <Ionicons name="sunny" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
+                <Pressable
+                  style={styles.verticalSliderTrack}
+                  onPress={(e) => {
+                    const relY = e.nativeEvent.locationY;
+                    const pct = Math.max(0, Math.min(1, 1 - relY / 160));
+                    device.setBrightness(pct);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.verticalSliderFill,
+                      { height: `${device.brightness * 100}%` as unknown as number },
+                    ]}
                   />
-                </View>
-                <Ionicons name="sunny" size={22} color="rgba(255,255,255,0.9)" />
+                  <Ionicons
+                    name="sunny"
+                    size={16}
+                    color="rgba(255,255,255,0.8)"
+                    style={styles.verticalSliderIconBottom}
+                  />
+                </Pressable>
+                <Text style={styles.verticalSliderLabel}>Brightness</Text>
               </View>
-            </View>
-          </View>
 
-          {/* ------------------------------------------------------------ */}
-          {/* Volume slider                                                   */}
-          {/* ------------------------------------------------------------ */}
-          <View style={styles.section}>
-            <View style={styles.sliderCard}>
-              <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-              <View style={styles.sliderRow}>
-                <Ionicons name="volume-low-outline" size={16} color="rgba(255,255,255,0.7)" />
-                <View style={styles.sliderTrack}>
-                  <CupertinoSlider
-                    value={volume}
-                    onValueChange={setVolume}
-                    minimumTrackColor="#FFFFFF"
-                    maximumTrackColor="rgba(255,255,255,0.25)"
+              {/* Volume */}
+              <View style={styles.verticalSliderWrap}>
+                <Ionicons name="volume-high" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
+                <Pressable
+                  style={styles.verticalSliderTrack}
+                  onPress={(e) => {
+                    const relY = e.nativeEvent.locationY;
+                    const pct = Math.max(0, Math.min(1, 1 - relY / 160));
+                    setVolume(pct);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.verticalSliderFill,
+                      { height: `${volume * 100}%` as unknown as number },
+                    ]}
                   />
-                </View>
-                <Ionicons name="volume-high" size={22} color="rgba(255,255,255,0.9)" />
+                  <Ionicons
+                    name="volume-low"
+                    size={16}
+                    color="rgba(255,255,255,0.8)"
+                    style={styles.verticalSliderIconBottom}
+                  />
+                </Pressable>
+                <Text style={styles.verticalSliderLabel}>Volume</Text>
               </View>
             </View>
           </View>
@@ -487,21 +505,39 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
 
-  // Slider card
-  sliderCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  sliderRow: {
+  // Vertical sliders
+  verticalSlidersRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
   },
-  sliderTrack: {
-    flex: 1,
+  verticalSliderWrap: {
+    alignItems: 'center',
+  },
+  verticalSliderTrack: {
+    width: 46,
+    height: 160,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  verticalSliderFill: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 23,
+  },
+  verticalSliderIconBottom: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+  },
+  verticalSliderLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '400',
+    marginTop: 6,
+    textAlign: 'center',
   },
 
   // Shortcut row
