@@ -9,6 +9,7 @@ import { ControlCenterScreen } from '../screens/ControlCenterScreen';
 
 // Built-in "apps" (opened from dock/grid, not tabs)
 import { PhoneScreen } from '../screens/PhoneScreen';
+import { CallScreen } from '../screens/CallScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
 import { ConversationScreen } from '../screens/ConversationScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
@@ -46,15 +47,21 @@ const Stack = createNativeStackNavigator();
 
 export function TabNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{
+      headerShown: false,
+      gestureEnabled: true,
+      fullScreenGestureEnabled: true,
+      animation: 'slide_from_right',
+    }}>
       {/* Launcher home — the ROOT screen, fullscreen, no tabs */}
       <Stack.Screen name="HomeMain" component={LauncherHomeScreen} />
       <Stack.Screen name="AppDrawer" component={AppDrawerScreen} />
-      <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade' }} />
-      <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
+      <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+      <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal', gestureEnabled: false }} />
 
       {/* Built-in apps — opened from dock/grid, slide in like real iOS apps */}
       <Stack.Screen name="Phone" component={PhoneScreen} />
+      <Stack.Screen name="CallScreen" component={CallScreen} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
       <Stack.Screen name="Conversation" component={ConversationScreen} />
       <Stack.Screen name="Contacts" component={ContactsScreen} />

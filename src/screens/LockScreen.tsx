@@ -147,7 +147,7 @@ function NotificationCard({ item }: { item: FakeNotification }) {
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function LockScreen({ navigation }: { navigation: any; route: any }) {
+export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings } = useSettings();
@@ -163,7 +163,11 @@ export function LockScreen({ navigation }: { navigation: any; route: any }) {
   const opacity = useSharedValue(1);
 
   const handleUnlock = () => {
-    navigation.goBack();
+    if (onUnlock) {
+      onUnlock();
+    } else {
+      navigation?.goBack();
+    }
   };
 
   const swipeGesture = Gesture.Pan()
