@@ -17,25 +17,38 @@ class NotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val notification = sbn.notification
         val extras = notification.extras
-        val data = mapOf(
-            "id" to sbn.id.toString(),
-            "packageName" to sbn.packageName,
+        val id = sbn.id.toString()
+        val pkg = sbn.packageName
+        val data = mapOf<String, Any?>(
+            "id" to id,
+            "packageName" to pkg,
             "title" to (extras.getCharSequence("android.title")?.toString() ?: ""),
             "text" to (extras.getCharSequence("android.text")?.toString() ?: ""),
             "time" to sbn.postTime,
             "isOngoing" to sbn.isOngoing
         )
-        activeNotifications.removeAll { it["id"] == data["id"] && it["packageName"] == data["packageName"] }
+        val iterator = activeNotifications.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry["id"] == id && entry["packageName"] == pkg) {
+                iterator.remove()
+            }
+        }
         activeNotifications.add(0, data)
-        // Keep max 50
-        if (activeNotifications.size > 50) {
-            activeNotifications.subList(50, activeNotifications.size).clear()
+        while (activeNotifications.size > 50) {
+            activeNotifications.removeAt(activeNotifications.size - 1)
         }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        activeNotifications.removeAll {
-            it["id"] == sbn.id.toString() && it["packageName"] == sbn.packageName
+        val id = sbn.id.toString()
+        val pkg = sbn.packageName
+        val iterator = activeNotifications.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry["id"] == id && entry["packageName"] == pkg) {
+                iterator.remove()
+            }
         }
     }
 
