@@ -110,6 +110,7 @@ export function SettingsScreen() {
   const renderItem = (item: SettingsItem) => {
     if (item.type === 'switch' && item.settingsKey) {
       const key = item.settingsKey as keyof typeof settings;
+      const isSearching = searchQuery.trim().length > 0;
       return (
         <CupertinoListTile
           key={item.key}
@@ -121,10 +122,16 @@ export function SettingsScreen() {
             backgroundColor: item.iconBg,
           }}
           trailing={
-            <CupertinoSwitch
-              value={settings[key] as boolean}
-              onValueChange={(v: boolean) => update(key, v as any)} // eslint-disable-line @typescript-eslint/no-explicit-any
-            />
+            isSearching ? (
+              <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                {settings[key] ? 'On' : 'Off'}
+              </Text>
+            ) : (
+              <CupertinoSwitch
+                value={settings[key] as boolean}
+                onValueChange={(v: boolean) => update(key, v as any)} // eslint-disable-line @typescript-eslint/no-explicit-any
+              />
+            )
           }
           showChevron={false}
         />

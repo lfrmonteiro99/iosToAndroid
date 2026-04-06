@@ -8,6 +8,7 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoAlertDialog,
+  CupertinoActionSheet,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,8 +16,10 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const [showShutdown, setShowShutdown] = useState(false);
+  const [showAirdropPicker, setShowAirdropPicker] = useState(false);
+  const [showBgRefreshPicker, setShowBgRefreshPicker] = useState(false);
 
   const airdropLabel = settings.airdrop === 'off' ? 'Receiving Off' : settings.airdrop === 'contactsOnly' ? 'Contacts Only' : 'Everyone';
   const bgRefreshLabel = settings.backgroundAppRefresh === 'off' ? 'Off' : settings.backgroundAppRefresh === 'wifi' ? 'Wi-Fi' : 'Wi-Fi & Cellular';
@@ -62,7 +65,7 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
                   {airdropLabel}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => setShowAirdropPicker(true)}
             />
             <CupertinoListTile title="AirPlay & Handoff" onPress={() => {}} />
             <CupertinoListTile title="CarPlay" onPress={() => {}} />
@@ -82,7 +85,7 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
                   {bgRefreshLabel}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => setShowBgRefreshPicker(true)}
             />
           </CupertinoListSection>
         </View>
@@ -128,6 +131,30 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
           { label: 'Shut Down', style: 'destructive', onPress: () => setShowShutdown(false) },
         ]}
         onClose={() => setShowShutdown(false)}
+      />
+
+      <CupertinoActionSheet
+        visible={showAirdropPicker}
+        onClose={() => setShowAirdropPicker(false)}
+        title="AirDrop"
+        options={[
+          { label: 'Receiving Off', onPress: () => { update('airdrop', 'off'); setShowAirdropPicker(false); } },
+          { label: 'Contacts Only', onPress: () => { update('airdrop', 'contactsOnly'); setShowAirdropPicker(false); } },
+          { label: 'Everyone', onPress: () => { update('airdrop', 'everyone'); setShowAirdropPicker(false); } },
+        ]}
+        cancelLabel="Cancel"
+      />
+
+      <CupertinoActionSheet
+        visible={showBgRefreshPicker}
+        onClose={() => setShowBgRefreshPicker(false)}
+        title="Background App Refresh"
+        options={[
+          { label: 'Off', onPress: () => { update('backgroundAppRefresh', 'off'); setShowBgRefreshPicker(false); } },
+          { label: 'Wi-Fi', onPress: () => { update('backgroundAppRefresh', 'wifi'); setShowBgRefreshPicker(false); } },
+          { label: 'Wi-Fi & Cellular Data', onPress: () => { update('backgroundAppRefresh', 'wifiAndCellular'); setShowBgRefreshPicker(false); } },
+        ]}
+        cancelLabel="Cancel"
       />
     </View>
   );

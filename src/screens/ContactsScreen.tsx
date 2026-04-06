@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, SectionList, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import { View, Text, SectionList, StyleSheet, Pressable, RefreshControl, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useContacts, Contact } from '../store/ContactsStore';
-import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoSwipeableRow } from '../components';
+import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoSwipeableRow, CupertinoActionSheet } from '../components';
 
 function groupByLetter(contacts: Contact[]) {
   const groups: Record<string, Contact[]> = {};
@@ -29,6 +29,7 @@ const ContactRow = React.memo(function ContactRow({
   isLast,
   onPress,
   onDelete,
+  onLongPress,
 }: {
   contact: Contact;
   colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -36,6 +37,7 @@ const ContactRow = React.memo(function ContactRow({
   isLast: boolean;
   onPress: () => void;
   onDelete: () => void;
+  onLongPress: () => void;
 }) {
   return (
     <CupertinoSwipeableRow
@@ -51,6 +53,7 @@ const ContactRow = React.memo(function ContactRow({
           },
         ]}
         onPress={onPress}
+        onLongPress={onLongPress}
         accessibilityRole="button"
         accessibilityLabel={`${contact.firstName} ${contact.lastName}`}
       >
@@ -91,9 +94,10 @@ export function ContactsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { contacts, favorites, deleteContact } = useContacts();
+  const { contacts, favorites, deleteContact, toggleFavorite } = useContacts();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [contextContact, setContextContact] = useState<Contact | null>(null);
 
   const filteredContacts = useMemo(() => {
     if (!searchQuery.trim()) return contacts;
@@ -130,6 +134,7 @@ export function ContactsScreen() {
         isLast={index === section.data.length - 1}
         onPress={() => navigation.navigate('ContactDetail', { contactId: item.id })}
         onDelete={() => deleteContact(item.id)}
+        onLongPress={() => setContextContact(item)}
       />
     ),
     [colors, typography, navigation, deleteContact],
@@ -207,6 +212,32 @@ export function ContactsScreen() {
           </Text>
         ))}
       </View>
+
+      <CupertinoActionSheet
+        visible={contextContact !== null}
+        onClose={() => setContextContact(null)}
+        title={contextContact ? `${contextContact.firstName} ${contextContact.lastName}` : undefined}
+        options={contextContact ? [
+          {
+            label: 'Call',
+            onPress: () => Linking.openURL(`tel:${contextContact.phone}`),
+          },
+          {
+            label: contextContact.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+            onPress: () => toggleFavorite(contextContact.id),
+          },
+          {
+            label: 'Send Message',
+            onPress: () => Linking.openURL(`sms:${contextContact.phone}`),
+          },
+          {
+            label: 'Delete',
+            onPress: () => deleteContact(contextContact.id),
+            destructive: true,
+          },
+        ] : []}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }
