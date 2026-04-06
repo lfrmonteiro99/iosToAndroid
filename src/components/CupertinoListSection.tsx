@@ -30,7 +30,7 @@ export function CupertinoListTile({
   onPress,
   isLast = false,
 }: CupertinoListTileProps) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
 
   return (
@@ -114,7 +114,7 @@ export function CupertinoListSection({
   children,
   style,
 }: CupertinoListSectionProps) {
-  const { theme, typography, spacing, borderRadius } = useTheme();
+  const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
 
   const childArray = React.Children.toArray(children);

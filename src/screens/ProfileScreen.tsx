@@ -12,7 +12,7 @@ import {
 } from '../components';
 
 export function ProfileScreen() {
-  const { theme, typography, spacing, borderRadius, shadows } = useTheme();
+  const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
 

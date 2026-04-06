@@ -5,6 +5,10 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { WifiScreen } from '../screens/settings/WifiScreen';
+import { GeneralScreen } from '../screens/settings/GeneralScreen';
+import { AboutScreen } from '../screens/settings/AboutScreen';
+import { DisplayBrightnessScreen } from '../screens/settings/DisplayBrightnessScreen';
 import { CupertinoTabBar } from '../components';
 
 const Tab = createBottomTabNavigator();
@@ -33,6 +37,10 @@ function SettingsStackScreen() {
   return (
     <SettingsStack.Navigator screenOptions={{ headerShown: false }}>
       <SettingsStack.Screen name="SettingsMain" component={SettingsScreen} />
+      <SettingsStack.Screen name="WiFi" component={WifiScreen} />
+      <SettingsStack.Screen name="General" component={GeneralScreen} />
+      <SettingsStack.Screen name="About" component={AboutScreen} />
+      <SettingsStack.Screen name="DisplayBrightness" component={DisplayBrightnessScreen} />
     </SettingsStack.Navigator>
   );
 }

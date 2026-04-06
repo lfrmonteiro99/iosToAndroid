@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, LayoutChangeEvent } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -23,27 +23,28 @@ export function CupertinoSegmentedControl({
   const { colors } = theme;
 
   const translateX = useSharedValue(0);
-  const segmentWidth = useSharedValue(0);
+  const animatedWidth = useSharedValue(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const segWidth = containerWidth > 0 ? containerWidth / values.length : 0;
 
   useEffect(() => {
-    if (segmentWidth.value > 0) {
-      translateX.value = withSpring(selectedIndex * segmentWidth.value, {
+    if (segWidth > 0) {
+      animatedWidth.value = segWidth;
+      translateX.value = withSpring(selectedIndex * segWidth, {
         damping: 20,
         stiffness: 300,
       });
     }
-  }, [selectedIndex, segmentWidth, translateX]);
+  }, [selectedIndex, segWidth, translateX, animatedWidth]);
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    const width = event.nativeEvent.layout.width;
-    const sWidth = width / values.length;
-    segmentWidth.value = sWidth;
-    translateX.value = selectedIndex * sWidth;
+    setContainerWidth(event.nativeEvent.layout.width);
   };
 
   const sliderStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
-    width: segmentWidth.value,
+    width: animatedWidth.value,
   }));
 
   return (

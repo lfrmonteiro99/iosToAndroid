@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -30,7 +29,7 @@ export function CupertinoAlertDialog({
   message,
   actions,
 }: CupertinoAlertDialogProps) {
-  const { theme, typography, borderRadius } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
 
   const scale = useSharedValue(1.2);

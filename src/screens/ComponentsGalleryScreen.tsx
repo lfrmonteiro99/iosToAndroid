@@ -15,6 +15,24 @@ import {
   CupertinoAlertDialog,
 } from '../components';
 
+function SectionHeader({ title, typography, color }: { title: string; typography: any; color: string }) {
+  return (
+    <Text
+      style={[
+        typography.footnote,
+        {
+          color,
+          textTransform: 'uppercase',
+          marginBottom: 8,
+          marginTop: 24,
+        },
+      ]}
+    >
+      {title}
+    </Text>
+  );
+}
+
 export function ComponentsGalleryScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
@@ -25,22 +43,6 @@ export function ComponentsGalleryScreen() {
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
-
-  const SectionHeader = ({ title }: { title: string }) => (
-    <Text
-      style={[
-        typography.footnote,
-        {
-          color: colors.secondaryLabel,
-          textTransform: 'uppercase',
-          marginBottom: 8,
-          marginTop: 24,
-        },
-      ]}
-    >
-      {title}
-    </Text>
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -62,7 +64,7 @@ export function ComponentsGalleryScreen() {
         </View>
 
         {/* Buttons */}
-        <SectionHeader title="Buttons" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Buttons" />
         <View style={styles.buttonRow}>
           <CupertinoButton title="Filled" variant="filled" />
           <CupertinoButton title="Tinted" variant="tinted" />
@@ -74,7 +76,7 @@ export function ComponentsGalleryScreen() {
         </View>
 
         {/* Switch */}
-        <SectionHeader title="Switch" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Switch" />
         <CupertinoCard>
           <View style={styles.switchRow}>
             <Text style={[typography.body, { color: colors.label }]}>
@@ -88,7 +90,7 @@ export function ComponentsGalleryScreen() {
         </CupertinoCard>
 
         {/* Text Field */}
-        <SectionHeader title="Text Field" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Text Field" />
         <CupertinoTextField
           placeholder="Search..."
           value={textValue}
@@ -101,7 +103,7 @@ export function ComponentsGalleryScreen() {
         />
 
         {/* Segmented Control */}
-        <SectionHeader title="Segmented Control" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Segmented Control" />
         <CupertinoSegmentedControl
           values={['First', 'Second', 'Third']}
           selectedIndex={segmentIndex}
@@ -117,7 +119,7 @@ export function ComponentsGalleryScreen() {
         </Text>
 
         {/* Cards */}
-        <SectionHeader title="Cards" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Cards" />
         <CupertinoCard
           title="Cupertino Card"
           subtitle="With title and subtitle"
@@ -129,7 +131,7 @@ export function ComponentsGalleryScreen() {
         </CupertinoCard>
 
         {/* List Section */}
-        <SectionHeader title="List Section" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="List Section" />
         <CupertinoListSection header="Favorites" footer="These are your favorite items.">
           <CupertinoListTile
             title="Messages"
@@ -154,7 +156,7 @@ export function ComponentsGalleryScreen() {
         </CupertinoListSection>
 
         {/* Modals */}
-        <SectionHeader title="Modals" />
+        <SectionHeader typography={typography} color={colors.secondaryLabel} title="Modals" />
         <View style={styles.buttonRow}>
           <CupertinoButton
             title="Action Sheet"

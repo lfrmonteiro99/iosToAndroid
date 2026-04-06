@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
@@ -10,23 +11,19 @@ import {
 } from '../components';
 
 export function SettingsScreen() {
-  const { theme, typography, spacing, borderRadius, isDark, toggleTheme } = useTheme();
+  const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
   const { colors } = theme;
+  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
 
   const [airplaneMode, setAirplaneMode] = useState(false);
-  const [wifi, setWifi] = useState(true);
-  const [bluetooth, setBluetooth] = useState(true);
   const [notifications, setNotifications] = useState(true);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
-      <CupertinoNavigationBar title="Settings" />
-
-      <ScrollView
-        style={styles.scroll}
+      <CupertinoNavigationBar
+        title="Settings"
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
-        showsVerticalScrollIndicator={false}
       >
         {/* Profile Row */}
         <View style={{ paddingHorizontal: spacing.md, marginBottom: 8 }}>
@@ -74,7 +71,7 @@ export function SettingsScreen() {
                   Home
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => navigation.navigate('WiFi')}
             />
             <CupertinoListTile
               title="Bluetooth"
@@ -174,7 +171,7 @@ export function SettingsScreen() {
                 color: '#FFFFFF',
                 backgroundColor: '#8E8E93',
               }}
-              onPress={() => {}}
+              onPress={() => navigation.navigate('General')}
             />
             <CupertinoListTile
               title="Display & Brightness"
@@ -183,7 +180,7 @@ export function SettingsScreen() {
                 color: '#FFFFFF',
                 backgroundColor: '#007AFF',
               }}
-              onPress={() => {}}
+              onPress={() => navigation.navigate('DisplayBrightness')}
             />
             <CupertinoListTile
               title="Wallpaper"
@@ -226,16 +223,13 @@ export function SettingsScreen() {
             />
           </CupertinoListSection>
         </View>
-      </ScrollView>
+      </CupertinoNavigationBar>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  scroll: {
     flex: 1,
   },
 });
