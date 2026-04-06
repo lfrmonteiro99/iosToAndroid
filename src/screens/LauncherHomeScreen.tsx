@@ -478,6 +478,15 @@ export function LauncherHomeScreen() {
     }
   }, [navigation, launchApp]);
 
+  // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
+  const navigateTo = useCallback((screen: string) => {
+    navigation.navigate(screen);
+  }, [navigation]);
+
+  const navigateToWithParams = useCallback((screen: string, params: object) => {
+    navigation.navigate(screen, params);
+  }, [navigation]);
+
   // Vertical swipe gesture: up → App Drawer, down-top-left → Notification Center, down-top-right → Control Center, down-mid → Spotlight
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
@@ -485,21 +494,16 @@ export function LauncherHomeScreen() {
       'worklet';
       const { translationY, absoluteY, absoluteX, velocityY } = event;
 
-      if (translationY < -80 && velocityY < -300) {
-        // Swipe up → App Drawer
-        runOnJS(navigation.navigate)('AppDrawer');
-      } else if (translationY > 80 && velocityY > 300 && absoluteY < 300) {
-        // Swipe down from top area — split by horizontal position
+      if (translationY < -60 && velocityY < -200) {
+        runOnJS(navigateTo)('AppDrawer');
+      } else if (translationY > 60 && velocityY > 200 && absoluteY < 350) {
         if (absoluteX < SCREEN_WIDTH / 2) {
-          // Left half → Notification Center
-          runOnJS(navigation.navigate)('NotificationCenter');
+          runOnJS(navigateTo)('NotificationCenter');
         } else {
-          // Right half → Control Center
-          runOnJS(navigation.navigate)('ControlCenter');
+          runOnJS(navigateTo)('ControlCenter');
         }
-      } else if (translationY > 80 && velocityY > 300 && absoluteY >= 300) {
-        // Swipe down from middle → AppDrawer with search focused
-        runOnJS(navigation.navigate)('AppDrawer', { searchFocused: true });
+      } else if (translationY > 60 && velocityY > 200 && absoluteY >= 350) {
+        runOnJS(navigateToWithParams)('AppDrawer', { searchFocused: true });
       }
     });
 
@@ -792,8 +796,10 @@ export function LauncherHomeScreen() {
           },
         ]}
       >
-        <Text style={styles.statusTime}>{formatTime(now)}</Text>
-        <View style={styles.statusRight}>
+        <Pressable onPress={() => navigateTo('NotificationCenter')}>
+          <Text style={styles.statusTime}>{formatTime(now)}</Text>
+        </Pressable>
+        <Pressable style={styles.statusRight} onPress={() => navigateTo('ControlCenter')}>
           {settings.focusMode !== 'off' && (
             <Ionicons name="moon" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
           )}
@@ -829,7 +835,7 @@ export function LauncherHomeScreen() {
               <Text style={styles.jiggleDoneBtnText}>Done</Text>
             </Pressable>
           )}
-        </View>
+        </Pressable>
       </View>
 
       {/* Dynamic Island placeholder */}
