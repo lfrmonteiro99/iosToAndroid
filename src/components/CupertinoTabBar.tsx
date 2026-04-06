@@ -9,7 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 
 const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Home: { active: 'home', inactive: 'home-outline' },
-  Components: { active: 'grid', inactive: 'grid-outline' },
+  Contacts: { active: 'people', inactive: 'people-outline' },
   Settings: { active: 'settings', inactive: 'settings-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
 };
@@ -59,6 +59,9 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
             <Pressable
               key={route.key}
               onPress={onPress}
+              accessibilityRole="tab"
+              accessibilityLabel={label as string}
+              accessibilityState={{ selected: isFocused }}
               style={styles.tab}
             >
               <Ionicons name={iconName} size={24} color={color} />

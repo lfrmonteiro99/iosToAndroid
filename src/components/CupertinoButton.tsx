@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
@@ -22,7 +22,7 @@ interface CupertinoButtonProps {
   style?: ViewStyle;
 }
 
-export function CupertinoButton({
+export const CupertinoButton = React.memo(function CupertinoButton({
   title,
   onPress,
   variant = 'filled',
@@ -35,7 +35,7 @@ export function CupertinoButton({
 
   const baseColor = destructive ? colors.systemRed : colors.systemBlue;
 
-  const getContainerStyle = (): ViewStyle => {
+  const containerStyle = useMemo((): ViewStyle => {
     switch (variant) {
       case 'filled':
         return {
@@ -57,18 +57,17 @@ export function CupertinoButton({
           paddingHorizontal: 4,
         };
     }
-  };
+  }, [variant, disabled, baseColor, colors.systemGray4, borderRadius.pill]);
 
-  const getTextStyle = (): TextStyle => {
+  const textStyle = useMemo((): TextStyle => {
     switch (variant) {
       case 'filled':
         return { color: disabled ? colors.secondaryLabel : '#FFFFFF' };
       case 'tinted':
-        return { color: disabled ? colors.secondaryLabel : baseColor };
       case 'plain':
         return { color: disabled ? colors.secondaryLabel : baseColor };
     }
-  };
+  }, [variant, disabled, baseColor, colors.secondaryLabel]);
 
   return (
     <Pressable
@@ -77,25 +76,22 @@ export function CupertinoButton({
         onPress?.();
       }}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.base,
-        getContainerStyle(),
+        containerStyle,
         { opacity: pressed ? 0.6 : 1 },
         style,
       ]}
     >
-      <Text
-        style={[
-          typography.headline,
-          styles.text,
-          getTextStyle(),
-        ]}
-      >
+      <Text style={[typography.headline, styles.text, textStyle]}>
         {title}
       </Text>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   base: {

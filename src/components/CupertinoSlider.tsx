@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import {
+import Animated, {
   useSharedValue,
   runOnJS,
 } from 'react-native-reanimated';

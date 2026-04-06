@@ -67,7 +67,13 @@ export function CupertinoSwitch({
   };
 
   return (
-    <Pressable onPress={handlePress} disabled={disabled}>
+    <Pressable
+      onPress={handlePress}
+      disabled={disabled}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      accessibilityLabel={value ? 'On' : 'Off'}
+    >
       <Animated.View
         style={[
           styles.track,

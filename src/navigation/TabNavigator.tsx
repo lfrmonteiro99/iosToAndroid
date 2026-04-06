@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HomeScreen } from '../screens/HomeScreen';
+import { ContactsScreen } from '../screens/ContactsScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -13,7 +14,7 @@ import { CupertinoTabBar } from '../components';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
-const ComponentsStack = createNativeStackNavigator();
+const ContactsStack = createNativeStackNavigator();
 const SettingsStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 
@@ -25,11 +26,11 @@ function HomeStackScreen() {
   );
 }
 
-function ComponentsStackScreen() {
+function ContactsStackScreen() {
   return (
-    <ComponentsStack.Navigator screenOptions={{ headerShown: false }}>
-      <ComponentsStack.Screen name="ComponentsMain" component={ComponentsGalleryScreen} />
-    </ComponentsStack.Navigator>
+    <ContactsStack.Navigator screenOptions={{ headerShown: false }}>
+      <ContactsStack.Screen name="ContactsMain" component={ContactsScreen} />
+    </ContactsStack.Navigator>
   );
 }
 
@@ -49,6 +50,7 @@ function ProfileStackScreen() {
   return (
     <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
+      <ProfileStack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} />
     </ProfileStack.Navigator>
   );
 }
@@ -60,7 +62,7 @@ export function TabNavigator() {
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
-      <Tab.Screen name="Components" component={ComponentsStackScreen} />
+      <Tab.Screen name="Contacts" component={ContactsStackScreen} />
       <Tab.Screen name="Settings" component={SettingsStackScreen} />
       <Tab.Screen name="Profile" component={ProfileStackScreen} />
     </Tab.Navigator>

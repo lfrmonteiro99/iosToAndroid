@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
@@ -15,6 +16,7 @@ export function ProfileScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const stats = [
     { label: 'Posts', value: '128' },
@@ -118,6 +120,14 @@ export function ProfileScreen() {
               title="Find My"
               leading={{ name: 'location', color: '#FFF', backgroundColor: '#34C759' }}
               onPress={() => {}}
+            />
+          </CupertinoListSection>
+
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Components Gallery"
+              leading={{ name: 'grid', color: '#FFF', backgroundColor: colors.systemBlue }}
+              onPress={() => navigation.navigate('ComponentsGallery')}
             />
           </CupertinoListSection>
 

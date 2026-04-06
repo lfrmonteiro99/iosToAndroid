@@ -9,7 +9,7 @@ interface CupertinoCardProps {
   style?: ViewStyle;
 }
 
-export function CupertinoCard({ title, subtitle, children, style }: CupertinoCardProps) {
+export const CupertinoCard = React.memo(function CupertinoCard({ title, subtitle, children, style }: CupertinoCardProps) {
   const { theme, typography, spacing, borderRadius, shadows } = useTheme();
   const { colors } = theme;
 
@@ -46,7 +46,7 @@ export function CupertinoCard({ title, subtitle, children, style }: CupertinoCar
       {children}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
