@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
+import { useSettings } from '../../store/SettingsStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -10,14 +11,12 @@ import {
   CupertinoSegmentedControl,
 } from '../../components';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-
-  const [trueTone, setTrueTone] = useState(true);
-  const [autoLock] = useState('5 Minutes');
-  const [textSizeIndex, setTextSizeIndex] = useState(1);
+  const { settings, update } = useSettings();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -36,7 +35,6 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Appearance */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Appearance">
             <View style={{ padding: spacing.md }}>
@@ -73,14 +71,13 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Text Size */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Text Size">
             <View style={{ padding: spacing.md }}>
               <CupertinoSegmentedControl
                 values={['Small', 'Default', 'Large']}
-                selectedIndex={textSizeIndex}
-                onChange={setTextSizeIndex}
+                selectedIndex={settings.textSizeIndex}
+                onChange={(i) => update('textSizeIndex', i)}
               />
             </View>
           </CupertinoListSection>
@@ -90,7 +87,12 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
           <CupertinoListSection>
             <CupertinoListTile
               title="True Tone"
-              trailing={<CupertinoSwitch value={trueTone} onValueChange={setTrueTone} />}
+              trailing={
+                <CupertinoSwitch
+                  value={settings.trueTone}
+                  onValueChange={(v) => update('trueTone', v)}
+                />
+              }
               showChevron={false}
             />
           </CupertinoListSection>
@@ -102,14 +104,19 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
               title="Auto-Lock"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {autoLock}
+                  {settings.autoLock}
                 </Text>
               }
               onPress={() => {}}
             />
             <CupertinoListTile
               title="Raise to Wake"
-              trailing={<CupertinoSwitch value={true} onValueChange={() => {}} />}
+              trailing={
+                <CupertinoSwitch
+                  value={settings.raiseToWake}
+                  onValueChange={(v) => update('raiseToWake', v)}
+                />
+              }
               showChevron={false}
             />
           </CupertinoListSection>

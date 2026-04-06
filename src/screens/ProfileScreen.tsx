@@ -1,15 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
+import { useProfile } from '../store/ProfileStore';
+import { useContacts } from '../store/ContactsStore';
+import { useSettings } from '../store/SettingsStore';
 import {
   CupertinoNavigationBar,
   CupertinoButton,
   CupertinoCard,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoAlertDialog,
+  CupertinoActionSheet,
 } from '../components';
 
 export function ProfileScreen() {
@@ -17,12 +23,27 @@ export function ProfileScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { profile } = useProfile();
+  const { contacts, favorites, reset: resetContacts } = useContacts();
+  const { reset: resetSettings } = useSettings();
+  const { reset: resetProfile } = useProfile();
+
+  const [showSignOut, setShowSignOut] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   const stats = [
-    { label: 'Posts', value: '128' },
-    { label: 'Followers', value: '1.2K' },
+    { label: 'Contacts', value: String(contacts.length) },
+    { label: 'Favorites', value: String(favorites.length) },
     { label: 'Following', value: '347' },
   ];
+
+  const handleSignOut = () => {
+    resetSettings();
+    resetContacts();
+    resetProfile();
+    AsyncStorage.removeItem('@iostoandroid/theme_preference');
+    setShowSignOut(false);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -36,7 +57,6 @@ export function ProfileScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Avatar */}
         <View
           style={[
             styles.avatar,
@@ -49,15 +69,13 @@ export function ProfileScreen() {
           <Ionicons name="person" size={60} color={colors.systemGray} />
         </View>
 
-        {/* Name & Email */}
         <Text style={[typography.title1, { color: colors.label, marginTop: 16 }]}>
-          John Appleseed
+          {profile.name}
         </Text>
         <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 4 }]}>
-          john.appleseed@icloud.com
+          {profile.email}
         </Text>
 
-        {/* Stats Row */}
         <View style={[styles.statsRow, { marginTop: spacing.lg }]}>
           {stats.map((stat) => (
             <View key={stat.label} style={styles.statItem}>
@@ -71,24 +89,29 @@ export function ProfileScreen() {
           ))}
         </View>
 
-        {/* Action Buttons */}
         <View style={[styles.actionRow, { marginTop: spacing.lg }]}>
-          <CupertinoButton title="Edit Profile" variant="filled" style={{ flex: 1 }} />
-          <CupertinoButton title="Share" variant="tinted" style={{ flex: 1 }} />
+          <CupertinoButton
+            title="Edit Profile"
+            variant="filled"
+            style={{ flex: 1 }}
+            onPress={() => navigation.navigate('EditProfile')}
+          />
+          <CupertinoButton
+            title="Share"
+            variant="tinted"
+            style={{ flex: 1 }}
+            onPress={() => setShowShare(true)}
+          />
         </View>
 
-        {/* Bio Card */}
         <View style={[styles.fullWidth, { paddingHorizontal: spacing.md, marginTop: spacing.lg }]}>
           <CupertinoCard title="About">
             <Text style={[typography.body, { color: colors.label }]}>
-              Designer & developer based in Cupertino. Passionate about creating
-              beautiful user interfaces that feel right at home on any platform.
-              Currently working on bringing iOS aesthetics to Android.
+              {profile.bio}
             </Text>
           </CupertinoCard>
         </View>
 
-        {/* Account Section */}
         <View style={[styles.fullWidth, { paddingHorizontal: spacing.md, marginTop: spacing.lg }]}>
           <CupertinoListSection header="Account">
             <CupertinoListTile
@@ -96,7 +119,7 @@ export function ProfileScreen() {
               leading={{ name: 'person-circle', color: '#FFF', backgroundColor: '#007AFF' }}
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  john@icloud.com
+                  {profile.appleId}
                 </Text>
               }
               onPress={() => {}}
@@ -106,7 +129,7 @@ export function ProfileScreen() {
               leading={{ name: 'cloud', color: '#FFF', backgroundColor: '#5AC8FA' }}
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  50 GB
+                  {profile.icloudStorage}
                 </Text>
               }
               onPress={() => {}}
@@ -136,22 +159,41 @@ export function ProfileScreen() {
               title="Sign Out"
               leading={{ name: 'log-out', color: '#FFF', backgroundColor: colors.systemRed }}
               showChevron={false}
-              onPress={() => {}}
+              onPress={() => setShowSignOut(true)}
             />
           </CupertinoListSection>
         </View>
       </ScrollView>
+
+      <CupertinoAlertDialog
+        visible={showSignOut}
+        title="Sign Out"
+        message="This will reset all settings, contacts, and profile data to defaults."
+        actions={[
+          { label: 'Cancel', style: 'cancel', onPress: () => setShowSignOut(false) },
+          { label: 'Sign Out', style: 'destructive', onPress: handleSignOut },
+        ]}
+        onClose={() => setShowSignOut(false)}
+      />
+
+      <CupertinoActionSheet
+        visible={showShare}
+        title="Share Profile"
+        options={[
+          { label: 'Copy Link', onPress: () => setShowShare(false) },
+          { label: 'Share via Messages', onPress: () => setShowShare(false) },
+          { label: 'Share via Email', onPress: () => setShowShare(false) },
+        ]}
+        cancelLabel="Cancel"
+        onClose={() => setShowShare(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scroll: { flex: 1 },
   avatar: {
     width: 120,
     height: 120,
@@ -167,16 +209,12 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 40,
   },
-  statItem: {
-    alignItems: 'center',
-  },
+  statItem: { alignItems: 'center' },
   actionRow: {
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 16,
     width: '100%',
   },
-  fullWidth: {
-    width: '100%',
-  },
+  fullWidth: { width: '100%' },
 });

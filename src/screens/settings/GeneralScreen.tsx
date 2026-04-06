@@ -1,17 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
+import { useSettings } from '../../store/SettingsStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoAlertDialog,
 } from '../../components';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function GeneralScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const { settings } = useSettings();
+  const [showShutdown, setShowShutdown] = useState(false);
+
+  const airdropLabel = settings.airdrop === 'off' ? 'Receiving Off' : settings.airdrop === 'contactsOnly' ? 'Contacts Only' : 'Everyone';
+  const bgRefreshLabel = settings.backgroundAppRefresh === 'off' ? 'Off' : settings.backgroundAppRefresh === 'wifi' ? 'Wi-Fi' : 'Wi-Fi & Cellular';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -40,7 +48,7 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.badgeText}>1</Text>
                 </View>
               }
-              onPress={() => {}}
+              onPress={() => navigation.navigate('SoftwareUpdate')}
             />
           </CupertinoListSection>
         </View>
@@ -51,26 +59,28 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
               title="AirDrop"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  Contacts Only
+                  {airdropLabel}
                 </Text>
               }
               onPress={() => {}}
             />
-            <CupertinoListTile
-              title="AirPlay & Handoff"
-              onPress={() => {}}
-            />
+            <CupertinoListTile title="AirPlay & Handoff" onPress={() => {}} />
             <CupertinoListTile title="CarPlay" onPress={() => {}} />
           </CupertinoListSection>
         </View>
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="iPhone Storage" onPress={() => {}} />
+            <CupertinoListTile
+              title="Device Storage"
+              onPress={() => navigation.navigate('Storage')}
+            />
             <CupertinoListTile
               title="Background App Refresh"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Wi-Fi</Text>
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  {bgRefreshLabel}
+                </Text>
               }
               onPress={() => {}}
             />
@@ -79,14 +89,16 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="Date & Time" onPress={() => {}} />
-            <CupertinoListTile title="Keyboard" onPress={() => {}} />
+            <CupertinoListTile title="Date & Time" onPress={() => navigation.navigate('DateTime')} />
+            <CupertinoListTile title="Keyboard" onPress={() => navigation.navigate('Keyboard')} />
             <CupertinoListTile
               title="Language & Region"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>English</Text>
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  {settings.language}
+                </Text>
               }
-              onPress={() => {}}
+              onPress={() => navigation.navigate('LanguageRegion')}
             />
             <CupertinoListTile title="Dictionary" onPress={() => {}} />
           </CupertinoListSection>
@@ -94,18 +106,29 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="VPN & Device Management" onPress={() => {}} />
+            <CupertinoListTile title="VPN & Device Management" onPress={() => navigation.navigate('Vpn')} />
             <CupertinoListTile title="Legal & Regulatory" onPress={() => {}} />
           </CupertinoListSection>
         </View>
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="Transfer or Reset iPhone" onPress={() => {}} />
-            <CupertinoListTile title="Shut Down" onPress={() => {}} />
+            <CupertinoListTile title="Transfer or Reset Device" onPress={() => {}} />
+            <CupertinoListTile title="Shut Down" showChevron={false} onPress={() => setShowShutdown(true)} />
           </CupertinoListSection>
         </View>
       </ScrollView>
+
+      <CupertinoAlertDialog
+        visible={showShutdown}
+        title="Shut Down"
+        message="Are you sure you want to shut down? This is a demo app — nothing will actually happen."
+        actions={[
+          { label: 'Cancel', style: 'cancel', onPress: () => setShowShutdown(false) },
+          { label: 'Shut Down', style: 'destructive', onPress: () => setShowShutdown(false) },
+        ]}
+        onClose={() => setShowShutdown(false)}
+      />
     </View>
   );
 }

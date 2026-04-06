@@ -4,6 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { SettingsProvider } from './src/store/SettingsStore';
+import { ContactsProvider } from './src/store/ContactsStore';
+import { ProfileProvider } from './src/store/ProfileStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -22,11 +25,17 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <ErrorBoundary>
-            <NavigationContainer>
-              <AppContent />
-            </NavigationContainer>
-          </ErrorBoundary>
+          <SettingsProvider>
+            <ContactsProvider>
+              <ProfileProvider>
+                <ErrorBoundary>
+                  <NavigationContainer>
+                    <AppContent />
+                  </NavigationContainer>
+                </ErrorBoundary>
+              </ProfileProvider>
+            </ContactsProvider>
+          </SettingsProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
