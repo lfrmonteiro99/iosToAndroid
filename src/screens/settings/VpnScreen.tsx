@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -16,6 +17,7 @@ export function VpnScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { openSystemPanel } = useDevice();
 
   const trailing = (text: string) => (
     <Text style={[typography.body, { color: colors.secondaryLabel }]}>{text}</Text>
@@ -105,6 +107,17 @@ export function VpnScreen({ navigation }: { navigation: any }) {
               title="Add VPN Configuration..."
               leading={{ name: 'add-circle-outline', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
               onPress={() => {}}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* Open System Settings */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Open VPN Settings"
+              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
+              onPress={() => openSystemPanel('vpn')}
             />
           </CupertinoListSection>
         </View>

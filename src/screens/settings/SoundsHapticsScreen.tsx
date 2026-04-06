@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -19,6 +20,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { openSystemPanel } = useDevice();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -106,6 +108,17 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
                 />
               }
               showChevron={false}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* Open System Settings */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Open Sound Settings"
+              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
+              onPress={() => openSystemPanel('sound')}
             />
           </CupertinoListSection>
         </View>

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
-import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -10,19 +10,12 @@ import {
   CupertinoSwitch,
 } from '../../components';
 
-const NETWORKS = [
-  { name: 'Home', signal: 'wifi' },
-  { name: 'Neighbors_5G', signal: 'wifi' },
-  { name: 'CoffeeShop_Free', signal: 'wifi' },
-  { name: 'Office-Guest', signal: 'wifi' },
-];
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function WifiScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
+  const { wifi, toggleWifi } = useDevice();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -47,8 +40,8 @@ export function WifiScreen({ navigation }: { navigation: any }) {
               title="Wi-Fi"
               trailing={
                 <CupertinoSwitch
-                  value={settings.wifiEnabled}
-                  onValueChange={(v) => update('wifiEnabled', v)}
+                  value={wifi.enabled}
+                  onValueChange={() => toggleWifi()}
                 />
               }
               showChevron={false}
@@ -56,15 +49,15 @@ export function WifiScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {settings.wifiEnabled && (
+        {wifi.enabled && (
           <View style={{ paddingHorizontal: spacing.md }}>
-            <CupertinoListSection header="My Networks">
-              {NETWORKS.map((net) => {
-                const connected = net.name === settings.wifiNetwork;
+            <CupertinoListSection header="Networks">
+              {wifi.networks.map((net) => {
+                const connected = net.ssid === wifi.ssid;
                 return (
                   <CupertinoListTile
-                    key={net.name}
-                    title={net.name}
+                    key={net.ssid}
+                    title={net.ssid}
                     leading={{
                       name: 'wifi',
                       color: '#FFFFFF',
@@ -76,7 +69,7 @@ export function WifiScreen({ navigation }: { navigation: any }) {
                       ) : undefined
                     }
                     showChevron={connected}
-                    onPress={() => update('wifiNetwork', net.name)}
+                    onPress={() => {}}
                   />
                 );
               })}
@@ -84,7 +77,7 @@ export function WifiScreen({ navigation }: { navigation: any }) {
           </View>
         )}
 
-        {settings.wifiEnabled && (
+        {wifi.enabled && (
           <View style={{ paddingHorizontal: spacing.md }}>
             <CupertinoListSection>
               <CupertinoListTile
@@ -104,6 +97,12 @@ export function WifiScreen({ navigation }: { navigation: any }) {
             </CupertinoListSection>
           </View>
         )}
+
+        {wifi.enabled && wifi.ip ? (
+          <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
+            IP Address: {wifi.ip}
+          </Text>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -111,4 +110,10 @@ export function WifiScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  footer: {
+    marginHorizontal: 32,
+    marginTop: 8,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
 });

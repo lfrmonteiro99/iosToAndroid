@@ -1,17 +1,31 @@
 package com.iostoandroid.launcher
 
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.Uri
+import android.net.wifi.WifiManager
+import android.os.Environment
+import android.os.StatFs
+import android.provider.Settings
+import android.provider.Telephony
 import android.util.Base64
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class LauncherModule : Module() {
     private val context: Context
@@ -19,6 +33,8 @@ class LauncherModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
+
+        // ── Apps ─────────────────────────────────────────────────────────
 
         AsyncFunction("getInstalledApps") {
             val pm = context.packageManager
@@ -33,9 +49,7 @@ class LauncherModule : Module() {
                 val packageName = resolveInfo.activityInfo.packageName
                 val icon = try {
                     drawableToBase64(resolveInfo.loadIcon(pm))
-                } catch (e: Exception) {
-                    ""
-                }
+                } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
 
                 mapOf(
@@ -53,9 +67,7 @@ class LauncherModule : Module() {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 true
-            } else {
-                false
-            }
+            } else { false }
         }
 
         AsyncFunction("getAppIcon") { packageName: String ->
@@ -63,26 +75,208 @@ class LauncherModule : Module() {
                 val pm = context.packageManager
                 val icon = pm.getApplicationIcon(packageName)
                 drawableToBase64(icon)
-            } catch (e: Exception) {
-                ""
-            }
+            } catch (e: Exception) { "" }
         }
 
         AsyncFunction("isDefaultLauncher") {
             val pm = context.packageManager
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-            }
+            val intent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }
             val resolveInfo = pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
             resolveInfo?.activityInfo?.packageName == context.packageName
         }
 
         AsyncFunction("openLauncherSettings") {
-            val intent = Intent(android.provider.Settings.ACTION_HOME_SETTINGS)
+            val intent = Intent(Settings.ACTION_HOME_SETTINGS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             true
         }
+
+        // ── Wi-Fi ────────────────────────────────────────────────────────
+
+        AsyncFunction("getWifiInfo") {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val info = wifiManager.connectionInfo
+            mapOf(
+                "enabled" to wifiManager.isWifiEnabled,
+                "ssid" to (info?.ssid?.replace("\"", "") ?: "Unknown"),
+                "rssi" to (info?.rssi ?: 0),
+                "linkSpeed" to (info?.linkSpeed ?: 0),
+                "ip" to intToIp(info?.ipAddress ?: 0)
+            )
+        }
+
+        AsyncFunction("setWifiEnabled") { enabled: Boolean ->
+            try {
+                // Android 10+ can't programmatically toggle Wi-Fi, open settings panel
+                val intent = Intent(Settings.Panel.ACTION_WIFI)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("getWifiNetworks") {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val results = wifiManager.scanResults ?: emptyList()
+            results.take(20).map { result ->
+                mapOf(
+                    "ssid" to result.SSID,
+                    "bssid" to result.BSSID,
+                    "level" to result.level,
+                    "frequency" to result.frequency,
+                    "isSecure" to (result.capabilities.contains("WPA") || result.capabilities.contains("WEP"))
+                )
+            }.filter { (it["ssid"] as String).isNotEmpty() }
+                .distinctBy { it["ssid"] }
+        }
+
+        // ── Bluetooth ────────────────────────────────────────────────────
+
+        AsyncFunction("getBluetoothInfo") {
+            val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val adapter = btManager?.adapter
+            mapOf(
+                "enabled" to (adapter?.isEnabled ?: false),
+                "name" to (adapter?.name ?: "Unknown"),
+                "address" to (adapter?.address ?: ""),
+                "pairedDevices" to (try {
+                    adapter?.bondedDevices?.map { device ->
+                        mapOf(
+                            "name" to (device.name ?: "Unknown"),
+                            "address" to device.address,
+                            "type" to device.type
+                        )
+                    } ?: emptyList()
+                } catch (e: SecurityException) { emptyList<Map<String, Any>>() })
+            )
+        }
+
+        AsyncFunction("setBluetoothEnabled") { enabled: Boolean ->
+            try {
+                val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        // ── Storage ──────────────────────────────────────────────────────
+
+        AsyncFunction("getStorageInfo") {
+            val stat = StatFs(Environment.getDataDirectory().path)
+            val totalBytes = stat.totalBytes
+            val freeBytes = stat.freeBytes
+            val usedBytes = totalBytes - freeBytes
+
+            mapOf(
+                "totalBytes" to totalBytes,
+                "freeBytes" to freeBytes,
+                "usedBytes" to usedBytes,
+                "totalGB" to String.format("%.1f", totalBytes / 1073741824.0),
+                "freeGB" to String.format("%.1f", freeBytes / 1073741824.0),
+                "usedGB" to String.format("%.1f", usedBytes / 1073741824.0),
+                "usedPercentage" to (usedBytes.toDouble() / totalBytes.toDouble() * 100).toInt()
+            )
+        }
+
+        // ── SMS / Messages ───────────────────────────────────────────────
+
+        AsyncFunction("getRecentMessages") { limit: Int ->
+            try {
+                val cursor: Cursor? = context.contentResolver.query(
+                    Telephony.Sms.CONTENT_URI,
+                    arrayOf(
+                        Telephony.Sms._ID,
+                        Telephony.Sms.ADDRESS,
+                        Telephony.Sms.BODY,
+                        Telephony.Sms.DATE,
+                        Telephony.Sms.TYPE,
+                        Telephony.Sms.READ
+                    ),
+                    null, null,
+                    "${Telephony.Sms.DATE} DESC"
+                )
+
+                val messages = mutableListOf<Map<String, Any?>>()
+                cursor?.use {
+                    var count = 0
+                    while (it.moveToNext() && count < limit) {
+                        val date = it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.DATE))
+                        messages.add(mapOf(
+                            "id" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms._ID)).toString(),
+                            "address" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)),
+                            "body" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY)),
+                            "date" to date,
+                            "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
+                            "type" to it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.TYPE)),
+                            "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1)
+                        ))
+                        count++
+                    }
+                }
+                messages
+            } catch (e: Exception) {
+                emptyList<Map<String, Any?>>()
+            }
+        }
+
+        // ── System Settings Panels ───────────────────────────────────────
+
+        AsyncFunction("openSystemSettings") { panel: String ->
+            val action = when (panel) {
+                "wifi" -> Settings.ACTION_WIFI_SETTINGS
+                "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+                "airplane" -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
+                "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+                "sound" -> Settings.ACTION_SOUND_SETTINGS
+                "display" -> Settings.ACTION_DISPLAY_SETTINGS
+                "battery" -> Intent.ACTION_POWER_USAGE_SUMMARY
+                "storage" -> Settings.ACTION_INTERNAL_STORAGE_SETTINGS
+                "date" -> Settings.ACTION_DATE_SETTINGS
+                "keyboard" -> Settings.ACTION_INPUT_METHOD_SETTINGS
+                "language" -> Settings.ACTION_LOCALE_SETTINGS
+                "vpn" -> Settings.ACTION_VPN_SETTINGS
+                "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
+                "notification" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+                "privacy" -> Settings.ACTION_PRIVACY_SETTINGS
+                "security" -> Settings.ACTION_SECURITY_SETTINGS
+                "hotspot" -> "android.settings.TETHER_SETTINGS"
+                "cellular" -> Settings.ACTION_NETWORK_OPERATOR_SETTINGS
+                "appinfo" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                else -> Settings.ACTION_SETTINGS
+            }
+            try {
+                val intent = if (panel == "appinfo") {
+                    Intent(action, Uri.parse("package:${context.packageName}"))
+                } else {
+                    Intent(action)
+                }
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        // ── Network Info ─────────────────────────────────────────────────
+
+        AsyncFunction("getNetworkInfo") {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork
+            val capabilities = network?.let { cm.getNetworkCapabilities(it) }
+            mapOf(
+                "isConnected" to (capabilities != null),
+                "isWifi" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ?: false),
+                "isCellular" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ?: false),
+                "isVpn" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false)
+            )
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    private fun intToIp(ip: Int): String {
+        return "${ip and 0xFF}.${ip shr 8 and 0xFF}.${ip shr 16 and 0xFF}.${ip shr 24 and 0xFF}"
     }
 
     private fun drawableToBase64(drawable: Drawable): String {

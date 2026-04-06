@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
-import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -10,23 +10,12 @@ import {
   CupertinoSwitch,
 } from '../../components';
 
-const MY_DEVICES = [
-  { name: 'AirPods Pro', connected: true, icon: 'headset' },
-  { name: 'MacBook Pro', connected: false, icon: 'laptop-outline' },
-  { name: 'HomePod mini', connected: false, icon: 'radio-outline' },
-];
-
-const OTHER_DEVICES = [
-  { name: 'Living Room TV', icon: 'tv-outline' },
-  { name: 'Kitchen Speaker', icon: 'musical-notes-outline' },
-];
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function BluetoothScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
+  const { bluetooth, toggleBluetooth } = useDevice();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -51,8 +40,8 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
               title="Bluetooth"
               trailing={
                 <CupertinoSwitch
-                  value={settings.bluetoothEnabled}
-                  onValueChange={(v) => update('bluetoothEnabled', v)}
+                  value={bluetooth.enabled}
+                  onValueChange={() => toggleBluetooth()}
                 />
               }
               showChevron={false}
@@ -60,7 +49,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {settings.bluetoothEnabled && (
+        {bluetooth.enabled && (
           <>
             <View style={{ paddingHorizontal: spacing.md }}>
               <CupertinoListSection>
@@ -68,7 +57,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
                   title="Device Name"
                   trailing={
                     <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                      {settings.bluetoothName}
+                      {bluetooth.name}
                     </Text>
                   }
                   onPress={() => {}}
@@ -76,47 +65,42 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
               </CupertinoListSection>
             </View>
 
-            <View style={{ paddingHorizontal: spacing.md }}>
-              <CupertinoListSection header="My Devices">
-                {MY_DEVICES.map((device) => (
-                  <CupertinoListTile
-                    key={device.name}
-                    title={device.name}
-                    subtitle={device.connected ? 'Connected' : 'Not Connected'}
-                    leading={{
-                      name: device.icon as 'headset',
-                      color: '#FFFFFF',
-                      backgroundColor: device.connected ? colors.systemBlue : colors.systemGray3,
-                    }}
-                    trailing={
-                      device.connected ? (
-                        <Text style={[typography.body, { color: colors.systemBlue }]}>✓</Text>
-                      ) : undefined
-                    }
-                    showChevron
-                    onPress={() => {}}
-                  />
-                ))}
-              </CupertinoListSection>
-            </View>
+            {bluetooth.pairedDevices.length > 0 && (
+              <View style={{ paddingHorizontal: spacing.md }}>
+                <CupertinoListSection header="Paired Devices">
+                  {bluetooth.pairedDevices.map((device) => (
+                    <CupertinoListTile
+                      key={device.address}
+                      title={device.name}
+                      leading={{
+                        name: 'bluetooth' as const,
+                        color: '#FFFFFF',
+                        backgroundColor: colors.systemBlue,
+                      }}
+                      showChevron
+                      onPress={() => {}}
+                    />
+                  ))}
+                </CupertinoListSection>
+              </View>
+            )}
 
-            <View style={{ paddingHorizontal: spacing.md }}>
-              <CupertinoListSection header="Other Devices">
-                {OTHER_DEVICES.map((device) => (
+            {bluetooth.pairedDevices.length === 0 && (
+              <View style={{ paddingHorizontal: spacing.md }}>
+                <CupertinoListSection header="Paired Devices">
                   <CupertinoListTile
-                    key={device.name}
-                    title={device.name}
-                    leading={{
-                      name: device.icon as 'tv-outline',
-                      color: '#FFFFFF',
-                      backgroundColor: colors.systemGray3,
-                    }}
-                    showChevron
+                    title="No paired devices"
+                    trailing={
+                      <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                        —
+                      </Text>
+                    }
+                    showChevron={false}
                     onPress={() => {}}
                   />
-                ))}
-              </CupertinoListSection>
-            </View>
+                </CupertinoListSection>
+              </View>
+            )}
           </>
         )}
       </ScrollView>

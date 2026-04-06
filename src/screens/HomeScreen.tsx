@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
 import { useContacts } from '../store/ContactsStore';
+import { useDevice } from '../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -42,6 +43,7 @@ export function HomeScreen() {
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
   const { settings } = useSettings();
   const { contacts } = useContacts();
+  const device = useDevice();
   const [greeting, setGreeting] = useState(getGreeting());
 
   useEffect(() => {
@@ -49,11 +51,14 @@ export function HomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const batteryLevel = settings.lowPowerMode ? '48%' : '72%';
-  const wifiStatus = settings.wifiEnabled ? settings.wifiNetwork : 'Off';
+  const batteryPct = Math.round(device.battery.level * 100);
+  const batteryLevel = `${batteryPct}%`;
+  const wifiStatus = device.wifi.enabled ? (device.wifi.ssid || 'Connected') : 'Off';
+  const contactCount = device.contacts.length > 0 ? device.contacts.length : contacts.length;
+  const unreadMessages = device.messages.filter((m) => !m.isRead).length;
 
   const recentActivity = [
-    { title: 'Contacts synced', subtitle: `${contacts.length} contacts`, icon: 'people' as const, time: getRelativeTime(2) },
+    { title: unreadMessages > 0 ? `${unreadMessages} unread messages` : 'No new messages', subtitle: `${contactCount} contacts`, icon: 'people' as const, time: getRelativeTime(2) },
     { title: 'Wi-Fi connected', subtitle: wifiStatus, icon: 'wifi' as const, time: getRelativeTime(15) },
     { title: 'Backup complete', subtitle: '4.2 GB backed up', icon: 'checkmark-circle' as const, time: getRelativeTime(60) },
     { title: settings.focusMode !== 'off' ? 'Focus mode active' : 'Focus mode off', subtitle: settings.focusMode !== 'off' ? settings.focusMode : 'No focus mode set', icon: 'moon' as const, time: getRelativeTime(120) },
@@ -101,7 +106,7 @@ export function HomeScreen() {
                 <Text style={[typography.caption1, { color: 'rgba(255,255,255,0.7)' }]}>Battery</Text>
               </View>
               <View style={styles.stat}>
-                <Text style={[typography.title1, { color: '#FFFFFF' }]}>{contacts.length}</Text>
+                <Text style={[typography.title1, { color: '#FFFFFF' }]}>{contactCount}</Text>
                 <Text style={[typography.caption1, { color: 'rgba(255,255,255,0.7)' }]}>Contacts</Text>
               </View>
               <View style={styles.stat}>
@@ -189,12 +194,12 @@ export function HomeScreen() {
                 </Text>
               </View>
               <Text style={[typography.title1, { color: colors.label, marginTop: 8 }]}>
-                {settings.lowPowerMode ? '48%' : '72%'}
+                {batteryLevel}
               </Text>
               <View style={{ marginTop: 8 }}>
                 <CupertinoProgressBar
-                  progress={settings.lowPowerMode ? 0.48 : 0.72}
-                  progressColor={settings.lowPowerMode ? '#FFCC00' : '#34C759'}
+                  progress={device.battery.level}
+                  progressColor={device.battery.level < 0.2 ? '#FFCC00' : '#34C759'}
                 />
               </View>
             </View>
@@ -217,14 +222,14 @@ export function HomeScreen() {
                 </Text>
               </View>
               <Text style={[typography.title1, { color: colors.label, marginTop: 8 }]}>
-                89.3 GB
+                {device.storage.usedGB} GB
               </Text>
               <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-                of 128 GB
+                of {device.storage.totalGB} GB
               </Text>
               <View style={{ marginTop: 8 }}>
                 <CupertinoProgressBar
-                  progress={0.70}
+                  progress={device.storage.usedPercentage / 100}
                   progressColor={colors.systemBlue}
                 />
               </View>
