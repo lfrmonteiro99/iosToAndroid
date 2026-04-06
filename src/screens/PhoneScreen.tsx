@@ -12,10 +12,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
 import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
+import { CupertinoActivityIndicator } from '../components';
 
 const getLauncher = async () => {
   try {
@@ -135,9 +137,11 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
   const { colors } = theme;
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [callLogLoading, setCallLogLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
+      setCallLogLoading(true);
       const mod = await getLauncher();
       if (mod) {
         try {
@@ -147,6 +151,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
           setPermissionDenied(true);
         }
       }
+      setCallLogLoading(false);
     })();
   }, []);
 
@@ -173,6 +178,14 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
       default: return 'Incoming';
     }
   };
+
+  if (callLogLoading) {
+    return (
+      <View style={styles.emptyState}>
+        <CupertinoActivityIndicator />
+      </View>
+    );
+  }
 
   if (permissionDenied) {
     return (
@@ -500,6 +513,7 @@ export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-dis
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.systemGroupedBackground }]}>
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
       {/* Navigation Bar */}
       <BlurView
         intensity={80}
@@ -699,6 +713,7 @@ const styles = StyleSheet.create({
     borderRadius: 37.5,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 2,
   },
   keypadDigit: {
     fontSize: 28,

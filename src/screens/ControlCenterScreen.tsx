@@ -63,7 +63,12 @@ function ToggleButton({
   onPress,
 }: ToggleButtonProps) {
   return (
-    <Pressable onPress={onPress} style={styles.toggleWrap} accessibilityLabel={label}>
+    <Pressable
+      onPress={onPress}
+      style={styles.toggleWrap}
+      accessibilityLabel={`${label} ${active ? 'on' : 'off'}`}
+      accessibilityRole="switch"
+    >
       <View
         style={[
           styles.toggleButton,
@@ -97,7 +102,7 @@ interface ShortcutButtonProps {
 
 function ShortcutButton({ iconName, label, active = false, onPress }: ShortcutButtonProps) {
   return (
-    <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={label}>
+    <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={label} accessibilityRole="button">
       <View
         style={[
           styles.shortcutCircle,
@@ -229,7 +234,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
       {/* Control Center sheet */}
       <GestureDetector gesture={swipeDownGesture}>
         <Animated.View
-          style={[styles.sheet, { paddingBottom: insets.bottom + 12 }, sheetStyle]}
+          style={[styles.sheet, { paddingBottom: insets.bottom + 16 }, sheetStyle]}
         >
           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
 
@@ -335,6 +340,8 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 <Ionicons name="sunny" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
                 <Pressable
                   style={styles.verticalSliderTrack}
+                  accessibilityLabel="Brightness control"
+                  accessibilityRole="adjustable"
                   onPress={(e) => {
                     const relY = e.nativeEvent.locationY;
                     const pct = Math.max(0, Math.min(1, 1 - relY / 160));
@@ -362,6 +369,8 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 <Ionicons name="volume-high" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
                 <Pressable
                   style={styles.verticalSliderTrack}
+                  accessibilityLabel="Volume control"
+                  accessibilityRole="adjustable"
                   onPress={(e) => {
                     const relY = e.nativeEvent.locationY;
                     const pct = Math.max(0, Math.min(1, 1 - relY / 160));
@@ -489,7 +498,7 @@ const styles = StyleSheet.create({
 
   section: {
     paddingHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 8,
   },
 
   // Toggle grid

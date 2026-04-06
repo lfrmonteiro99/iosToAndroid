@@ -8,6 +8,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '../theme/ThemeContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +24,26 @@ type ButtonDef = {
 // ---------------------------------------------------------------------------
 // Button grid definition
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Accessibility label map
+// ---------------------------------------------------------------------------
+
+const ACCESSIBILITY_LABELS: Record<string, string> = {
+  'AC': 'clear',
+  '+/-': 'toggle sign',
+  '%': 'percent',
+  '÷': 'divide',
+  '×': 'multiply',
+  '-': 'minus',
+  '+': 'plus',
+  '=': 'equals',
+  '.': 'decimal point',
+};
+
+function getAccessibilityLabel(def: ButtonDef): string {
+  return def.accessibilityLabel ?? ACCESSIBILITY_LABELS[def.label] ?? def.label;
+}
 
 const ROWS: ButtonDef[][] = [
   [
@@ -97,7 +118,8 @@ function CalcButton({ def, isActiveOp, onPress }: CalcButtonProps) {
   return (
     <Pressable
       onPress={onPress}
-      accessibilityLabel={def.accessibilityLabel ?? def.label}
+      accessibilityLabel={getAccessibilityLabel(def)}
+      accessibilityRole="button"
       style={({ pressed }) => [
         styles.button,
         def.wide ? styles.buttonWide : styles.buttonNormal,
@@ -114,6 +136,7 @@ function CalcButton({ def, isActiveOp, onPress }: CalcButtonProps) {
 // ---------------------------------------------------------------------------
 
 export function CalculatorScreen() {
+  const { typography } = useTheme();
   const [display, setDisplay] = useState('0');
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
@@ -274,7 +297,7 @@ const styles = StyleSheet.create({
 
   displayText: {
     color: '#FFFFFF',
-    fontWeight: '300',
+    fontWeight: '200',
     letterSpacing: -2,
   },
 
@@ -306,6 +329,7 @@ const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 2,
   },
 
   buttonText: {

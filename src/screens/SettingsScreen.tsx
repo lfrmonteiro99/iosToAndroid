@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
 import { useDevice } from '../store/DeviceStore';
@@ -199,6 +200,7 @@ export function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <CupertinoNavigationBar
         title="Settings"
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}

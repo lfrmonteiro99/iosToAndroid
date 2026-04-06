@@ -9,9 +9,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoSearchBar, CupertinoButton } from '../components';
+import { CupertinoSearchBar, CupertinoButton, CupertinoActivityIndicator } from '../components';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -247,13 +249,15 @@ export function MessagesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
       {/* Nav Bar */}
-      <View
+      <BlurView
+        intensity={80}
+        tint={theme.dark ? 'dark' : 'light'}
         style={[
           styles.navBar,
           {
             paddingTop: insets.top,
-            backgroundColor: colors.systemBackground,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.separator,
           },
@@ -273,10 +277,10 @@ export function MessagesScreen() {
             </Pressable>
           </View>
         </View>
-      </View>
+      </BlurView>
 
       {/* Search Bar */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.systemBackground }]}>
+      <View style={styles.searchContainer}>
         <CupertinoSearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -285,17 +289,23 @@ export function MessagesScreen() {
         />
       </View>
 
-      {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ListEmptyComponent={ListEmpty}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={
-          filtered.length === 0 ? styles.emptyList : undefined
-        }
-      />
+      {/* List or loading */}
+      {!device.isReady ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <CupertinoActivityIndicator />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          ListEmptyComponent={ListEmpty}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={
+            filtered.length === 0 ? styles.emptyList : undefined
+          }
+        />
+      )}
     </View>
   );
 }
@@ -329,6 +339,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 16,
+    elevation: 1,
   },
   avatar: {
     width: AVATAR_SIZE,

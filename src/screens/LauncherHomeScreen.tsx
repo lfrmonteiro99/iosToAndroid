@@ -69,7 +69,7 @@ const COLS = 4;
 const ROWS = 6;
 const APPS_PER_PAGE = COLS * ROWS; // 24
 const ICON_SIZE = 60;
-const GRID_HORIZONTAL_PADDING = 20;
+const GRID_HORIZONTAL_PADDING = 16;
 const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
@@ -172,6 +172,8 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
       onPress={isJiggling ? undefined : onPress}
       onLongPress={onLongPress}
       android_ripple={isJiggling ? null : { color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
+      accessibilityLabel={`Open ${app.name}`}
+      accessibilityRole="button"
     >
       <Animated.View style={animatedStyle}>
         {virtualCfg ? (
@@ -281,6 +283,8 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
       onPress={onPress}
       onLongPress={onLongPress}
       android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
+      accessibilityLabel={`Open ${folder.name} folder`}
+      accessibilityRole="button"
     >
       <View style={[styles.folderIcon, { backgroundColor: folder.color }]}>
         <View style={styles.folderGrid}>
@@ -909,7 +913,7 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
-      <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
         <BlurView
           intensity={90}
           tint="dark"

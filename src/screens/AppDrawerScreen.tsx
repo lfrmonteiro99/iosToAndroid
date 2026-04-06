@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
+import { StatusBar } from 'expo-status-bar';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoNavigationBar } from '../components/CupertinoNavigationBar';
 import { CupertinoActionSheet } from '../components/CupertinoActionSheet';
@@ -219,6 +220,7 @@ export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
       <CupertinoNavigationBar
         title="All Apps"
         largeTitle={false}
