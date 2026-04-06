@@ -1,6 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
+import { AppDrawerScreen } from '../screens/AppDrawerScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { ContactDetailScreen } from '../screens/contacts/ContactDetailScreen';
@@ -41,7 +43,9 @@ const ProfileStack = createNativeStackNavigator();
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
-      <HomeStack.Screen name="HomeMain" component={HomeScreen} />
+      <HomeStack.Screen name="HomeMain" component={LauncherHomeScreen} />
+      <HomeStack.Screen name="AppDrawer" component={AppDrawerScreen} />
+      <HomeStack.Screen name="Dashboard" component={HomeScreen} />
     </HomeStack.Navigator>
   );
 }
