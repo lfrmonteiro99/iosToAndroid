@@ -501,7 +501,7 @@ export function LauncherHomeScreen() {
       const { translationY, absoluteY, absoluteX, velocityY } = event;
 
       if (translationY < -60 && velocityY < -200) {
-        runOnJS(navigateTo)('AppDrawer');
+        runOnJS(navigateTo)('AppLibrary');
       } else if (translationY > 60 && velocityY > 200 && absoluteY < 350) {
         if (absoluteX < SCREEN_WIDTH / 2) {
           runOnJS(navigateTo)('NotificationCenter');
@@ -509,7 +509,7 @@ export function LauncherHomeScreen() {
           runOnJS(navigateTo)('ControlCenter');
         }
       } else if (translationY > 60 && velocityY > 200 && absoluteY >= 350) {
-        runOnJS(navigateToWithParams)('AppDrawer', { searchFocused: true });
+        runOnJS(navigateToWithParams)('AppLibrary', { searchFocused: true });
       }
     });
 
@@ -968,7 +968,7 @@ export function LauncherHomeScreen() {
       <PageDots total={totalPages} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
-        onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppDrawer')}
+        onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppLibrary')}
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
