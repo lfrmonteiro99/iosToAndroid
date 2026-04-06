@@ -159,6 +159,30 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
     return () => clearInterval(id);
   }, []);
 
+  // Biometric unlock on mount
+  const triggerBiometric = async () => {
+    try {
+      const LocalAuth = await import('expo-local-authentication');
+      const hasHardware = await LocalAuth.hasHardwareAsync();
+      const isEnrolled = await LocalAuth.isEnrolledAsync();
+      if (hasHardware && isEnrolled) {
+        const result = await LocalAuth.authenticateAsync({
+          promptMessage: 'Unlock your phone',
+          fallbackLabel: 'Use swipe',
+          disableDeviceFallback: false,
+        });
+        if (result.success) {
+          handleUnlock();
+        }
+      }
+    } catch { /* biometrics not available */ }
+  };
+
+  useEffect(() => {
+    triggerBiometric();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Swipe-up animation
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -283,6 +307,13 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           </Pressable>
 
           <View style={styles.swipeHintWrap}>
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); triggerBiometric(); }}
+              accessibilityLabel="Biometric unlock"
+              style={styles.biometricButton}
+            >
+              <Ionicons name="finger-print" size={28} color="rgba(255,255,255,0.75)" />
+            </Pressable>
             <View style={styles.homeIndicator} />
           </View>
 
@@ -434,6 +465,12 @@ const styles = StyleSheet.create({
   swipeHintWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+  },
+  biometricButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
   },
   homeIndicator: {
     width: 134,

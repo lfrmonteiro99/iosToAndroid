@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CupertinoTheme, getTheme, Typography, Spacing, BorderRadius, Shadows, AnimationConfig } from './CupertinoTheme';
 
@@ -21,8 +20,9 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemColorScheme = useColorScheme();
-  const [isDark, setIsDark] = useState(systemColorScheme === 'dark');
+  // Initial value: apply time-based rule immediately
+  const initHour = new Date().getHours();
+  const [isDark, setIsDark] = useState(initHour >= 19 || initHour < 7);
   const [isReady, setIsReady] = useState(false);
   const [hasUserOverride, setHasUserOverride] = useState(false);
 
@@ -44,8 +44,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isDark, isReady, hasUserOverride]);
 
-  // Derive theme from system when no user override
-  const effectiveDark = hasUserOverride ? isDark : (systemColorScheme === 'dark');
+  // Auto dark mode based on time of day (7pm–7am) when no user override
+  useEffect(() => {
+    if (hasUserOverride) return;
+    const applyTimeDark = () => {
+      const hour = new Date().getHours();
+      setIsDark(hour >= 19 || hour < 7);
+    };
+    const timer = setTimeout(applyTimeDark, 0);
+    const interval = setInterval(applyTimeDark, 60000);
+    return () => { clearTimeout(timer); clearInterval(interval); };
+  }, [hasUserOverride]);
+
+  // isDark is the single source of truth: set by user override or time-based auto-dark
+  const effectiveDark = isDark;
 
   const toggleTheme = useCallback(() => {
     setHasUserOverride(true);

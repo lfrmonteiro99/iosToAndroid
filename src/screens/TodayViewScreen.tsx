@@ -8,6 +8,7 @@ import {
   Pressable,
   StatusBar,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,9 +44,22 @@ function formatDate(date: Date): string {
 interface WidgetCardProps {
   children: React.ReactNode;
   style?: object;
+  onPress?: () => void;
 }
 
-function WidgetCard({ children, style }: WidgetCardProps) {
+function WidgetCard({ children, style, onPress }: WidgetCardProps) {
+  if (onPress) {
+    return (
+      <Pressable
+        style={[styles.widgetCard, style]}
+        onPress={onPress}
+        android_ripple={{ color: 'rgba(255,255,255,0.1)', borderless: false }}
+      >
+        <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.widgetContent}>{children}</View>
+      </Pressable>
+    );
+  }
   return (
     <View style={[styles.widgetCard, style]}>
       <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
@@ -70,13 +84,13 @@ function ProgressBar({ value, color = '#0A84FF' }: { value: number; color?: stri
 // Battery Widget
 // ---------------------------------------------------------------------------
 
-function BatteryWidget({ level, isCharging }: { level: number; isCharging: boolean }) {
+function BatteryWidget({ level, isCharging, onPress }: { level: number; isCharging: boolean; onPress?: () => void }) {
   const pct = Math.round(level * 100);
   const color = pct > 20 ? '#30D158' : '#FF453A';
   const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
 
   return (
-    <WidgetCard>
+    <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={28} color={color} />
         <Text style={styles.widgetTitle}>Battery</Text>
@@ -98,16 +112,18 @@ function StorageWidget({
   usedGB,
   totalGB,
   usedPercentage,
+  onPress,
 }: {
   usedGB: string;
   totalGB: string;
   usedPercentage: number;
+  onPress?: () => void;
 }) {
   const pct = usedPercentage / 100;
   const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : '#0A84FF';
 
   return (
-    <WidgetCard>
+    <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="server-outline" size={22} color={color} />
         <Text style={styles.widgetTitle}>Storage</Text>
@@ -182,9 +198,9 @@ function UpNextWidget() {
 // Messages Widget
 // ---------------------------------------------------------------------------
 
-function MessagesWidget({ unreadCount }: { unreadCount: number }) {
+function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress?: () => void }) {
   return (
-    <WidgetCard>
+    <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
         <Text style={styles.widgetTitle}>Messages</Text>
@@ -208,6 +224,7 @@ function MessagesWidget({ unreadCount }: { unreadCount: number }) {
 export function TodayViewScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
+  const nav = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const today = useMemo(() => formatDate(new Date()), []);
 
@@ -270,12 +287,14 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
             <BatteryWidget
               level={device.battery.level}
               isCharging={device.battery.isCharging}
+              onPress={() => nav.navigate('Battery')}
             />
 
             <StorageWidget
               usedGB={device.storage.usedGB}
               totalGB={device.storage.totalGB}
               usedPercentage={device.storage.usedPercentage}
+              onPress={() => nav.navigate('Storage')}
             />
 
             <WeatherWidget />
@@ -284,7 +303,7 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
 
             <UpNextWidget />
 
-            <MessagesWidget unreadCount={unreadCount} />
+            <MessagesWidget unreadCount={unreadCount} onPress={() => nav.navigate('Messages')} />
           </ScrollView>
         </Animated.View>
       </GestureDetector>
