@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -115,6 +116,7 @@ function ShortcutButton({ iconName, label, active = false, onPress }: ShortcutBu
 // ---------------------------------------------------------------------------
 
 export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) {
+  const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings, update } = useSettings();
@@ -157,14 +159,9 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
     }
   };
 
-  const launchCalculator = async () => {
-    const mod = await getLauncher();
-    if (mod) {
-      const launched =
-        (await mod.launchApp('com.google.android.calculator').catch(() => false)) ||
-        (await mod.launchApp('com.android.calculator2').catch(() => false));
-      if (!launched) Alert.alert('Calculator not found');
-    }
+  const launchCalculator = () => {
+    navigation.goBack();
+    setTimeout(() => nav.navigate('Calculator'), 300);
   };
 
   const launchCamera = async () => {

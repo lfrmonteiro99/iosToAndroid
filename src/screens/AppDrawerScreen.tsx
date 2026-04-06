@@ -54,6 +54,7 @@ export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
 
   const [query, setQuery] = useState('');
   const [autoFocus, setAutoFocus] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [selectedApp, setSelectedApp] = useState<InstalledApp | null>(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
 
@@ -92,6 +93,10 @@ export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
   }, [query]);
 
   const isSearching = query.trim().length > 0;
+  const showSuggestions = isFocused && !query.trim();
+
+  const siriSuggestions = useMemo(() => filteredApps.slice(0, 4), [filteredApps]);
+  const recentContacts = useMemo(() => device.contacts.slice(0, 3), [device.contacts]);
 
   const dockPackageNames = useMemo(
     () => new Set(dockApps.map(a => a.packageName)),
@@ -225,10 +230,63 @@ export function AppDrawerScreen({ navigation, route }: AppDrawerScreenProps) {
           value={query}
           onChangeText={setQuery}
           placeholder="Search Apps"
-          onCancel={() => setQuery('')}
+          onCancel={() => { setQuery(''); setIsFocused(false); }}
+          onFocusChange={setIsFocused}
           autoFocus={autoFocus}
         />
       </View>
+
+      {showSuggestions && (
+        <View style={styles.searchSections}>
+          {siriSuggestions.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>Siri Suggestions</Text>
+              <View style={styles.siriSuggestionsRow}>
+                {siriSuggestions.map(app => (
+                  <Pressable
+                    key={app.packageName}
+                    style={[styles.siriSuggestionItem, { width: cellWidth }]}
+                    onPress={() => launchApp(app.packageName)}
+                  >
+                    {app.icon ? (
+                      <Image source={{ uri: app.icon }} style={styles.siriSuggestionIcon} resizeMode="contain" />
+                    ) : (
+                      <View style={[styles.siriSuggestionIcon, styles.iconFallback, { backgroundColor: colors.systemGray3 }]}>
+                        <Ionicons name="apps" size={24} color={colors.label} />
+                      </View>
+                    )}
+                    <Text style={[typography.caption2, styles.appName, { color: colors.label }]} numberOfLines={1}>
+                      {app.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+          {recentContacts.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>Recent Contacts</Text>
+              {recentContacts.map(contact => (
+                <Pressable
+                  key={contact.id}
+                  style={[styles.contactRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+                  onPress={() => navigation.navigate('ContactDetail', { contactId: contact.id })}
+                >
+                  <View style={[styles.contactAvatar, { backgroundColor: colors.systemBlue }]}>
+                    <Text style={styles.contactAvatarText}>
+                      {(contact.firstName?.[0] ?? '') + (contact.lastName?.[0] ?? '')}
+                    </Text>
+                  </View>
+                  <Text style={[typography.body, { color: colors.label, marginLeft: 12 }]}>
+                    {contact.firstName} {contact.lastName}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 'auto' }} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {isSearching && (settingsResults.length > 0 || contactResults.length > 0) && (
         <View style={styles.searchSections}>
@@ -402,5 +460,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '600',
+  },
+  siriSuggestionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  siriSuggestionItem: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  siriSuggestionIcon: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    borderRadius: ICON_BORDER_RADIUS,
   },
 });

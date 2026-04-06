@@ -117,6 +117,7 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
             <CupertinoListTile title="Transfer or Reset Device" onPress={() => {}} />
+            <CupertinoListTile title="Backup & Restore" onPress={() => navigation.navigate('BackupRestore')} />
             <CupertinoListTile title="Shut Down" showChevron={false} onPress={() => setShowShutdown(true)} />
           </CupertinoListSection>
         </View>

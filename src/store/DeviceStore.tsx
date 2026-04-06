@@ -261,6 +261,15 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [refresh]);
 
+  // Lightweight background refresh — battery + messages every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const [battery, messages] = await Promise.all([loadBattery(), loadMessages()]);
+      setState(prev => ({ ...prev, battery, messages }));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadBattery, loadMessages]);
+
   // Battery subscription
   useEffect(() => {
     const sub = Battery.addBatteryLevelListener(({ batteryLevel }) => {

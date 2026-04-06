@@ -9,6 +9,7 @@ import { LockScreen } from '../screens/LockScreen';
 import { ControlCenterScreen } from '../screens/ControlCenterScreen';
 
 // Built-in "apps" (opened from dock/grid, not tabs)
+import { CalculatorScreen } from '../screens/CalculatorScreen';
 import { PhoneScreen } from '../screens/PhoneScreen';
 import { CallScreen } from '../screens/CallScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
@@ -42,6 +43,7 @@ import { BatteryScreen } from '../screens/settings/BatteryScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
+import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
@@ -67,6 +69,7 @@ export function TabNavigator() {
       <Stack.Screen name="Multitask" component={MultitaskScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
 
       {/* Built-in apps — zoom up like iOS app launch */}
+      <Stack.Screen name="Calculator" component={CalculatorScreen} options={{ animation: 'fade_from_bottom' }} />
       <Stack.Screen name="Phone" component={PhoneScreen} options={{ animation: 'fade_from_bottom' }} />
       <Stack.Screen name="CallScreen" component={CallScreen} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="Messages" component={MessagesScreen} options={{ animation: 'fade_from_bottom' }} />
@@ -98,6 +101,7 @@ export function TabNavigator() {
       <Stack.Screen name="Keyboard" component={KeyboardScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="LanguageRegion" component={LanguageRegionScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Vpn" component={VpnScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="BackupRestore" component={BackupRestoreScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: 'slide_from_right' }} />
