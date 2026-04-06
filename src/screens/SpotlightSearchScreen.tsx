@@ -226,7 +226,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
       {showResults && filteredApps.length === 0 && (
         <View style={styles.noResults}>
           <Text style={styles.noResultsText}>No Results</Text>
-          <Text style={styles.noResultsSubtext}>No results found for "{query}"</Text>
+          <Text style={styles.noResultsSubtext}>No results found for &ldquo;{query}&rdquo;</Text>
         </View>
       )}
 
