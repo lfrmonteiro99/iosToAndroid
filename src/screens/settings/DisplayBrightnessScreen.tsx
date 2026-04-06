@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -10,6 +12,7 @@ import {
   CupertinoSwitch,
   CupertinoSegmentedControl,
   CupertinoActionSheet,
+  CupertinoSlider,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,6 +21,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { brightness, setBrightness, openSystemPanel } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
 
   return (
@@ -37,6 +41,24 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Brightness slider */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection header="Brightness">
+            <View style={styles.sliderRow}>
+              <Ionicons name="sunny-outline" size={20} color={colors.secondaryLabel} />
+              <View style={styles.sliderTrack}>
+                <CupertinoSlider
+                  value={brightness}
+                  onValueChange={(v) => setBrightness(v)}
+                  minimumValue={0}
+                  maximumValue={1}
+                />
+              </View>
+              <Ionicons name="sunny" size={20} color={colors.secondaryLabel} />
+            </View>
+          </CupertinoListSection>
+        </View>
+
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Appearance">
             <View style={{ padding: spacing.md }}>
@@ -123,6 +145,17 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
             />
           </CupertinoListSection>
         </View>
+
+        {/* Open System Settings */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Open Display Settings"
+              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
+              onPress={() => openSystemPanel('display')}
+            />
+          </CupertinoListSection>
+        </View>
       </ScrollView>
 
       <CupertinoActionSheet
@@ -145,6 +178,16 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  sliderTrack: {
+    flex: 1,
+  },
   appearanceRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',

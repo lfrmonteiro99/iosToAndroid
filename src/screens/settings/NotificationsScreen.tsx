@@ -4,6 +4,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -21,6 +22,7 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { openSystemPanel } = useDevice();
 
   const previewIndex = PREVIEW_VALUES.indexOf(settings.notificationPreviews);
 
@@ -104,6 +106,17 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
               }
               onPress={() => {}}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* Open System Settings */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Open Notification Settings"
+              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
+              onPress={() => openSystemPanel('notification')}
             />
           </CupertinoListSection>
         </View>

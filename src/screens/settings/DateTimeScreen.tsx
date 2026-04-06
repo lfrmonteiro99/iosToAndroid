@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -16,6 +17,7 @@ export function DateTimeScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { openSystemPanel } = useDevice();
 
   const now = new Date();
 
@@ -92,6 +94,17 @@ export function DateTimeScreen({ navigation }: { navigation: any }) {
                 </Text>
               }
               showChevron={false}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* Open System Settings */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Open Date & Time Settings"
+              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
+              onPress={() => openSystemPanel('date_time')}
             />
           </CupertinoListSection>
         </View>

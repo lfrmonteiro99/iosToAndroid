@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -11,20 +12,17 @@ import {
   CupertinoSwitch,
 } from '../../components';
 
-const BATTERY_LEVEL = 72;
-
-const APP_USAGE = [
-  { name: 'Safari', pct: 35, color: '#007AFF' },
-  { name: 'Messages', pct: 22, color: '#34C759' },
-  { name: 'Instagram', pct: 18, color: '#FF375F' },
-  { name: 'Music', pct: 12, color: '#FF2D55' },
-  { name: 'Other', pct: 13, color: '#8E8E93' },
-];
-
 function getBatteryColor(level: number): string {
   if (level > 20) return '#34C759';
   if (level > 10) return '#FFCC00';
   return '#FF3B30';
+}
+
+function getBatteryIcon(level: number, isCharging: boolean): 'battery-full' | 'battery-half' | 'battery-dead' | 'battery-charging' {
+  if (isCharging) return 'battery-charging';
+  if (level > 50) return 'battery-full';
+  if (level > 20) return 'battery-half';
+  return 'battery-dead';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,8 +31,11 @@ export function BatteryScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { battery, openSystemPanel } = useDevice();
 
-  const batteryColor = getBatteryColor(BATTERY_LEVEL);
+  const batteryLevel = Math.round(battery.level * 100);
+  const batteryColor = getBatteryColor(batteryLevel);
+  const batteryIcon = getBatteryIcon(batteryLevel, battery.isCharging);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -55,12 +56,12 @@ export function BatteryScreen({ navigation }: { navigation: any }) {
       >
         {/* Battery level display */}
         <View style={[styles.batteryDisplay, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-          <Ionicons name="battery-half" size={64} color={batteryColor} />
+          <Ionicons name={batteryIcon} size={64} color={batteryColor} />
           <Text style={[styles.batteryPercent, { color: batteryColor }]}>
-            {BATTERY_LEVEL}%
+            {batteryLevel}%
           </Text>
           <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: 4 }]}>
-            Battery Level
+            {battery.isCharging ? 'Charging' : 'Not Charging'}
           </Text>
         </View>
 
@@ -90,46 +91,18 @@ export function BatteryScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Last Charged */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Last Charged"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  Today at 8:30 AM
-                </Text>
-              }
-              showChevron={false}
-            />
-          </CupertinoListSection>
-        </View>
-
         {/* Battery Usage */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Battery Usage">
-            {APP_USAGE.map((app) => (
-              <CupertinoListTile
-                key={app.name}
-                title={app.name}
-                trailing={
-                  <View style={styles.barContainer}>
-                    <Text style={[typography.footnote, { color: colors.secondaryLabel, marginRight: 6 }]}>
-                      {app.pct}%
-                    </Text>
-                    <View style={[styles.barTrack, { backgroundColor: colors.systemFill }]}>
-                      <View
-                        style={[
-                          styles.barFill,
-                          { width: `${app.pct}%` as unknown as number, backgroundColor: app.color },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                }
-                showChevron={false}
-              />
-            ))}
+            <CupertinoListTile
+              title="View Battery Usage"
+              leading={{
+                name: 'bar-chart-outline',
+                color: '#FFFFFF',
+                backgroundColor: colors.systemGreen ?? '#34C759',
+              }}
+              onPress={() => openSystemPanel('battery')}
+            />
           </CupertinoListSection>
         </View>
 
@@ -156,21 +129,6 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '700',
     lineHeight: 56,
-  },
-  barContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 140,
-  },
-  barTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: 6,
-    borderRadius: 3,
   },
   footer: {
     marginHorizontal: 32,

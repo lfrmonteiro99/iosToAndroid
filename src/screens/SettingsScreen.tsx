@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
+import { useDevice } from '../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -29,6 +30,7 @@ export function SettingsScreen() {
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const device = useDevice();
 
   const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -42,7 +44,7 @@ export function SettingsScreen() {
     {
       section: 'connectivity',
       items: [
-        { key: 'airplane', title: 'Airplane Mode', icon: 'airplane', iconBg: '#FF9500', type: 'switch', settingsKey: 'airplaneMode' },
+        { key: 'airplane', title: 'Airplane Mode', icon: 'airplane', iconBg: '#FF9500', type: 'navigate' },
         { key: 'wifi', title: 'Wi-Fi', icon: 'wifi', iconBg: '#007AFF', type: 'navigate', route: 'WiFi' },
         { key: 'bluetooth', title: 'Bluetooth', icon: 'bluetooth', iconBg: '#007AFF', type: 'navigate', route: 'Bluetooth' },
         { key: 'cellular', title: 'Cellular', icon: 'cellular', iconBg: '#34C759', type: 'navigate', route: 'Cellular' },
@@ -78,8 +80,9 @@ export function SettingsScreen() {
 
   const getTrailing = (item: SettingsItem): string | undefined => {
     switch (item.key) {
-      case 'wifi': return settings.wifiEnabled ? settings.wifiNetwork : 'Off';
-      case 'bluetooth': return settings.bluetoothEnabled ? 'On' : 'Off';
+      case 'airplane': return settings.airplaneMode ? 'On' : undefined;
+      case 'wifi': return device.wifi.enabled ? device.wifi.ssid || 'On' : 'Off';
+      case 'bluetooth': return device.bluetooth.enabled ? device.bluetooth.name || 'On' : 'Off';
       case 'hotspot': return settings.hotspotEnabled ? 'On' : 'Off';
       case 'focus': return settings.focusMode !== 'off' ? settings.focusMode.charAt(0).toUpperCase() + settings.focusMode.slice(1) : undefined;
       case 'screentime': return settings.screenTimeEnabled ? 'On' : 'Off';
@@ -102,6 +105,10 @@ export function SettingsScreen() {
   }, [searchQuery, ALL_SETTINGS]);
 
   const handleItemPress = (item: SettingsItem) => {
+    if (item.key === 'airplane') {
+      device.openSystemPanel('airplane');
+      return;
+    }
     if (item.route) {
       navigation.navigate(item.route);
     }

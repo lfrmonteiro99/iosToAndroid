@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { useDevice } from '../store/DeviceStore';
 import {
   CupertinoSearchBar,
   CupertinoActivityIndicator,
@@ -214,7 +215,7 @@ function NonAndroidFallback() {
 // ---------------------------------------------------------------------------
 
 export function LauncherHomeScreen() {
-  const { theme, borderRadius } = useTheme();
+  const { borderRadius } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -229,6 +230,7 @@ export function LauncherHomeScreen() {
     removeFromHome,
   } = useApps();
   const { settings } = useSettings();
+  const device = useDevice();
 
   // Clock state
   const [now, setNow] = useState(new Date());
@@ -342,18 +344,21 @@ export function LauncherHomeScreen() {
       >
         <Text style={styles.statusTime}>{formatTime(now)}</Text>
         <View style={styles.statusRight}>
-          {settings.wifiEnabled && (
+          {device.wifi.enabled && (
             <Ionicons name="wifi" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
           )}
           {settings.batteryPercentage && (
             <View style={styles.batteryPill}>
+              {device.battery.isCharging && (
+                <Ionicons name="flash" size={12} color="rgba(255,255,255,0.85)" />
+              )}
               <Ionicons
-                name={settings.lowPowerMode ? 'battery-dead-outline' : 'battery-half-outline'}
+                name="battery-half-outline"
                 size={14}
                 color="rgba(255,255,255,0.85)"
               />
               <Text style={styles.batteryText}>
-                {settings.lowPowerMode ? '20%' : '72%'}
+                {Math.round(device.battery.level * 100)}%
               </Text>
             </View>
           )}
