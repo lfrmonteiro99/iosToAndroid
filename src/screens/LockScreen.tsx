@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
+import * as Haptics from 'expo-haptics';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 
@@ -163,6 +164,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const opacity = useSharedValue(1);
 
   const handleUnlock = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (onUnlock) {
       onUnlock();
     } else {
@@ -272,7 +274,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
             style={styles.circleButton}
-            onPress={() => Alert.alert('Flashlight', 'Not available in demo.')}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Flashlight', 'Not available in demo.'); }}
             accessibilityLabel="Flashlight"
           >
             <BlurView intensity={40} tint="dark" style={styles.circleBlur}>
@@ -286,7 +288,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
           <Pressable
             style={styles.circleButton}
-            onPress={() => Alert.alert('Camera', 'Not available in demo.')}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Camera', 'Not available in demo.'); }}
             accessibilityLabel="Camera"
           >
             <BlurView intensity={40} tint="dark" style={styles.circleBlur}>
