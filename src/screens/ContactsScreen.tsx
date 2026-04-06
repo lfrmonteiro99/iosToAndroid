@@ -2,45 +2,10 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, SectionList, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
-import { CupertinoNavigationBar, CupertinoSearchBar } from '../components';
-
-interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email?: string;
-}
-
-const CONTACTS: Contact[] = [
-  { id: '1', firstName: 'Alice', lastName: 'Anderson', phone: '+1 (555) 100-1001', email: 'alice@example.com' },
-  { id: '2', firstName: 'Bob', lastName: 'Baker', phone: '+1 (555) 100-1002' },
-  { id: '3', firstName: 'Carol', lastName: 'Clark', phone: '+1 (555) 100-1003', email: 'carol@example.com' },
-  { id: '4', firstName: 'David', lastName: 'Davis', phone: '+1 (555) 100-1004' },
-  { id: '5', firstName: 'Emma', lastName: 'Evans', phone: '+1 (555) 100-1005', email: 'emma@example.com' },
-  { id: '6', firstName: 'Frank', lastName: 'Fisher', phone: '+1 (555) 100-1006' },
-  { id: '7', firstName: 'Grace', lastName: 'Garcia', phone: '+1 (555) 100-1007' },
-  { id: '8', firstName: 'Henry', lastName: 'Hill', phone: '+1 (555) 100-1008', email: 'henry@example.com' },
-  { id: '9', firstName: 'Iris', lastName: 'Ingram', phone: '+1 (555) 100-1009' },
-  { id: '10', firstName: 'James', lastName: 'Johnson', phone: '+1 (555) 100-1010', email: 'james@example.com' },
-  { id: '11', firstName: 'Karen', lastName: 'King', phone: '+1 (555) 100-1011' },
-  { id: '12', firstName: 'Leo', lastName: 'Lopez', phone: '+1 (555) 100-1012' },
-  { id: '13', firstName: 'Maria', lastName: 'Martinez', phone: '+1 (555) 100-1013', email: 'maria@example.com' },
-  { id: '14', firstName: 'Nathan', lastName: 'Nelson', phone: '+1 (555) 100-1014' },
-  { id: '15', firstName: 'Olivia', lastName: 'Owen', phone: '+1 (555) 100-1015', email: 'olivia@example.com' },
-  { id: '16', firstName: 'Paul', lastName: 'Parker', phone: '+1 (555) 100-1016' },
-  { id: '17', firstName: 'Quinn', lastName: 'Quinn', phone: '+1 (555) 100-1017' },
-  { id: '18', firstName: 'Rachel', lastName: 'Robinson', phone: '+1 (555) 100-1018', email: 'rachel@example.com' },
-  { id: '19', firstName: 'Sam', lastName: 'Smith', phone: '+1 (555) 100-1019' },
-  { id: '20', firstName: 'Tina', lastName: 'Taylor', phone: '+1 (555) 100-1020', email: 'tina@example.com' },
-  { id: '21', firstName: 'Uma', lastName: 'Underwood', phone: '+1 (555) 100-1021' },
-  { id: '22', firstName: 'Victor', lastName: 'Vargas', phone: '+1 (555) 100-1022' },
-  { id: '23', firstName: 'Wendy', lastName: 'Williams', phone: '+1 (555) 100-1023', email: 'wendy@example.com' },
-  { id: '24', firstName: 'Xavier', lastName: 'Xu', phone: '+1 (555) 100-1024' },
-  { id: '25', firstName: 'Yuki', lastName: 'Yamamoto', phone: '+1 (555) 100-1025' },
-  { id: '26', firstName: 'Zara', lastName: 'Zhang', phone: '+1 (555) 100-1026', email: 'zara@example.com' },
-];
+import { useContacts, Contact } from '../store/ContactsStore';
+import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoSwipeableRow } from '../components';
 
 function groupByLetter(contacts: Contact[]) {
   const groups: Record<string, Contact[]> = {};
@@ -62,50 +27,62 @@ const ContactRow = React.memo(function ContactRow({
   colors,
   typography,
   isLast,
+  onPress,
+  onDelete,
 }: {
   contact: Contact;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   isLast: boolean;
+  onPress: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground,
-        },
+    <CupertinoSwipeableRow
+      trailingActions={[
+        { label: 'Delete', color: '#FF3B30', onPress: onDelete },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`${contact.firstName} ${contact.lastName}`}
     >
-      <View
-        style={[
-          styles.avatar,
-          { backgroundColor: colors.systemGray4 },
-        ]}
-      >
-        <Text style={[styles.avatarText, { color: colors.label }]}>
-          {contact.firstName[0]}{contact.lastName[0]}
-        </Text>
-      </View>
-      <View
-        style={[
-          styles.rowContent,
-          !isLast && {
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: colors.separator,
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          {
+            backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground,
           },
         ]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${contact.firstName} ${contact.lastName}`}
       >
-        <Text style={[typography.body, { color: colors.label }]}>
-          <Text style={{ fontWeight: '400' }}>{contact.firstName} </Text>
-          <Text style={{ fontWeight: '600' }}>{contact.lastName}</Text>
-        </Text>
-      </View>
-    </Pressable>
+        <View style={[styles.avatar, { backgroundColor: contact.isFavorite ? colors.systemBlue : colors.systemGray4 }]}>
+          <Text style={[styles.avatarText, { color: contact.isFavorite ? '#FFFFFF' : colors.label }]}>
+            {contact.firstName[0]}{contact.lastName[0]}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.rowContent,
+            !isLast && {
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: colors.separator,
+            },
+          ]}
+        >
+          <Text style={[typography.body, { color: colors.label }]}>
+            <Text style={{ fontWeight: '400' }}>{contact.firstName} </Text>
+            <Text style={{ fontWeight: '600' }}>{contact.lastName}</Text>
+          </Text>
+          {contact.company ? (
+            <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+              {contact.company}
+            </Text>
+          ) : null}
+        </View>
+        {contact.isFavorite && (
+          <Ionicons name="star" size={14} color={colors.systemYellow} style={{ marginRight: 12 }} />
+        )}
+      </Pressable>
+    </CupertinoSwipeableRow>
   );
 });
 
@@ -113,21 +90,29 @@ export function ContactsScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { contacts, favorites, deleteContact } = useContacts();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   const filteredContacts = useMemo(() => {
-    if (!searchQuery.trim()) return CONTACTS;
+    if (!searchQuery.trim()) return contacts;
     const q = searchQuery.toLowerCase();
-    return CONTACTS.filter(
+    return contacts.filter(
       (c) =>
         c.firstName.toLowerCase().includes(q) ||
         c.lastName.toLowerCase().includes(q) ||
         c.phone.includes(q),
     );
-  }, [searchQuery]);
+  }, [searchQuery, contacts]);
 
-  const sections = useMemo(() => groupByLetter(filteredContacts), [filteredContacts]);
+  const sections = useMemo(() => {
+    const groups = groupByLetter(filteredContacts);
+    if (!searchQuery.trim() && favorites.length > 0) {
+      return [{ title: '★ Favorites', data: favorites }, ...groups];
+    }
+    return groups;
+  }, [filteredContacts, favorites, searchQuery]);
 
   const sectionLetters = useMemo(() => sections.map((s) => s.title), [sections]);
 
@@ -143,9 +128,11 @@ export function ContactsScreen() {
         colors={colors}
         typography={typography}
         isLast={index === section.data.length - 1}
+        onPress={() => navigation.navigate('ContactDetail', { contactId: item.id })}
+        onDelete={() => deleteContact(item.id)}
       />
     ),
-    [colors, typography],
+    [colors, typography, navigation, deleteContact],
   );
 
   const renderSectionHeader = useCallback(
@@ -171,9 +158,16 @@ export function ContactsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
-      <CupertinoNavigationBar title="Contacts" largeTitle={false} />
+      <CupertinoNavigationBar
+        title="Contacts"
+        largeTitle={false}
+        rightButton={
+          <Pressable onPress={() => navigation.navigate('ContactEdit')}>
+            <Ionicons name="add" size={28} color={colors.systemBlue} />
+          </Pressable>
+        }
+      />
 
-      {/* Search */}
       <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs, backgroundColor: colors.systemGroupedBackground }}>
         <CupertinoSearchBar
           value={searchQuery}
@@ -182,7 +176,6 @@ export function ContactsScreen() {
         />
       </View>
 
-      {/* Contact list */}
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
@@ -204,14 +197,13 @@ export function ContactsScreen() {
         }
       />
 
-      {/* Section index (right side) */}
       <View style={[styles.sectionIndex, { top: insets.top + 44 + 48 }]}>
         {sectionLetters.map((letter) => (
           <Text
             key={letter}
             style={[styles.indexLetter, { color: colors.systemBlue }]}
           >
-            {letter}
+            {letter.length === 1 ? letter : '★'}
           </Text>
         ))}
       </View>
@@ -220,9 +212,7 @@ export function ContactsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
