@@ -12,12 +12,14 @@ interface CupertinoSearchBarProps extends Omit<TextInputProps, 'style'> {
   value: string;
   onChangeText: (text: string) => void;
   onCancel?: () => void;
+  onFocusChange?: (focused: boolean) => void;
 }
 
 export function CupertinoSearchBar({
   value,
   onChangeText,
   onCancel,
+  onFocusChange,
   placeholder = 'Search',
   ...rest
 }: CupertinoSearchBarProps) {
@@ -31,14 +33,20 @@ export function CupertinoSearchBar({
 
   const handleFocus = () => {
     setIsFocused(true);
+    onFocusChange?.(true);
     cancelWidth.value = withTiming(60, { duration: 200 });
     cancelOpacity.value = withTiming(1, { duration: 200 });
+  };
+
+  const handleBlur = () => {
+    onFocusChange?.(false);
   };
 
   const handleCancel = () => {
     onChangeText('');
     inputRef.current?.blur();
     setIsFocused(false);
+    onFocusChange?.(false);
     cancelWidth.value = withTiming(0, { duration: 200 });
     cancelOpacity.value = withTiming(0, { duration: 150 });
     onCancel?.();
@@ -79,6 +87,7 @@ export function CupertinoSearchBar({
           placeholder={placeholder}
           placeholderTextColor={colors.systemGray}
           onFocus={handleFocus}
+          onBlur={handleBlur}
           returnKeyType="search"
           clearButtonMode="while-editing"
           {...rest}

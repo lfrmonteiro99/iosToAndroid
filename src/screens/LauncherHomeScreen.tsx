@@ -556,6 +556,12 @@ export function LauncherHomeScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Parallax wallpaper
+  const scrollX = useSharedValue(0);
+  const wallpaperAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -(scrollX.value * 0.1) }],
+  }));
+
   // Custom wallpaper URI (loaded from AsyncStorage when wallpaperIndex === 6)
   const [customWallpaperUri, setCustomWallpaperUri] = useState<string | null>(null);
   useEffect(() => {
@@ -592,15 +598,21 @@ export function LauncherHomeScreen() {
     WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
   const wallpaperDark = darkenHex(wallpaperColor, 0.28);
 
-  const WallpaperWrapper = settings.wallpaperIndex === 6 && customWallpaperUri
-    ? ({ children, style }: { children: React.ReactNode; style: object }) => (
-        <ImageBackground source={{ uri: customWallpaperUri }} style={[style, { flex: 1 }]} resizeMode="cover">
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }}>{children}</View>
-        </ImageBackground>
-      )
-    : ({ children, style }: { children: React.ReactNode; style: object }) => (
-        <LinearGradient colors={[wallpaperColor, wallpaperDark]} style={style}>{children}</LinearGradient>
-      );
+  const WallpaperContent =
+    settings.wallpaperIndex === 6 && customWallpaperUri ? (
+      <ImageBackground
+        source={{ uri: customWallpaperUri }}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode="cover"
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
+      </ImageBackground>
+    ) : (
+      <LinearGradient
+        colors={[wallpaperColor, wallpaperDark]}
+        style={StyleSheet.absoluteFillObject}
+      />
+    );
 
   // Build display items: folders appear as single grid cells, their member apps are hidden
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -630,11 +642,16 @@ export function LauncherHomeScreen() {
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
+    scrollX.value = offsetX;
     const page = Math.round(offsetX / SCREEN_WIDTH);
     if (page !== currentPage && page >= 0 && page < pages.length) {
       setCurrentPage(page);
       Haptics.selectionAsync();
     }
+  };
+
+  const handlePageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollX.value = event.nativeEvent.contentOffset.x;
   };
 
   // Build "Move to Folder" sub-options for action sheet
@@ -722,9 +739,19 @@ export function LauncherHomeScreen() {
 
   return (
     <GestureDetector gesture={panGesture}>
-      <Animated.View style={{ flex: 1 }}>
-        <WallpaperWrapper style={styles.root}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
+        {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            { left: -20, right: -20 },
+            wallpaperAnimStyle,
+          ]}
+        >
+          {WallpaperContent}
+        </Animated.View>
+
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
       {/* ---------------------------------------------------------------- */}
       {/* Jiggle-mode background tap target (exits edit mode)               */}
@@ -770,6 +797,9 @@ export function LauncherHomeScreen() {
           {settings.focusMode !== 'off' && (
             <Ionicons name="moon" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
           )}
+          {device.network?.isCellular && (
+            <Ionicons name="cellular" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
+          )}
           {device.wifi.enabled && (
             <Ionicons name="wifi" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
           )}
@@ -813,6 +843,8 @@ export function LauncherHomeScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        onScroll={handlePageScroll}
+        scrollEventThrottle={16}
         onMomentumScrollEnd={handleScroll}
         style={styles.pagerContainer}
         contentContainerStyle={styles.pagerContent}
@@ -936,7 +968,6 @@ export function LauncherHomeScreen() {
       <View style={[styles.homeIndicator, { bottom: insets.bottom + 2 }]}>
         <View style={styles.homeIndicatorBar} />
       </View>
-        </WallpaperWrapper>
       </Animated.View>
     </GestureDetector>
   );
