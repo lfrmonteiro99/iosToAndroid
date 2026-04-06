@@ -58,6 +58,15 @@ export interface NetworkInfo {
   isVpn: boolean;
 }
 
+export interface DeviceNotification {
+  id: string;
+  packageName: string;
+  title: string;
+  text: string;
+  time: number;
+  isOngoing: boolean;
+}
+
 interface LauncherModuleType {
   // Apps
   getInstalledApps(): Promise<InstalledApp[]>;
@@ -80,6 +89,10 @@ interface LauncherModuleType {
   openSystemSettings(panel: string): Promise<boolean>;
   // Network
   getNetworkInfo(): Promise<NetworkInfo>;
+  // Notifications
+  getNotifications(): Promise<DeviceNotification[]>;
+  isNotificationAccessGranted(): Promise<boolean>;
+  openNotificationAccessSettings(): Promise<boolean>;
 }
 
 const isAndroid = Platform.OS === 'android';
@@ -99,6 +112,9 @@ const stub: LauncherModuleType = {
   getRecentMessages: async () => [],
   openSystemSettings: async () => false,
   getNetworkInfo: async () => ({ isConnected: false, isWifi: false, isCellular: false, isVpn: false }),
+  getNotifications: async () => [],
+  isNotificationAccessGranted: async () => false,
+  openNotificationAccessSettings: async () => false,
 };
 
 const LauncherModule: LauncherModuleType = isAndroid

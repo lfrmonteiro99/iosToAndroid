@@ -4,8 +4,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
 import { AppDrawerScreen } from '../screens/AppDrawerScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { LockScreen } from '../screens/LockScreen';
+import { ControlCenterScreen } from '../screens/ControlCenterScreen';
 import { MessagesScreen } from '../screens/MessagesScreen';
 import { ConversationScreen } from '../screens/ConversationScreen';
+import { PhoneScreen } from '../screens/PhoneScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { ContactDetailScreen } from '../screens/contacts/ContactDetailScreen';
 import { ContactEditScreen } from '../screens/contacts/ContactEditScreen';
@@ -38,10 +41,10 @@ import { CupertinoTabBar } from '../components';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
+const PhoneStack = createNativeStackNavigator();
 const MessagesStack = createNativeStackNavigator();
 const ContactsStack = createNativeStackNavigator();
 const SettingsStack = createNativeStackNavigator();
-const ProfileStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
   return (
@@ -49,7 +52,17 @@ function HomeStackScreen() {
       <HomeStack.Screen name="HomeMain" component={LauncherHomeScreen} />
       <HomeStack.Screen name="AppDrawer" component={AppDrawerScreen} />
       <HomeStack.Screen name="Dashboard" component={HomeScreen} />
+      <HomeStack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade' }} />
+      <HomeStack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
     </HomeStack.Navigator>
+  );
+}
+
+function PhoneStackScreen() {
+  return (
+    <PhoneStack.Navigator screenOptions={{ headerShown: false }}>
+      <PhoneStack.Screen name="PhoneMain" component={PhoneScreen} />
+    </PhoneStack.Navigator>
   );
 }
 
@@ -97,17 +110,10 @@ function SettingsStackScreen() {
       <SettingsStack.Screen name="Keyboard" component={KeyboardScreen} />
       <SettingsStack.Screen name="LanguageRegion" component={LanguageRegionScreen} />
       <SettingsStack.Screen name="Vpn" component={VpnScreen} />
+      <SettingsStack.Screen name="ProfileMain" component={ProfileScreen} />
+      <SettingsStack.Screen name="EditProfile" component={EditProfileScreen} />
+      <SettingsStack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} />
     </SettingsStack.Navigator>
-  );
-}
-
-function ProfileStackScreen() {
-  return (
-    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
-      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
-      <ProfileStack.Screen name="EditProfile" component={EditProfileScreen} />
-      <ProfileStack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} />
-    </ProfileStack.Navigator>
   );
 }
 
@@ -118,10 +124,10 @@ export function TabNavigator() {
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
+      <Tab.Screen name="Phone" component={PhoneStackScreen} />
       <Tab.Screen name="Messages" component={MessagesStackScreen} />
       <Tab.Screen name="Contacts" component={ContactsStackScreen} />
       <Tab.Screen name="Settings" component={SettingsStackScreen} />
-      <Tab.Screen name="Profile" component={ProfileStackScreen} />
     </Tab.Navigator>
   );
 }
