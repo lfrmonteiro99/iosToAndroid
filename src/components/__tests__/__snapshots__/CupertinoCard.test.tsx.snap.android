@@ -1,0 +1,101 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`CupertinoCard renders with title and subtitle 1`] = `
+<View
+  style={
+    [
+      {
+        "overflow": "hidden",
+      },
+      {
+        "elevation": 4,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 4,
+          "width": 0,
+        },
+        "shadowOpacity": 0.12,
+        "shadowRadius": 10,
+      },
+      {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": 12,
+        "padding": 16,
+      },
+      undefined,
+    ]
+  }
+>
+  <Text
+    style={
+      [
+        {
+          "fontSize": 17,
+          "fontWeight": "600",
+          "letterSpacing": -0.41,
+          "lineHeight": 22,
+        },
+        {
+          "color": "#000000",
+          "marginBottom": 2,
+        },
+      ]
+    }
+  >
+    Title
+  </Text>
+  <Text
+    style={
+      [
+        {
+          "fontSize": 15,
+          "fontWeight": "400",
+          "letterSpacing": -0.24,
+          "lineHeight": 20,
+        },
+        {
+          "color": "rgba(60, 60, 67, 0.6)",
+          "marginBottom": 8,
+        },
+      ]
+    }
+  >
+    Subtitle
+  </Text>
+  <Text>
+    Content
+  </Text>
+</View>
+`;
+
+exports[`CupertinoCard renders without title 1`] = `
+<View
+  style={
+    [
+      {
+        "overflow": "hidden",
+      },
+      {
+        "elevation": 4,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 4,
+          "width": 0,
+        },
+        "shadowOpacity": 0.12,
+        "shadowRadius": 10,
+      },
+      {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": 12,
+        "padding": 16,
+      },
+      undefined,
+    ]
+  }
+>
+  <Text>
+    Just content
+  </Text>
+</View>
+`;
