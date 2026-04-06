@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 // Launcher
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
 import { MultitaskScreen } from '../screens/MultitaskScreen';
-import { AppDrawerScreen } from '../screens/AppDrawerScreen';
+
 import { LockScreen } from '../screens/LockScreen';
 import { ControlCenterScreen } from '../screens/ControlCenterScreen';
 
@@ -63,7 +63,7 @@ export function TabNavigator() {
     }}>
       {/* Launcher home — the ROOT screen, fullscreen, no tabs */}
       <Stack.Screen name="HomeMain" component={LauncherHomeScreen} />
-      <Stack.Screen name="AppDrawer" component={AppDrawerScreen} />
+      {/* App Drawer removed — iOS doesn't have one. All apps are on home pages. App Library is the last page. */}
       <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal', gestureEnabled: false }} />
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
