@@ -100,6 +100,36 @@ function formatTime(date: Date): string {
 }
 
 // ---------------------------------------------------------------------------
+// Dynamic Island
+// ---------------------------------------------------------------------------
+
+function DynamicIsland({ device, settings }: { device: any; settings: any }) {
+  const isCharging = device.battery.isCharging;
+  const hasDND = settings.focusMode !== 'off';
+
+  if (!isCharging && !hasDND) return null;
+
+  return (
+    <View style={styles.dynamicIsland}>
+      {isCharging && (
+        <>
+          <Ionicons name="flash" size={12} color="#34C759" />
+          <Text style={styles.dynamicIslandText}>
+            {Math.round(device.battery.level * 100)}%
+          </Text>
+        </>
+      )}
+      {hasDND && (
+        <>
+          <Ionicons name="moon" size={12} color="#5856D6" />
+          <Text style={styles.dynamicIslandText}>Focus</Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -492,12 +522,6 @@ export function LauncherHomeScreen() {
   // Jiggle (edit) mode state
   const [isJiggling, setIsJiggling] = useState(false);
 
-  const handleLongPress = useCallback((app: InstalledApp) => {
-    if (isJiggling) return;
-    setIsJiggling(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [isJiggling]);
-
   const exitJiggle = useCallback(() => {
     setIsJiggling(false);
   }, []);
@@ -515,6 +539,12 @@ export function LauncherHomeScreen() {
   const closeActionSheet = useCallback(() => {
     setActionSheet({ visible: false, app: null });
   }, []);
+
+  const handleLongPress = useCallback((app: InstalledApp) => {
+    if (isJiggling) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    openActionSheet(app);
+  }, [isJiggling, openActionSheet]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -626,9 +656,31 @@ export function LauncherHomeScreen() {
     ];
   };
 
+  // Quick actions per built-in app (3D Touch style)
+  const getQuickActions = (app: InstalledApp) => {
+    const actions: Array<{ label: string; onPress: () => void }> = [];
+    switch (app.packageName) {
+      case 'com.iostoandroid.phone':
+        actions.push({ label: 'New Call', onPress: () => { closeActionSheet(); navigation.navigate('Phone'); } });
+        break;
+      case 'com.iostoandroid.messages':
+        actions.push({ label: 'New Message', onPress: () => { closeActionSheet(); navigation.navigate('Conversation', { address: '' }); } });
+        break;
+      case 'com.iostoandroid.contacts':
+        actions.push({ label: 'Add Contact', onPress: () => { closeActionSheet(); navigation.navigate('ContactEdit'); } });
+        break;
+      case 'com.iostoandroid.settings':
+        actions.push({ label: 'Wi-Fi', onPress: () => { closeActionSheet(); navigation.navigate('WiFi'); } });
+        actions.push({ label: 'Bluetooth', onPress: () => { closeActionSheet(); navigation.navigate('Bluetooth'); } });
+        break;
+    }
+    return actions;
+  };
+
   // Action sheet options for the selected app
   const actionSheetOptions = actionSheet.app
     ? [
+        ...getQuickActions(actionSheet.app),
         {
           label: 'Open',
           onPress: () => {
@@ -644,6 +696,13 @@ export function LauncherHomeScreen() {
           },
         },
         ...buildMoveToFolderOptions(actionSheet.app),
+        {
+          label: 'Edit Home Screen',
+          onPress: () => {
+            closeActionSheet();
+            setIsJiggling(true);
+          },
+        },
         {
           label: 'Remove from Home',
           destructive: true,
@@ -702,6 +761,9 @@ export function LauncherHomeScreen() {
       >
         <Text style={styles.statusTime}>{formatTime(now)}</Text>
         <View style={styles.statusRight}>
+          {settings.focusMode !== 'off' && (
+            <Ionicons name="moon" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
+          )}
           {device.wifi.enabled && (
             <Ionicons name="wifi" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
           )}
@@ -734,7 +796,8 @@ export function LauncherHomeScreen() {
         </View>
       </View>
 
-      {/* No clock widget — iOS home screen has no clock (lock screen only) */}
+      {/* Dynamic Island placeholder */}
+      <DynamicIsland device={device} settings={settings} />
 
       {/* ---------------------------------------------------------------- */}
       {/* Swipeable app pages                                                */}
@@ -1150,6 +1213,24 @@ const styles = StyleSheet.create({
   widgetRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+
+  // Dynamic Island
+  dynamicIsland: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  dynamicIslandText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Home indicator bar (iOS-style)
