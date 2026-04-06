@@ -30,6 +30,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
+import * as Haptics from 'expo-haptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -139,6 +140,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   }, []);
 
   const toggleFlashlight = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const mod = await getLauncher();
     if (mod) {
       const newState = !flashlightOn;
@@ -208,6 +210,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
 
   // Focus mode toggle
   const toggleFocus = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     update('focusMode', settings.focusMode === 'off' ? 'doNotDisturb' : 'off');
   };
 
@@ -242,6 +245,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 label="Airplane"
                 active={settings.airplaneMode}
                 onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   update('airplaneMode', !settings.airplaneMode);
                   device.openSystemPanel('airplane');
                 }}
@@ -251,14 +255,14 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 label="Wi-Fi"
                 sublabel={device.wifi.enabled ? (device.wifi.ssid || 'On') : 'Off'}
                 active={device.wifi.enabled}
-                onPress={device.toggleWifi}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleWifi(); }}
               />
               <ToggleButton
                 iconName="bluetooth"
                 label="Bluetooth"
                 sublabel={device.bluetooth.enabled ? 'On' : 'Off'}
                 active={device.bluetooth.enabled}
-                onPress={device.toggleBluetooth}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleBluetooth(); }}
               />
               <ToggleButton
                 iconName="moon"
@@ -391,17 +395,17 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               <ShortcutButton
                 iconName="radio-button-on"
                 label="Screen Rec"
-                onPress={() => Alert.alert('Screen Recording', 'Screen recording requires system permission.')}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Alert.alert('Screen Recording', 'Screen recording requires system permission.'); }}
               />
               <ShortcutButton
                 iconName="calculator-outline"
                 label="Calculator"
-                onPress={launchCalculator}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCalculator(); }}
               />
               <ShortcutButton
                 iconName="camera-outline"
                 label="Camera"
-                onPress={launchCamera}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCamera(); }}
               />
             </View>
           </View>

@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Launcher
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
+import { MultitaskScreen } from '../screens/MultitaskScreen';
 import { AppDrawerScreen } from '../screens/AppDrawerScreen';
 import { LockScreen } from '../screens/LockScreen';
 import { ControlCenterScreen } from '../screens/ControlCenterScreen';
@@ -42,6 +43,8 @@ import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
+import { AppLibraryScreen } from '../screens/AppLibraryScreen';
+import { TodayViewScreen } from '../screens/TodayViewScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -58,6 +61,7 @@ export function TabNavigator() {
       <Stack.Screen name="AppDrawer" component={AppDrawerScreen} />
       <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal', gestureEnabled: false }} />
+      <Stack.Screen name="Multitask" component={MultitaskScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
 
       {/* Built-in apps — opened from dock/grid, slide in like real iOS apps */}
       <Stack.Screen name="Phone" component={PhoneScreen} />
@@ -94,6 +98,8 @@ export function TabNavigator() {
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} />
+      <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
+      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: 'slide_from_left' }} />
     </Stack.Navigator>
   );
 }

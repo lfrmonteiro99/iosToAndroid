@@ -3,6 +3,7 @@ import {
   View,
   Text,
   Image,
+  ImageBackground,
   Pressable,
   StyleSheet,
   ScrollView,
@@ -14,6 +15,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,9 +110,10 @@ interface AppIconProps {
   onLongPress: () => void;
   isJiggling?: boolean;
   onDelete?: () => void;
+  badge?: number;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete }: AppIconProps) {
+function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
 
@@ -154,6 +157,26 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete }:
         ) : (
           <View style={styles.appIconPlaceholder}>
             <Ionicons name="apps" size={28} color="#fff" />
+          </View>
+        )}
+        {badge != null && badge > 0 && (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            right: (cellWidth - ICON_SIZE) / 2 - 4,
+            backgroundColor: '#FF3B30',
+            borderRadius: 9,
+            minWidth: 18,
+            height: 18,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 4,
+            borderWidth: 2,
+            borderColor: 'rgba(0,0,0,0.3)',
+          }}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+              {badge > 99 ? '99+' : String(badge)}
+            </Text>
           </View>
         )}
         {isJiggling && (
@@ -416,6 +439,7 @@ export function LauncherHomeScreen() {
 
   // Unified app press handler — routes built-in apps to internal screens
   const handleAppPress = useCallback((app: InstalledApp) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
       navigation.navigate(internalRoute);
@@ -496,6 +520,23 @@ export function LauncherHomeScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Custom wallpaper URI (loaded from AsyncStorage when wallpaperIndex === 6)
+  const [customWallpaperUri, setCustomWallpaperUri] = useState<string | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem('@iostoandroid/custom_wallpaper').then(uri => {
+      if (uri) setCustomWallpaperUri(uri);
+    });
+  }, []);
+
+  // Badge counts computed from device data
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const badgeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const unread = device.messages.filter((m: { isRead: boolean }) => !m.isRead).length;
+    if (unread > 0) counts['com.iostoandroid.messages'] = unread;
+    return counts;
+  }, [device.messages]);
+
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
     return <NonAndroidFallback />;
@@ -514,6 +555,16 @@ export function LauncherHomeScreen() {
   const wallpaperColor =
     WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
   const wallpaperDark = darkenHex(wallpaperColor, 0.28);
+
+  const WallpaperWrapper = settings.wallpaperIndex === 6 && customWallpaperUri
+    ? ({ children, style }: { children: React.ReactNode; style: object }) => (
+        <ImageBackground source={{ uri: customWallpaperUri }} style={[style, { flex: 1 }]} resizeMode="cover">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }}>{children}</View>
+        </ImageBackground>
+      )
+    : ({ children, style }: { children: React.ReactNode; style: object }) => (
+        <LinearGradient colors={[wallpaperColor, wallpaperDark]} style={style}>{children}</LinearGradient>
+      );
 
   // Build display items: folders appear as single grid cells, their member apps are hidden
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -546,6 +597,7 @@ export function LauncherHomeScreen() {
     const page = Math.round(offsetX / SCREEN_WIDTH);
     if (page !== currentPage && page >= 0 && page < pages.length) {
       setCurrentPage(page);
+      Haptics.selectionAsync();
     }
   };
 
@@ -606,10 +658,7 @@ export function LauncherHomeScreen() {
   return (
     <GestureDetector gesture={panGesture}>
       <Animated.View style={{ flex: 1 }}>
-        <LinearGradient
-          colors={[wallpaperColor, wallpaperDark]}
-          style={styles.root}
-        >
+        <WallpaperWrapper style={styles.root}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
       {/* ---------------------------------------------------------------- */}
@@ -711,7 +760,7 @@ export function LauncherHomeScreen() {
                       folder={item.folder}
                       cellWidth={CELL_WIDTH}
                       apps={apps}
-                      onPress={() => setOpenFolder(item.folder)}
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setOpenFolder(item.folder); }}
                       onLongPress={() => {/* future: folder jiggle */}}
                     />
                   );
@@ -724,6 +773,7 @@ export function LauncherHomeScreen() {
                     onPress={() => handleAppPress(item.app)}
                     onLongPress={() => handleLongPress(item.app)}
                     isJiggling={isJiggling}
+                    badge={badgeCounts[item.app.packageName]}
                     onDelete={() => {
                       removeFromHome(item.app.packageName);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -767,6 +817,7 @@ export function LauncherHomeScreen() {
                 onPress={() => handleAppPress(app)}
                 onLongPress={() => handleLongPress(app)}
                 isJiggling={isJiggling}
+                badge={badgeCounts[app.packageName]}
                 onDelete={() => {
                   removeFromHome(app.packageName);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -809,7 +860,14 @@ export function LauncherHomeScreen() {
         title={actionSheet.app?.name}
         options={actionSheetOptions}
       />
-        </LinearGradient>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Home indicator bar (iOS-style)                                     */}
+      {/* ---------------------------------------------------------------- */}
+      <View style={[styles.homeIndicator, { bottom: insets.bottom + 2 }]}>
+        <View style={styles.homeIndicatorBar} />
+      </View>
+        </WallpaperWrapper>
       </Animated.View>
     </GestureDetector>
   );
@@ -1092,5 +1150,19 @@ const styles = StyleSheet.create({
   widgetRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+
+  // Home indicator bar (iOS-style)
+  homeIndicator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  homeIndicatorBar: {
+    width: 134,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
 });
