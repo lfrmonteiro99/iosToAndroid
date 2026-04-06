@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   Image,
   Pressable,
   StyleSheet,
-  FlatList,
+  ScrollView,
   Platform,
   StatusBar,
   Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -21,7 +23,6 @@ import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
 import {
-  CupertinoSearchBar,
   CupertinoActivityIndicator,
   CupertinoActionSheet,
 } from '../components';
@@ -48,10 +49,14 @@ function darkenHex(hex: string, amount: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-const GRID_COLUMNS = 4;
-const MAX_GRID_APPS = 16;
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const ICON_CELL_SIZE = (SCREEN_WIDTH - 32) / GRID_COLUMNS; // 16px padding each side
+const COLS = 4;
+const ROWS = 6;
+const APPS_PER_PAGE = COLS * ROWS; // 24
+const ICON_SIZE = 60;
+const GRID_HORIZONTAL_PADDING = 16;
+const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
+const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 24) / 4; // dock has 12px padding each side
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,33 +82,28 @@ function formatDate(date: Date): string {
 
 interface AppIconProps {
   app: InstalledApp;
-  size: number;
+  cellWidth: number;
   onPress: () => void;
   onLongPress: () => void;
 }
 
-function AppIcon({ app, size, onPress, onLongPress }: AppIconProps) {
+function AppIcon({ app, cellWidth, onPress, onLongPress }: AppIconProps) {
   return (
     <Pressable
-      style={[styles.appIconWrapper, { width: size }]}
+      style={[styles.appIconWrapper, { width: cellWidth }]}
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: size / 2 }}
+      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
     >
       {app.icon ? (
         <Image
           source={{ uri: app.icon }}
-          style={[styles.appIconImage, { width: size * 0.8, height: size * 0.8, borderRadius: 14 }]}
+          style={styles.appIconImage}
           resizeMode="contain"
         />
       ) : (
-        <View
-          style={[
-            styles.appIconPlaceholder,
-            { width: size * 0.8, height: size * 0.8, borderRadius: 14 },
-          ]}
-        >
-          <Ionicons name="apps" size={size * 0.4} color="#fff" />
+        <View style={styles.appIconPlaceholder}>
+          <Ionicons name="apps" size={28} color="#fff" />
         </View>
       )}
       <Text style={styles.appIconLabel} numberOfLines={1} ellipsizeMode="tail">
@@ -119,6 +119,7 @@ interface PageDotsProps {
 }
 
 function PageDots({ total, current }: PageDotsProps) {
+  if (total <= 1) return null;
   return (
     <View style={styles.pageDotsRow}>
       {Array.from({ length: total }).map((_, i) => (
@@ -253,8 +254,9 @@ export function LauncherHomeScreen() {
     setActionSheet({ visible: false, app: null });
   }, []);
 
-  // Search state (for the tappable search bar)
-  const [searchQuery] = useState('');
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
@@ -275,8 +277,23 @@ export function LauncherHomeScreen() {
     WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
   const wallpaperDark = darkenHex(wallpaperColor, 0.28);
 
-  // Apps for grid: first 16 non-dock apps
-  const gridApps = nonDockApps.slice(0, MAX_GRID_APPS);
+  // Split non-dock apps into pages of 24
+  const pages: InstalledApp[][] = [];
+  for (let i = 0; i < nonDockApps.length; i += APPS_PER_PAGE) {
+    pages.push(nonDockApps.slice(i, i + APPS_PER_PAGE));
+  }
+  // Ensure at least one page
+  if (pages.length === 0) {
+    pages.push([]);
+  }
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const page = Math.round(offsetX / SCREEN_WIDTH);
+    if (page !== currentPage && page >= 0 && page < pages.length) {
+      setCurrentPage(page);
+    }
+  };
 
   // Action sheet options for the selected app
   const actionSheetOptions = actionSheet.app
@@ -366,66 +383,70 @@ export function LauncherHomeScreen() {
       </View>
 
       {/* ---------------------------------------------------------------- */}
-      {/* Clock widget                                                       */}
+      {/* Clock widget (first page only — always visible above grid)        */}
       {/* ---------------------------------------------------------------- */}
-      <View style={styles.clockWidget}>
-        <Text style={styles.clockTime}>{formatTime(now)}</Text>
-        <Text style={styles.clockDate}>{formatDate(now)}</Text>
-      </View>
+      {currentPage === 0 && (
+        <View style={styles.clockWidget}>
+          <Text style={styles.clockTime}>{formatTime(now)}</Text>
+          <Text style={styles.clockDate}>{formatDate(now)}</Text>
+        </View>
+      )}
 
       {/* ---------------------------------------------------------------- */}
-      {/* Search bar                                                         */}
+      {/* Search bar — iOS Spotlight style                                   */}
       {/* ---------------------------------------------------------------- */}
       <Pressable
         style={styles.searchWrapper}
         onPress={() => {
-          // Navigate to AppDrawer when it exists; for now show alert
-          // navigation.navigate('AppDrawer', { focusSearch: true });
-          navigation.navigate('Contacts'); // temporary placeholder
+          navigation.navigate('Contacts');
         }}
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
-        <View pointerEvents="none">
-          <CupertinoSearchBar
-            value={searchQuery}
-            onChangeText={() => {}}
-            placeholder="Search apps…"
-            editable={false}
-          />
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={16} color="rgba(255,255,255,0.5)" />
+          <Text style={styles.searchText}>Search</Text>
         </View>
       </Pressable>
 
       {/* ---------------------------------------------------------------- */}
-      {/* App grid                                                           */}
+      {/* Swipeable app pages                                                */}
       {/* ---------------------------------------------------------------- */}
-      <FlatList<InstalledApp>
-        data={gridApps}
-        keyExtractor={(item) => item.packageName}
-        numColumns={GRID_COLUMNS}
-        scrollEnabled={false}
-        contentContainerStyle={styles.gridContent}
-        renderItem={({ item }) => (
-          <AppIcon
-            app={item}
-            size={ICON_CELL_SIZE}
-            onPress={() => launchApp(item.packageName)}
-            onLongPress={() => openActionSheet(item)}
-          />
-        )}
-        style={styles.grid}
-      />
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
+        style={styles.pagerContainer}
+        contentContainerStyle={styles.pagerContent}
+      >
+        {pages.map((pageApps, pageIndex) => (
+          <View key={pageIndex} style={styles.page}>
+            <View style={styles.pageGrid}>
+              {pageApps.map((app) => (
+                <AppIcon
+                  key={app.packageName}
+                  app={app}
+                  cellWidth={CELL_WIDTH}
+                  onPress={() => launchApp(app.packageName)}
+                  onLongPress={() => openActionSheet(app)}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
       {/* Page dots                                                          */}
       {/* ---------------------------------------------------------------- */}
-      <PageDots total={2} current={0} />
+      <PageDots total={pages.length} current={currentPage} />
 
       {/* ---------------------------------------------------------------- */}
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
       <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 8 }]}>
-        <View style={styles.dockSeparator} />
         <BlurView
           intensity={40}
           tint="dark"
@@ -436,14 +457,14 @@ export function LauncherHomeScreen() {
               <AppIcon
                 key={app.packageName}
                 app={app}
-                size={ICON_CELL_SIZE}
+                cellWidth={DOCK_CELL_WIDTH}
                 onPress={() => launchApp(app.packageName)}
                 onLongPress={() => openActionSheet(app)}
               />
             ))}
             {/* Fill empty dock slots */}
             {Array.from({ length: Math.max(0, 4 - dockApps.length) }).map((_, i) => (
-              <View key={`empty-${i}`} style={{ width: ICON_CELL_SIZE }} />
+              <View key={`empty-${i}`} style={{ width: DOCK_CELL_WIDTH }} />
             ))}
           </View>
         </BlurView>
@@ -536,7 +557,7 @@ const styles = StyleSheet.create({
   clockWidget: {
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   clockTime: {
     fontSize: 72,
@@ -552,28 +573,56 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Search
+  // Search — iOS Spotlight style
   searchWrapper: {
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  searchText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 16,
+    fontWeight: '400',
   },
 
-  // App grid
-  grid: {
+  // Swipeable pages
+  pagerContainer: {
     flex: 1,
-    paddingHorizontal: 16,
   },
-  gridContent: {
-    paddingBottom: 8,
+  pagerContent: {
+    // no extra styles needed; children define width
   },
+  page: {
+    width: SCREEN_WIDTH,
+    paddingHorizontal: GRID_HORIZONTAL_PADDING,
+  },
+  pageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+
+  // App icons
   appIconWrapper: {
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   appIconImage: {
-    // width / height set inline
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    borderRadius: 14,
   },
   appIconPlaceholder: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -613,15 +662,10 @@ const styles = StyleSheet.create({
   dockOuter: {
     paddingHorizontal: 12,
   },
-  dockSeparator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 8,
-  },
   dockBlur: {
     overflow: 'hidden',
     paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   dockRow: {
