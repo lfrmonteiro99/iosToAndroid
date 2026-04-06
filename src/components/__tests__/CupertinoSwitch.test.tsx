@@ -1,40 +1,28 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '../../test-utils';
 import { CupertinoSwitch } from '../CupertinoSwitch';
-import { ThemeProvider } from '../../theme/ThemeContext';
-
-const renderWithTheme = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
 
 describe('CupertinoSwitch', () => {
-  it('renders on state', () => {
-    const { toJSON } = renderWithTheme(
-      <CupertinoSwitch value={true} />,
-    );
-    expect(toJSON()).toMatchSnapshot();
-  });
-
-  it('renders off state', () => {
-    const { toJSON } = renderWithTheme(
-      <CupertinoSwitch value={false} />,
-    );
-    expect(toJSON()).toMatchSnapshot();
+  it('renders without crashing', () => {
+    const { getByRole } = render(<CupertinoSwitch value={false} />);
+    expect(getByRole('switch')).toBeTruthy();
   });
 
   it('calls onValueChange when pressed', () => {
-    const onChange = jest.fn();
-    const { toJSON } = renderWithTheme(
-      <CupertinoSwitch value={false} onValueChange={onChange} />,
+    const onValueChange = jest.fn();
+    const { getByRole } = render(
+      <CupertinoSwitch value={false} onValueChange={onValueChange} />,
     );
-    // The switch is wrapped in a Pressable, fire press on the root
-    const tree = toJSON();
-    expect(tree).toBeTruthy();
+    fireEvent.press(getByRole('switch'));
+    expect(onValueChange).toHaveBeenCalledWith(true);
   });
 
-  it('renders disabled state', () => {
-    const { toJSON } = renderWithTheme(
-      <CupertinoSwitch value={true} disabled />,
+  it('does not call onValueChange when disabled', () => {
+    const onValueChange = jest.fn();
+    const { getByRole } = render(
+      <CupertinoSwitch value={false} onValueChange={onValueChange} disabled />,
     );
-    expect(toJSON()).toMatchSnapshot();
+    fireEvent.press(getByRole('switch'));
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 });
