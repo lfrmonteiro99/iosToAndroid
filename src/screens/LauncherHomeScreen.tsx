@@ -660,11 +660,14 @@ export function LauncherHomeScreen() {
     pages.push([]);
   }
 
+  // +1 for the App Library page appended at the end
+  const totalPages = pages.length + 1;
+
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     scrollX.value = offsetX;
     const page = Math.round(offsetX / SCREEN_WIDTH);
-    if (page !== currentPage && page >= 0 && page < pages.length) {
+    if (page !== currentPage && page >= 0 && page < totalPages) {
       setCurrentPage(page);
       Haptics.selectionAsync();
     }
@@ -944,12 +947,25 @@ export function LauncherHomeScreen() {
             </View>
           </View>
         ))}
+
+        {/* App Library page — always the last swipeable page */}
+        <Pressable
+          key="app-library"
+          style={[styles.page, styles.appLibraryPage]}
+          onPress={() => navigation.navigate('AppLibrary')}
+          accessibilityLabel="Open App Library"
+          accessibilityRole="button"
+        >
+          <Ionicons name="grid" size={52} color="rgba(255,255,255,0.7)" />
+          <Text style={styles.appLibraryText}>App Library</Text>
+          <Text style={styles.appLibrarySubtext}>Tap to open all apps</Text>
+        </Pressable>
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
       {/* Page dots + Search label (iOS 16/17 style)                         */}
       {/* ---------------------------------------------------------------- */}
-      <PageDots total={pages.length} current={currentPage} />
+      <PageDots total={totalPages} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
         onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppDrawer')}
@@ -1293,6 +1309,26 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // App Library page
+  appLibraryPage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  appLibraryText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 22,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  appLibrarySubtext: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+    fontWeight: '400',
   },
 
   // Fallback
