@@ -81,6 +81,7 @@ export function CupertinoActionSheet({
           <BlurView
             intensity={60}
             tint={theme.dark ? 'dark' : 'light'}
+            experimentalBlurMethod="dimezisBlurView"
             style={[
               styles.group,
               { backgroundColor: groupBg, borderRadius: borderRadius.large },

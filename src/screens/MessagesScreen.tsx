@@ -254,6 +254,7 @@ export function MessagesScreen() {
       <BlurView
         intensity={80}
         tint={theme.dark ? 'dark' : 'light'}
+        experimentalBlurMethod="dimezisBlurView"
         style={[
           styles.navBar,
           {
@@ -264,7 +265,17 @@ export function MessagesScreen() {
         ]}
       >
         <View style={styles.navBarContent}>
-          <View style={styles.navSlot} />
+          <View style={styles.navSlot}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
+            </Pressable>
+          </View>
           <Text style={[typography.headline, { color: colors.label }]}>Messages</Text>
           <View style={[styles.navSlot, styles.navSlotRight]}>
             <Pressable

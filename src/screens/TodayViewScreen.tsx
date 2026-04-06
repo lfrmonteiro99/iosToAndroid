@@ -55,7 +55,7 @@ function WidgetCard({ children, style, onPress }: WidgetCardProps) {
         onPress={onPress}
         android_ripple={{ color: 'rgba(255,255,255,0.1)', borderless: false }}
       >
-        <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={55} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
         <View style={styles.widgetContent}>{children}</View>
       </Pressable>
     );
@@ -315,7 +315,7 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
       <GestureDetector gesture={swipeLeftGesture}>
         <Animated.View style={[styles.panel, sheetStyle]}>
           {/* Translucent blur background */}
-          <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={70} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
 
           <ScrollView
             contentContainerStyle={[

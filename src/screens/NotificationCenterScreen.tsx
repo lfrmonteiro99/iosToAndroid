@@ -160,7 +160,7 @@ export function NotificationCenterScreen() {
 
         {/* No notification access */}
         {!hasAccess && (
-          <BlurView intensity={40} tint="dark" style={styles.accessCard}>
+          <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.accessCard}>
             <Ionicons name="notifications-off" size={28} color="#FFFFFF" style={{ marginBottom: 8 }} />
             <Text style={[styles.accessTitle, typography.headline]}>Notification Access Required</Text>
             <Text style={[styles.accessSubtitle, typography.subhead]}>
@@ -206,7 +206,7 @@ export function NotificationCenterScreen() {
                       onPress={() => handleNotificationTap(notif.packageName)}
                       style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                     >
-                      <BlurView intensity={50} tint="dark" style={styles.notifCard}>
+                      <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
                         <View style={styles.notifCardHeader}>
                           <Text style={[styles.notifTitle, typography.subhead, { fontWeight: '700' }]} numberOfLines={1}>
                             {notif.title || group.appName}

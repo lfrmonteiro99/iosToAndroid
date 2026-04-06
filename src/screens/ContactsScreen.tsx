@@ -158,6 +158,11 @@ export function ContactsScreen() {
       <CupertinoNavigationBar
         title="Contacts"
         largeTitle={false}
+        leftButton={
+          <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
+          </Pressable>
+        }
       />
 
       <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs, backgroundColor: colors.systemGroupedBackground }}>

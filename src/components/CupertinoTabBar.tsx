@@ -24,6 +24,7 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
     <BlurView
       intensity={80}
       tint={theme.dark ? 'dark' : 'light'}
+      experimentalBlurMethod="dimezisBlurView"
       style={[
         styles.container,
         {

@@ -142,7 +142,7 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
   return (
     <View style={styles.root}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+      <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
 
       {/* Tap backdrop to close */}
       <Pressable
