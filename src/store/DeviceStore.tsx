@@ -45,6 +45,24 @@ export interface DeviceContact {
   imageUri?: string;
 }
 
+export interface DeviceWeather {
+  temp: number;
+  condition: string;
+  icon: string;
+  city: string;
+}
+
+function mapWeatherIcon(code: string): string {
+  const c = parseInt(code, 10);
+  if (c === 113) return 'sunny';
+  if (c === 116) return 'partly-sunny';
+  if ([119, 122].includes(c)) return 'cloud';
+  if ([176, 263, 266, 293, 296, 299, 302, 305, 308, 353, 356, 359].includes(c)) return 'rainy';
+  if ([200, 386, 389, 392, 395].includes(c)) return 'thunderstorm';
+  if ([227, 230, 323, 326, 329, 332, 335, 338, 368, 371, 374, 377].includes(c)) return 'snow';
+  return 'cloud';
+}
+
 interface DeviceState {
   battery: { level: number; isCharging: boolean };
   brightness: number;
@@ -54,6 +72,7 @@ interface DeviceState {
   network: { isConnected: boolean; isWifi: boolean; isCellular: boolean };
   messages: DeviceSms[];
   contacts: DeviceContact[];
+  weather: DeviceWeather;
   isReady: boolean;
 }
 
@@ -78,6 +97,7 @@ const DEFAULT_STATE: DeviceState = {
   network: { isConnected: false, isWifi: false, isCellular: false },
   messages: [],
   contacts: [],
+  weather: { temp: 0, condition: '', icon: 'cloud', city: '' },
   isReady: false,
 };
 
@@ -203,15 +223,32 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     } catch { return []; }
   }, []);
 
+  const loadWeather = useCallback(async (): Promise<DeviceWeather> => {
+    try {
+      const res = await fetch('https://wttr.in/?format=j1');
+      const data = await res.json();
+      const current = data.current_condition[0];
+      const area = data.nearest_area[0];
+      return {
+        temp: parseInt(current.temp_C, 10),
+        condition: current.weatherDesc[0].value,
+        icon: mapWeatherIcon(current.weatherCode),
+        city: area.areaName[0].value,
+      };
+    } catch {
+      return { temp: 22, condition: 'Partly Cloudy', icon: 'partly-sunny', city: '' };
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
-    const [battery, brightness, network, wifi, bluetooth, storage, messages, contacts] = await Promise.all([
+    const [battery, brightness, network, wifi, bluetooth, storage, messages, contacts, weather] = await Promise.all([
       loadBattery(), loadBrightness(), loadNetwork(), loadWifi(),
-      loadBluetooth(), loadStorage(), loadMessages(), loadContacts(),
+      loadBluetooth(), loadStorage(), loadMessages(), loadContacts(), loadWeather(),
     ]);
     setState({
-      battery, brightness, wifi, bluetooth, storage, network, messages, contacts, isReady: true,
+      battery, brightness, wifi, bluetooth, storage, network, messages, contacts, weather, isReady: true,
     });
-  }, [loadBattery, loadBrightness, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts]);
+  }, [loadBattery, loadBrightness, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts, loadWeather]);
 
   // Initial load
   useEffect(() => { refresh(); }, [refresh]);

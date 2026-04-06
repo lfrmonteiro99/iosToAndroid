@@ -77,6 +77,23 @@ export interface DeviceNotification {
   isOngoing: boolean;
 }
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  allDay: boolean;
+  location: string;
+}
+
+export interface NowPlaying {
+  title: string;
+  artist: string;
+  album: string;
+  isPlaying: boolean;
+  packageName: string;
+}
+
 interface LauncherModuleType {
   // Apps
   getInstalledApps(): Promise<InstalledApp[]>;
@@ -111,6 +128,10 @@ interface LauncherModuleType {
   openNotificationAccessSettings(): Promise<boolean>;
   // SMS Send
   sendSms(address: string, body: string): Promise<boolean>;
+  // Calendar
+  getCalendarEvents(daysAhead: number): Promise<CalendarEvent[]>;
+  // Media session
+  getNowPlaying(): Promise<NowPlaying>;
   // Permissions
   requestAllPermissions(): Promise<boolean>;
   checkPermissions(): Promise<Record<string, boolean>>;
@@ -143,6 +164,8 @@ const stub: LauncherModuleType = {
   sendSms: async () => false,
   requestAllPermissions: async () => false,
   checkPermissions: async () => ({}),
+  getCalendarEvents: async () => [],
+  getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
 };
 
 const LauncherModule: LauncherModuleType = isAndroid

@@ -406,6 +406,73 @@ class LauncherModule : Module() {
             }
         }
 
+        // ── Calendar ─────────────────────────────────────────────────────
+
+        AsyncFunction("getCalendarEvents") { daysAhead: Int ->
+            try {
+                val now = System.currentTimeMillis()
+                val end = now + (daysAhead.toLong() * 24 * 60 * 60 * 1000)
+                val cursor = context.contentResolver.query(
+                    android.provider.CalendarContract.Events.CONTENT_URI,
+                    arrayOf(
+                        android.provider.CalendarContract.Events._ID,
+                        android.provider.CalendarContract.Events.TITLE,
+                        android.provider.CalendarContract.Events.DTSTART,
+                        android.provider.CalendarContract.Events.DTEND,
+                        android.provider.CalendarContract.Events.ALL_DAY,
+                        android.provider.CalendarContract.Events.EVENT_LOCATION
+                    ),
+                    "${android.provider.CalendarContract.Events.DTSTART} >= ? AND ${android.provider.CalendarContract.Events.DTSTART} <= ?",
+                    arrayOf(now.toString(), end.toString()),
+                    "${android.provider.CalendarContract.Events.DTSTART} ASC"
+                )
+                val events = mutableListOf<Map<String, Any?>>()
+                cursor?.use { c ->
+                    while (c.moveToNext() && events.size < 20) {
+                        events.add(mapOf(
+                            "id" to c.getLong(0).toString(),
+                            "title" to (c.getString(1) ?: ""),
+                            "start" to c.getLong(2),
+                            "end" to c.getLong(3),
+                            "allDay" to (c.getInt(4) == 1),
+                            "location" to (c.getString(5) ?: "")
+                        ))
+                    }
+                }
+                events
+            } catch (e: Exception) {
+                emptyList<Map<String, Any?>>()
+            }
+        }
+
+        // ── Media Session (Now Playing) ───────────────────────────────────
+
+        AsyncFunction("getNowPlaying") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+
+                if (controllers.isNotEmpty()) {
+                    val controller = controllers[0]
+                    val metadata = controller.metadata
+                    val state = controller.playbackState
+                    mapOf(
+                        "title" to (metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) ?: ""),
+                        "artist" to (metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST) ?: ""),
+                        "album" to (metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM) ?: ""),
+                        "isPlaying" to (state?.state == android.media.session.PlaybackState.STATE_PLAYING),
+                        "packageName" to (controller.packageName ?: "")
+                    )
+                } else {
+                    mapOf("title" to "", "artist" to "", "album" to "", "isPlaying" to false, "packageName" to "")
+                }
+            } catch (e: Exception) {
+                mapOf("title" to "", "artist" to "", "album" to "", "isPlaying" to false, "packageName" to "")
+            }
+        }
+
         // ── Permissions ──────────────────────────────────────────────────
 
         AsyncFunction("requestAllPermissions") {

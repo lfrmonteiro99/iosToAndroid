@@ -139,21 +139,22 @@ function StorageWidget({
 }
 
 // ---------------------------------------------------------------------------
-// Weather Widget (static placeholder)
+// Weather Widget (live data from wttr.in)
 // ---------------------------------------------------------------------------
 
-function WeatherWidget() {
+function WeatherWidget({ temp, condition, icon, city }: { temp: number; condition: string; icon: string; city: string }) {
+  const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
   return (
     <WidgetCard>
       <View style={styles.widgetRow}>
-        <Ionicons name="partly-sunny-outline" size={22} color="#FFD60A" />
+        <Ionicons name={iconName} size={22} color="#FFD60A" />
         <Text style={styles.widgetTitle}>Weather</Text>
+        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none' }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
-        <Text style={styles.weatherTemp}>22°C</Text>
-        <Text style={styles.weatherDesc}>Partly Cloudy</Text>
+        <Text style={styles.weatherTemp}>{temp}°C</Text>
+        <Text style={styles.weatherDesc}>{condition || '—'}</Text>
       </View>
-      <Text style={styles.widgetSubtext}>H: 25°  L: 18°</Text>
     </WidgetCard>
   );
 }
@@ -176,20 +177,49 @@ function ScreenTimeWidget() {
 }
 
 // ---------------------------------------------------------------------------
-// Up Next Widget (static placeholder)
+// Up Next Widget (real calendar events)
 // ---------------------------------------------------------------------------
 
-function UpNextWidget() {
+interface CalendarEventItem {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  allDay: boolean;
+  location: string;
+}
+
+function formatEventTime(ts: number, allDay: boolean): string {
+  if (allDay) return 'All day';
+  const d = new Date(ts);
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
   return (
     <WidgetCard>
       <View style={styles.widgetRow}>
         <Ionicons name="calendar-outline" size={22} color="#FF9F0A" />
         <Text style={styles.widgetTitle}>Up Next</Text>
       </View>
-      <View style={styles.upNextBody}>
-        <Ionicons name="calendar" size={36} color="rgba(255,255,255,0.2)" />
-        <Text style={styles.upNextText}>No upcoming events</Text>
-      </View>
+      {events.length === 0 ? (
+        <View style={styles.upNextBody}>
+          <Ionicons name="calendar" size={36} color="rgba(255,255,255,0.2)" />
+          <Text style={styles.upNextText}>No upcoming events</Text>
+        </View>
+      ) : (
+        events.slice(0, 3).map((ev) => (
+          <View key={ev.id} style={styles.eventRow}>
+            <View style={styles.eventDot} />
+            <View style={styles.eventMeta}>
+              <Text style={styles.eventTitle} numberOfLines={1}>{ev.title}</Text>
+              <Text style={styles.eventTime}>{formatEventTime(ev.start, ev.allDay)}{ev.location ? `  ·  ${ev.location}` : ''}</Text>
+            </View>
+          </View>
+        ))
+      )}
     </WidgetCard>
   );
 }
@@ -232,6 +262,20 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
     () => device.messages.filter((m) => !m.isRead && m.type === 1).length,
     [device.messages],
   );
+
+  const [calendarEvents, setCalendarEvents] = React.useState<CalendarEventItem[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const mod = (await import('../../modules/launcher-module/src')).default;
+        const events = await mod.getCalendarEvents(7);
+        setCalendarEvents(events as CalendarEventItem[]);
+      } catch {
+        // permission not granted or unavailable — leave empty
+      }
+    })();
+  }, []);
 
   // Swipe-left gesture to dismiss
   const translateX = useSharedValue(0);
@@ -297,11 +341,16 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
               onPress={() => nav.navigate('Storage')}
             />
 
-            <WeatherWidget />
+            <WeatherWidget
+              temp={device.weather.temp}
+              condition={device.weather.condition}
+              icon={device.weather.icon}
+              city={device.weather.city}
+            />
 
             <ScreenTimeWidget />
 
-            <UpNextWidget />
+            <UpNextWidget events={calendarEvents} />
 
             <MessagesWidget unreadCount={unreadCount} onPress={() => nav.navigate('Messages')} />
           </ScrollView>
@@ -424,5 +473,34 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: 15,
     fontWeight: '400',
+  },
+
+  // Event rows
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 8,
+  },
+  eventDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF9F0A',
+    marginTop: 4,
+  },
+  eventMeta: {
+    flex: 1,
+  },
+  eventTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  eventTime: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 2,
   },
 });
