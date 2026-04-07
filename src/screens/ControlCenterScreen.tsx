@@ -128,6 +128,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const { theme } = useTheme();
   const { colors } = theme;
 
+  // TODO: Replace with react-native-volume-manager to read/set real system volume
   const [volume, setVolume] = useState(0.5);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [nowPlaying, setNowPlaying] = useState({ title: '', artist: '', album: '', isPlaying: false, packageName: '' });
