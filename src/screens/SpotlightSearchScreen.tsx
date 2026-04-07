@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -6,71 +7,63 @@ import {
   SectionList,
   Pressable,
   StyleSheet,
-  TextInput,
-  Keyboard,
-  Dimensions,
+  StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
+import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const HISTORY_KEY = '@spotlight_history';
-const MAX_HISTORY = 5;
+// ---------------------------------------------------------------------------
+// Fuzzy matching
+// ---------------------------------------------------------------------------
 
-const BUILT_IN_APPS: Record<string, string> = {
-  'com.iostoandroid.phone': 'Phone',
-  'com.iostoandroid.messages': 'Messages',
-  'com.iostoandroid.contacts': 'Contacts',
-  'com.iostoandroid.settings': 'Settings',
-};
-
-// ─── Fuzzy scoring ──────────────────────────────────────────────────────────
-
-function fuzzyScore(query: string, target: string): number {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-
-  if (t === q) return 100;
-  if (t.startsWith(q)) return 80;
-  if (t.includes(q)) return 50;
-
-  // Character-by-character fuzzy: all chars present in order
+function fuzzyMatch(text: string, query: string): { match: boolean; score: number } {
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  // Exact match = score 3
+  if (lowerText === lowerQuery) return { match: true, score: 3 };
+  // Starts with = score 2
+  if (lowerText.startsWith(lowerQuery)) return { match: true, score: 2 };
+  // Contains = score 1
+  if (lowerText.includes(lowerQuery)) return { match: true, score: 1 };
+  // Character-by-character fuzzy (all query chars appear in order) = score 0.5
   let qi = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) qi++;
+  for (let i = 0; i < lowerText.length && qi < lowerQuery.length; i++) {
+    if (lowerText[i] === lowerQuery[qi]) qi++;
   }
-  if (qi === q.length) return 20;
-
-  return 0;
+  if (qi === lowerQuery.length) return { match: true, score: 0.5 };
+  return { match: false, score: 0 };
 }
 
-// ─── Search result types ────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Settings search index
+// ---------------------------------------------------------------------------
 
-interface AppResult {
-  type: 'app';
-  id: string;
-  name: string;
-  score: number;
-  app: InstalledApp;
-}
+const SETTINGS_INDEX = [
+  { name: 'Wi-Fi', screen: 'WiFi', keywords: ['wifi', 'internet', 'network', 'wireless'] },
+  { name: 'Bluetooth', screen: 'Bluetooth', keywords: ['bluetooth', 'pair', 'connect'] },
+  { name: 'Display & Brightness', screen: 'DisplayBrightness', keywords: ['brightness', 'display', 'screen', 'dark mode'] },
+  { name: 'Sounds & Haptics', screen: 'SoundsHaptics', keywords: ['sounds', 'volume', 'ringtone', 'vibration'] },
+  { name: 'Battery', screen: 'Battery', keywords: ['battery', 'power', 'charging'] },
+  { name: 'Privacy & Security', screen: 'Privacy', keywords: ['privacy', 'security', 'permissions'] },
+  { name: 'General', screen: 'General', keywords: ['general', 'about', 'software update'] },
+  { name: 'Accessibility', screen: 'Accessibility', keywords: ['accessibility', 'voiceover', 'zoom'] },
+  { name: 'Wallpaper', screen: 'Wallpaper', keywords: ['wallpaper', 'background'] },
+  { name: 'Notifications', screen: 'Notifications', keywords: ['notifications', 'alerts', 'badges'] },
+];
 
-interface ContactResult {
-  type: 'contact';
-  id: string;
-  name: string;
-  score: number;
-  contact: DeviceContact;
-}
+// ---------------------------------------------------------------------------
+// Search history helpers
+// ---------------------------------------------------------------------------
 
-type SearchResult = AppResult | ContactResult;
-
-// ─── History helpers ────────────────────────────────────────────────────────
+const HISTORY_KEY = 'spotlight_search_history';
+const MAX_HISTORY = 10;
 
 async function loadHistory(): Promise<string[]> {
   try {
@@ -81,32 +74,61 @@ async function loadHistory(): Promise<string[]> {
   }
 }
 
-async function saveToHistory(query: string): Promise<string[]> {
+async function saveHistory(history: string[]): Promise<void> {
+  await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+}
+
+async function addToHistory(query: string, current: string[]): Promise<string[]> {
   const trimmed = query.trim();
-  if (!trimmed) return await loadHistory();
-  try {
-    const prev = await loadHistory();
-    const filtered = prev.filter((h) => h !== trimmed);
-    const next = [trimmed, ...filtered].slice(0, MAX_HISTORY);
-    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-    return next;
-  } catch {
-    return [];
-  }
+  if (!trimmed) return current;
+  const filtered = current.filter((h) => h !== trimmed);
+  const updated = [trimmed, ...filtered].slice(0, MAX_HISTORY);
+  await saveHistory(updated);
+  return updated;
 }
 
-async function clearHistory(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(HISTORY_KEY);
-  } catch {
-    // ignore
-  }
+async function clearHistory(): Promise<string[]> {
+  await AsyncStorage.removeItem(HISTORY_KEY);
+  return [];
 }
 
-// ─── App Icon ───────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------------
 
-function AppIcon({ app, size = 46 }: { app: InstalledApp; size?: number }) {
-  const radius = size * 0.22;
+interface AppResult {
+  type: 'app';
+  app: InstalledApp;
+  score: number;
+}
+
+interface ContactResult {
+  type: 'contact';
+  contact: DeviceContact | Contact;
+  contactId: string;
+  name: string;
+  phone: string;
+  score: number;
+}
+
+interface SettingResult {
+  type: 'setting';
+  name: string;
+  screen: string;
+  score: number;
+}
+
+type SearchResult = AppResult | ContactResult | SettingResult;
+
+// ---------------------------------------------------------------------------
+// App Icon (reused pattern from AppLibraryScreen)
+// ---------------------------------------------------------------------------
+
+const ICON_SIZE = 40;
+const ICON_RADIUS = 10;
+
+function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }) {
+  const radius = (size / ICON_SIZE) * ICON_RADIUS;
   if (app.icon) {
     return (
       <Image
@@ -129,513 +151,400 @@ function AppIcon({ app, size = 46 }: { app: InstalledApp; size?: number }) {
         justifyContent: 'center',
       }}
     >
-      <Text style={{ color: '#fff', fontSize: size * 0.4, fontWeight: '600' }}>{letter}</Text>
-    </View>
-  );
-}
-
-// ─── Contact Icon ───────────────────────────────────────────────────────────
-
-function ContactIcon({ contact, size = 42 }: { contact: DeviceContact; size?: number }) {
-  if (contact.imageUri) {
-    return (
-      <Image
-        source={{ uri: contact.imageUri }}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-        resizeMode="cover"
-      />
-    );
-  }
-  const initials = `${(contact.firstName || '')[0] || ''}${(contact.lastName || '')[0] || ''}`.toUpperCase() || '?';
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: '#8E8E93',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Ionicons name="person" size={size * 0.5} color="#fff" />
-    </View>
-  );
-}
-
-// ─── Siri Suggestions ───────────────────────────────────────────────────────
-
-function SiriSuggestions({
-  apps,
-  onLaunch,
-  colors,
-}: {
-  apps: InstalledApp[];
-  onLaunch: (app: InstalledApp) => void;
-  colors: any;
-}) {
-  const suggested = apps.slice(0, 8);
-  const iconSize = 54;
-
-  return (
-    <View style={styles.suggestionsSection}>
-      <Text style={[styles.sectionTitle, { color: colors.secondaryLabel }]}>
-        SIRI SUGGESTIONS
+      <Text style={{ color: '#fff', fontSize: size * 0.4, fontWeight: '600' }}>
+        {letter}
       </Text>
-      <View style={[styles.suggestionsCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-        <View style={styles.suggestionsGrid}>
-          {suggested.map((app) => (
-            <Pressable
-              key={app.packageName}
-              style={styles.suggestionItem}
-              onPress={() => onLaunch(app)}
-            >
-              <AppIcon app={app} size={iconSize} />
-              <Text style={[styles.suggestionLabel, { color: colors.label }]} numberOfLines={1}>
-                {app.name}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
     </View>
   );
 }
 
-// ─── Recent Searches ────────────────────────────────────────────────────────
-
-function RecentSearches({
-  history,
-  onSelect,
-  onClear,
-}: {
-  history: string[];
-  onSelect: (query: string) => void;
-  onClear: () => void;
-}) {
-  if (history.length === 0) return null;
-
-  return (
-    <View style={styles.historySection}>
-      <View style={styles.historyHeader}>
-        <Text style={styles.historyTitle}>RECENT</Text>
-        <Pressable onPress={onClear} hitSlop={8}>
-          <Text style={styles.historyClear}>Clear</Text>
-        </Pressable>
-      </View>
-      {history.map((item, index) => (
-        <Pressable
-          key={`${item}-${index}`}
-          style={styles.historyRow}
-          onPress={() => onSelect(item)}
-        >
-          <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.5)" style={{ marginRight: 12 }} />
-          <Text style={styles.historyText} numberOfLines={1}>{item}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-// ─── Main Screen ────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Main Screen
+// ---------------------------------------------------------------------------
 
 export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { apps, launchApp } = useApps();
-  const { contacts } = useDevice();
+  const { contacts: deviceContacts } = useDevice();
+  const { contacts: storeContacts } = useContacts();
+
   const [query, setQuery] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
-  const inputRef = useRef<TextInput>(null);
+  const historyLoaded = useRef(false);
 
+  // Load history on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timer);
+    if (!historyLoaded.current) {
+      historyLoaded.current = true;
+      loadHistory().then(setHistory);
+    }
   }, []);
 
-  useEffect(() => {
-    loadHistory().then(setHistory);
-  }, []);
+  // Merge contacts: device contacts + store contacts (deduplicate by id)
+  const allContacts = useMemo(() => {
+    const map = new Map<string, DeviceContact | Contact>();
+    for (const c of deviceContacts) {
+      map.set(c.id, c);
+    }
+    for (const c of storeContacts) {
+      if (!map.has(c.id)) {
+        map.set(c.id, c);
+      }
+    }
+    return Array.from(map.values());
+  }, [deviceContacts, storeContacts]);
 
+  // Search across all categories
   const sections = useMemo(() => {
-    if (!query.trim()) return [];
     const q = query.trim();
+    if (!q) return [];
 
-    // Score apps
+    // Apps
     const appResults: AppResult[] = [];
     for (const app of apps) {
-      const nameScore = fuzzyScore(q, app.name);
-      const pkgScore = fuzzyScore(q, app.packageName);
-      const score = Math.max(nameScore, pkgScore);
-      if (score > 0) {
-        appResults.push({ type: 'app', id: app.packageName, name: app.name, score, app });
+      const nameMatch = fuzzyMatch(app.name, q);
+      const pkgMatch = fuzzyMatch(app.packageName, q);
+      const bestScore = Math.max(nameMatch.score, pkgMatch.score);
+      if (nameMatch.match || pkgMatch.match) {
+        appResults.push({ type: 'app', app, score: bestScore });
       }
     }
     appResults.sort((a, b) => b.score - a.score);
 
-    // Score contacts
+    // Contacts
     const contactResults: ContactResult[] = [];
-    for (const c of contacts) {
-      const fullName = `${c.firstName} ${c.lastName}`.trim();
-      const score = fuzzyScore(q, fullName);
-      if (score > 0) {
-        contactResults.push({ type: 'contact', id: c.id, name: fullName, score, contact: c });
+    for (const contact of allContacts) {
+      const fullName = `${contact.firstName} ${contact.lastName}`.trim();
+      const result = fuzzyMatch(fullName, q);
+      if (result.match) {
+        contactResults.push({
+          type: 'contact',
+          contact,
+          contactId: contact.id,
+          name: fullName,
+          phone: contact.phone || '',
+          score: result.score,
+        });
       }
     }
     contactResults.sort((a, b) => b.score - a.score);
 
+    // Settings
+    const settingResults: SettingResult[] = [];
+    for (const setting of SETTINGS_INDEX) {
+      const nameMatch = fuzzyMatch(setting.name, q);
+      let bestScore = nameMatch.score;
+      let matched = nameMatch.match;
+      for (const kw of setting.keywords) {
+        const kwMatch = fuzzyMatch(kw, q);
+        if (kwMatch.match && kwMatch.score > bestScore) {
+          bestScore = kwMatch.score;
+          matched = true;
+        }
+      }
+      if (matched) {
+        settingResults.push({ type: 'setting', name: setting.name, screen: setting.screen, score: bestScore });
+      }
+    }
+    settingResults.sort((a, b) => b.score - a.score);
+
     const result: { title: string; data: SearchResult[] }[] = [];
     if (appResults.length > 0) result.push({ title: 'Apps', data: appResults });
     if (contactResults.length > 0) result.push({ title: 'Contacts', data: contactResults });
+    if (settingResults.length > 0) result.push({ title: 'Settings', data: settingResults });
     return result;
-  }, [apps, contacts, query]);
+  }, [query, apps, allContacts]);
 
-  const totalResults = sections.reduce((sum, s) => sum + s.data.length, 0);
+  const handleResultPress = useCallback(async (item: SearchResult) => {
+    const updatedHistory = await addToHistory(query, history);
+    setHistory(updatedHistory);
 
-  const persistSearch = useCallback(async (q: string) => {
-    const next = await saveToHistory(q);
-    setHistory(next);
-  }, []);
+    switch (item.type) {
+      case 'app':
+        launchApp(item.app.packageName);
+        break;
+      case 'contact':
+        navigation.navigate('ContactDetail', { contactId: item.contactId });
+        break;
+      case 'setting':
+        navigation.navigate(item.screen);
+        break;
+    }
+  }, [query, history, launchApp, navigation]);
 
-  const handleLaunch = useCallback(
-    (app: InstalledApp) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      if (query.trim()) persistSearch(query.trim());
-      const route = BUILT_IN_APPS[app.packageName];
-      if (route) {
-        navigation.navigate(route);
-      } else {
-        launchApp(app.packageName);
-      }
-    },
-    [navigation, launchApp, query, persistSearch],
-  );
-
-  const handleContactPress = useCallback(
-    (contact: DeviceContact) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      if (query.trim()) persistSearch(query.trim());
-      navigation.navigate('ContactDetail', { contactId: contact.id });
-    },
-    [navigation, query, persistSearch],
-  );
-
-  const handleSubmit = useCallback(() => {
-    if (query.trim()) persistSearch(query.trim());
-  }, [query, persistSearch]);
-
-  const handleCancel = useCallback(() => {
-    Keyboard.dismiss();
-    navigation.goBack();
-  }, [navigation]);
-
-  const handleHistorySelect = useCallback((q: string) => {
-    setQuery(q);
+  const handleHistoryPress = useCallback((historyQuery: string) => {
+    setQuery(historyQuery);
   }, []);
 
   const handleClearHistory = useCallback(async () => {
-    await clearHistory();
-    setHistory([]);
+    const cleared = await clearHistory();
+    setHistory(cleared);
   }, []);
 
-  const showSuggestions = query.trim().length === 0;
-  const showResults = query.trim().length > 0;
+  const isSearching = query.trim().length > 0;
+  const showHistory = isFocused && !isSearching && history.length > 0;
 
-  const renderItem = useCallback(({ item, index, section }: { item: SearchResult; index: number; section: { data: SearchResult[] } }) => {
-    const isFirst = index === 0;
-    const isLast = index === section.data.length - 1;
-
-    if (item.type === 'contact') {
-      return (
-        <Pressable
-          onPress={() => handleContactPress(item.contact)}
-          style={({ pressed }) => [
-            styles.resultRow,
-            {
-              backgroundColor: pressed
-                ? 'rgba(255,255,255,0.1)'
-                : 'rgba(255,255,255,0.06)',
-            },
-            isFirst && { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
-            isLast && { borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
-          ]}
-        >
-          <ContactIcon contact={item.contact} size={42} />
-          <View style={styles.resultInfo}>
-            <Text style={styles.resultName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.resultSubtitle} numberOfLines={1}>Contact</Text>
-          </View>
-        </Pressable>
-      );
+  const renderItem = useCallback(({ item }: { item: SearchResult }) => {
+    switch (item.type) {
+      case 'app':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <AppIcon app={item.app} size={40} />
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.app.name}</Text>
+            </View>
+          </Pressable>
+        );
+      case 'contact':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: colors.systemGray4 }]}>
+              <Ionicons name="person-circle" size={36} color={colors.systemGray} />
+            </View>
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
+              {item.phone ? (
+                <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>{item.phone}</Text>
+              ) : null}
+            </View>
+          </Pressable>
+        );
+      case 'setting':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: colors.systemGray4 }]}>
+              <Ionicons name="settings" size={24} color={colors.systemGray} />
+            </View>
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
+              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>
+                Settings &gt; {item.name}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      default:
+        return null;
     }
+  }, [colors, handleResultPress]);
 
-    return (
-      <Pressable
-        onPress={() => handleLaunch(item.app)}
-        style={({ pressed }) => [
-          styles.resultRow,
-          {
-            backgroundColor: pressed
-              ? 'rgba(255,255,255,0.1)'
-              : 'rgba(255,255,255,0.06)',
-          },
-          isFirst && { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
-          isLast && { borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
-        ]}
-      >
-        <AppIcon app={item.app} size={42} />
-        <View style={styles.resultInfo}>
-          <Text style={styles.resultName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.resultSubtitle} numberOfLines={1}>App</Text>
-        </View>
-      </Pressable>
-    );
-  }, [handleLaunch, handleContactPress]);
+  const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
+    <View style={[styles.sectionHeader, { backgroundColor: colors.systemGroupedBackground }]}>
+      <Text style={[styles.sectionHeaderText, { color: colors.secondaryLabel }]}>
+        {section.title}
+      </Text>
+    </View>
+  ), [colors]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.92)' : 'rgba(0,0,0,0.85)' }]}>
-      <StatusBar style="light" />
+    <View style={[styles.root, { backgroundColor: colors.systemGroupedBackground }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Search bar area */}
-      <View style={[styles.searchArea, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.searchBarRow}>
-          <View style={[styles.searchBar, { backgroundColor: theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.2)' }]}>
-            <Ionicons name="search" size={18} color="rgba(255,255,255,0.6)" style={{ marginRight: 8 }} />
-            <TextInput
-              ref={inputRef}
-              style={styles.searchInput}
-              placeholder="Search"
-              placeholderTextColor="rgba(255,255,255,0.45)"
-              value={query}
-              onChangeText={setQuery}
-              autoCorrect={false}
-              returnKeyType="search"
-              onSubmitEditing={handleSubmit}
-              selectionColor="rgba(255,255,255,0.5)"
-            />
-            {query.length > 0 && (
-              <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.5)" />
-              </Pressable>
-            )}
-          </View>
-          <Pressable onPress={handleCancel} hitSlop={8} style={{ marginLeft: 12 }}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
+      {/* Navigation bar */}
+      <View style={[styles.navBar, { paddingTop: insets.top + 8, borderBottomColor: colors.separator }]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          accessibilityLabel="Back"
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
+          <Text style={[styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
+        </Pressable>
+        <Text style={[styles.navTitle, { color: colors.label }]}>Search</Text>
+        <View style={styles.backBtn} />
       </View>
 
-      {/* Content */}
-      {showSuggestions && (
-        <>
-          <RecentSearches
-            history={history}
-            onSelect={handleHistorySelect}
-            onClear={handleClearHistory}
-          />
-          <SiriSuggestions
-            apps={apps}
-            onLaunch={handleLaunch}
-            colors={colors}
-          />
-        </>
-      )}
+      {/* Search bar */}
+      <View style={styles.searchBarWrap}>
+        <CupertinoSearchBar
+          value={query}
+          onChangeText={setQuery}
+          onFocusChange={setIsFocused}
+          placeholder="Search"
+          autoFocus
+        />
+      </View>
 
-      {showResults && totalResults > 0 && (
+      {showHistory ? (
+        /* Search history */
+        <View style={styles.historyContainer}>
+          <View style={styles.historyHeader}>
+            <Text style={[styles.historyTitle, { color: colors.label }]}>Recent Searches</Text>
+            <Pressable onPress={handleClearHistory}>
+              <Text style={[styles.historyClear, { color: colors.systemBlue }]}>Clear</Text>
+            </Pressable>
+          </View>
+          {history.map((item, index) => (
+            <Pressable
+              key={`${item}-${index}`}
+              onPress={() => handleHistoryPress(item)}
+              style={({ pressed }) => [
+                styles.historyRow,
+                {
+                  opacity: pressed ? 0.7 : 1,
+                  borderBottomColor: colors.separator,
+                  borderBottomWidth: index < history.length - 1 ? StyleSheet.hairlineWidth : 0,
+                },
+              ]}
+            >
+              <Ionicons name="time-outline" size={18} color={colors.secondaryLabel} />
+              <Text style={[styles.historyText, { color: colors.label }]}>{item}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : isSearching ? (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => `${item.type}-${item.id}`}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 20 }}
-          renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionHeader}>{section.title}</Text>
-          )}
+          keyExtractor={(item, index) => {
+            if (item.type === 'app') return `app-${item.app.packageName}`;
+            if (item.type === 'contact') return `contact-${item.contactId}`;
+            if (item.type === 'setting') return `setting-${item.screen}`;
+            return `item-${index}`;
+          }}
           renderItem={renderItem}
-          SectionSeparatorComponent={() => <View style={{ height: 12 }} />}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           ItemSeparatorComponent={() => (
-            <View style={[styles.resultSeparator, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
-              <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.1)', marginLeft: 62 }} />
-            </View>
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.separator, marginLeft: 66 }} />
           )}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: colors.secondaryLabel }]}>No Results</Text>
+            </View>
+          }
         />
-      )}
-
-      {showResults && totalResults === 0 && (
-        <View style={styles.noResults}>
-          <Text style={styles.noResultsText}>No Results</Text>
-          <Text style={styles.noResultsSubtext}>No results found for &ldquo;{query}&rdquo;</Text>
-        </View>
-      )}
-
-      {/* Tap outside to dismiss */}
-      {showSuggestions && (
-        <Pressable
-          style={styles.dismissArea}
-          onPress={handleCancel}
-        />
-      )}
+      ) : null}
     </View>
   );
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  screen: {
+  root: {
     flex: 1,
   },
-  searchArea: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  searchBarRow: {
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  searchBar: {
-    flex: 1,
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 40,
+    minWidth: 70,
+    paddingHorizontal: 4,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 17,
-    color: '#FFFFFF',
-    paddingVertical: 0,
-  },
-  cancelText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 17,
-  },
-
-  // Siri Suggestions
-  suggestionsSection: {
-    paddingHorizontal: 16,
-    marginTop: 16,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-    marginLeft: 4,
-  },
-  suggestionsCard: {
-    borderRadius: 14,
-    padding: 12,
-    paddingBottom: 4,
-  },
-  suggestionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  suggestionItem: {
-    width: (SCREEN_WIDTH - 32 - 24) / 4,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  suggestionLabel: {
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: 'center',
-    width: '90%',
-  },
-
-  // Section headers
-  sectionHeader: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-    marginLeft: 4,
-    marginTop: 4,
-  },
-
-  // Results
-  resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  resultInfo: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  resultName: {
-    color: '#FFFFFF',
+  backLabel: {
     fontSize: 17,
     fontWeight: '400',
   },
-  resultSubtitle: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
-    marginTop: 1,
+  navTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
-  resultSeparator: {
-    paddingHorizontal: 14,
+  searchBarWrap: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-
-  // History
-  historySection: {
+  // Section header
+  sectionHeader: {
     paddingHorizontal: 16,
-    marginTop: 12,
+    paddingVertical: 6,
+    paddingTop: 12,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  // Result row
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  resultTextWrap: {
+    flex: 1,
+  },
+  resultTitle: {
+    fontSize: 16,
+    fontWeight: '400',
+  },
+  resultSubtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 2,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // History
+  historyContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   historyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-    marginLeft: 4,
-    marginRight: 4,
   },
   historyTitle: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.4,
   },
   historyClear: {
-    color: '#007AFF',
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '400',
   },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: 12,
+    gap: 10,
   },
   historyText: {
-    color: 'rgba(255,255,255,0.85)',
     fontSize: 16,
-    flex: 1,
+    fontWeight: '400',
   },
-
-  // No results
-  noResults: {
+  // Empty
+  emptyContainer: {
     alignItems: 'center',
-    marginTop: 60,
+    justifyContent: 'center',
+    paddingTop: 60,
   },
-  noResultsText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 22,
-    fontWeight: '600',
-  },
-  noResultsSubtext: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 15,
-    marginTop: 6,
-  },
-
-  // Dismiss
-  dismissArea: {
-    flex: 1,
+  emptyText: {
+    fontSize: 17,
+    fontWeight: '500',
   },
 });
