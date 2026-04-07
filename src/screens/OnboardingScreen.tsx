@@ -13,6 +13,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SystemColors } from '../theme/CupertinoTheme';
 
 const getLauncher = async () => {
   try {
@@ -318,7 +319,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: 8,
-    backgroundColor: '#0A84FF',
+    backgroundColor: SystemColors.dark.accent,
     borderRadius: 14,
     paddingHorizontal: 48,
     paddingVertical: 15,
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: '#0A84FF',
+    backgroundColor: SystemColors.dark.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

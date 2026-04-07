@@ -61,7 +61,7 @@ export function WifiScreen({ navigation }: { navigation: any }) {
                     leading={{
                       name: 'wifi',
                       color: '#FFFFFF',
-                      backgroundColor: connected ? '#007AFF' : colors.systemGray3,
+                      backgroundColor: connected ? colors.accent : colors.systemGray3,
                     }}
                     trailing={
                       connected ? (

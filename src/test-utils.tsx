@@ -10,8 +10,8 @@ import { FoldersProvider } from './store/FoldersStore';
 
 function AllProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <SettingsProvider>
+    <SettingsProvider>
+      <ThemeProvider>
         <ContactsProvider>
           <ProfileProvider>
             <AppsProvider>
@@ -23,8 +23,8 @@ function AllProviders({ children }: { children: React.ReactNode }) {
             </AppsProvider>
           </ProfileProvider>
         </ContactsProvider>
-      </SettingsProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </SettingsProvider>
   );
 }
 

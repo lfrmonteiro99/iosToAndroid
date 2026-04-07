@@ -13,6 +13,18 @@ export const SystemColors = {
     systemTeal: '#5AC8FA',
     systemIndigo: '#5856D6',
 
+    // Semantic colors
+    accent: '#007AFF',
+    error: '#FF3B30',
+    warning: '#FF9500',
+    success: '#34C759',
+    info: '#007AFF',
+
+    // Semantic text aliases
+    textPrimary: '#000000',
+    textSecondary: 'rgba(60, 60, 67, 0.6)',
+    textTertiary: 'rgba(60, 60, 67, 0.3)',
+
     // Grays
     systemGray: '#8E8E93',
     systemGray2: '#AEAEB2',
@@ -58,6 +70,18 @@ export const SystemColors = {
     systemTeal: '#64D2FF',
     systemIndigo: '#5E5CE6',
 
+    // Semantic colors
+    accent: '#0A84FF',
+    error: '#FF453A',
+    warning: '#FF9F0A',
+    success: '#30D158',
+    info: '#0A84FF',
+
+    // Semantic text aliases
+    textPrimary: '#FFFFFF',
+    textSecondary: 'rgba(235, 235, 245, 0.6)',
+    textTertiary: 'rgba(235, 235, 245, 0.3)',
+
     // Grays
     systemGray: '#8E8E93',
     systemGray2: '#636366',
@@ -93,6 +117,46 @@ export const SystemColors = {
     opaqueSeparator: '#38383A',
   },
 };
+
+// High Contrast color overrides (applied on top of light/dark)
+export const HighContrastOverrides = {
+  light: {
+    label: '#000000',
+    secondaryLabel: 'rgba(60, 60, 67, 0.85)',
+    tertiaryLabel: 'rgba(60, 60, 67, 0.55)',
+    separator: 'rgba(60, 60, 67, 0.5)',
+    opaqueSeparator: '#8E8E93',
+    systemBackground: '#FFFFFF',
+    secondarySystemBackground: '#E5E5EA',
+    textPrimary: '#000000',
+    textSecondary: 'rgba(60, 60, 67, 0.85)',
+    textTertiary: 'rgba(60, 60, 67, 0.55)',
+  },
+  dark: {
+    label: '#FFFFFF',
+    secondaryLabel: 'rgba(235, 235, 245, 0.85)',
+    tertiaryLabel: 'rgba(235, 235, 245, 0.55)',
+    separator: 'rgba(235, 235, 245, 0.4)',
+    opaqueSeparator: '#636366',
+    systemBackground: '#000000',
+    secondarySystemBackground: '#1C1C1E',
+    textPrimary: '#FFFFFF',
+    textSecondary: 'rgba(235, 235, 245, 0.85)',
+    textTertiary: 'rgba(235, 235, 245, 0.55)',
+  },
+};
+
+// Accent color options
+export const AccentColors = {
+  blue: { light: '#007AFF', dark: '#0A84FF' },
+  purple: { light: '#AF52DE', dark: '#BF5AF2' },
+  pink: { light: '#FF2D55', dark: '#FF375F' },
+  red: { light: '#FF3B30', dark: '#FF453A' },
+  orange: { light: '#FF9500', dark: '#FF9F0A' },
+  green: { light: '#34C759', dark: '#30D158' },
+} as const;
+
+export type AccentColorKey = keyof typeof AccentColors;
 
 export type CupertinoColors = typeof SystemColors.light;
 
@@ -227,6 +291,9 @@ export const Shadows = StyleSheet.create({
 
 // Animation constants matching iOS spring dynamics
 export const AnimationConfig = {
+  springBouncy: { damping: 10, stiffness: 150, mass: 1 },
+  springSnappy: { damping: 20, stiffness: 400, mass: 1 },
+  springGentle: { damping: 25, stiffness: 200, mass: 1 },
   defaultSpring: { damping: 20, stiffness: 300, mass: 1 },
   gentleSpring: { damping: 15, stiffness: 150, mass: 1 },
   duration: { fast: 200, normal: 350, slow: 500 },
@@ -238,9 +305,18 @@ export interface CupertinoTheme {
   colors: CupertinoColors;
 }
 
-export function getTheme(dark: boolean): CupertinoTheme {
-  return {
-    dark,
-    colors: dark ? SystemColors.dark : SystemColors.light,
-  };
+export function getTheme(
+  dark: boolean,
+  accentKey: AccentColorKey = 'blue',
+  highContrast: boolean = false,
+): CupertinoTheme {
+  const base = dark ? { ...SystemColors.dark } : { ...SystemColors.light };
+  const accentColor = AccentColors[accentKey][dark ? 'dark' : 'light'];
+  base.accent = accentColor;
+  base.systemBlue = accentColor;
+  if (highContrast) {
+    const overrides = dark ? HighContrastOverrides.dark : HighContrastOverrides.light;
+    Object.assign(base, overrides);
+  }
+  return { dark, colors: base };
 }

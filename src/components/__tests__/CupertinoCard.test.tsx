@@ -3,9 +3,10 @@ import { Text } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { CupertinoCard } from '../CupertinoCard';
 import { ThemeProvider } from '../../theme/ThemeContext';
+import { SettingsProvider } from '../../store/SettingsStore';
 
 const renderWithTheme = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
+  render(<SettingsProvider><ThemeProvider>{ui}</ThemeProvider></SettingsProvider>);
 
 describe('CupertinoCard', () => {
   it('renders with title and subtitle', () => {

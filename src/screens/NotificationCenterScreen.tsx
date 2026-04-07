@@ -72,6 +72,7 @@ function formatDateHeader(date: Date): string {
 
 export function NotificationCenterScreen() {
   const { theme, isDark, typography } = useTheme();
+  const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { apps, launchApp } = useApps();
@@ -215,7 +216,7 @@ export function NotificationCenterScreen() {
           <Text style={[styles.dateText, typography.title1]}>{formatDateHeader(today)}</Text>
           {notifications.length > 0 && (
             <Pressable onPress={handleClearAll} hitSlop={12}>
-              <Text style={[styles.clearAllText, typography.subhead, { fontWeight: '600' }]}>Clear All</Text>
+              <Text style={[styles.clearAllText, typography.subhead, { fontWeight: '600', color: colors.accent }]}>Clear All</Text>
             </Pressable>
           )}
         </View>
@@ -228,7 +229,7 @@ export function NotificationCenterScreen() {
             <Text style={[styles.accessSubtitle, typography.subhead]}>
               Allow access to see your notifications here.
             </Text>
-            <Pressable style={styles.accessButton} onPress={handleEnableAccess}>
+            <Pressable style={[styles.accessButton, { backgroundColor: colors.accent }]} onPress={handleEnableAccess}>
               <Text style={[styles.accessButtonText, typography.subhead, { fontWeight: '600' }]}>Enable Notification Access</Text>
             </Pressable>
           </BlurView>
@@ -374,7 +375,6 @@ const styles = StyleSheet.create({
   clearAllText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#0A84FF',
   },
   scroll: {
     flex: 1,
@@ -505,7 +505,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   accessButton: {
-    backgroundColor: '#0A84FF',
     borderRadius: 12,
     paddingHorizontal: 20,
     paddingVertical: 11,

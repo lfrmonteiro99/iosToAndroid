@@ -1,8 +1,52 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CupertinoTheme, getTheme, Typography, Spacing, BorderRadius, Shadows, AnimationConfig } from './CupertinoTheme';
+import { useSettings } from '../store/SettingsStore';
+import {
+  CupertinoTheme,
+  getTheme,
+  Typography,
+  Spacing,
+  BorderRadius,
+  Shadows,
+  AnimationConfig,
+  AccentColors,
+  AccentColorKey,
+} from './CupertinoTheme';
 
 const THEME_STORAGE_KEY = '@iostoandroid/theme_preference';
+const ACCENT_STORAGE_KEY = '@iostoandroid/accent_color';
+const HIGH_CONTRAST_STORAGE_KEY = '@iostoandroid/high_contrast';
+
+const TEXT_SIZE_SCALE: Record<number, number> = { 0: 0.85, 1: 1.0, 2: 1.15, 3: 1.3 };
+
+type FontWeightValue = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900' | 'bold' | 'normal';
+
+function scaleTypography(
+  base: typeof Typography,
+  textSizeIndex: number,
+  boldText: boolean,
+): typeof Typography {
+  const scale = TEXT_SIZE_SCALE[textSizeIndex] ?? 1.0;
+  if (scale === 1.0 && !boldText) return base;
+
+  const boldWeightMap: Record<string, FontWeightValue> = {
+    '100': '300', '200': '400', '300': '500',
+    '400': '600', '500': '700', '600': '800', '700': '900',
+    '800': '900', '900': '900', 'normal': '600', 'bold': '900',
+  };
+
+  const result = {} as typeof Typography;
+  for (const key of Object.keys(base) as (keyof typeof Typography)[]) {
+    const style = base[key];
+    const scaledFontSize = Math.round(style.fontSize * scale);
+    const scaledLineHeight = Math.round(style.lineHeight * scale);
+    const fontWeight = boldText
+      ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
+      : style.fontWeight;
+    (result as any)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight };
+  }
+  return result;
+}
 
 interface ThemeContextValue {
   theme: CupertinoTheme;
@@ -13,8 +57,12 @@ interface ThemeContextValue {
   animation: typeof AnimationConfig;
   isDark: boolean;
   isReady: boolean;
+  accentColor: AccentColorKey;
+  highContrast: boolean;
   toggleTheme: () => void;
   setDark: (dark: boolean) => void;
+  setAccentColor: (color: AccentColorKey) => void;
+  setHighContrast: (enabled: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -25,24 +73,52 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(initHour >= 19 || initHour < 7);
   const [isReady, setIsReady] = useState(false);
   const [hasUserOverride, setHasUserOverride] = useState(false);
+  const [accentColor, setAccentColorState] = useState<AccentColorKey>('blue');
+  const [highContrast, setHighContrastState] = useState(false);
 
-  // Hydrate saved preference on mount
+  const { settings } = useSettings();
+
+  // Hydrate saved preferences on mount
   useEffect(() => {
-    AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
-      if (stored !== null) {
+    Promise.all([
+      AsyncStorage.getItem(THEME_STORAGE_KEY),
+      AsyncStorage.getItem(ACCENT_STORAGE_KEY),
+      AsyncStorage.getItem(HIGH_CONTRAST_STORAGE_KEY),
+    ]).then(([storedTheme, storedAccent, storedHighContrast]) => {
+      if (storedTheme !== null) {
         setHasUserOverride(true);
-        setIsDark(stored === 'dark');
+        setIsDark(storedTheme === 'dark');
+      }
+      if (storedAccent !== null && storedAccent in AccentColors) {
+        setAccentColorState(storedAccent as AccentColorKey);
+      }
+      if (storedHighContrast !== null) {
+        setHighContrastState(storedHighContrast === 'true');
       }
       setIsReady(true);
     });
   }, []);
 
-  // Persist on change
+  // Persist theme on change
   useEffect(() => {
     if (isReady && hasUserOverride) {
       AsyncStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
     }
   }, [isDark, isReady, hasUserOverride]);
+
+  // Persist accent color on change
+  useEffect(() => {
+    if (isReady) {
+      AsyncStorage.setItem(ACCENT_STORAGE_KEY, accentColor);
+    }
+  }, [accentColor, isReady]);
+
+  // Persist high contrast on change
+  useEffect(() => {
+    if (isReady) {
+      AsyncStorage.setItem(HIGH_CONTRAST_STORAGE_KEY, String(highContrast));
+    }
+  }, [highContrast, isReady]);
 
   // Auto dark mode based on time of day (7pm–7am) when no user override
   useEffect(() => {
@@ -56,9 +132,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => { clearTimeout(timer); clearInterval(interval); };
   }, [hasUserOverride]);
 
-  // isDark is the single source of truth: set by user override or time-based auto-dark
-  const effectiveDark = isDark;
-
   const toggleTheme = useCallback(() => {
     setHasUserOverride(true);
     setIsDark((prev) => !prev);
@@ -69,20 +142,32 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setIsDark(dark);
   }, []);
 
+  const setAccentColor = useCallback((color: AccentColorKey) => {
+    setAccentColorState(color);
+  }, []);
+
+  const setHighContrast = useCallback((enabled: boolean) => {
+    setHighContrastState(enabled);
+  }, []);
+
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: getTheme(effectiveDark),
-      typography: Typography,
+      theme: getTheme(isDark, accentColor, highContrast),
+      typography: scaleTypography(Typography, settings.textSizeIndex, settings.boldText),
       spacing: Spacing,
       borderRadius: BorderRadius,
       shadows: Shadows,
       animation: AnimationConfig,
-      isDark: effectiveDark,
+      isDark,
       isReady,
+      accentColor,
+      highContrast,
       toggleTheme,
       setDark,
+      setAccentColor,
+      setHighContrast,
     }),
-    [effectiveDark, isReady, toggleTheme, setDark]
+    [isDark, isReady, accentColor, highContrast, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setAccentColor, setHighContrast]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

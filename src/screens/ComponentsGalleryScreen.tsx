@@ -255,7 +255,7 @@ export function ComponentsGalleryScreen() {
           />
           <CupertinoListTile
             title="Mail"
-            leading={{ name: 'mail', color: '#FFF', backgroundColor: '#007AFF' }}
+            leading={{ name: 'mail', color: '#FFF', backgroundColor: colors.accent }}
             trailing={
               <View style={[styles.badgeCount, { backgroundColor: colors.systemRed }]}>
                 <Text style={[typography.caption2, { color: '#FFF', fontWeight: '600' }]}>3</Text>

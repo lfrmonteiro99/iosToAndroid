@@ -31,6 +31,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { SystemColors } from '../theme/CupertinoTheme';
 import * as Haptics from 'expo-haptics';
 
 // ---------------------------------------------------------------------------
@@ -59,7 +60,7 @@ function ToggleButton({
   label,
   sublabel,
   active,
-  activeColor = '#0A84FF',
+  activeColor = SystemColors.dark.accent,
   onPress,
 }: ToggleButtonProps) {
   return (
@@ -255,6 +256,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 iconName="airplane"
                 label="Airplane"
                 active={settings.airplaneMode}
+                activeColor={colors.accent}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   update('airplaneMode', !settings.airplaneMode);
@@ -266,6 +268,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 label="Wi-Fi"
                 sublabel={device.wifi.enabled ? (device.wifi.ssid || 'On') : 'Off'}
                 active={device.wifi.enabled}
+                activeColor={colors.accent}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleWifi(); }}
               />
               <ToggleButton
@@ -273,6 +276,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 label="Bluetooth"
                 sublabel={device.bluetooth.enabled ? 'On' : 'Off'}
                 active={device.bluetooth.enabled}
+                activeColor={colors.accent}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleBluetooth(); }}
               />
               <ToggleButton
