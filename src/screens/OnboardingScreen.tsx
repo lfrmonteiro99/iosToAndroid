@@ -18,7 +18,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null;
+    return null; // Expected: module unavailable on non-Android
   }
 };
 
@@ -88,7 +88,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         try {
           const results = await mod.checkPermissions();
           setPermissionResults(results);
-        } catch { /* ignore secondary failure */ }
+        } catch { /* Expected: checkPermissions may fail after partial grant */ }
       }
     }
     goToPage(2);
@@ -99,7 +99,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     if (mod) {
       try {
         await (mod as any).openLauncherSettings?.();
-      } catch { /* ignore */ }
+      } catch { /* Expected: openLauncherSettings may not exist on all devices */ }
     }
     goToPage(3);
   }, [goToPage]);

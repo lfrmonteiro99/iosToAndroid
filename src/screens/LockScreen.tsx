@@ -34,7 +34,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null;
+    return null; // Expected: module unavailable on non-Android
   }
 };
 
@@ -192,7 +192,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         const success = await mod.setFlashlight(newState);
         if (success) setFlashlightOn(newState);
       } catch {
-        // flashlight not available
+        // Expected: flashlight not available on this device
       }
     }
   };
@@ -232,7 +232,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             .slice(0, 5);
           if (mounted) setNotifications(filtered);
         }
-      } catch { /* notification access not available */ }
+      } catch { /* Expected: notification access not granted */ }
     })();
     return () => { mounted = false; };
   }, []);
@@ -321,7 +321,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         }
       }
     } catch {
-      // Biometrics not available at all — fall back to passcode
+      // Expected: biometrics not available — fall back to passcode
       setShowPasscode(true);
     }
   };

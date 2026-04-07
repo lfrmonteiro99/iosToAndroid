@@ -74,7 +74,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(RECENTS_KEY).then(raw => {
       if (raw) {
-        try { setRecentPackages(JSON.parse(raw)); } catch { /* ignore */ }
+        try { setRecentPackages(JSON.parse(raw)); } catch (e) { console.warn('AppsStore: failed to parse recent apps:', e); }
       }
     });
   }, []);
@@ -117,7 +117,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
           const savedDock = parsed.dockApps || [];
           const hasVirtualApps = DEFAULT_DOCK.some((pkg: string) => savedDock.includes(pkg));
           dockApps = hasVirtualApps ? savedDock : DEFAULT_DOCK;
-        } catch { /* ignore */ }
+        } catch (e) { console.warn('AppsStore: failed to parse saved layout:', e); }
       }
 
       // Ensure our built-in apps are always in the dock

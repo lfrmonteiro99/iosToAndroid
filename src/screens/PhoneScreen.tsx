@@ -23,7 +23,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null;
+    return null; // Expected: module unavailable on non-Android
   }
 };
 
@@ -108,6 +108,7 @@ function RecentsTab({ contacts, onCall, onInfo, colors, typography }: {
           const log = await mod.getCallLog(50);
           setCallLog(log);
         } catch {
+          // Expected: call log permission not granted
           setPermissionDenied(true);
         }
       }
@@ -145,7 +146,7 @@ function RecentsTab({ contacts, onCall, onInfo, colors, typography }: {
                 const log = await mod.getCallLog(50);
                 setCallLog(log);
                 setPermissionDenied(false);
-              } catch { /* still denied */ }
+              } catch { /* Expected: call log permission still denied */ }
             }
           }}
         >

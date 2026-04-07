@@ -108,7 +108,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     if (Platform.OS !== 'android') return null;
     try {
       return (await import('../../modules/launcher-module/src')).default;
-    } catch { return null; }
+    } catch { return null; } // Expected: module unavailable on non-Android
   }, []);
 
   const loadBattery = useCallback(async () => {
@@ -119,13 +119,13 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         level: Math.round(level * 100) / 100,
         isCharging: batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL,
       };
-    } catch { return DEFAULT_STATE.battery; }
+    } catch { return DEFAULT_STATE.battery; } // Expected: battery API unavailable
   }, []);
 
   const loadBrightness = useCallback(async () => {
     try {
       return await Brightness.getBrightnessAsync();
-    } catch { return 0.5; }
+    } catch { return 0.5; } // Expected: brightness API unavailable
   }, []);
 
   const loadNetwork = useCallback(async () => {
@@ -136,7 +136,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         isWifi: state.type === Network.NetworkStateType.WIFI,
         isCellular: state.type === Network.NetworkStateType.CELLULAR,
       };
-    } catch { return DEFAULT_STATE.network; }
+    } catch { return DEFAULT_STATE.network; } // Expected: network API unavailable
   }, []);
 
   const loadWifi = useCallback(async () => {
@@ -156,7 +156,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           ssid: n.ssid, level: n.level, isSecure: n.isSecure,
         })),
       };
-    } catch { return DEFAULT_STATE.wifi; }
+    } catch { return DEFAULT_STATE.wifi; } // Expected: wifi info unavailable
   }, [getLauncherModule]);
 
   const loadBluetooth = useCallback(async () => {
@@ -171,7 +171,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           name: d.name, address: d.address,
         })),
       };
-    } catch { return DEFAULT_STATE.bluetooth; }
+    } catch { return DEFAULT_STATE.bluetooth; } // Expected: bluetooth info unavailable
   }, [getLauncherModule]);
 
   const loadStorage = useCallback(async () => {
@@ -185,7 +185,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         freeGB: info.freeGB,
         usedPercentage: info.usedPercentage,
       };
-    } catch { return DEFAULT_STATE.storage; }
+    } catch { return DEFAULT_STATE.storage; } // Expected: storage info unavailable
   }, [getLauncherModule]);
 
   const loadMessages = useCallback(async () => {
@@ -193,7 +193,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     if (!mod) return [];
     try {
       return await mod.getRecentMessages(50);
-    } catch { return []; }
+    } catch { return []; } // Expected: SMS permission not granted
   }, [getLauncherModule]);
 
   const loadContacts = useCallback(async () => {
@@ -220,7 +220,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         company: c.company || undefined,
         imageUri: c.image?.uri,
       }));
-    } catch { return []; }
+    } catch { return []; } // Expected: contacts permission not granted
   }, []);
 
   const loadWeather = useCallback(async (): Promise<DeviceWeather> => {
@@ -235,7 +235,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         icon: mapWeatherIcon(current.weatherCode),
         city: area.areaName[0].value,
       };
-    } catch {
+    } catch (e) {
+      console.warn('DeviceStore: failed to fetch weather:', e);
       return { temp: 0, condition: 'Unavailable', icon: 'cloud', city: '\u2014' };
     }
   }, []);
@@ -282,7 +283,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     try {
       await Brightness.setBrightnessAsync(value);
       setState(prev => ({ ...prev, brightness: value }));
-    } catch { /* needs permission */ }
+    } catch { /* Expected: brightness permission not granted */ }
   }, []);
 
   const toggleWifi = useCallback(async () => {
@@ -333,7 +334,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         return true;
       }
       return false;
-    } catch {
+    } catch (e) {
+      console.warn('DeviceStore: SMS permission request failed:', e);
       return false;
     }
   }, [loadMessages]);

@@ -38,7 +38,7 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setContacts(JSON.parse(stored)); } catch { /* ignore */ }
+        try { setContacts(JSON.parse(stored)); } catch (e) { console.warn('ContactsStore: failed to parse stored contacts:', e); }
       }
       setIsReady(true);
     });

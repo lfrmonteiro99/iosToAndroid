@@ -323,11 +323,12 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
 // FolderOverlay
 // ---------------------------------------------------------------------------
 
-function FolderOverlay({ folder, apps, onClose, onLaunchApp, onRename }: {
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename }: {
   folder: AppFolder;
   apps: InstalledApp[];
   onClose: () => void;
   onLaunchApp: (app: InstalledApp) => void;
+  onLongPressApp: (app: InstalledApp) => void;
   onRename: (newName: string) => void;
 }) {
   const folderApps = folder.apps
@@ -375,7 +376,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onRename }: {
                   app={app}
                   cellWidth={70}
                   onPress={() => onLaunchApp(app)}
-                  onLongPress={() => {}}
+                  onLongPress={() => onLongPressApp(app)}
                 />
               ))}
             </View>
@@ -540,7 +541,7 @@ export function LauncherHomeScreen() {
         if (needsPermission) {
           await mod.requestAllPermissions();
         }
-      } catch { /* ignore */ }
+      } catch { /* Expected: permissions check may fail on non-Android or first install */ }
     })();
   }, []);
 
@@ -759,7 +760,7 @@ export function LauncherHomeScreen() {
 
   // Helper to call native module lazily
   const getLauncher = async () => {
-    try { return (await import('../../modules/launcher-module/src')).default; } catch { return null; }
+    try { return (await import('../../modules/launcher-module/src')).default; } catch { return null; } // Expected: module unavailable on non-Android
   };
 
   // Action sheet options for the selected app
@@ -958,7 +959,7 @@ export function LauncherHomeScreen() {
                       cellWidth={CELL_WIDTH}
                       apps={apps}
                       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setOpenFolder(item.folder); }}
-                      onLongPress={() => {/* future: folder jiggle */}}
+                      onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIsJiggling(true); }}
                     />
                   );
                 }
@@ -1054,6 +1055,10 @@ export function LauncherHomeScreen() {
           onLaunchApp={(app) => {
             setOpenFolder(null);
             handleAppPress(app);
+          }}
+          onLongPressApp={(app) => {
+            setOpenFolder(null);
+            handleLongPress(app);
           }}
           onRename={(newName) => {
             renameFolder(openFolder.id, newName);
