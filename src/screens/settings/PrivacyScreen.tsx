@@ -97,7 +97,7 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
                   </Text>
                 }
                 showChevron
-                onPress={() => {}}
+                onPress={() => openSystemPanel('privacy')}
               />
             ))}
           </CupertinoListSection>

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@iostoandroid/settings';
@@ -87,7 +88,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   airdrop: 'contactsOnly',
   backgroundAppRefresh: 'wifi',
   dateTimeAutomatic: true,
-  timezone: 'America/New_York',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   use24Hour: false,
   keyboardAutoCorrect: true,
   keyboardAutoCapitalize: true,
@@ -131,6 +132,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isReady) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   }, [settings, isReady]);
+
+  // Refresh timezone when app comes to foreground (e.g. user changed it in system settings)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        setSettings((prev) => {
+          if (prev.timezone !== currentTz) {
+            return { ...prev, timezone: currentTz };
+          }
+          return prev;
+        });
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   const update = useCallback(<K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));

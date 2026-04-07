@@ -59,7 +59,7 @@ export function DateTimeScreen({ navigation }: { navigation: any }) {
                   {settings.timezone}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => openSystemPanel('date_time')}
             />
             <CupertinoListTile
               title="24-Hour Time"

@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -27,18 +28,30 @@ import { useApps, InstalledApp } from '../store/AppsStore';
 // ---------------------------------------------------------------------------
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_WIDTH = 280;
-const CARD_HEIGHT = 400;
+const CARD_WIDTH = 260;
+const CARD_HEIGHT = 380;
 const CARD_BORDER_RADIUS = 20;
+const CARD_OVERLAP = -30; // negative margin for iOS-style overlap
 
-// Placeholder screenshot colors — one per slot
-const SCREENSHOT_COLORS = [
-  '#1C3A5E',
-  '#3D1C5E',
-  '#1C5E3A',
-  '#5E3D1C',
-  '#1C4D5E',
+// Gradient pairs derived from name hash
+const GRADIENT_PAIRS = [
+  ['#1a1a2e', '#16213e'],
+  ['#0f3460', '#1a1a40'],
+  ['#1b262c', '#0f4c75'],
+  ['#2d132c', '#1a1a2e'],
+  ['#1b1b2f', '#162447'],
+  ['#0a192f', '#112240'],
+  ['#1c1c3c', '#2a1454'],
+  ['#0d1b2a', '#1b263b'],
 ];
+
+function hashName(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
 
 // ---------------------------------------------------------------------------
 // RecentAppCard
@@ -46,14 +59,16 @@ const SCREENSHOT_COLORS = [
 
 interface RecentAppCardProps {
   app: InstalledApp;
-  color: string;
   onSwipeUp: () => void;
   onTap: () => void;
 }
 
-function RecentAppCard({ app, color, onSwipeUp, onTap }: RecentAppCardProps) {
+function RecentAppCard({ app, onSwipeUp, onTap }: RecentAppCardProps) {
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
+
+  const gradientIndex = hashName(app.name) % GRADIENT_PAIRS.length;
+  const [bgTop, bgBottom] = GRADIENT_PAIRS[gradientIndex];
 
   const dismiss = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -89,12 +104,29 @@ function RecentAppCard({ app, color, onSwipeUp, onTap }: RecentAppCardProps) {
     <GestureDetector gesture={swipeGesture}>
       <Animated.View style={[styles.cardWrapper, animatedStyle]}>
         <Pressable onPress={onTap} style={styles.cardPressable}>
-          {/* Screenshot placeholder */}
-          <View style={[styles.screenshot, { backgroundColor: color }]}>
-            <Text style={styles.screenshotLabel} numberOfLines={1}>
+          {/* Card background with gradient-like effect */}
+          <View style={[styles.cardBackground, { backgroundColor: bgBottom }]}>
+            <View style={[styles.cardGradientTop, { backgroundColor: bgTop }]} />
+
+            {/* Centered app icon */}
+            <View style={styles.cardIconContainer}>
+              {app.icon ? (
+                <Image
+                  source={{ uri: app.icon }}
+                  style={styles.cardIcon}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={styles.cardIconFallback}>
+                  <Ionicons name="apps" size={40} color="rgba(255,255,255,0.5)" />
+                </View>
+              )}
+            </View>
+
+            {/* App name on card */}
+            <Text style={styles.cardAppName} numberOfLines={1}>
               {app.name}
             </Text>
-            <Ionicons name="phone-portrait-outline" size={48} color="rgba(255,255,255,0.15)" />
           </View>
 
           {/* Swipe-up hint */}
@@ -105,9 +137,13 @@ function RecentAppCard({ app, color, onSwipeUp, onTap }: RecentAppCardProps) {
 
         {/* App info below card */}
         <View style={styles.appInfo}>
-          <View style={styles.appIconBadge}>
-            <Ionicons name="apps" size={18} color="#fff" />
-          </View>
+          {app.icon ? (
+            <Image source={{ uri: app.icon }} style={styles.appInfoIcon} resizeMode="contain" />
+          ) : (
+            <View style={styles.appInfoIconFallback}>
+              <Ionicons name="apps" size={14} color="#fff" />
+            </View>
+          )}
           <Text style={styles.appInfoName} numberOfLines={1}>
             {app.name}
           </Text>
@@ -123,20 +159,35 @@ function RecentAppCard({ app, color, onSwipeUp, onTap }: RecentAppCardProps) {
 
 export function MultitaskScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
-  const { apps } = useApps();
+  const { apps, recentPackages } = useApps();
 
-  // Take first 5 non-dock apps as placeholder recents
-  const initialRecents = apps.slice(0, 5);
+  // Build recents list: prefer actual tracked recents, fall back to sorted-by-name
+  const initialRecents = useMemo(() => {
+    if (recentPackages.length > 0) {
+      return recentPackages
+        .map(pkg => apps.find(a => a.packageName === pkg))
+        .filter(Boolean) as InstalledApp[];
+    }
+    // Fallback: sort by name, take first 8
+    return [...apps]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 8);
+  }, [apps, recentPackages]);
+
   const [recents, setRecents] = useState<InstalledApp[]>(initialRecents);
 
   const handleDismiss = useCallback((pkg: string) => {
     setRecents((prev) => prev.filter((a) => a.packageName !== pkg));
   }, []);
 
+  const handleClearAll = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRecents([]);
+  }, []);
+
   const handleTap = useCallback((app: InstalledApp) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.goBack();
-    // In a real launcher this would bring the app to foreground
   }, [navigation]);
 
   return (
@@ -151,15 +202,21 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
         accessibilityLabel="Close multitasking"
       />
 
-      {/* Title */}
+      {/* Header */}
       <View style={[styles.header, { marginTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Recents</Text>
+        {recents.length > 0 && (
+          <Pressable onPress={handleClearAll} style={styles.clearAllButton}>
+            <Text style={styles.clearAllText}>Clear All</Text>
+          </Pressable>
+        )}
       </View>
 
       {recents.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="apps-outline" size={56} color="rgba(255,255,255,0.3)" />
-          <Text style={styles.emptyText}>No recent apps</Text>
+          <Text style={styles.emptyTitle}>No Recent Apps</Text>
+          <Text style={styles.emptySubtitle}>Apps you use will appear here</Text>
         </View>
       ) : (
         <ScrollView
@@ -170,14 +227,13 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
             { paddingBottom: insets.bottom + 16 },
           ]}
           decelerationRate="fast"
-          snapToInterval={CARD_WIDTH + 20}
+          snapToInterval={CARD_WIDTH + CARD_OVERLAP + 20}
           snapToAlignment="center"
         >
-          {recents.map((app, index) => (
+          {recents.map((app) => (
             <RecentAppCard
               key={app.packageName}
               app={app}
-              color={SCREENSHOT_COLORS[index % SCREENSHOT_COLORS.length]}
               onSwipeUp={() => handleDismiss(app.packageName)}
               onTap={() => handleTap(app)}
             />
@@ -199,9 +255,12 @@ const styles = StyleSheet.create({
   },
 
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 24,
     zIndex: 2,
+    paddingHorizontal: 24,
   },
   headerTitle: {
     color: '#ffffff',
@@ -209,16 +268,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: -0.3,
   },
+  clearAllButton: {
+    position: 'absolute',
+    right: 24,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  clearAllText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
 
   scrollContent: {
     paddingHorizontal: 24,
-    gap: 20,
     alignItems: 'flex-end',
   },
 
   cardWrapper: {
     alignItems: 'center',
     width: CARD_WIDTH,
+    marginRight: CARD_OVERLAP + 20,
   },
 
   cardPressable: {
@@ -229,18 +299,59 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  screenshot: {
+  cardBackground: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
   },
 
-  screenshotLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 22,
-    fontWeight: '300',
-    letterSpacing: -0.5,
+  cardGradientTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    borderTopLeftRadius: CARD_BORDER_RADIUS,
+    borderTopRightRadius: CARD_BORDER_RADIUS,
+  },
+
+  cardIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    // Subtle shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+
+  cardIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 18,
+  },
+
+  cardIconFallback: {
+    width: 80,
+    height: 80,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  cardAppName: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 15,
+    fontWeight: '400',
+    letterSpacing: -0.3,
   },
 
   dismissHint: {
@@ -264,10 +375,15 @@ const styles = StyleSheet.create({
     gap: 8,
     maxWidth: CARD_WIDTH,
   },
-  appIconBadge: {
+  appInfoIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: 7,
+  },
+  appInfoIconFallback: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -283,11 +399,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
   },
-  emptyText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 17,
+  emptyTitle: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 18,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 14,
     fontWeight: '400',
   },
 });

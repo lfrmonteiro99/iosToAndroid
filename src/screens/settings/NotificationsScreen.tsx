@@ -105,7 +105,7 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
               }
-              onPress={() => {}}
+              onPress={() => openSystemPanel('notification')}
             />
           </CupertinoListSection>
         </View>

@@ -47,27 +47,27 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Preferred Language"
               trailing={trailing(settings.language)}
-              onPress={() => {}}
+              onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Region"
               trailing={trailing(settings.region)}
-              onPress={() => {}}
+              onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Calendar"
               trailing={trailing('Gregorian')}
-              onPress={() => {}}
+              onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Temperature"
               trailing={trailing('°C')}
-              onPress={() => {}}
+              onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Measurement System"
               trailing={trailing('Metric')}
-              onPress={() => {}}
+              onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Number Format"
