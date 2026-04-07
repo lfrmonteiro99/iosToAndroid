@@ -91,14 +91,18 @@ export function NotificationCenterScreen() {
       try {
         const stored = await AsyncStorage.getItem(READ_IDS_KEY);
         if (stored) setReadIds(new Set(JSON.parse(stored)));
-      } catch {}
+      } catch {
+        console.log("erro");
+      }
     })();
   }, []);
 
   const persistReadIds = useCallback(async (ids: Set<string>) => {
     try {
       await AsyncStorage.setItem(READ_IDS_KEY, JSON.stringify([...ids]));
-    } catch {}
+    } catch {
+      console.log("erro");
+    }
   }, []);
 
   const loadNotifications = useCallback(async () => {
