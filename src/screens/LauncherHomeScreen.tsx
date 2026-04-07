@@ -83,11 +83,16 @@ const BUILT_IN_APPS: Record<string, string> = {
 };
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
-const VIRTUAL_ICON_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; bg: string }> = {
-  'com.iostoandroid.phone': { icon: 'call', bg: '#34C759' },
-  'com.iostoandroid.messages': { icon: 'chatbubble', bg: '#34C759' },
-  'com.iostoandroid.contacts': { icon: 'people', bg: '#FF9500' },
-  'com.iostoandroid.settings': { icon: 'settings', bg: '#8E8E93' },
+const VIRTUAL_ICON_CONFIG: Record<string, {
+  icon: keyof typeof Ionicons.glyphMap;
+  bg: string;
+  gradient?: [string, string];
+  iconSize?: number;
+}> = {
+  'com.iostoandroid.phone': { icon: 'call', bg: '#34C759', gradient: ['#65D36E', '#1FB940'], iconSize: 34 },
+  'com.iostoandroid.messages': { icon: 'chatbubble-sharp', bg: '#34C759', gradient: ['#65D36E', '#1FB940'], iconSize: 34 },
+  'com.iostoandroid.contacts': { icon: 'people', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
+  'com.iostoandroid.settings': { icon: 'settings-sharp', bg: '#8E8E93', gradient: ['#8E8E93', '#636366'], iconSize: 34 },
 };
 
 // ---------------------------------------------------------------------------
@@ -178,9 +183,20 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
     >
       <Animated.View style={animatedStyle}>
         {virtualCfg ? (
-          <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
-            <Ionicons name={virtualCfg.icon} size={28} color="#fff" />
-          </View>
+          virtualCfg.gradient ? (
+            <LinearGradient
+              colors={virtualCfg.gradient}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.appIconPlaceholder}
+            >
+              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
+            </LinearGradient>
+          ) : (
+            <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
+              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
+            </View>
+          )
         ) : app.icon ? (
           <Image
             source={{ uri: app.icon }}
@@ -509,7 +525,7 @@ export function LauncherHomeScreen() {
           runOnJS(navigateTo)('ControlCenter');
         }
       } else if (translationY > 60 && velocityY > 200 && absoluteY >= 350) {
-        runOnJS(navigateToWithParams)('AppLibrary', { searchFocused: true });
+        runOnJS(navigateTo)('SpotlightSearch');
       }
     });
 
@@ -986,7 +1002,7 @@ export function LauncherHomeScreen() {
       <PageDots total={totalPages} current={currentPage} />
       <Pressable
         style={styles.searchLabel}
-        onPress={isJiggling ? exitJiggle : () => navigation.navigate('AppLibrary')}
+        onPress={isJiggling ? exitJiggle : () => navigation.navigate('SpotlightSearch')}
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >

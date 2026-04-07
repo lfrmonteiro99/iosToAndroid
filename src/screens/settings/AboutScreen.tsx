@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import {
@@ -93,7 +93,7 @@ export function AboutScreen({ navigation }: { navigation: any }) {
           <CupertinoListSection footer="This app demonstrates iOS Cupertino-style UI components running natively on Android using React Native and Expo.">
             <CupertinoListTile
               title="Legal & Regulatory"
-              onPress={() => {}}
+              onPress={() => Alert.alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')}
             />
           </CupertinoListSection>
         </View>

@@ -301,7 +301,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 </View>
                 <View style={styles.musicControls}>
                   <Pressable
-                    onPress={() => {}}
+                    onPress={() => Alert.alert('Previous Track', 'Media controls require an active media session.')}
                     accessibilityLabel="Previous track"
                     style={styles.musicBtn}
                   >
@@ -319,7 +319,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     />
                   </Pressable>
                   <Pressable
-                    onPress={() => {}}
+                    onPress={() => Alert.alert('Next Track', 'Media controls require an active media session.')}
                     accessibilityLabel="Next track"
                     style={styles.musicBtn}
                   >

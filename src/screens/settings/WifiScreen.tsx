@@ -15,7 +15,7 @@ export function WifiScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { wifi, toggleWifi } = useDevice();
+  const { wifi, toggleWifi, openSystemPanel } = useDevice();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -69,7 +69,7 @@ export function WifiScreen({ navigation }: { navigation: any }) {
                       ) : undefined
                     }
                     showChevron={connected}
-                    onPress={() => {}}
+                    onPress={() => openSystemPanel('wifi')}
                   />
                 );
               })}
@@ -85,14 +85,14 @@ export function WifiScreen({ navigation }: { navigation: any }) {
                 trailing={
                   <Text style={[typography.body, { color: colors.secondaryLabel }]}>Ask</Text>
                 }
-                onPress={() => {}}
+                onPress={() => openSystemPanel('wifi')}
               />
               <CupertinoListTile
                 title="Auto-Join Hotspot"
                 trailing={
                   <Text style={[typography.body, { color: colors.secondaryLabel }]}>Never</Text>
                 }
-                onPress={() => {}}
+                onPress={() => openSystemPanel('wifi')}
               />
             </CupertinoListSection>
           </View>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, PermissionsAndroid } from 'react-native';
 import * as Battery from 'expo-battery';
 import * as Brightness from 'expo-brightness';
 import * as Network from 'expo-network';
@@ -311,10 +311,20 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [loadContacts]);
 
   const requestSmsPermission = useCallback(async () => {
-    // SMS permission is requested at runtime by the system when the native module accesses it
-    const messages = await loadMessages();
-    setState(prev => ({ ...prev, messages }));
-    return messages.length > 0;
+    if (Platform.OS !== 'android') return false;
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+      );
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        const messages = await loadMessages();
+        setState(prev => ({ ...prev, messages }));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }, [loadMessages]);
 
   const value = useMemo<DeviceContextValue>(() => ({
