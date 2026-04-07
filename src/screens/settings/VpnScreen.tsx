@@ -106,7 +106,7 @@ export function VpnScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Add VPN Configuration..."
               leading={{ name: 'add-circle-outline', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
-              onPress={() => {}}
+              onPress={() => openSystemPanel('vpn')}
             />
           </CupertinoListSection>
         </View>
