@@ -20,6 +20,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
+    /* Expected: native module unavailable on non-Android platforms */
     return null;
   }
 };

@@ -524,7 +524,7 @@ export function LauncherHomeScreen() {
         if (needsPermission) {
           await mod.requestAllPermissions();
         }
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('Permission check/request failed:', e); }
     })();
   }, []);
 
@@ -743,7 +743,7 @@ export function LauncherHomeScreen() {
 
   // Helper to call native module lazily
   const getLauncher = async () => {
-    try { return (await import('../../modules/launcher-module/src')).default; } catch { return null; }
+    try { return (await import('../../modules/launcher-module/src')).default; } catch { /* Expected: native module unavailable on non-Android platforms */ return null; }
   };
 
   // Action sheet options for the selected app

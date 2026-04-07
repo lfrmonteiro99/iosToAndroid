@@ -26,6 +26,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
+    /* Expected: native module unavailable on non-Android platforms */
     return null;
   }
 };
@@ -193,7 +194,8 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
         } else {
           Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
         }
-      } catch {
+      } catch (e) {
+        console.warn('sendSms failed:', e);
         Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
       } finally {
         setIsSending(false);

@@ -57,7 +57,7 @@ class LauncherModule : Module() {
                 val packageName = resolveInfo.activityInfo.packageName
                 val icon = try {
                     drawableToBase64(resolveInfo.loadIcon(pm))
-                } catch (e: Exception) { "" }
+                } catch (e: Exception) { android.util.Log.w("LauncherModule", "Icon load failed for ${resolveInfo.activityInfo.packageName}: ${e.message}"); "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
 
                 mapOf(
@@ -83,7 +83,7 @@ class LauncherModule : Module() {
                 val pm = context.packageManager
                 val icon = pm.getApplicationIcon(packageName)
                 drawableToBase64(icon)
-            } catch (e: Exception) { "" }
+            } catch (e: Exception) { android.util.Log.w("LauncherModule", "getAppIcon failed: ${e.message}"); "" }
         }
 
         AsyncFunction("isDefaultLauncher") {
@@ -99,7 +99,7 @@ class LauncherModule : Module() {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 true
-            } catch (e: Exception) { false }
+            } catch (e: Exception) { android.util.Log.w("LauncherModule", "uninstallApp failed: ${e.message}"); false }
         }
 
         AsyncFunction("openLauncherSettings") {
@@ -129,7 +129,7 @@ class LauncherModule : Module() {
                 // Don't add FLAG_ACTIVITY_NEW_TASK — we want the panel to appear over our activity
                 appContext.currentActivity?.startActivity(intent)
                 true
-            } catch (e: Exception) { false }
+            } catch (e: Exception) { android.util.Log.w("LauncherModule", "setWifiEnabled failed: ${e.message}"); false }
         }
 
         AsyncFunction("getWifiNetworks") {
@@ -164,7 +164,7 @@ class LauncherModule : Module() {
                             "type" to device.type
                         )
                     } ?: emptyList()
-                } catch (e: SecurityException) { emptyList<Map<String, Any>>() })
+                } catch (e: SecurityException) { android.util.Log.w("LauncherModule", "Bluetooth paired devices access denied: ${e.message}"); emptyList<Map<String, Any>>() })
             )
         }
 
@@ -181,7 +181,7 @@ class LauncherModule : Module() {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                     true
-                } catch (e2: Exception) { false }
+                } catch (e2: Exception) { android.util.Log.w("LauncherModule", "Bluetooth settings fallback failed: ${e2.message}"); false }
             }
         }
 
@@ -241,6 +241,7 @@ class LauncherModule : Module() {
                 }
                 messages
             } catch (e: Exception) {
+                android.util.Log.w("LauncherModule", "getRecentMessages failed: ${e.message}")
                 emptyList<Map<String, Any?>>()
             }
         }
@@ -279,7 +280,7 @@ class LauncherModule : Module() {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 true
-            } catch (e: Exception) { false }
+            } catch (e: Exception) { android.util.Log.w("LauncherModule", "openSystemSettings failed: ${e.message}"); false }
         }
 
         // ── Network Info ─────────────────────────────────────────────────
@@ -305,7 +306,7 @@ class LauncherModule : Module() {
                 cameraManager.setTorchMode(cameraId, enabled)
                 flashlightState = enabled
                 true
-            } catch (e: Exception) { false }
+            } catch (e: Exception) { android.util.Log.w("LauncherModule", "setFlashlight failed: ${e.message}"); false }
         }
 
         AsyncFunction("isFlashlightOn") {
@@ -366,6 +367,7 @@ class LauncherModule : Module() {
                 }
                 calls
             } catch (e: Exception) {
+                android.util.Log.w("LauncherModule", "getCallLog failed: ${e.message}")
                 emptyList<Map<String, Any?>>()
             }
         }
@@ -378,7 +380,7 @@ class LauncherModule : Module() {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 true
-            } catch (e: Exception) { false }
+            } catch (e: Exception) { android.util.Log.w("LauncherModule", "makeCall failed: ${e.message}"); false }
         }
 
         // ── Notifications ────────────────────────────────────────────────
@@ -411,6 +413,7 @@ class LauncherModule : Module() {
                 smsManager.sendTextMessage(address, null, body, null, null)
                 true
             } catch (e: Exception) {
+                android.util.Log.w("LauncherModule", "sendSms failed: ${e.message}")
                 false
             }
         }
@@ -450,6 +453,7 @@ class LauncherModule : Module() {
                 }
                 events
             } catch (e: Exception) {
+                android.util.Log.w("LauncherModule", "getCalendarEvents failed: ${e.message}")
                 emptyList<Map<String, Any?>>()
             }
         }
@@ -478,6 +482,7 @@ class LauncherModule : Module() {
                     mapOf("title" to "", "artist" to "", "album" to "", "isPlaying" to false, "packageName" to "")
                 }
             } catch (e: Exception) {
+                android.util.Log.w("LauncherModule", "getNowPlaying failed: ${e.message}")
                 mapOf("title" to "", "artist" to "", "album" to "", "isPlaying" to false, "packageName" to "")
             }
         }
@@ -541,7 +546,7 @@ class LauncherModule : Module() {
                     return c.getString(0)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("LauncherModule", "resolveContactName failed: ${e.message}") }
         return null
     }
 

@@ -14,6 +14,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
+    /* Expected: native module unavailable on non-Android platforms */
     return null;
   }
 };
@@ -143,8 +144,8 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
           ]);
           setFlashlightOn(!!flashState);
           setNowPlaying(np);
-        } catch {
-          // ignore
+        } catch (e) {
+          console.warn('Failed to load control center state:', e);
         }
       }
     })();
@@ -158,8 +159,8 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
       try {
         const success = await mod.setFlashlight(newState);
         if (success) setFlashlightOn(newState);
-      } catch {
-        // ignore
+      } catch (e) {
+        console.warn('Failed to toggle flashlight:', e);
       }
     }
   };

@@ -53,7 +53,7 @@ export function LauncherSettingsScreen() {
           AsyncStorage.getItem('@iostoandroid/apps_layout').then((raw) => {
             let homeApps: unknown[] = [];
             if (raw) {
-              try { homeApps = JSON.parse(raw).homeApps || []; } catch { /* ignore */ }
+              try { homeApps = JSON.parse(raw).homeApps || []; } catch { /* Expected: stored layout JSON may be corrupted */ }
             }
             AsyncStorage.setItem('@iostoandroid/apps_layout', JSON.stringify({
               dockApps: DEFAULT_DOCK,

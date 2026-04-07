@@ -108,7 +108,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     if (Platform.OS !== 'android') return null;
     try {
       return (await import('../../modules/launcher-module/src')).default;
-    } catch { return null; }
+    } catch { /* Expected: native module unavailable on non-Android platforms */ return null; }
   }, []);
 
   const loadBattery = useCallback(async () => {
@@ -119,13 +119,13 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         level: Math.round(level * 100) / 100,
         isCharging: batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL,
       };
-    } catch { return DEFAULT_STATE.battery; }
+    } catch { /* Expected: battery API may be unavailable in some environments */ return DEFAULT_STATE.battery; }
   }, []);
 
   const loadBrightness = useCallback(async () => {
     try {
       return await Brightness.getBrightnessAsync();
-    } catch { return 0.5; }
+    } catch { /* Expected: brightness API may require permission or be unavailable */ return 0.5; }
   }, []);
 
   const loadNetwork = useCallback(async () => {
@@ -136,7 +136,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         isWifi: state.type === Network.NetworkStateType.WIFI,
         isCellular: state.type === Network.NetworkStateType.CELLULAR,
       };
-    } catch { return DEFAULT_STATE.network; }
+    } catch { /* Expected: network state API may be unavailable */ return DEFAULT_STATE.network; }
   }, []);
 
   const loadWifi = useCallback(async () => {
@@ -145,7 +145,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     try {
       const [info, networks] = await Promise.all([
         mod.getWifiInfo(),
-        mod.getWifiNetworks().catch(() => []),
+        mod.getWifiNetworks().catch(() => []), // Expected: scan results may be unavailable without location permission
       ]);
       return {
         enabled: info.enabled,
@@ -156,7 +156,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           ssid: n.ssid, level: n.level, isSecure: n.isSecure,
         })),
       };
-    } catch { return DEFAULT_STATE.wifi; }
+    } catch { /* Expected: Wi-Fi info requires location permission on Android */ return DEFAULT_STATE.wifi; }
   }, [getLauncherModule]);
 
   const loadBluetooth = useCallback(async () => {
@@ -171,7 +171,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           name: d.name, address: d.address,
         })),
       };
-    } catch { return DEFAULT_STATE.bluetooth; }
+    } catch { /* Expected: Bluetooth info requires permission that may not be granted */ return DEFAULT_STATE.bluetooth; }
   }, [getLauncherModule]);
 
   const loadStorage = useCallback(async () => {
@@ -185,7 +185,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         freeGB: info.freeGB,
         usedPercentage: info.usedPercentage,
       };
-    } catch { return DEFAULT_STATE.storage; }
+    } catch { /* Expected: storage info API may be unavailable */ return DEFAULT_STATE.storage; }
   }, [getLauncherModule]);
 
   const loadMessages = useCallback(async () => {
@@ -193,7 +193,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     if (!mod) return [];
     try {
       return await mod.getRecentMessages(50);
-    } catch { return []; }
+    } catch (e) { console.warn('Failed to load messages:', e); return []; }
   }, [getLauncherModule]);
 
   const loadContacts = useCallback(async () => {
@@ -220,7 +220,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         company: c.company || undefined,
         imageUri: c.image?.uri,
       }));
-    } catch { return []; }
+    } catch (e) { console.warn('Failed to load contacts:', e); return []; }
   }, []);
 
   const loadWeather = useCallback(async (): Promise<DeviceWeather> => {
@@ -235,7 +235,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         icon: mapWeatherIcon(current.weatherCode),
         city: area.areaName[0].value,
       };
-    } catch {
+    } catch (e) {
+      console.warn('Failed to load weather:', e);
       return { temp: 22, condition: 'Partly Cloudy', icon: 'partly-sunny', city: '' };
     }
   }, []);
@@ -282,7 +283,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     try {
       await Brightness.setBrightnessAsync(value);
       setState(prev => ({ ...prev, brightness: value }));
-    } catch { /* needs permission */ }
+    } catch { /* Expected: brightness setting requires WRITE_SETTINGS permission */ }
   }, []);
 
   const toggleWifi = useCallback(async () => {

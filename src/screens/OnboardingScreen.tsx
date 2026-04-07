@@ -17,6 +17,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
+    /* Expected: native module unavailable on non-Android platforms */
     return null;
   }
 };
@@ -70,7 +71,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     if (mod) {
       try {
         await mod.requestAllPermissions();
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('Permission request failed:', e); }
     }
     goToPage(2);
   }, [goToPage]);
@@ -80,7 +81,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     if (mod) {
       try {
         await (mod as any).openLauncherSettings?.();
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('Open launcher settings failed:', e); }
     }
     goToPage(3);
   }, [goToPage]);

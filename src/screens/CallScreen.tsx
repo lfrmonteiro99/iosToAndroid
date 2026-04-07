@@ -27,6 +27,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
+    /* Expected: native module unavailable on non-Android platforms */
     return null;
   }
 };
@@ -83,7 +84,7 @@ export function CallScreen({
       if (mod && number) {
         try {
           await mod.makeCall(number);
-        } catch { /* native call failed — screen still shows */ }
+        } catch (e) { console.warn('Native call failed:', e); /* screen still shows */ }
       }
     })();
     // Simulate "connected" after a few seconds for UI demo purposes

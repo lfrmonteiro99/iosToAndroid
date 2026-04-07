@@ -65,7 +65,7 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setContacts(JSON.parse(stored)); } catch { /* ignore */ }
+        try { setContacts(JSON.parse(stored)); } catch { /* Expected: stored JSON may be corrupted or from an older schema */ }
       }
       setIsReady(true);
     });

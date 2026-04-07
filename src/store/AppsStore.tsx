@@ -95,7 +95,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
           const savedDock = parsed.dockApps || [];
           const hasVirtualApps = DEFAULT_DOCK.some((pkg: string) => savedDock.includes(pkg));
           dockApps = hasVirtualApps ? savedDock : DEFAULT_DOCK;
-        } catch { /* ignore */ }
+        } catch { /* Expected: stored layout JSON may be corrupted or from an older schema */ }
       }
 
       // Ensure our built-in apps are always in the dock

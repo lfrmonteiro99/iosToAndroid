@@ -180,7 +180,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           setTimeout(() => setAuthFailed(false), 2000);
         }
       }
-    } catch { /* biometrics not available */ }
+    } catch { /* Expected: biometrics may not be available on all devices */ }
   };
 
   useEffect(() => {
