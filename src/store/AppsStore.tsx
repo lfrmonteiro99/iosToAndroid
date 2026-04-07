@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
+const RECENTS_KEY = '@iostoandroid/recent_apps';
+const MAX_RECENTS = 8;
 
 export interface InstalledApp {
   name: string;
@@ -28,6 +30,7 @@ interface AppsContextValue {
   homeApps: HomeApp[];
   dockApps: InstalledApp[];
   nonDockApps: InstalledApp[];
+  recentPackages: string[];
   isLoading: boolean;
   refreshApps: () => Promise<void>;
   launchApp: (packageName: string) => Promise<void>;
@@ -65,6 +68,25 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     isLoading: true,
   });
   const [isDefault, setIsDefault] = useState(false);
+  const [recentPackages, setRecentPackages] = useState<string[]>([]);
+
+  // Load recent apps from storage
+  useEffect(() => {
+    AsyncStorage.getItem(RECENTS_KEY).then(raw => {
+      if (raw) {
+        try { setRecentPackages(JSON.parse(raw)); } catch { /* ignore */ }
+      }
+    });
+  }, []);
+
+  const addToRecents = useCallback(async (packageName: string) => {
+    setRecentPackages(prev => {
+      const filtered = prev.filter(p => p !== packageName);
+      const next = [packageName, ...filtered].slice(0, MAX_RECENTS);
+      AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const loadApps = useCallback(async () => {
     if (Platform.OS !== 'android') {
@@ -135,10 +157,11 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     try {
       const LauncherModule = (await import('../../modules/launcher-module/src')).default;
       await LauncherModule.launchApp(packageName);
+      addToRecents(packageName);
     } catch (e) {
       console.warn('Failed to launch app:', e);
     }
-  }, []);
+  }, [addToRecents]);
 
   const addToHome = useCallback((packageName: string) => {
     setState(prev => {
@@ -203,6 +226,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     homeApps: state.homeApps,
     dockApps,
     nonDockApps,
+    recentPackages,
     isLoading: state.isLoading,
     refreshApps: loadApps,
     launchApp,
@@ -212,7 +236,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     removeFromDock,
     isDefaultLauncher: isDefault,
     openLauncherSettings,
-  }), [state, dockApps, nonDockApps, isDefault, loadApps, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, openLauncherSettings]);
+  }), [state, dockApps, nonDockApps, recentPackages, isDefault, loadApps, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, openLauncherSettings]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }
