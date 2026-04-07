@@ -17,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoSearchBar, CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow } from '../components';
+import { CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow } from '../components';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -135,12 +135,10 @@ const ConversationRow = React.memo(function ConversationRow({
 
         {/* Avatar */}
         <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-          {contact?.imageUri ? null : (
-            contact ? (
-              <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
-            ) : (
-              <Ionicons name="call-outline" size={22} color="#FFFFFF" />
-            )
+          {contact ? (
+            <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
+          ) : (
+            <Ionicons name="person" size={22} color="#FFFFFF" />
           )}
         </View>
 
@@ -179,7 +177,7 @@ const ConversationRow = React.memo(function ConversationRow({
             style={[
               typography.subhead,
               styles.previewText,
-              { color: hasUnread ? colors.label : colors.secondaryLabel },
+              { color: colors.secondaryLabel },
             ]}
             numberOfLines={2}
           >
@@ -208,9 +206,9 @@ export function MessagesScreen() {
   const device = useDevice();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [deletedAddresses, setDeletedAddresses] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
 
   useEffect(() => {
