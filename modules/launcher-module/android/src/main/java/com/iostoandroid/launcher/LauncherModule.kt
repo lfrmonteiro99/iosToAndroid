@@ -397,6 +397,14 @@ class LauncherModule : Module() {
             flat != null && flat.contains(cn.flattenToString())
         }
 
+        AsyncFunction("clearNotification") { key: String ->
+            NotificationService.dismissNotification(key)
+        }
+
+        AsyncFunction("clearAllNotifications") {
+            NotificationService.dismissAllNotifications()
+        }
+
         AsyncFunction("openNotificationAccessSettings") {
             val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)

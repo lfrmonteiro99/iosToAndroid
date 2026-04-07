@@ -5,6 +5,7 @@ import android.service.notification.StatusBarNotification
 
 data class NotificationData(
     val id: String,
+    val key: String,
     val packageName: String,
     val title: String,
     val text: String,
@@ -13,6 +14,7 @@ data class NotificationData(
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "id" to id,
+        "key" to key,
         "packageName" to packageName,
         "title" to title,
         "text" to text,
@@ -29,6 +31,27 @@ class NotificationService : NotificationListenerService() {
         fun getNotificationMaps(): List<Map<String, Any?>> {
             return notifications.map { it.toMap() }
         }
+
+        fun dismissNotification(key: String): Boolean {
+            val svc = instance ?: return false
+            try {
+                svc.cancelNotification(key)
+                return true
+            } catch (e: Exception) {
+                return false
+            }
+        }
+
+        fun dismissAllNotifications(): Boolean {
+            val svc = instance ?: return false
+            try {
+                svc.cancelAllNotifications()
+                notifications.clear()
+                return true
+            } catch (e: Exception) {
+                return false
+            }
+        }
     }
 
     override fun onCreate() {
@@ -40,6 +63,7 @@ class NotificationService : NotificationListenerService() {
         val extras = sbn.notification.extras
         val data = NotificationData(
             id = sbn.id.toString(),
+            key = sbn.key,
             packageName = sbn.packageName,
             title = extras.getCharSequence("android.title")?.toString() ?: "",
             text = extras.getCharSequence("android.text")?.toString() ?: "",
