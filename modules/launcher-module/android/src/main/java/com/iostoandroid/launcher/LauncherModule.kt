@@ -265,6 +265,7 @@ class LauncherModule : Module() {
                 "notification" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
                 "privacy" -> Settings.ACTION_PRIVACY_SETTINGS
                 "security" -> Settings.ACTION_SECURITY_SETTINGS
+                "cast" -> "android.settings.CAST_SETTINGS"
                 "hotspot" -> "android.settings.TETHER_SETTINGS"
                 "cellular" -> Settings.ACTION_NETWORK_OPERATOR_SETTINGS
                 "appinfo" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
