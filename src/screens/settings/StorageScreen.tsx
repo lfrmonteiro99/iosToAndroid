@@ -44,7 +44,7 @@ export function StorageScreen({ navigation }: { navigation: any }) {
               style={{
                 flex: usedFraction,
                 height: 24,
-                backgroundColor: '#007AFF',
+                backgroundColor: colors.accent,
               }}
             />
             <View
@@ -68,7 +68,7 @@ export function StorageScreen({ navigation }: { navigation: any }) {
               title="Used"
               trailing={
                 <View style={styles.trailingRow}>
-                  <View style={[styles.dot, { backgroundColor: '#007AFF' }]} />
+                  <View style={[styles.dot, { backgroundColor: colors.accent }]} />
                   <Text style={[typography.body, { color: colors.secondaryLabel }]}>
                     {storage.usedGB} GB
                   </Text>

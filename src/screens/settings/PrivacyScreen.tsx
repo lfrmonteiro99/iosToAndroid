@@ -51,7 +51,7 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
           <CupertinoListSection>
             <CupertinoListTile
               title="Location Services"
-              leading={{ name: 'location', color: '#FFFFFF', backgroundColor: '#007AFF' }}
+              leading={{ name: 'location', color: '#FFFFFF', backgroundColor: colors.accent }}
               trailing={
                 <CupertinoSwitch
                   value={settings.locationServices}

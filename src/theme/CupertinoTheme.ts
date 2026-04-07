@@ -13,6 +13,15 @@ export const SystemColors = {
     systemTeal: '#5AC8FA',
     systemIndigo: '#5856D6',
 
+    // Semantic colors
+    error: '#FF3B30',
+    warning: '#FF9500',
+    success: '#34C759',
+    info: '#007AFF',
+
+    // Accent
+    accent: '#007AFF',
+
     // Grays
     systemGray: '#8E8E93',
     systemGray2: '#AEAEB2',
@@ -57,6 +66,15 @@ export const SystemColors = {
     systemPink: '#FF375F',
     systemTeal: '#64D2FF',
     systemIndigo: '#5E5CE6',
+
+    // Semantic colors
+    error: '#FF453A',
+    warning: '#FF9F0A',
+    success: '#30D158',
+    info: '#0A84FF',
+
+    // Accent
+    accent: '#0A84FF',
 
     // Grays
     systemGray: '#8E8E93',

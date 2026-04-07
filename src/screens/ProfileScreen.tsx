@@ -165,7 +165,7 @@ export function ProfileScreen() {
           <CupertinoListSection header="Account">
             <CupertinoListTile
               title="Apple ID"
-              leading={{ name: 'person-circle', color: '#FFF', backgroundColor: '#007AFF' }}
+              leading={{ name: 'person-circle', color: '#FFF', backgroundColor: colors.accent }}
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
                   {profile.appleId}

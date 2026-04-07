@@ -47,8 +47,8 @@ export function SettingsScreen() {
       section: 'connectivity',
       items: [
         { key: 'airplane', title: 'Airplane Mode', icon: 'airplane', iconBg: '#FF9500', type: 'navigate' },
-        { key: 'wifi', title: 'Wi-Fi', icon: 'wifi', iconBg: '#007AFF', type: 'navigate', route: 'WiFi' },
-        { key: 'bluetooth', title: 'Bluetooth', icon: 'bluetooth', iconBg: '#007AFF', type: 'navigate', route: 'Bluetooth' },
+        { key: 'wifi', title: 'Wi-Fi', icon: 'wifi', iconBg: colors.accent, type: 'navigate', route: 'WiFi' },
+        { key: 'bluetooth', title: 'Bluetooth', icon: 'bluetooth', iconBg: colors.accent, type: 'navigate', route: 'Bluetooth' },
         { key: 'cellular', title: 'Cellular', icon: 'cellular', iconBg: '#34C759', type: 'navigate', route: 'Cellular' },
         { key: 'hotspot', title: 'Personal Hotspot', icon: 'link', iconBg: '#34C759', type: 'navigate', route: 'Hotspot' },
       ],
@@ -66,16 +66,16 @@ export function SettingsScreen() {
       section: 'general',
       items: [
         { key: 'general', title: 'General', icon: 'settings', iconBg: '#8E8E93', type: 'navigate', route: 'General' },
-        { key: 'display', title: 'Display & Brightness', icon: 'sunny', iconBg: '#007AFF', type: 'navigate', route: 'DisplayBrightness' },
+        { key: 'display', title: 'Display & Brightness', icon: 'sunny', iconBg: colors.accent, type: 'navigate', route: 'DisplayBrightness' },
         { key: 'wallpaper', title: 'Wallpaper', icon: 'image', iconBg: '#5AC8FA', type: 'navigate', route: 'Wallpaper' },
-        { key: 'accessibility', title: 'Accessibility', icon: 'accessibility', iconBg: '#007AFF', type: 'navigate', route: 'Accessibility' },
+        { key: 'accessibility', title: 'Accessibility', icon: 'accessibility', iconBg: colors.accent, type: 'navigate', route: 'Accessibility' },
       ],
     },
     {
       section: 'extra',
       items: [
         { key: 'battery', title: 'Battery', icon: 'battery-half', iconBg: '#34C759', type: 'navigate', route: 'Battery' },
-        { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: '#007AFF', type: 'navigate', route: 'Privacy' },
+        { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, type: 'navigate', route: 'Privacy' },
       ],
     },
   ], []);

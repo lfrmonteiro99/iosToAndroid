@@ -178,7 +178,7 @@ export function LauncherSettingsScreen() {
         />
         <CupertinoListTile
           title="App Icon Size"
-          leading={{ name: 'apps', color: '#fff', backgroundColor: '#007AFF' }}
+          leading={{ name: 'apps', color: '#fff', backgroundColor: colors.accent }}
           trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>Default</Text>}
           showChevron={false}
           isLast
