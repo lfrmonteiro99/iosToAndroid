@@ -141,9 +141,20 @@ export function CalculatorScreen() {
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [resetOnNext, setResetOnNext] = useState(false);
+  const [memory, setMemory] = useState(0);
+  const [history, setHistory] = useState<string[]>([]);
+  const [isError, setIsError] = useState(false);
 
   const handleNumber = (num: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isError) {
+      setIsError(false);
+      setDisplay(num);
+      setPreviousValue(null);
+      setOperation(null);
+      setResetOnNext(false);
+      return;
+    }
     if (resetOnNext) {
       setDisplay(num);
       setResetOnNext(false);
@@ -152,23 +163,36 @@ export function CalculatorScreen() {
     setDisplay(prev => (prev === '0' ? num : prev + num));
   };
 
-  const compute = (prev: number, op: string, current: number): number => {
+  const compute = (prev: number, op: string, current: number): number | 'Error' => {
     switch (op) {
       case '+': return prev + current;
       case '-': return prev - current;
       case '×': return prev * current;
-      case '÷': return current !== 0 ? prev / current : 0;
+      case '÷': return current !== 0 ? prev / current : 'Error';
       default: return current;
     }
   };
 
   const handleOperator = (op: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isError) return;
     const current = parseFloat(display);
 
     if (op === '=') {
       if (previousValue === null || !operation) return;
       const result = compute(previousValue, operation, current);
+      if (result === 'Error') {
+        const expr = `${formatNumber(previousValue)} ${operation} ${formatNumber(current)}`;
+        setHistory(prev => [...prev.slice(-9), `${expr} = Error`]);
+        setDisplay('Error');
+        setIsError(true);
+        setPreviousValue(null);
+        setOperation(null);
+        setResetOnNext(true);
+        return;
+      }
+      const expr = `${formatNumber(previousValue)} ${operation} ${formatNumber(current)}`;
+      setHistory(prev => [...prev.slice(-9), `${expr} = ${formatNumber(result)}`]);
       setDisplay(formatNumber(result));
       setPreviousValue(null);
       setOperation(null);
@@ -179,6 +203,14 @@ export function CalculatorScreen() {
     // Chain: if we already have a pending operation and a new value was entered, resolve first
     if (previousValue !== null && operation && !resetOnNext) {
       const result = compute(previousValue, operation, current);
+      if (result === 'Error') {
+        setDisplay('Error');
+        setIsError(true);
+        setPreviousValue(null);
+        setOperation(null);
+        setResetOnNext(true);
+        return;
+      }
       setDisplay(formatNumber(result));
       setPreviousValue(result);
     } else {
@@ -195,11 +227,42 @@ export function CalculatorScreen() {
     setPreviousValue(null);
     setOperation(null);
     setResetOnNext(false);
+    setIsError(false);
+  };
+
+  const handleMemoryClear = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMemory(0);
+  };
+
+  const handleMemoryRecall = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDisplay(formatNumber(memory));
+    setResetOnNext(true);
+  };
+
+  const handleMemoryAdd = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isError) return;
+    setMemory(prev => prev + parseFloat(display));
+  };
+
+  const handleMemorySubtract = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isError) return;
+    setMemory(prev => prev - parseFloat(display));
   };
 
   const handlePercent = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setDisplay(String(parseFloat(display) / 100));
+    if (isError) return;
+    const current = parseFloat(display);
+    if (previousValue !== null && operation) {
+      // Contextual: percentage of first operand (e.g. 100 + 10% => 100 + 10)
+      setDisplay(String(previousValue * (current / 100)));
+    } else {
+      setDisplay(String(current / 100));
+    }
   };
 
   const handleToggleSign = () => {
@@ -247,6 +310,12 @@ export function CalculatorScreen() {
 
       {/* Display */}
       <View style={styles.displayArea}>
+        {memory !== 0 && (
+          <Text style={styles.memoryIndicator}>M</Text>
+        )}
+        {history.length > 0 && (
+          <Text style={styles.historyText}>{history[history.length - 1]}</Text>
+        )}
         <Text
           style={[styles.displayText, { fontSize: displayFontSize }]}
           numberOfLines={1}
@@ -254,6 +323,31 @@ export function CalculatorScreen() {
         >
           {display}
         </Text>
+      </View>
+
+      {/* Memory buttons */}
+      <View style={styles.memoryRow}>
+        {(['MC', 'MR', 'M+', 'M-'] as const).map((label) => (
+          <Pressable
+            key={label}
+            onPress={() => {
+              switch (label) {
+                case 'MC': handleMemoryClear(); break;
+                case 'MR': handleMemoryRecall(); break;
+                case 'M+': handleMemoryAdd(); break;
+                case 'M-': handleMemorySubtract(); break;
+              }
+            }}
+            accessibilityLabel={`memory ${label.toLowerCase()}`}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.memoryButton,
+              { opacity: pressed ? 0.5 : 1 },
+            ]}
+          >
+            <Text style={styles.memoryButtonText}>{label}</Text>
+          </Pressable>
+        ))}
       </View>
 
       {/* Button grid */}
@@ -295,10 +389,45 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
 
+  memoryIndicator: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+    alignSelf: 'flex-start',
+    marginBottom: 2,
+  },
+
+  historyText: {
+    color: '#888888',
+    fontSize: 16,
+    fontWeight: '300',
+    marginBottom: 4,
+  },
+
   displayText: {
     color: '#FFFFFF',
     fontWeight: '200',
     letterSpacing: -2,
+  },
+
+  memoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    paddingHorizontal: GAP,
+    paddingBottom: 8,
+  },
+
+  memoryButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#1C1C1E',
+  },
+
+  memoryButtonText: {
+    color: '#FF9F0A',
+    fontSize: 16,
+    fontWeight: '500',
   },
 
   grid: {
