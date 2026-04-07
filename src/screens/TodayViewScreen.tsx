@@ -152,8 +152,8 @@ function WeatherWidget({ temp, condition, icon, city }: { temp: number; conditio
         {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none' }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
-        <Text style={styles.weatherTemp}>{temp}°C</Text>
-        <Text style={styles.weatherDesc}>{condition || '—'}</Text>
+        <Text style={styles.weatherTemp}>{condition === 'Unavailable' ? '\u2014' : `${temp}°C`}</Text>
+        <Text style={styles.weatherDesc}>{condition || '\u2014'}</Text>
       </View>
     </WidgetCard>
   );
@@ -170,8 +170,8 @@ function ScreenTimeWidget() {
         <Ionicons name="time-outline" size={22} color="#BF5AF2" />
         <Text style={styles.widgetTitle}>Screen Time</Text>
       </View>
-      <Text style={[styles.widgetBigNumber, { color: '#BF5AF2' }]}>2h 34m</Text>
-      <Text style={styles.widgetSubtext}>today · 18% more than yesterday</Text>
+      <Text style={[styles.widgetBigNumber, { color: '#BF5AF2' }]}>{'\u2014'}</Text>
+      <Text style={styles.widgetSubtext}>No data</Text>
     </WidgetCard>
   );
 }

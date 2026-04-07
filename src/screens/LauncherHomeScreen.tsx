@@ -66,7 +66,7 @@ function darkenHex(hex: string, amount: number): string {
 }
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const COLS = 4;
+const COLS = Math.min(4, Math.floor(SCREEN_WIDTH / 90));
 const ROWS = 6;
 const APPS_PER_PAGE = COLS * ROWS; // 24
 const ICON_SIZE = 60;
