@@ -140,6 +140,8 @@ interface LauncherModuleType {
 
 const isAndroid = Platform.OS === 'android';
 
+const nativeModule = isAndroid ? requireNativeModule('LauncherModule') : null;
+
 const stub: LauncherModuleType = {
   getInstalledApps: async () => [],
   launchApp: async () => false,
@@ -170,9 +172,122 @@ const stub: LauncherModuleType = {
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
 };
 
-const LauncherModule: LauncherModuleType = isAndroid
-  ? requireNativeModule('LauncherModule')
-  : stub;
+function createBridgedModule(): LauncherModuleType {
+  if (!nativeModule) return stub;
+
+  return {
+    getInstalledApps: async () => {
+      try { return await nativeModule.getInstalledApps(); }
+      catch (e) { console.warn('LauncherModule.getInstalledApps failed:', e); return []; }
+    },
+    launchApp: async (packageName: string) => {
+      try { return await nativeModule.launchApp(packageName); }
+      catch (e) { console.warn('LauncherModule.launchApp failed:', e); return false; }
+    },
+    getAppIcon: async (packageName: string) => {
+      try { return await nativeModule.getAppIcon(packageName); }
+      catch (e) { console.warn('LauncherModule.getAppIcon failed:', e); return ''; }
+    },
+    isDefaultLauncher: async () => {
+      try { return await nativeModule.isDefaultLauncher(); }
+      catch (e) { console.warn('LauncherModule.isDefaultLauncher failed:', e); return false; }
+    },
+    openLauncherSettings: async () => {
+      try { return await nativeModule.openLauncherSettings(); }
+      catch (e) { console.warn('LauncherModule.openLauncherSettings failed:', e); return false; }
+    },
+    uninstallApp: async (packageName: string) => {
+      try { return await nativeModule.uninstallApp(packageName); }
+      catch (e) { console.warn('LauncherModule.uninstallApp failed:', e); return false; }
+    },
+    getWifiInfo: async () => {
+      try { return await nativeModule.getWifiInfo(); }
+      catch (e) { console.warn('LauncherModule.getWifiInfo failed:', e); return { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }; }
+    },
+    setWifiEnabled: async (enabled: boolean) => {
+      try { return await nativeModule.setWifiEnabled(enabled); }
+      catch (e) { console.warn('LauncherModule.setWifiEnabled failed:', e); return false; }
+    },
+    getWifiNetworks: async () => {
+      try { return await nativeModule.getWifiNetworks(); }
+      catch (e) { console.warn('LauncherModule.getWifiNetworks failed:', e); return []; }
+    },
+    getBluetoothInfo: async () => {
+      try { return await nativeModule.getBluetoothInfo(); }
+      catch (e) { console.warn('LauncherModule.getBluetoothInfo failed:', e); return { enabled: false, name: '', address: '', pairedDevices: [] }; }
+    },
+    setBluetoothEnabled: async (enabled: boolean) => {
+      try { return await nativeModule.setBluetoothEnabled(enabled); }
+      catch (e) { console.warn('LauncherModule.setBluetoothEnabled failed:', e); return false; }
+    },
+    getStorageInfo: async () => {
+      try { return await nativeModule.getStorageInfo(); }
+      catch (e) { console.warn('LauncherModule.getStorageInfo failed:', e); return { totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }; }
+    },
+    getRecentMessages: async (limit: number) => {
+      try { return await nativeModule.getRecentMessages(limit); }
+      catch (e) { console.warn('LauncherModule.getRecentMessages failed:', e); return []; }
+    },
+    openSystemSettings: async (panel: string) => {
+      try { return await nativeModule.openSystemSettings(panel); }
+      catch (e) { console.warn('LauncherModule.openSystemSettings failed:', e); return false; }
+    },
+    getNetworkInfo: async () => {
+      try { return await nativeModule.getNetworkInfo(); }
+      catch (e) { console.warn('LauncherModule.getNetworkInfo failed:', e); return { isConnected: false, isWifi: false, isCellular: false, isVpn: false }; }
+    },
+    setFlashlight: async (enabled: boolean) => {
+      try { return await nativeModule.setFlashlight(enabled); }
+      catch (e) { console.warn('LauncherModule.setFlashlight failed:', e); return false; }
+    },
+    isFlashlightOn: async () => {
+      try { return await nativeModule.isFlashlightOn(); }
+      catch (e) { console.warn('LauncherModule.isFlashlightOn failed:', e); return false; }
+    },
+    getCallLog: async (limit: number) => {
+      try { return await nativeModule.getCallLog(limit); }
+      catch (e) { console.warn('LauncherModule.getCallLog failed:', e); return []; }
+    },
+    makeCall: async (number: string) => {
+      try { return await nativeModule.makeCall(number); }
+      catch (e) { console.warn('LauncherModule.makeCall failed:', e); return false; }
+    },
+    getNotifications: async () => {
+      try { return await nativeModule.getNotifications(); }
+      catch (e) { console.warn('LauncherModule.getNotifications failed:', e); return []; }
+    },
+    isNotificationAccessGranted: async () => {
+      try { return await nativeModule.isNotificationAccessGranted(); }
+      catch (e) { console.warn('LauncherModule.isNotificationAccessGranted failed:', e); return false; }
+    },
+    openNotificationAccessSettings: async () => {
+      try { return await nativeModule.openNotificationAccessSettings(); }
+      catch (e) { console.warn('LauncherModule.openNotificationAccessSettings failed:', e); return false; }
+    },
+    sendSms: async (address: string, body: string) => {
+      try { return await nativeModule.sendSms(address, body); }
+      catch (e) { console.warn('LauncherModule.sendSms failed:', e); return false; }
+    },
+    requestAllPermissions: async () => {
+      try { return await nativeModule.requestAllPermissions(); }
+      catch (e) { console.warn('LauncherModule.requestAllPermissions failed:', e); return false; }
+    },
+    checkPermissions: async () => {
+      try { return await nativeModule.checkPermissions(); }
+      catch (e) { console.warn('LauncherModule.checkPermissions failed:', e); return {}; }
+    },
+    getCalendarEvents: async (daysAhead: number) => {
+      try { return await nativeModule.getCalendarEvents(daysAhead); }
+      catch (e) { console.warn('LauncherModule.getCalendarEvents failed:', e); return []; }
+    },
+    getNowPlaying: async () => {
+      try { return await nativeModule.getNowPlaying(); }
+      catch (e) { console.warn('LauncherModule.getNowPlaying failed:', e); return { title: '', artist: '', album: '', isPlaying: false, packageName: '' }; }
+    },
+  };
+}
+
+const LauncherModule: LauncherModuleType = createBridgedModule();
 
 export { LauncherModuleType };
 export default LauncherModule;
