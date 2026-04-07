@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -35,6 +36,61 @@ const getLauncher = async () => {
 function findContactByPhone(phone: string, contacts: DeviceContact[]): DeviceContact | undefined {
   const digits = phone.replace(/\D/g, '').slice(-10);
   return contacts.find((c) => c.phone.replace(/\D/g, '').slice(-10) === digits);
+}
+
+// ─── Date grouping ──────────────────────────────────────────────────────────
+
+interface DateSeparatorItem {
+  type: 'separator';
+  id: string;
+  label: string;
+}
+
+type ListItem = DeviceSms | DateSeparatorItem;
+
+function isSeparator(item: ListItem): item is DateSeparatorItem {
+  return (item as DateSeparatorItem).type === 'separator';
+}
+
+function formatDateLabel(date: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[date.getMonth()]} ${date.getDate()}`;
+}
+
+function insertDateSeparators(messages: DeviceSms[]): ListItem[] {
+  if (messages.length === 0) return [];
+  // Messages are sorted newest-first (inverted list), so iterate in order
+  const result: ListItem[] = [];
+  let lastDateKey = '';
+
+  // Walk from oldest to newest so separators precede their group
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const timestamp = (msg as DeviceSms & { date?: number }).date ?? 0;
+    const msgDate = new Date(timestamp);
+    const dateKey = `${msgDate.getFullYear()}-${msgDate.getMonth()}-${msgDate.getDate()}`;
+
+    if (dateKey !== lastDateKey) {
+      result.push({
+        type: 'separator',
+        id: `sep_${dateKey}`,
+        label: formatDateLabel(msgDate),
+      });
+      lastDateKey = dateKey;
+    }
+    result.push(msg);
+  }
+
+  // Reverse so newest is first (for inverted FlatList)
+  return result.reverse();
 }
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
@@ -123,16 +179,25 @@ const MessageBubble = React.memo(function MessageBubble({
           />
         )}
       </View>
-      <Text
-        style={[
-          typography.caption2,
-          styles.bubbleTime,
-          { color: colors.secondaryLabel },
-          isSent ? styles.bubbleTimeRight : styles.bubbleTimeLeft,
-        ]}
-      >
-        {message.dateFormatted}
-      </Text>
+      <View style={[styles.bubbleMeta, isSent ? styles.bubbleMetaRight : styles.bubbleMetaLeft]}>
+        <Text
+          style={[
+            typography.caption2,
+            styles.bubbleTime,
+            { color: colors.secondaryLabel },
+          ]}
+        >
+          {message.dateFormatted}
+        </Text>
+        {isSent && (
+          <View style={styles.sentIndicator}>
+            <Ionicons name="checkmark" size={12} color={colors.secondaryLabel} />
+            <Text style={[typography.caption2, { color: colors.secondaryLabel, marginLeft: 2 }]}>
+              Sent
+            </Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 });
@@ -150,6 +215,28 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const draftKey = `@draft_${address}`;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load draft on mount
+  useEffect(() => {
+    AsyncStorage.getItem(draftKey).then((value) => {
+      if (value) setInputText(value);
+    }).catch(() => {});
+  }, [draftKey]);
+
+  // Debounced draft save on text change
+  const handleInputChange = useCallback((text: string) => {
+    setInputText(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (text.trim()) {
+        AsyncStorage.setItem(draftKey, text).catch(() => {});
+      } else {
+        AsyncStorage.removeItem(draftKey).catch(() => {});
+      }
+    }, 500);
+  }, [draftKey]);
 
   // Match contact
   const contact = useMemo(
@@ -162,16 +249,20 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
     : address;
 
   // Filter messages for this address
-  const messages = useMemo(() => {
+  const rawMessages = useMemo(() => {
     return device.messages
       .filter((m) => m.address === address)
       .sort((a, b) => {
         const aTime = (a as DeviceSms & { date?: number }).date ?? 0;
         const bTime = (b as DeviceSms & { date?: number }).date ?? 0;
-        // For inverted FlatList we want descending order (newest first = top of inverted)
         return bTime - aTime;
       });
   }, [device.messages, address]);
+
+  const messages = useMemo(
+    () => insertDateSeparators(rawMessages),
+    [rawMessages],
+  );
 
   const handleCall = useCallback(() => {
     Linking.openURL(`tel:${address}`);
@@ -187,8 +278,8 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
         const success = await mod.sendSms(address, text);
         if (success) {
           setInputText('');
+          AsyncStorage.removeItem(draftKey).catch(() => {});
           await device.refresh();
-          // FlatList is inverted — index 0 is the newest message
           listRef.current?.scrollToIndex({ index: 0, animated: true });
         } else {
           Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
@@ -199,21 +290,32 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
         setIsSending(false);
       }
     }
-  }, [inputText, isSending, address, device]);
+  }, [inputText, isSending, address, device, draftKey]);
 
   const renderItem = useCallback(
-    ({ item }: { item: DeviceSms }) => (
-      <MessageBubble
-        message={item}
-        isDark={dark}
-        colors={colors}
-        typography={typography}
-      />
-    ),
+    ({ item }: { item: ListItem }) => {
+      if (isSeparator(item)) {
+        return (
+          <View style={styles.dateSeparator}>
+            <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+              {item.label}
+            </Text>
+          </View>
+        );
+      }
+      return (
+        <MessageBubble
+          message={item}
+          isDark={dark}
+          colors={colors}
+          typography={typography}
+        />
+      );
+    },
     [dark, colors, typography],
   );
 
-  const keyExtractor = useCallback((item: DeviceSms) => item.id, []);
+  const keyExtractor = useCallback((item: ListItem) => isSeparator(item) ? item.id : item.id, []);
 
   const ListEmpty = (
     <View style={styles.emptyContainer}>
@@ -291,11 +393,11 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
         data={messages}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        inverted={messages.length > 0}
+        inverted={rawMessages.length > 0}
         ListEmptyComponent={ListEmpty}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
-          messages.length === 0
+          rawMessages.length === 0
             ? styles.emptyList
             : styles.listContent
         }
@@ -324,7 +426,7 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
         </Pressable>
         <CupertinoTextField
           value={inputText}
-          onChangeText={setInputText}
+          onChangeText={handleInputChange}
           placeholder="Message"
           multiline
           clearButton={false}
@@ -405,15 +507,28 @@ const styles = StyleSheet.create({
   bubbleReceived: {
     borderBottomLeftRadius: 4,
   },
-  bubbleTime: {
+  bubbleMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 2,
     marginHorizontal: 4,
+    gap: 6,
   },
-  bubbleTimeLeft: {
-    alignSelf: 'flex-start',
+  bubbleMetaLeft: {
+    justifyContent: 'flex-start',
   },
-  bubbleTimeRight: {
-    alignSelf: 'flex-end',
+  bubbleMetaRight: {
+    justifyContent: 'flex-end',
+  },
+  bubbleTime: {
+  },
+  sentIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dateSeparator: {
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   inputArea: {
     flexDirection: 'row',
