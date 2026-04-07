@@ -287,13 +287,24 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
   const toggleWifi = useCallback(async () => {
     const mod = await getLauncherModule();
-    if (mod) await mod.setWifiEnabled(!state.wifi.enabled);
-  }, [getLauncherModule, state.wifi.enabled]);
+    if (mod) {
+      // On Android 10+ this opens the system WiFi panel; state is refreshed on app foreground
+      await mod.setWifiEnabled(!state.wifi.enabled);
+      // Optimistic update while panel is open; real state syncs via AppState 'active' listener
+      const wifi = await loadWifi();
+      setState(prev => ({ ...prev, wifi }));
+    }
+  }, [getLauncherModule, state.wifi.enabled, loadWifi]);
 
   const toggleBluetooth = useCallback(async () => {
     const mod = await getLauncherModule();
-    if (mod) await mod.setBluetoothEnabled(!state.bluetooth.enabled);
-  }, [getLauncherModule, state.bluetooth.enabled]);
+    if (mod) {
+      // On Android 10+ this opens the system Bluetooth panel; state is refreshed on app foreground
+      await mod.setBluetoothEnabled(!state.bluetooth.enabled);
+      const bluetooth = await loadBluetooth();
+      setState(prev => ({ ...prev, bluetooth }));
+    }
+  }, [getLauncherModule, state.bluetooth.enabled, loadBluetooth]);
 
   const openSystemPanel = useCallback(async (panel: string) => {
     const mod = await getLauncherModule();
