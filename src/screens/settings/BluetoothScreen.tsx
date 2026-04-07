@@ -15,7 +15,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { bluetooth, toggleBluetooth } = useDevice();
+  const { bluetooth, toggleBluetooth, openSystemPanel } = useDevice();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -60,7 +60,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
                       {bluetooth.name}
                     </Text>
                   }
-                  onPress={() => {}}
+                  onPress={() => openSystemPanel('bluetooth')}
                 />
               </CupertinoListSection>
             </View>
@@ -78,7 +78,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
                         backgroundColor: colors.systemBlue,
                       }}
                       showChevron
-                      onPress={() => {}}
+                      onPress={() => openSystemPanel('bluetooth')}
                     />
                   ))}
                 </CupertinoListSection>
@@ -96,7 +96,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
                       </Text>
                     }
                     showChevron={false}
-                    onPress={() => {}}
+                    onPress={() => openSystemPanel('bluetooth')}
                   />
                 </CupertinoListSection>
               </View>

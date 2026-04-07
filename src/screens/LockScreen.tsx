@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Alert,
   Dimensions,
+  Linking,
   Pressable,
   StatusBar,
 } from 'react-native';
@@ -26,6 +28,38 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
+import { useApps } from '../store/AppsStore';
+
+const getLauncher = async () => {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
+
+interface RealNotification {
+  id: string;
+  packageName: string;
+  title: string;
+  text: string;
+  time: number;
+  isOngoing: boolean;
+}
+
+function formatNotifTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  if (diff < 60_000) return 'now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) {
+    const d = new Date(timestamp);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  }
+  return 'Yesterday';
+}
 
 const LOCK_PIN_KEY = '@lock_pin';
 const DEFAULT_PIN = '1234';
@@ -89,62 +123,44 @@ function formatFullDate(date: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// Fake notifications
+// Notification helpers
 // ---------------------------------------------------------------------------
-
-interface FakeNotification {
-  id: string;
-  app: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-  iconColor: string;
-  time: string;
-  preview: string;
-}
-
-const FAKE_NOTIFICATIONS: FakeNotification[] = [
-  {
-    id: '1',
-    app: 'Messages',
-    iconName: 'chatbubble-ellipses',
-    iconColor: '#30D158',
-    time: '2m ago',
-    preview: 'Hey, are you coming tonight?',
-  },
-  {
-    id: '2',
-    app: 'Mail',
-    iconName: 'mail',
-    iconColor: '#0A84FF',
-    time: '14m ago',
-    preview: 'Your monthly statement is ready.',
-  },
-  {
-    id: '3',
-    app: 'Calendar',
-    iconName: 'calendar',
-    iconColor: '#FF375F',
-    time: '1h ago',
-    preview: 'Reminder: Team sync at 3:00 PM',
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function NotificationCard({ item }: { item: FakeNotification }) {
+function NotificationCard({ item, appName, appIcon }: {
+  item: RealNotification;
+  appName: string;
+  appIcon: string;
+}) {
   return (
     <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
       <View style={styles.notifHeader}>
-        <View style={[styles.notifIconWrap, { backgroundColor: item.iconColor }]}>
-          <Ionicons name={item.iconName} size={14} color="#fff" />
-        </View>
-        <Text style={styles.notifApp}>{item.app}</Text>
-        <Text style={styles.notifTime}>{item.time}</Text>
+        {appIcon ? (
+          <Image
+            source={{ uri: `data:image/png;base64,${appIcon}` }}
+            style={styles.notifIconWrap}
+          />
+        ) : (
+          <View style={[styles.notifIconWrap, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+            <Ionicons name="notifications" size={14} color="#fff" />
+          </View>
+        )}
+        <Text style={styles.notifApp}>{appName}</Text>
+        <Text style={styles.notifTime}>{formatNotifTime(item.time)}</Text>
       </View>
-      <Text style={styles.notifPreview} numberOfLines={1}>
-        {item.preview}
-      </Text>
+      {!!item.title && (
+        <Text style={styles.notifTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+      )}
+      {!!item.text && (
+        <Text style={styles.notifPreview} numberOfLines={2}>
+          {item.text}
+        </Text>
+      )}
     </BlurView>
   );
 }
@@ -157,12 +173,69 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings } = useSettings();
+  const { apps } = useApps();
 
   const [now, setNow] = useState(new Date());
   const [authFailed, setAuthFailed] = useState(false);
   const [showPasscode, setShowPasscode] = useState(false);
   const [passcode, setPasscode] = useState('');
   const passcodeShake = useSharedValue(0);
+  const [flashlightOn, setFlashlightOn] = useState(false);
+  const [notifications, setNotifications] = useState<RealNotification[]>([]);
+
+  const toggleFlashlight = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const mod = await getLauncher();
+    if (mod) {
+      const newState = !flashlightOn;
+      try {
+        const success = await mod.setFlashlight(newState);
+        if (success) setFlashlightOn(newState);
+      } catch {
+        // flashlight not available
+      }
+    }
+  };
+
+  const openCamera = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const mod = await getLauncher();
+    if (mod) {
+      const launched =
+        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
+        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
+      if (!launched) {
+        Linking.openURL('content://media/internal/images/media').catch(() =>
+          Alert.alert('Camera', 'Could not open camera app.')
+        );
+      }
+    } else {
+      Linking.openURL('content://media/internal/images/media').catch(() =>
+        Alert.alert('Camera', 'Could not open camera app.')
+      );
+    }
+  };
+
+  // Fetch real notifications
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const mod = await getLauncher();
+      if (!mod || !mounted) return;
+      try {
+        const access = await mod.isNotificationAccessGranted();
+        if (access && mounted) {
+          const notifs = await mod.getNotifications();
+          const filtered = notifs
+            .filter((n: RealNotification) => !n.isOngoing)
+            .sort((a: RealNotification, b: RealNotification) => b.time - a.time)
+            .slice(0, 5);
+          if (mounted) setNotifications(filtered);
+        }
+      } catch { /* notification access not available */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -363,12 +436,21 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         </View>
 
         {/* ---------------------------------------------------------------- */}
-        {/* Notification cards                                                 */}
+        {/* Notification cards (real device notifications only)               */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.notifArea}>
-          {FAKE_NOTIFICATIONS.map((item) => (
-            <NotificationCard key={item.id} item={item} />
-          ))}
+          {notifications.map((item) => {
+            const appInfo = apps.find(a => a.packageName === item.packageName);
+            const appName = appInfo?.name ?? item.packageName.split('.').pop() ?? 'App';
+            return (
+              <NotificationCard
+                key={item.id}
+                item={item}
+                appName={appName}
+                appIcon={appInfo?.icon ?? ''}
+              />
+            );
+          })}
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -440,11 +522,11 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
             style={styles.circleButton}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Flashlight', 'Not available in demo.'); }}
+            onPress={toggleFlashlight}
             accessibilityLabel="Flashlight"
           >
-            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
-              <Ionicons name="flashlight" size={22} color="#fff" />
+            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
+              <Ionicons name="flashlight" size={22} color={flashlightOn ? '#000' : '#fff'} />
             </BlurView>
           </Pressable>
 
@@ -490,7 +572,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
           <Pressable
             style={styles.circleButton}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Camera', 'Not available in demo.'); }}
+            onPress={openCamera}
             accessibilityLabel="Camera"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
@@ -578,8 +660,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    height: 70,
-    justifyContent: 'center',
   },
   notifHeader: {
     flexDirection: 'row',
@@ -607,11 +687,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
   },
-  notifPreview: {
+  notifTitle: {
     color: '#ffffff',
     fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    marginBottom: 1,
+  },
+  notifPreview: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
     fontWeight: '400',
     letterSpacing: -0.2,
+    lineHeight: 19,
   },
 
   // Bottom

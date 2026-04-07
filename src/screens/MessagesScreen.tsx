@@ -1,19 +1,23 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   Pressable,
+  Alert,
+  TextInput,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoSearchBar, CupertinoButton, CupertinoActivityIndicator } from '../components';
+import { CupertinoSearchBar, CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow } from '../components';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -34,7 +38,6 @@ function groupConversations(messages: DeviceSms[]): Conversation[] {
   return Object.entries(groups)
     .map(([address, msgs]) => {
       const sorted = [...msgs].sort((a, b) => {
-        // Fall back to dateFormatted string comparison if no numeric date
         const aTime = (a as DeviceSms & { date?: number }).date ?? 0;
         const bTime = (b as DeviceSms & { date?: number }).date ?? 0;
         return bTime - aTime;
@@ -54,8 +57,8 @@ function groupConversations(messages: DeviceSms[]): Conversation[] {
 }
 
 function findContactByPhone(phone: string, contacts: DeviceContact[]): DeviceContact | undefined {
-  const digits = phone.replace(/\D/g, '').slice(-10);
-  return contacts.find((c) => c.phone.replace(/\D/g, '').slice(-10) === digits);
+  const digits = phone.replace(/\D/g, '').slice(-9);
+  return contacts.find((c) => c.phone.replace(/\D/g, '').slice(-9) === digits);
 }
 
 function getInitials(contact: DeviceContact): string {
@@ -64,9 +67,7 @@ function getInitials(contact: DeviceContact): string {
   return (first + last).toUpperCase() || '?';
 }
 
-// ─── Conversation Row ────────────────────────────────────────────────────────
-
-const AVATAR_SIZE = 52;
+const AVATAR_SIZE = 48;
 const AVATAR_COLORS = [
   '#FF3B30', '#FF9500', '#FFCC00', '#34C759',
   '#5AC8FA', '#007AFF', '#5856D6', '#AF52DE', '#FF2D55',
@@ -78,12 +79,16 @@ function avatarColor(address: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+// ─── Conversation Row ────────────────────────────────────────────────────────
+
 interface ConversationRowProps {
   conversation: Conversation;
   contacts: DeviceContact[];
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: any;
+  typography: any;
   onPress: () => void;
+  onDelete: () => void;
+  draft?: string;
 }
 
 const ConversationRow = React.memo(function ConversationRow({
@@ -92,75 +97,104 @@ const ConversationRow = React.memo(function ConversationRow({
   colors,
   typography,
   onPress,
+  onDelete,
+  draft,
 }: ConversationRowProps) {
   const contact = findContactByPhone(conversation.address, contacts);
   const displayName = contact
     ? `${contact.firstName} ${contact.lastName}`.trim()
     : conversation.address;
   const hasUnread = conversation.unreadCount > 0;
-  const bgColor = avatarColor(conversation.address);
+  const bgColor = contact ? avatarColor(contact.id) : avatarColor(conversation.address);
+
+  const trailingActions = [
+    {
+      label: 'Delete',
+      color: '#FF3B30',
+      onPress: onDelete,
+    },
+  ];
 
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.row,
-        { backgroundColor: pressed ? colors.systemGray5 : colors.systemBackground },
-      ]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`Conversation with ${displayName}`}
-    >
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-        {contact?.imageUri ? null : (
-          contact ? (
-            <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
-          ) : (
-            <Ionicons name="call-outline" size={22} color="#FFFFFF" />
-          )
-        )}
-      </View>
-
-      {/* Content */}
-      <View
-        style={[
-          styles.rowContent,
-          { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+    <CupertinoSwipeableRow trailingActions={trailingActions}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          { backgroundColor: pressed ? colors.systemGray5 : 'transparent' },
         ]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Conversation with ${displayName}`}
       >
-        <View style={styles.rowHeader}>
-          <Text
-            style={[
-              typography.callout,
-              styles.nameText,
-              { color: colors.label, fontWeight: hasUnread ? '700' : '400' },
-            ]}
-            numberOfLines={1}
-          >
-            {displayName}
-          </Text>
-          <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-            {conversation.lastMessage.dateFormatted}
-          </Text>
+        {/* Unread indicator */}
+        <View style={styles.unreadIndicatorSlot}>
+          {hasUnread && (
+            <View style={[styles.unreadIndicator, { backgroundColor: colors.systemBlue }]} />
+          )}
         </View>
 
-        <View style={styles.rowFooter}>
+        {/* Avatar */}
+        <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+          {contact?.imageUri ? null : (
+            contact ? (
+              <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
+            ) : (
+              <Ionicons name="call-outline" size={22} color="#FFFFFF" />
+            )
+          )}
+        </View>
+
+        {/* Content */}
+        <View
+          style={[
+            styles.rowContent,
+            { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+          ]}
+        >
+          <View style={styles.rowTop}>
+            <Text
+              style={[
+                typography.body,
+                styles.nameText,
+                { color: colors.label, fontWeight: hasUnread ? '700' : '400' },
+              ]}
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+            <View style={styles.dateChevronRow}>
+              <Text style={[typography.subhead, { color: colors.secondaryLabel, fontSize: 15 }]}>
+                {conversation.lastMessage.dateFormatted}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.systemGray3}
+                style={{ marginLeft: 4 }}
+              />
+            </View>
+          </View>
+
           <Text
             style={[
               typography.subhead,
               styles.previewText,
               { color: hasUnread ? colors.label : colors.secondaryLabel },
             ]}
-            numberOfLines={1}
+            numberOfLines={2}
           >
-            {conversation.lastMessage.body}
+            {draft ? (
+              <>
+                <Text style={{ color: colors.systemGray, fontStyle: 'italic' }}>Draft: </Text>
+                {draft}
+              </>
+            ) : (
+              conversation.lastMessage.body
+            )}
           </Text>
-          {hasUnread && (
-            <View style={[styles.unreadDot, { backgroundColor: colors.systemBlue }]} />
-          )}
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </CupertinoSwipeableRow>
   );
 });
 
@@ -170,15 +204,72 @@ export function MessagesScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<any>();
   const device = useDevice();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [deletedAddresses, setDeletedAddresses] = useState<Set<string>>(new Set());
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (Platform.OS !== 'android') {
+        setHasSmsPermission(false);
+        return;
+      }
+      const granted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+      );
+      setHasSmsPermission(granted);
+    })();
+  }, [device.messages]);
 
   const conversations = useMemo(
-    () => groupConversations(device.messages),
-    [device.messages],
+    () => groupConversations(device.messages).filter(
+      (conv) => !deletedAddresses.has(conv.address),
+    ),
+    [device.messages, deletedAddresses],
   );
+
+  // Load drafts for all conversation addresses
+  useEffect(() => {
+    const loadDrafts = async () => {
+      const allConvs = groupConversations(device.messages);
+      if (allConvs.length === 0) return;
+      try {
+        const loaded: Record<string, string> = {};
+        await Promise.all(
+          allConvs.map(async (c) => {
+            const value = await AsyncStorage.getItem(`@draft_${c.address}`);
+            if (value) loaded[c.address] = value;
+          }),
+        );
+        setDrafts(loaded);
+      } catch {
+        // ignore
+      }
+    };
+    loadDrafts();
+  }, [device.messages]);
+
+  const handleDeleteConversation = useCallback((address: string) => {
+    Alert.alert(
+      'Delete Conversation',
+      'Are you sure you want to delete this conversation?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDeletedAddresses((prev) => new Set(prev).add(address));
+          },
+        },
+      ],
+    );
+  }, []);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
@@ -211,36 +302,45 @@ export function MessagesScreen() {
         colors={colors}
         typography={typography}
         onPress={() => handleConversationPress(item.address)}
+        onDelete={() => handleDeleteConversation(item.address)}
+        draft={drafts[item.address]}
       />
     ),
-    [device.contacts, colors, typography, handleConversationPress],
+    [device.contacts, colors, typography, handleConversationPress, handleDeleteConversation, drafts],
   );
 
   const keyExtractor = useCallback((item: Conversation) => item.address, []);
 
+  const handleGrantPermission = useCallback(async () => {
+    const granted = await device.requestSmsPermission();
+    setHasSmsPermission(granted);
+  }, [device]);
+
   const ListEmpty = (
     <View style={styles.emptyContainer}>
-      {device.messages.length === 0 ? (
+      {hasSmsPermission === false ? (
         <>
-          <Ionicons name="chatbubble-outline" size={64} color={colors.systemGray3} />
-          <Text style={[typography.title3, { color: colors.secondaryLabel, marginTop: spacing.md }]}>
-            No Messages
+          <View style={[styles.emptyIconBg, { backgroundColor: colors.systemGray5 }]}>
+            <Ionicons name="lock-closed-outline" size={40} color={colors.systemGray} />
+          </View>
+          <Text style={[typography.title3, { color: colors.label, marginTop: 16 }]}>
+            SMS Permission Required
           </Text>
-          <Text style={[typography.body, { color: colors.tertiaryLabel, marginTop: spacing.xs, textAlign: 'center' }]}>
-            Grant SMS permission to see your messages
+          <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center' }]}>
+            Grant SMS permission to see your messages.
           </Text>
           <View style={{ marginTop: spacing.lg }}>
             <CupertinoButton
               title="Grant SMS Permission"
-              onPress={() => device.requestSmsPermission()}
+              onPress={handleGrantPermission}
             />
           </View>
         </>
       ) : (
         <>
-          <Ionicons name="chatbubble-outline" size={64} color={colors.systemGray3} />
+          <Ionicons name="chatbubble-outline" size={48} color={colors.systemGray3} />
           <Text style={[typography.title3, { color: colors.secondaryLabel, marginTop: spacing.md }]}>
-            No Messages
+            No Results
           </Text>
         </>
       )}
@@ -250,54 +350,49 @@ export function MessagesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
-      {/* Nav Bar */}
-      <BlurView
-        intensity={80}
-        tint={theme.dark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezisBlurView"
-        style={[
-          styles.navBar,
-          {
-            paddingTop: insets.top,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: colors.separator,
-          },
-        ]}
-      >
-        <View style={styles.navBarContent}>
-          <View style={styles.navSlot}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              hitSlop={8}
-              style={{ flexDirection: 'row', alignItems: 'center' }}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-            >
-              <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
-            </Pressable>
-          </View>
-          <Text style={[typography.headline, { color: colors.label }]}>Messages</Text>
-          <View style={[styles.navSlot, styles.navSlotRight]}>
-            <Pressable
-              onPress={handleComposePress}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Compose new message"
-            >
-              <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
-            </Pressable>
-          </View>
-        </View>
-      </BlurView>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <CupertinoSearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onCancel={() => setSearchQuery('')}
-          placeholder="Search"
-        />
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <View style={styles.headerTopRow}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
+          </Pressable>
+          <Pressable
+            onPress={handleComposePress}
+            hitSlop={8}
+          >
+            <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
+          </Pressable>
+        </View>
+
+        {/* Large title */}
+        <Text style={[styles.largeTitle, { color: colors.label }]}>
+          Messages
+        </Text>
+
+        {/* Search bar */}
+        <View style={[styles.searchBar, { backgroundColor: colors.systemGray5 }]}>
+          <Ionicons name="search" size={16} color={colors.systemGray} style={{ marginRight: 6 }} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.label }]}
+            placeholder="Search"
+            placeholderTextColor={colors.systemGray}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.systemGray} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* List or loading */}
@@ -313,7 +408,7 @@ export function MessagesScreen() {
           ListEmptyComponent={ListEmpty}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={
-            filtered.length === 0 ? styles.emptyList : undefined
+            filtered.length === 0 ? styles.emptyList : { paddingBottom: 20 }
           }
         />
       )}
@@ -325,32 +420,56 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  navBar: {
-    zIndex: 10,
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
   },
-  navBarContent: {
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     height: 44,
-    paddingHorizontal: 16,
   },
-  navSlot: {
-    minWidth: 60,
-    alignItems: 'flex-start',
-  },
-  navSlotRight: {
-    alignItems: 'flex-end',
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  row: {
+  backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 16,
-    elevation: 1,
+    marginLeft: -8,
+  },
+  largeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: 0.41,
+    marginBottom: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 36,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 17,
+    paddingVertical: 0,
+  },
+
+  // Conversation row
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 0,
+  },
+  unreadIndicatorSlot: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  unreadIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -358,43 +477,40 @@ const styles = StyleSheet.create({
     borderRadius: AVATAR_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
     flexShrink: 0,
   },
   avatarInitials: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   rowContent: {
     flex: 1,
     paddingRight: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    marginLeft: 10,
   },
-  rowHeader: {
+  rowTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 3,
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  dateChevronRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginLeft: 8,
   },
   nameText: {
     flex: 1,
-    marginRight: 8,
-  },
-  rowFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginRight: 4,
   },
   previewText: {
-    flex: 1,
-    marginRight: 8,
+    lineHeight: 20,
   },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    flexShrink: 0,
-  },
+
+  // Empty
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
@@ -403,5 +519,12 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     flex: 1,
+  },
+  emptyIconBg: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

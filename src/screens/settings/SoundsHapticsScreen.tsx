@@ -62,7 +62,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
                   {settings.ringtone}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => openSystemPanel('sound')}
             />
             <CupertinoListTile
               title="Text Tone"
@@ -71,7 +71,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
                   {settings.textTone}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => openSystemPanel('sound')}
             />
           </CupertinoListSection>
         </View>
