@@ -181,6 +181,7 @@ export function ContactsScreen() {
         stickySectionHeadersEnabled
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator
+        decelerationRate={0.998}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }

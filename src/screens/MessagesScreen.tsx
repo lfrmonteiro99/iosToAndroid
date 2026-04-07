@@ -312,6 +312,7 @@ export function MessagesScreen() {
           renderItem={renderItem}
           ListEmptyComponent={ListEmpty}
           showsVerticalScrollIndicator={false}
+          decelerationRate={0.998}
           contentContainerStyle={
             filtered.length === 0 ? styles.emptyList : undefined
           }

@@ -225,6 +225,13 @@ export const Shadows = StyleSheet.create({
   },
 });
 
+// Spring presets matching iOS UIKit spring dynamics
+export const SPRING_PRESETS = {
+  bouncy: { damping: 10, stiffness: 150, mass: 1 },
+  snappy: { damping: 20, stiffness: 400, mass: 1 },
+  gentle: { damping: 25, stiffness: 200, mass: 1 },
+} as const;
+
 // Animation constants matching iOS spring dynamics
 export const AnimationConfig = {
   defaultSpring: { damping: 20, stiffness: 300, mass: 1 },
