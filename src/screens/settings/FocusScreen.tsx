@@ -4,6 +4,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -34,6 +35,7 @@ export function FocusScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { openSystemPanel } = useDevice();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -74,7 +76,14 @@ export function FocusScreen({ navigation }: { navigation: any }) {
                   ) : undefined
                 }
                 showChevron={false}
-                onPress={() => update('focusMode', mode.key)}
+                onPress={() => {
+                  update('focusMode', mode.key);
+                  // For DND/sleep, open the Android notification policy settings so the
+                  // user can actually enable Do Not Disturb on the device.
+                  if (mode.key === 'doNotDisturb' || mode.key === 'sleep') {
+                    openSystemPanel('notification_policy');
+                  }
+                }}
               />
             ))}
           </CupertinoListSection>

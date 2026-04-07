@@ -215,10 +215,14 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
     opacity: backdropOpacity.value,
   }));
 
-  // Focus mode toggle
+  // Focus mode toggle — also opens Android DND settings when enabling
   const toggleFocus = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    update('focusMode', settings.focusMode === 'off' ? 'doNotDisturb' : 'off');
+    const newMode = settings.focusMode === 'off' ? 'doNotDisturb' : 'off';
+    update('focusMode', newMode);
+    if (newMode === 'doNotDisturb') {
+      device.openSystemPanel('notification_policy');
+    }
   };
 
   const batteryLevel = Math.round(device.battery.level * 100);

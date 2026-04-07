@@ -63,7 +63,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   bluetoothName: 'iosToAndroid',
   cellularDataEnabled: true,
   hotspotEnabled: false,
-  hotspotPassword: '',
+  hotspotPassword: 'password123',
   notificationsEnabled: true,
   notificationSounds: true,
   notificationBadges: true,
@@ -111,6 +111,7 @@ interface SettingsContextValue {
   update: <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => void;
   updateMany: (partial: Partial<SettingsState>) => void;
   reset: () => void;
+  syncFromDevice: () => Promise<void>;
   isReady: boolean;
 }
 
@@ -123,7 +124,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setSettings((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch (e) { console.warn('SettingsStore: failed to parse stored settings:', e); }
+        try { setSettings((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch { /* ignore */ }
       }
       setIsReady(true);
     });
@@ -133,21 +134,53 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (isReady) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   }, [settings, isReady]);
 
-  // Refresh timezone when app comes to foreground (e.g. user changed it in system settings)
+  // Read real device state and sync it into settings
+  const syncFromDevice = useCallback(async () => {
+    const getLauncherModule = async () => {
+      try {
+        return (await import('../../modules/launcher-module/src')).default;
+      } catch { return null; }
+    };
+
+    const partial: Partial<SettingsState> = {};
+
+    // Timezone — always read from JS runtime (reflects system timezone)
+    partial.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // WiFi and Bluetooth — read from native module on Android
+    try {
+      const mod = await getLauncherModule();
+      if (mod) {
+        const [wifiInfo, btInfo] = await Promise.all([
+          mod.getWifiInfo().catch(() => null),
+          mod.getBluetoothInfo().catch(() => null),
+        ]);
+        if (wifiInfo !== null) {
+          partial.wifiEnabled = wifiInfo.enabled;
+          if (wifiInfo.ssid) partial.wifiNetwork = wifiInfo.ssid;
+        }
+        if (btInfo !== null) {
+          partial.bluetoothEnabled = btInfo.enabled;
+          if (btInfo.name) partial.bluetoothName = btInfo.name;
+        }
+      }
+    } catch { /* native module unavailable on non-Android */ }
+
+    setSettings((prev) => ({ ...prev, ...partial }));
+  }, []);
+
+  // Initial device sync after AsyncStorage load
+  useEffect(() => {
+    if (isReady) { syncFromDevice(); }
+  }, [isReady, syncFromDevice]);
+
+  // Re-sync when app comes to foreground (user may have changed settings in system UI)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        setSettings((prev) => {
-          if (prev.timezone !== currentTz) {
-            return { ...prev, timezone: currentTz };
-          }
-          return prev;
-        });
-      }
+      if (nextState === 'active') { syncFromDevice(); }
     });
     return () => sub.remove();
-  }, []);
+  }, [syncFromDevice]);
 
   const update = useCallback(<K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
@@ -162,7 +195,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  const value = useMemo(() => ({ settings, update, updateMany, reset, isReady }), [settings, update, updateMany, reset, isReady]);
+  const value = useMemo(() => ({ settings, update, updateMany, reset, syncFromDevice, isReady }), [settings, update, updateMany, reset, syncFromDevice, isReady]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

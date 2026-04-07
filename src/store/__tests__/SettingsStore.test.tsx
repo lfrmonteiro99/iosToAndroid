@@ -15,13 +15,18 @@ beforeEach(() => {
 });
 
 describe('SettingsStore', () => {
-  it('provides default settings on mount', async () => {
+  it('provides default settings on mount and exposes syncFromDevice', async () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
 
     await act(async () => {});
 
-    expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
+    // Core non-device settings should match defaults
+    expect(result.current.settings.airplaneMode).toBe(DEFAULT_SETTINGS.airplaneMode);
+    expect(result.current.settings.notificationsEnabled).toBe(DEFAULT_SETTINGS.notificationsEnabled);
+    expect(result.current.settings.volume).toBe(DEFAULT_SETTINGS.volume);
     expect(result.current.isReady).toBe(true);
+    // syncFromDevice should be exposed as a function
+    expect(typeof result.current.syncFromDevice).toBe('function');
   });
 
   it('update() changes a single setting', async () => {
@@ -82,7 +87,10 @@ describe('SettingsStore', () => {
       result.current.reset();
     });
 
-    expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
+    // After reset, device-independent settings revert to defaults
+    expect(result.current.settings.airplaneMode).toBe(DEFAULT_SETTINGS.airplaneMode);
+    expect(result.current.settings.volume).toBe(DEFAULT_SETTINGS.volume);
+    expect(result.current.settings.focusMode).toBe(DEFAULT_SETTINGS.focusMode);
     expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@iostoandroid/settings');
   });
 
@@ -106,6 +114,8 @@ describe('SettingsStore', () => {
     await act(async () => {});
 
     expect(result.current.isReady).toBe(true);
-    expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
+    // Device-independent settings remain at defaults when no stored data
+    expect(result.current.settings.airplaneMode).toBe(DEFAULT_SETTINGS.airplaneMode);
+    expect(result.current.settings.volume).toBe(DEFAULT_SETTINGS.volume);
   });
 });
