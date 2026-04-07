@@ -129,7 +129,6 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const { theme } = useTheme();
   const { colors } = theme;
 
-  const [volume] = useState(0.5);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [nowPlaying, setNowPlaying] = useState({ title: '', artist: '', album: '', isPlaying: false, packageName: '' });
 
@@ -379,18 +378,16 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   style={styles.verticalSliderTrack}
                   accessibilityLabel="Volume control"
                   accessibilityRole="adjustable"
-                  onPress={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    const mod = await getLauncher();
-                    if (mod) {
-                      await mod.openSystemSettings('volume');
-                    }
+                  onPress={(e) => {
+                    const relY = e.nativeEvent.locationY;
+                    const pct = Math.max(0, Math.min(1, 1 - relY / 160));
+                    device.setVolume(pct);
                   }}
                 >
                   <View
                     style={[
                       styles.verticalSliderFill,
-                      { height: `${volume * 100}%` as unknown as number },
+                      { height: `${device.volume * 100}%` as unknown as number },
                     ]}
                   />
                   <Ionicons

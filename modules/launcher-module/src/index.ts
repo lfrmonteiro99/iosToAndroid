@@ -114,6 +114,9 @@ interface LauncherModuleType {
   getStorageInfo(): Promise<StorageInfo>;
   // SMS
   getRecentMessages(limit: number): Promise<SmsMessage[]>;
+  // Volume
+  getVolume(): Promise<number>;
+  setVolume(level: number): Promise<boolean>;
   // System settings
   openSystemSettings(panel: string): Promise<boolean>;
   // Network
@@ -159,6 +162,8 @@ const stub: LauncherModuleType = {
   setBluetoothEnabled: async () => false,
   getStorageInfo: async () => ({ totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }),
   getRecentMessages: async () => [],
+  getVolume: async () => 0.5,
+  setVolume: async () => false,
   openSystemSettings: async () => false,
   getNetworkInfo: async () => ({ isConnected: false, isWifi: false, isCellular: false, isVpn: false }),
   setFlashlight: async () => false,
@@ -232,6 +237,14 @@ function createBridgedModule(): LauncherModuleType {
     getRecentMessages: async (limit: number) => {
       try { return await nativeModule.getRecentMessages(limit); }
       catch (e) { console.warn('LauncherModule.getRecentMessages failed:', e); return []; }
+    },
+    getVolume: async () => {
+      try { return await nativeModule.getVolume(); }
+      catch (e) { console.warn('LauncherModule.getVolume failed:', e); return 0.5; }
+    },
+    setVolume: async (level: number) => {
+      try { return await nativeModule.setVolume(level); }
+      catch (e) { console.warn('LauncherModule.setVolume failed:', e); return false; }
     },
     openSystemSettings: async (panel: string) => {
       try { return await nativeModule.openSystemSettings(panel); }

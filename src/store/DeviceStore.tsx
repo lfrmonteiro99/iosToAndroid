@@ -66,6 +66,7 @@ function mapWeatherIcon(code: string): string {
 interface DeviceState {
   battery: { level: number; isCharging: boolean };
   brightness: number;
+  volume: number;
   wifi: DeviceWifi;
   bluetooth: DeviceBluetooth;
   storage: DeviceStorage;
@@ -79,6 +80,7 @@ interface DeviceState {
 interface DeviceContextValue extends DeviceState {
   refresh: () => Promise<void>;
   setBrightness: (value: number) => Promise<void>;
+  setVolume: (value: number) => Promise<void>;
   toggleWifi: () => Promise<void>;
   toggleBluetooth: () => Promise<void>;
   openSystemPanel: (panel: string) => Promise<void>;
@@ -91,6 +93,7 @@ const DeviceContext = createContext<DeviceContextValue | null>(null);
 const DEFAULT_STATE: DeviceState = {
   battery: { level: 1, isCharging: false },
   brightness: 0.5,
+  volume: 0.5,
   wifi: { enabled: false, ssid: '', rssi: 0, ip: '', networks: [] },
   bluetooth: { enabled: false, name: '', pairedDevices: [] },
   storage: { totalGB: '0', usedGB: '0', freeGB: '0', usedPercentage: 0 },
@@ -127,6 +130,13 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       return await Brightness.getBrightnessAsync();
     } catch { return 0.5; }
   }, []);
+
+  const loadVolume = useCallback(async () => {
+    const mod = await getLauncherModule();
+    if (!mod) return 0.5;
+    try { return await mod.getVolume(); }
+    catch { return 0.5; }
+  }, [getLauncherModule]);
 
   const loadNetwork = useCallback(async () => {
     try {
@@ -241,14 +251,14 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [battery, brightness, network, wifi, bluetooth, storage, messages, contacts, weather] = await Promise.all([
-      loadBattery(), loadBrightness(), loadNetwork(), loadWifi(),
+    const [battery, brightness, volume, network, wifi, bluetooth, storage, messages, contacts, weather] = await Promise.all([
+      loadBattery(), loadBrightness(), loadVolume(), loadNetwork(), loadWifi(),
       loadBluetooth(), loadStorage(), loadMessages(), loadContacts(), loadWeather(),
     ]);
     setState({
-      battery, brightness, wifi, bluetooth, storage, network, messages, contacts, weather, isReady: true,
+      battery, brightness, volume, wifi, bluetooth, storage, network, messages, contacts, weather, isReady: true,
     });
-  }, [loadBattery, loadBrightness, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts, loadWeather]);
+  }, [loadBattery, loadBrightness, loadVolume, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts, loadWeather]);
 
   // Initial load
   useEffect(() => { refresh(); }, [refresh]);
@@ -284,6 +294,15 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({ ...prev, brightness: value }));
     } catch { /* needs permission */ }
   }, []);
+
+  const setVolumeValue = useCallback(async (value: number) => {
+    const mod = await getLauncherModule();
+    if (!mod) return;
+    try {
+      await mod.setVolume(value);
+      setState(prev => ({ ...prev, volume: value }));
+    } catch { /* needs permission or unavailable */ }
+  }, [getLauncherModule]);
 
   const toggleWifi = useCallback(async () => {
     const mod = await getLauncherModule();
@@ -341,12 +360,13 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     ...state,
     refresh,
     setBrightness: setBrightnessValue,
+    setVolume: setVolumeValue,
     toggleWifi,
     toggleBluetooth,
     openSystemPanel,
     requestContactsPermission,
     requestSmsPermission,
-  }), [state, refresh, setBrightnessValue, toggleWifi, toggleBluetooth, openSystemPanel, requestContactsPermission, requestSmsPermission]);
+  }), [state, refresh, setBrightnessValue, setVolumeValue, toggleWifi, toggleBluetooth, openSystemPanel, requestContactsPermission, requestSmsPermission]);
 
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;
 }
