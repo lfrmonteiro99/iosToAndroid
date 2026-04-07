@@ -96,14 +96,11 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
     { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
-      Alert.alert(
-        'Video Call',
-        'Video calling requires a compatible app (WhatsApp, Google Duo, etc.)',
-        [
-          { text: 'Call Instead', onPress: () => contact.phone ? Linking.openURL(`tel:${contact.phone}`) : undefined },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+      if (contact.phone) {
+        Linking.openURL(`tel:${contact.phone}`);
+      } else {
+        Alert.alert('No phone number', 'No phone number available for this contact.');
+      }
     }},
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
   ];

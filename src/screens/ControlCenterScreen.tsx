@@ -412,14 +412,12 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 label="Screen Rec"
                 onPress={async () => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert(
-                    'Screen Recording',
-                    'Use your device\'s built-in screen recorder.',
-                    [
-                      { text: 'Open Settings', onPress: async () => { const mod = await getLauncher(); if (mod) mod.openSystemSettings('display'); } },
-                      { text: 'Cancel', style: 'cancel' },
-                    ]
-                  );
+                  const mod = await getLauncher();
+                  if (mod) {
+                    await mod.openSystemSettings('cast');
+                  } else {
+                    Alert.alert('Screen Recording', 'Could not open screen recorder settings.');
+                  }
                 }}
               />
               <ShortcutButton
@@ -442,14 +440,13 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
             <Pressable
               style={styles.mirrorTile}
               onPress={async () => {
-                Alert.alert(
-                  'Screen Mirroring',
-                  'Use your device\'s cast feature.',
-                  [
-                    { text: 'Open Cast Settings', onPress: async () => { const mod = await getLauncher(); if (mod) mod.openSystemSettings('display'); } },
-                    { text: 'Cancel', style: 'cancel' },
-                  ]
-                );
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const mod = await getLauncher();
+                if (mod) {
+                  await mod.openSystemSettings('cast');
+                } else {
+                  Alert.alert('Screen Mirroring', 'Could not open cast settings.');
+                }
               }}
               accessibilityLabel="Screen Mirroring"
             >
