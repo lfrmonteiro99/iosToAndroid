@@ -10,6 +10,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -76,6 +83,43 @@ export function CallScreen({
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(false);
 
+  // Pulsing animation for the accept/avatar area during incoming (calling) state
+  const pulseScale = useSharedValue(1);
+  const pulseGlow = useSharedValue(0);
+
+  useEffect(() => {
+    if (status === 'calling') {
+      pulseScale.value = withRepeat(
+        withSequence(
+          withTiming(1.1, { duration: 800 }),
+          withTiming(1.0, { duration: 800 }),
+        ),
+        -1,
+        false,
+      );
+      pulseGlow.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 800 }),
+          withTiming(0, { duration: 800 }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      pulseScale.value = withTiming(1, { duration: 300 });
+      pulseGlow.value = withTiming(0, { duration: 300 });
+    }
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pulseAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+    shadowOpacity: pulseGlow.value * 0.7,
+    shadowRadius: 8 + pulseGlow.value * 16,
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 0 },
+    elevation: pulseGlow.value * 12,
+  }));
+
   // Initiate the native call on mount
   useEffect(() => {
     (async () => {
@@ -134,10 +178,10 @@ export function CallScreen({
       {/* Contact info                                                         */}
       {/* ------------------------------------------------------------------ */}
       <View style={styles.contactSection}>
-        {/* Avatar */}
-        <View style={styles.avatarCircle}>
+        {/* Avatar — pulses when in calling/incoming state */}
+        <Animated.View style={[styles.avatarCircle, pulseAnimStyle]}>
           <Text style={styles.avatarInitials}>{getInitials(displayName)}</Text>
-        </View>
+        </Animated.View>
 
         {/* Name */}
         <Text style={styles.callerName} numberOfLines={1} adjustsFontSizeToFit>

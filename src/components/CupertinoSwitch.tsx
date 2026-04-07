@@ -61,7 +61,7 @@ export function CupertinoSwitch({
 
   const handlePress = () => {
     if (!disabled) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.selectionAsync();
       onValueChange?.(!value);
     }
   };

@@ -179,6 +179,7 @@ export function ContactsScreen() {
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled
+        decelerationRate={0.998}
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator
         refreshControl={

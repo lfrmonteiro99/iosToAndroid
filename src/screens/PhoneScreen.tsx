@@ -5,9 +5,8 @@ import {
   FlatList,
   Pressable,
   StyleSheet,
-  SectionList,
+  ScrollView,
   TouchableOpacity,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,13 +16,14 @@ import { StatusBar } from 'expo-status-bar';
 import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
+import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { CupertinoActivityIndicator } from '../components';
 
 const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null; // Expected: module unavailable on non-Android
+    return null;
   }
 };
 
@@ -40,16 +40,16 @@ function getFullName(contact: DeviceContact): string {
 }
 
 const AVATAR_COLORS = [
-  '#FF3B30', '#FF9500', '#FFCC00', '#34C759',
-  '#5AC8FA', '#007AFF', '#5856D6', '#AF52DE',
-  '#FF2D55', '#30B0C7',
+  '#007AFF', '#34C759', '#FF9500', '#FF2D55',
+  '#AF52DE', '#5AC8FA', '#5856D6', '#FF3B30',
+  '#30B0C7', '#32ADE6',
 ];
 
-function avatarColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+function avatarColor(contact: DeviceContact): string {
+  const seed = contact.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[seed % AVATAR_COLORS.length];
 }
+
 
 const KEYPAD_ROWS = [
   [{ digit: '1', letters: '' }, { digit: '2', letters: 'ABC' }, { digit: '3', letters: 'DEF' }],
@@ -58,70 +58,129 @@ const KEYPAD_ROWS = [
   [{ digit: '*', letters: '' }, { digit: '0', letters: '+' }, { digit: '#', letters: '' }],
 ];
 
-const TAB_CONFIG = [
-  { key: 'recents', label: 'Recents', icon: 'time' as const, iconOutline: 'time-outline' as const },
-  { key: 'contacts', label: 'Contacts', icon: 'person-circle' as const, iconOutline: 'person-circle-outline' as const },
-  { key: 'keypad', label: 'Keypad', icon: 'keypad' as const, iconOutline: 'keypad-outline' as const },
-];
-
 // ─── Avatar ─────────────────────────────────────────────────────────────────
 
 function ContactAvatar({ contact, size = 40 }: { contact: DeviceContact; size?: number }) {
   const initials = getInitials(contact);
-  const bg = avatarColor(contact.id);
+  const bg = avatarColor(contact);
   return (
     <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+      style={[
+        styles.avatar,
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: bg },
+      ]}
     >
-      <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: size * 0.38 }}>{initials}</Text>
+      <Text style={[styles.avatarText, { fontSize: size * 0.38 }]}>{initials}</Text>
     </View>
+  );
+}
+
+// ─── Favorites Tab ──────────────────────────────────────────────────────────
+
+function FavoritesTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+  const favorites = contacts.slice(0, 8);
+
+  const handleCall = useCallback((phone: string, name?: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onCall(phone, name);
+  }, [onCall]);
+
+  if (favorites.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="star-outline" size={52} color={colors.systemGray3} />
+        <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>No Favorites</Text>
+        <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center' }]}>
+          Add contacts to Favorites for quick access.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={favorites}
+      keyExtractor={(item) => item.id}
+      decelerationRate={0.998}
+      contentContainerStyle={{ paddingBottom: 20 }}
+      ItemSeparatorComponent={() => (
+        <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />
+      )}
+      renderItem={({ item }) => (
+        <View style={[styles.contactRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+          <ContactAvatar contact={item} size={44} />
+          <View style={styles.contactInfo}>
+            <Text style={[typography.body, { color: colors.label }]} numberOfLines={1}>
+              {getFullName(item)}
+            </Text>
+            <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>mobile</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => handleCall(item.phone, getFullName(item))}
+            style={styles.callBtn}
+            accessibilityLabel={`Call ${getFullName(item)}`}
+            accessibilityRole="button"
+          >
+            <Ionicons name="call" size={22} color={colors.systemGreen} />
+          </TouchableOpacity>
+        </View>
+      )}
+    />
   );
 }
 
 // ─── Recents Tab ────────────────────────────────────────────────────────────
 
-function RecentsTab({ contacts, onCall, onInfo, colors, typography }: {
-  contacts: DeviceContact[];
-  onCall: (phone: string, name?: string) => void;
-  onInfo: (phone: string, name?: string) => void;
-  colors: any;
-  typography: any;
-}) {
+function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const insets = useSafeAreaInsets();
+  const [callLogLoading, setCallLogLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
+      setCallLogLoading(true);
       const mod = await getLauncher();
       if (mod) {
         try {
           const log = await mod.getCallLog(50);
           setCallLog(log);
         } catch {
-          // Expected: call log permission not granted
           setPermissionDenied(true);
         }
       }
-      setLoading(false);
+      setCallLogLoading(false);
     })();
   }, []);
 
-  const findContact = useCallback((phone: string) => {
-    const digits = phone.replace(/\D/g, '').slice(-9);
-    return contacts.find((c) => c.phone.replace(/\D/g, '').slice(-9) === digits);
-  }, [contacts]);
+  const handleCall = useCallback((number: string, name?: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onCall(number, name);
+  }, [onCall]);
 
-  if (loading) {
+  const callDirectionIcon = (type: CallLogEntry['type']) => {
+    switch (type) {
+      case 'incoming': return { name: 'arrow-down-circle' as const, color: colors.systemGreen };
+      case 'outgoing': return { name: 'arrow-up-circle' as const, color: colors.systemBlue };
+      case 'missed': return { name: 'close-circle' as const, color: colors.systemRed };
+      case 'rejected': return { name: 'close-circle' as const, color: colors.systemRed };
+      default: return { name: 'call' as const, color: colors.systemGray };
+    }
+  };
+
+  const callTypeLabel = (type: CallLogEntry['type']) => {
+    switch (type) {
+      case 'outgoing': return 'Outgoing';
+      case 'missed': return 'Missed';
+      case 'rejected': return 'Rejected';
+      default: return 'Incoming';
+    }
+  };
+
+  if (callLogLoading) {
     return (
       <View style={styles.emptyState}>
         <CupertinoActivityIndicator />
@@ -132,13 +191,10 @@ function RecentsTab({ contacts, onCall, onInfo, colors, typography }: {
   if (permissionDenied) {
     return (
       <View style={styles.emptyState}>
-        <Ionicons name="time-outline" size={48} color={colors.systemGray3} />
+        <Ionicons name="time-outline" size={52} color={colors.systemGray3} />
         <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>Call Log Unavailable</Text>
-        <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center' }]}>
-          Allow access to see recent calls.
-        </Text>
         <TouchableOpacity
-          style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: colors.systemBlue, borderRadius: 12 }}
+          style={[styles.voicemailBtn, { backgroundColor: colors.systemBlue, marginTop: 16 }]}
           onPress={async () => {
             const mod = await getLauncher();
             if (mod) {
@@ -146,11 +202,12 @@ function RecentsTab({ contacts, onCall, onInfo, colors, typography }: {
                 const log = await mod.getCallLog(50);
                 setCallLog(log);
                 setPermissionDenied(false);
-              } catch { /* Expected: call log permission still denied */ }
+              } catch { /* still denied */ }
             }
           }}
+          accessibilityRole="button"
         >
-          <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 15 }}>Grant Permission</Text>
+          <Text style={[typography.subhead, { color: '#FFFFFF', fontWeight: '600' }]}>Grant Call Log Permission</Text>
         </TouchableOpacity>
       </View>
     );
@@ -159,187 +216,132 @@ function RecentsTab({ contacts, onCall, onInfo, colors, typography }: {
   if (callLog.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Ionicons name="time-outline" size={48} color={colors.systemGray3} />
+        <Ionicons name="time-outline" size={52} color={colors.systemGray3} />
         <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>No Recent Calls</Text>
       </View>
     );
   }
 
   return (
-    <FlatList
-      data={callLog}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={{ paddingBottom: 100 }}
-      renderItem={({ item, index }) => {
-        const isMissed = item.type === 'missed' || item.type === 'rejected';
-        const contact = item.name && item.name !== item.number
-          ? findContact(item.number)
-          : undefined;
-        const displayName = item.name && item.name !== item.number ? item.name : item.number;
-        const isLast = index === callLog.length - 1;
-
-        return (
-          <Pressable
-            onPress={() => onCall(item.number, displayName)}
-            style={({ pressed }) => [
-              styles.recentRow,
-              { backgroundColor: pressed ? colors.systemGray5 : 'transparent' },
-            ]}
-          >
-            <View style={styles.recentLeft}>
-              {/* Call direction icon */}
-              <View style={{ width: 28, alignItems: 'center', marginRight: 8 }}>
-                {item.type === 'outgoing' ? (
-                  <Ionicons name="arrow-up" size={16} color={colors.systemGreen} />
-                ) : item.type === 'incoming' ? (
-                  <Ionicons name="arrow-down" size={16} color={colors.systemGreen} />
-                ) : (
-                  <Ionicons name="close" size={16} color={colors.systemRed} />
-                )}
+    <ScrollView contentContainerStyle={{ paddingBottom: 20 }} decelerationRate={0.998}>
+      <View style={{ backgroundColor: colors.secondarySystemGroupedBackground }}>
+        {callLog.map((call, idx) => {
+          const icon = callDirectionIcon(call.type);
+          const isMissed = call.type === 'missed' || call.type === 'rejected';
+          const isLast = idx === callLog.length - 1;
+          const displayName = call.name && call.name !== call.number ? call.name : call.number;
+          return (
+            <Pressable
+              key={call.id}
+              onPress={() => handleCall(call.number, call.name && call.name !== call.number ? call.name : undefined)}
+              style={({ pressed }) => [
+                styles.recentRow,
+                !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+                pressed && { backgroundColor: colors.systemGray5 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${call.type} call ${displayName}, ${call.dateFormatted}`}
+            >
+              <View style={styles.recentLeft}>
+                <Ionicons name={icon.name} size={18} color={icon.color} style={{ marginRight: 10 }} />
+                <View>
+                  <Text
+                    style={[
+                      typography.body,
+                      { color: isMissed ? colors.systemRed : colors.label, fontWeight: isMissed ? '600' : '400' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                  <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+                    {callTypeLabel(call.type)}
+                  </Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    typography.body,
-                    {
-                      color: isMissed ? colors.systemRed : colors.label,
-                      fontWeight: '400',
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-                <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 1 }]}>
-                  {item.type === 'outgoing' ? 'Outgoing' : item.type === 'incoming' ? 'Incoming' : item.type === 'missed' ? 'Missed' : 'Cancelled'}
-                </Text>
+              <View style={styles.recentRight}>
+                <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>{call.dateFormatted}</Text>
+                <Ionicons name="information-circle-outline" size={20} color={colors.systemBlue} style={{ marginLeft: 12 }} />
               </View>
-            </View>
-            <View style={styles.recentRight}>
-              <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>
-                {item.dateFormatted}
-              </Text>
-              <TouchableOpacity
-                onPress={() => onInfo(item.number, displayName)}
-                style={{ marginLeft: 12, padding: 4 }}
-                hitSlop={8}
-              >
-                <Ionicons name="information-circle-outline" size={22} color={colors.systemBlue} />
-              </TouchableOpacity>
-            </View>
-            {!isLast && (
-              <View style={[styles.rowSeparator, { backgroundColor: colors.separator, left: 52 }]} />
-            )}
-          </Pressable>
-        );
-      }}
-    />
+            </Pressable>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
-// ─── Contacts Tab ───────────────────────────────────────────────────────────
+// ─── Contacts Tab ────────────────────────────────────────────────────────────
 
-interface Section {
-  title: string;
-  data: DeviceContact[];
-}
+function ContactsTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
 
-function ContactsTab({ contacts, onCall, colors, typography }: {
-  contacts: DeviceContact[];
-  onCall: (phone: string, name?: string) => void;
-  colors: any;
-  typography: any;
-}) {
-  const sections = useMemo(() => {
-    const sorted = [...contacts].sort((a, b) =>
-      getFullName(a).localeCompare(getFullName(b)),
-    );
-    const map: Record<string, DeviceContact[]> = {};
-    for (const c of sorted) {
-      const letter = getFullName(c)[0]?.toUpperCase() || '#';
-      const key = /[A-Z]/.test(letter) ? letter : '#';
-      if (!map[key]) map[key] = [];
-      map[key].push(c);
-    }
-    return Object.entries(map)
-      .sort(([a], [b]) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b))
-      .map(([title, data]) => ({ title, data }));
-  }, [contacts]);
+  const sorted = useMemo(
+    () =>
+      [...contacts].sort((a, b) =>
+        getFullName(a).localeCompare(getFullName(b)),
+      ),
+    [contacts],
+  );
 
-  const sectionIndex = useMemo(() => sections.map(s => s.title), [sections]);
+  const handleCall = useCallback((phone: string, name?: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onCall(phone, name);
+  }, [onCall]);
 
-  if (contacts.length === 0) {
+  if (sorted.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Ionicons name="person-outline" size={48} color={colors.systemGray3} />
+        <Ionicons name="person-outline" size={52} color={colors.systemGray3} />
         <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>No Contacts</Text>
         <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center', paddingHorizontal: 32 }]}>
-          Grant permission in Settings to see contacts.
+          No contacts found. Grant permission in Settings.
         </Text>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        stickySectionHeadersEnabled
-        renderSectionHeader={({ section }) => (
-          <View style={[styles.sectionHeader, { backgroundColor: colors.systemGroupedBackground }]}>
-            <Text style={[typography.headline, { color: colors.label, fontSize: 15 }]}>
-              {section.title}
+    <FlatList
+      data={sorted}
+      keyExtractor={(item) => item.id}
+      decelerationRate={0.998}
+      contentContainerStyle={{ paddingBottom: 20 }}
+      ItemSeparatorComponent={() => (
+        <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />
+      )}
+      getItemLayout={(_, index) => ({ length: 60, offset: 60 * index, index })}
+      renderItem={({ item }) => (
+        <Pressable
+          onPress={() => handleCall(item.phone, getFullName(item))}
+          style={({ pressed }) => [
+            styles.contactRow,
+            { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Call ${getFullName(item)}`}
+        >
+          <ContactAvatar contact={item} size={44} />
+          <View style={[styles.contactInfo, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator }]}>
+            <Text style={[typography.body, { color: colors.label }]} numberOfLines={1}>
+              {getFullName(item)}
+            </Text>
+            <Text style={[typography.caption1, { color: colors.secondaryLabel }]} numberOfLines={1}>
+              {item.phone}
             </Text>
           </View>
-        )}
-        renderItem={({ item, index, section }) => {
-          const isLast = index === section.data.length - 1;
-          return (
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onCall(item.phone, getFullName(item));
-              }}
-              style={({ pressed }) => [
-                styles.contactRow,
-                { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },
-              ]}
-            >
-              <ContactAvatar contact={item} size={40} />
-              <View style={[
-                styles.contactInfo,
-                !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
-              ]}>
-                <Text style={[typography.body, { color: colors.label }]} numberOfLines={1}>
-                  {getFullName(item)}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        }}
-      />
-      {/* Section index on the right side (like iOS) */}
-      <View style={styles.sectionIndexContainer}>
-        {sectionIndex.map((letter) => (
-          <Text key={letter} style={[styles.sectionIndexLetter, { color: colors.systemBlue }]}>
-            {letter}
-          </Text>
-        ))}
-      </View>
-    </View>
+        </Pressable>
+      )}
+    />
   );
 }
 
-// ─── Keypad Tab ─────────────────────────────────────────────────────────────
+// ─── Keypad Tab ──────────────────────────────────────────────────────────────
 
-function KeypadTab({ onCall, colors, typography, isDark }: {
-  onCall: (phone: string, name?: string) => void;
-  colors: any;
-  typography: any;
-  isDark: boolean;
-}) {
+function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
   const insets = useSafeAreaInsets();
   const [number, setNumber] = useState('');
 
@@ -359,33 +361,36 @@ function KeypadTab({ onCall, colors, typography, isDark }: {
     onCall(number);
   }, [number, onCall]);
 
-  const keyBg = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)';
+  const keypadBg = theme.dark ? colors.systemGray4 : colors.systemGray5;
 
   return (
-    <View style={[styles.keypadContainer, { paddingBottom: insets.bottom + 80 }]}>
-      {/* Number display */}
+    <View style={[styles.keypadContainer, { paddingBottom: insets.bottom + 16 }]}>
+      {/* Display */}
       <View style={styles.keypadDisplay}>
         <Text
           style={[
             styles.keypadNumber,
             { color: colors.label },
-            number.length > 12 && { fontSize: 28 },
+            number.length > 12 && { fontSize: 24 },
           ]}
           numberOfLines={1}
           adjustsFontSizeToFit
         >
-          {number || '\u00A0'}
+          {number || ''}
         </Text>
+        {number.length > 0 && (
+          <TouchableOpacity
+            onPress={handleDelete}
+            onLongPress={() => setNumber('')}
+            style={styles.keypadDeleteDisplay}
+            accessibilityLabel="Delete digit"
+          >
+            <Ionicons name="backspace-outline" size={26} color={colors.secondaryLabel} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Add Number link */}
-      {number.length > 0 && (
-        <TouchableOpacity style={{ marginBottom: 16 }}>
-          <Text style={{ color: colors.systemBlue, fontSize: 15 }}>Add Number</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Keypad grid */}
+      {/* Grid */}
       <View style={styles.keypadGrid}>
         {KEYPAD_ROWS.map((row, ri) => (
           <View key={ri} style={styles.keypadRow}>
@@ -393,8 +398,10 @@ function KeypadTab({ onCall, colors, typography, isDark }: {
               <TouchableOpacity
                 key={digit}
                 onPress={() => handleDigit(digit)}
-                activeOpacity={0.6}
-                style={[styles.keypadKey, { backgroundColor: keyBg }]}
+                activeOpacity={0.7}
+                style={[styles.keypadKey, { backgroundColor: keypadBg }]}
+                accessibilityLabel={digit}
+                accessibilityRole="button"
               >
                 <Text style={[styles.keypadDigit, { color: colors.label }]}>{digit}</Text>
                 {letters !== '' && (
@@ -406,222 +413,226 @@ function KeypadTab({ onCall, colors, typography, isDark }: {
         ))}
       </View>
 
-      {/* Action row: spacer, call button, delete */}
+      {/* Action Row */}
       <View style={styles.keypadActions}>
+        {/* Spacer left */}
         <View style={styles.keypadActionSlot} />
+
+        {/* Call Button */}
         <TouchableOpacity
           onPress={handleCall}
           style={[
             styles.keypadCallButton,
-            { backgroundColor: colors.systemGreen },
+            { backgroundColor: number ? colors.systemGreen : colors.systemGray4 },
           ]}
-          activeOpacity={0.7}
+          disabled={!number}
+          accessibilityLabel="Call"
+          accessibilityRole="button"
         >
-          <Ionicons name="call" size={32} color="#FFFFFF" />
+          <Ionicons name="call" size={30} color="#FFFFFF" />
         </TouchableOpacity>
+
+        {/* Backspace right */}
         <View style={styles.keypadActionSlot}>
           {number.length > 0 && (
             <TouchableOpacity
               onPress={handleDelete}
               onLongPress={() => setNumber('')}
               style={styles.keypadBackspace}
+              accessibilityLabel="Delete"
             >
-              <Ionicons name="backspace-outline" size={28} color={colors.label} />
+              <Ionicons name="backspace-outline" size={28} color={colors.secondaryLabel} />
             </TouchableOpacity>
           )}
         </View>
       </View>
+    </View>
+  );
+}
+
+// ─── Voicemail Tab ───────────────────────────────────────────────────────────
+
+function VoicemailTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+
+  const handleCallVoicemail = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onCall('*86', 'Voicemail');
+  }, [onCall]);
+
+  return (
+    <View style={styles.emptyState}>
+      <View style={[styles.voicemailIconBg, { backgroundColor: colors.systemGray5 }]}>
+        <Ionicons name="mail-unread-outline" size={40} color={colors.systemGray} />
+      </View>
+      <Text style={[typography.title3, { color: colors.label, marginTop: 16 }]}>No Voicemail</Text>
+      <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center', paddingHorizontal: 40 }]}>
+        Your voicemail inbox is empty.
+      </Text>
+      <TouchableOpacity
+        onPress={handleCallVoicemail}
+        style={[styles.voicemailBtn, { backgroundColor: colors.systemBlue }]}
+        accessibilityRole="button"
+        accessibilityLabel="Call Voicemail"
+      >
+        <Ionicons name="call" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+        <Text style={[typography.subhead, { color: '#FFFFFF', fontWeight: '600' }]}>Call Voicemail</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 // ─── PhoneScreen ─────────────────────────────────────────────────────────────
 
-export function PhoneScreen({ navigation }: { navigation: any }) {
-  const { theme, typography } = useTheme();
+const TABS = ['Favorites', 'Recents', 'Contacts', 'Keypad', 'Voicemail'];
+
+export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const [selectedTab, setSelectedTab] = useState(0);
 
+  const handleTabChange = useCallback((index: number) => {
+    setSelectedTab(index);
+  }, []);
+
   const handleCall = useCallback((phone: string, name?: string) => {
     navigation.navigate('CallScreen', { number: phone, name });
   }, [navigation]);
 
-  const handleInfo = useCallback((_phone: string, _name?: string) => {
-    // Could navigate to contact detail in the future
-  }, []);
-
   const renderContent = () => {
     switch (selectedTab) {
-      case 0:
-        return (
-          <RecentsTab
-            contacts={device.contacts}
-            onCall={handleCall}
-            onInfo={handleInfo}
-            colors={colors}
-            typography={typography}
-          />
-        );
-      case 1:
-        return (
-          <ContactsTab
-            contacts={device.contacts}
-            onCall={handleCall}
-            colors={colors}
-            typography={typography}
-          />
-        );
-      case 2:
-        return (
-          <KeypadTab
-            onCall={handleCall}
-            colors={colors}
-            typography={typography}
-            isDark={theme.dark}
-          />
-        );
-      default:
-        return null;
+      case 0: return <FavoritesTab contacts={device.contacts} onCall={handleCall} />;
+      case 1: return <RecentsTab onCall={handleCall} />;
+      case 2: return <ContactsTab contacts={device.contacts} onCall={handleCall} />;
+      case 3: return <KeypadTab onCall={handleCall} />;
+      case 4: return <VoicemailTab onCall={handleCall} />;
+      default: return null;
     }
   };
-
-  const tabTitle = TAB_CONFIG[selectedTab].label;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.systemGroupedBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
-
-      {/* iOS-style header with large title */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <View style={styles.headerTopRow}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            hitSlop={8}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
-          </Pressable>
-          {selectedTab === 0 && (
-            <TouchableOpacity style={{ padding: 4 }}>
-              <Text style={{ color: colors.systemBlue, fontSize: 17 }}>Edit</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <Text style={[styles.largeTitle, { color: colors.label }]}>
-          {tabTitle}
-        </Text>
-      </View>
-
-      {/* Content area */}
-      <View style={styles.content}>
-        {renderContent()}
-      </View>
-
-      {/* iOS-style bottom tab bar */}
+      {/* Navigation Bar */}
       <BlurView
-        intensity={90}
+        intensity={80}
         tint={theme.dark ? 'dark' : 'light'}
         experimentalBlurMethod="dimezisBlurView"
         style={[
-          styles.tabBar,
+          styles.navBar,
           {
-            paddingBottom: insets.bottom,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.separator,
+            paddingTop: insets.top,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.separator,
           },
         ]}
       >
-        <View style={styles.tabBarRow}>
-          {TAB_CONFIG.map((tab, index) => {
-            const isActive = selectedTab === index;
-            const iconName = isActive ? tab.icon : tab.iconOutline;
-            const color = isActive ? colors.systemBlue : colors.systemGray;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setSelectedTab(index);
-                }}
-                style={styles.tabItem}
-              >
-                <Ionicons name={iconName} size={25} color={color} />
-                <Text style={[styles.tabLabel, { color }]}>{tab.label}</Text>
-              </Pressable>
-            );
-          })}
+        <View style={styles.navBarContent}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+            style={styles.navBackButton}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
+          </Pressable>
+          <Text style={[typography.headline, { color: colors.label }]}>Phone</Text>
+          {/* Right slot keeps title centered */}
+          <View style={styles.navBackButton} />
+        </View>
+
+        {/* Segmented Control */}
+        <View style={styles.segmentedWrapper}>
+          <CupertinoSegmentedControl
+            values={TABS}
+            selectedIndex={selectedTab}
+            onChange={handleTabChange}
+          />
         </View>
       </BlurView>
+
+      {/* Content */}
+      <View style={[styles.content, { paddingTop: insets.top + 44 + 52 }]}>
+        {renderContent()}
+      </View>
     </View>
   );
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+  navBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
-  headerTopRow: {
+  navBarContent: {
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 44,
+    paddingHorizontal: 8,
   },
-  backButton: {
+  navBackButton: {
+    minWidth: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: -8,
   },
-  largeTitle: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: 0.41,
-    marginBottom: 4,
+  segmentedWrapper: {
+    paddingHorizontal: 10,
+    paddingBottom: 8,
   },
   content: {
     flex: 1,
   },
-
-  // Tab bar
-  tabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  // Avatar
+  avatar: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  tabBarRow: {
+  avatarText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  // Shared row
+  contactRow: {
     flexDirection: 'row',
-    height: 49,
+    alignItems: 'center',
+    paddingLeft: 16,
+    minHeight: 44,
   },
-  tabItem: {
+  contactInfo: {
     flex: 1,
+    paddingRight: 16,
+    paddingVertical: 10,
+  },
+  callBtn: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
+    marginRight: 8,
   },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 2,
+  separator: {
+    height: StyleSheet.hairlineWidth,
   },
-
-  // Empty state
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
+  // Section header
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-
   // Recents
   recentRow: {
     flexDirection: 'row',
@@ -629,7 +640,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     minHeight: 56,
-    position: 'relative',
   },
   recentLeft: {
     flexDirection: 'row',
@@ -640,47 +650,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  rowSeparator: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    height: StyleSheet.hairlineWidth,
+  // Empty state
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-
-  // Contacts
-  contactRow: {
+  voicemailIconBg: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voicemailBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 16,
-    minHeight: 52,
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  contactInfo: {
-    flex: 1,
-    paddingRight: 16,
-    paddingVertical: 10,
-    marginLeft: 12,
-  },
-  sectionHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    paddingTop: 8,
-  },
-  sectionIndexContainer: {
-    position: 'absolute',
-    right: 2,
-    top: 0,
-    bottom: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 16,
-    paddingVertical: 8,
-  },
-  sectionIndexLetter: {
-    fontSize: 11,
-    fontWeight: '600',
-    paddingVertical: 0.5,
-  },
-
   // Keypad
   keypadContainer: {
     flex: 1,
@@ -698,65 +689,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   keypadNumber: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: '300',
     letterSpacing: 2,
     textAlign: 'center',
     flex: 1,
   },
+  keypadDeleteDisplay: {
+    position: 'absolute',
+    right: 0,
+    padding: 8,
+  },
   keypadGrid: {
     width: '100%',
-    maxWidth: 310,
-    marginBottom: 16,
+    maxWidth: 320,
+    marginBottom: 12,
   },
   keypadRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   keypadKey: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 75,
+    height: 75,
+    borderRadius: 37.5,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 2,
   },
   keypadDigit: {
-    fontSize: 32,
-    fontWeight: '300',
-    lineHeight: 38,
+    fontSize: 28,
+    fontWeight: '600',
+    lineHeight: 34,
   },
   keypadLetters: {
     fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.8,
-    marginTop: -2,
-    opacity: 0.7,
+    fontWeight: '500',
+    letterSpacing: 1.5,
+    marginTop: -4,
   },
   keypadActions: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    maxWidth: 310,
+    maxWidth: 320,
     marginBottom: 8,
   },
   keypadActionSlot: {
-    width: 80,
-    height: 80,
+    width: 75,
+    height: 75,
     alignItems: 'center',
     justifyContent: 'center',
   },
   keypadCallButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 75,
+    height: 75,
+    borderRadius: 37.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   keypadBackspace: {
-    width: 80,
-    height: 80,
+    width: 75,
+    height: 75,
     alignItems: 'center',
     justifyContent: 'center',
   },

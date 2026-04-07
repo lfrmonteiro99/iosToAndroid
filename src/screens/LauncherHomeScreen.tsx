@@ -29,6 +29,7 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -152,6 +153,7 @@ interface AppIconProps {
 function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
+  const pressScale = useSharedValue(1);
 
   useEffect(() => {
     if (isJiggling) {
@@ -169,13 +171,28 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   }, [isJiggling]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
+    transform: [
+      { rotate: `${rotation.value}deg` },
+      { scale: pressScale.value },
+    ],
   }));
+
+  const handlePressIn = () => {
+    if (isJiggling) return;
+    pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handlePressOut = () => {
+    pressScale.value = withSpring(1.0, { damping: 12, stiffness: 200 });
+  };
 
   return (
     <Pressable
       style={[styles.appIconWrapper, { width: cellWidth }]}
       onPress={isJiggling ? undefined : onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       onLongPress={onLongPress}
       android_ripple={isJiggling ? null : { color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${app.name}`}
@@ -596,7 +613,7 @@ export function LauncherHomeScreen() {
   // Parallax wallpaper
   const scrollX = useSharedValue(0);
   const wallpaperAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -(scrollX.value * 0.1) }],
+    transform: [{ translateX: -(scrollX.value * 0.3) }],
   }));
 
   // Custom wallpaper URI (loaded from AsyncStorage when wallpaperIndex === 6)
