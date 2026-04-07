@@ -195,6 +195,7 @@ export function ProfileScreen() {
             />
           </CupertinoListSection>
 
+          {__DEV__ && (
           <CupertinoListSection>
             <CupertinoListTile
               title="Components Gallery"
@@ -202,6 +203,7 @@ export function ProfileScreen() {
               onPress={() => navigation.navigate('ComponentsGallery')}
             />
           </CupertinoListSection>
+          )}
 
           <CupertinoListSection>
             <CupertinoListTile
