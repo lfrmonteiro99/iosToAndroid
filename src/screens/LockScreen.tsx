@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,11 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  withSequence,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import * as Haptics from 'expo-haptics';
 import { useDevice } from '../store/DeviceStore';
@@ -59,13 +61,8 @@ function formatNotifTime(timestamp: number): string {
   return 'Yesterday';
 }
 
-const getLauncher = async () => {
-  try {
-    return (await import('../../modules/launcher-module/src')).default;
-  } catch {
-    return null;
-  }
-};
+const LOCK_PIN_KEY = '@lock_pin';
+const DEFAULT_PIN = '1234';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -180,6 +177,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
   const [now, setNow] = useState(new Date());
   const [authFailed, setAuthFailed] = useState(false);
+  const [showPasscode, setShowPasscode] = useState(false);
+  const [passcode, setPasscode] = useState('');
+  const passcodeShake = useSharedValue(0);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [notifications, setNotifications] = useState<RealNotification[]>([]);
 
@@ -242,26 +242,88 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
     return () => clearInterval(id);
   }, []);
 
+  // Ensure a default PIN exists in AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem(LOCK_PIN_KEY).then((stored) => {
+      if (!stored) {
+        AsyncStorage.setItem(LOCK_PIN_KEY, DEFAULT_PIN);
+      }
+    });
+  }, []);
+
+  const passcodeShakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: passcodeShake.value }],
+  }));
+
+  const handlePasscodeDigit = useCallback((digit: string) => {
+    setPasscode((prev) => {
+      if (prev.length >= 4) return prev;
+      const next = prev + digit;
+      if (next.length === 4) {
+        // Verify PIN asynchronously
+        AsyncStorage.getItem(LOCK_PIN_KEY).then((stored) => {
+          const pin = stored ?? DEFAULT_PIN;
+          if (next === pin) {
+            handleUnlock();
+          } else {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            passcodeShake.value = withSequence(
+              withTiming(-12, { duration: 50 }),
+              withTiming(12, { duration: 50 }),
+              withTiming(-12, { duration: 50 }),
+              withTiming(12, { duration: 50 }),
+              withTiming(0, { duration: 50 }),
+            );
+            // Clear after a short delay so user sees the dots filled briefly
+            setTimeout(() => setPasscode(''), 300);
+          }
+        });
+      }
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePasscodeDelete = useCallback(() => {
+    setPasscode((prev) => prev.slice(0, -1));
+  }, []);
+
   // Biometric unlock on mount
   const triggerBiometric = async () => {
     try {
       const LocalAuth = await import('expo-local-authentication');
       const hasHardware = await LocalAuth.hasHardwareAsync();
       const isEnrolled = await LocalAuth.isEnrolledAsync();
-      if (hasHardware && isEnrolled) {
-        const result = await LocalAuth.authenticateAsync({
-          promptMessage: 'Unlock your phone',
-          fallbackLabel: 'Use swipe',
-          disableDeviceFallback: false,
-        });
-        if (result.success) {
-          handleUnlock();
+
+      if (!hasHardware || !isEnrolled) {
+        // No biometrics available — go straight to passcode
+        setShowPasscode(true);
+        return;
+      }
+
+      const result = await LocalAuth.authenticateAsync({
+        promptMessage: 'Unlock your phone',
+        fallbackLabel: 'Use Passcode',
+        disableDeviceFallback: true,
+      });
+
+      if (result.success) {
+        handleUnlock();
+      } else {
+        // User cancelled or biometric failed
+        setAuthFailed(true);
+        if (result.error === 'user_cancel' || result.error === 'system_cancel' || result.error === 'app_cancel') {
+          // User cancelled — stay on lock screen, offer passcode
+          setShowPasscode(false);
         } else {
-          setAuthFailed(true);
-          setTimeout(() => setAuthFailed(false), 2000);
+          // Authentication failure — show both retry and passcode
+          setShowPasscode(false);
         }
       }
-    } catch { /* biometrics not available */ }
+    } catch {
+      // Biometrics not available at all — fall back to passcode
+      setShowPasscode(true);
+    }
   };
 
   useEffect(() => {
@@ -392,8 +454,71 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         </View>
 
         {/* ---------------------------------------------------------------- */}
+        {/* Passcode UI (shown when biometric fails or is unavailable)       */}
+        {/* ---------------------------------------------------------------- */}
+        {showPasscode && (
+          <View style={styles.passcodeOverlay}>
+            <Text style={styles.passcodeTitle}>Enter Passcode</Text>
+            <Animated.View style={[styles.passcodeDots, passcodeShakeStyle]}>
+              {[0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.passcodeDot,
+                    i < passcode.length && styles.passcodeDotFilled,
+                  ]}
+                />
+              ))}
+            </Animated.View>
+            <View style={styles.numpad}>
+              {[
+                ['1', '2', '3'],
+                ['4', '5', '6'],
+                ['7', '8', '9'],
+                ['', '0', 'del'],
+              ].map((row, ri) => (
+                <View key={ri} style={styles.numpadRow}>
+                  {row.map((key) => {
+                    if (key === '') return <View key="empty" style={styles.numpadKey} />;
+                    if (key === 'del') {
+                      return (
+                        <Pressable
+                          key="del"
+                          style={styles.numpadKey}
+                          onPress={handlePasscodeDelete}
+                          accessibilityLabel="Delete"
+                        >
+                          <Ionicons name="backspace-outline" size={24} color="#fff" />
+                        </Pressable>
+                      );
+                    }
+                    return (
+                      <Pressable
+                        key={key}
+                        style={styles.numpadKey}
+                        onPress={() => handlePasscodeDigit(key)}
+                        accessibilityLabel={`Digit ${key}`}
+                      >
+                        <Text style={styles.numpadKeyText}>{key}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+            <Pressable
+              onPress={() => { setShowPasscode(false); setPasscode(''); }}
+              style={styles.passcodeCancel}
+            >
+              <Text style={styles.passcodeCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
         {/* Bottom area: flashlight, swipe hint, camera                       */}
         {/* ---------------------------------------------------------------- */}
+        {!showPasscode && (
         <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
             style={styles.circleButton}
@@ -414,9 +539,33 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               <Ionicons name="finger-print" size={28} color="rgba(255,255,255,0.75)" />
             </Pressable>
             {authFailed && (
-              <Text style={styles.authFailedText}>
-                Authentication failed. Swipe up to unlock.
-              </Text>
+              <View style={styles.authFailedWrap}>
+                <Text style={styles.authFailedText}>
+                  Authentication failed
+                </Text>
+                <View style={styles.authFailedButtons}>
+                  <Pressable
+                    onPress={() => { setAuthFailed(false); triggerBiometric(); }}
+                    style={styles.authActionButton}
+                  >
+                    <Text style={styles.authActionText}>Try Again</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => { setAuthFailed(false); setShowPasscode(true); }}
+                    style={styles.authActionButton}
+                  >
+                    <Text style={styles.authActionText}>Use Passcode</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+            {!authFailed && (
+              <Pressable
+                onPress={() => setShowPasscode(true)}
+                style={styles.usePasscodeButton}
+              >
+                <Text style={styles.usePasscodeText}>Use Passcode</Text>
+              </Pressable>
             )}
             <View style={styles.homeIndicator} />
           </View>
@@ -431,6 +580,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             </BlurView>
           </Pressable>
         </View>
+        )}
       </Animated.View>
     </GestureDetector>
   );
@@ -595,5 +745,93 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 2.5,
     backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  authFailedWrap: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  authFailedButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  authActionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  authActionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  usePasscodeButton: {
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  usePasscodeText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // Passcode
+  passcodeOverlay: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+  },
+  passcodeTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 20,
+  },
+  passcodeDots: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 28,
+  },
+  passcodeDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'transparent',
+  },
+  passcodeDotFilled: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
+  },
+  numpad: {
+    gap: 12,
+  },
+  numpadRow: {
+    flexDirection: 'row',
+    gap: 24,
+    justifyContent: 'center',
+  },
+  numpadKey: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numpadKeyText: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '300',
+  },
+  passcodeCancel: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  passcodeCancelText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });
