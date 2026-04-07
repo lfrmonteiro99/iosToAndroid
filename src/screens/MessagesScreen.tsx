@@ -5,17 +5,19 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
+  Alert,
   TextInput,
   Platform,
   PermissionsAndroid,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoButton, CupertinoActivityIndicator } from '../components';
+import { CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow } from '../components';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -85,6 +87,8 @@ interface ConversationRowProps {
   colors: any;
   typography: any;
   onPress: () => void;
+  onDelete: () => void;
+  draft?: string;
 }
 
 const ConversationRow = React.memo(function ConversationRow({
@@ -93,6 +97,8 @@ const ConversationRow = React.memo(function ConversationRow({
   colors,
   typography,
   onPress,
+  onDelete,
+  draft,
 }: ConversationRowProps) {
   const contact = findContactByPhone(conversation.address, contacts);
   const displayName = contact
@@ -101,75 +107,92 @@ const ConversationRow = React.memo(function ConversationRow({
   const hasUnread = conversation.unreadCount > 0;
   const bgColor = contact ? avatarColor(contact.id) : avatarColor(conversation.address);
 
+  const trailingActions = [
+    {
+      label: 'Delete',
+      color: '#FF3B30',
+      onPress: onDelete,
+    },
+  ];
+
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.row,
-        { backgroundColor: pressed ? colors.systemGray5 : 'transparent' },
-      ]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`Conversation with ${displayName}`}
-    >
-      {/* Unread indicator */}
-      <View style={styles.unreadIndicatorSlot}>
-        {hasUnread && (
-          <View style={[styles.unreadIndicator, { backgroundColor: colors.systemBlue }]} />
-        )}
-      </View>
-
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-        {contact ? (
-          <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
-        ) : (
-          <Ionicons name="person" size={22} color="#FFFFFF" />
-        )}
-      </View>
-
-      {/* Content */}
-      <View
-        style={[
-          styles.rowContent,
-          { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+    <CupertinoSwipeableRow trailingActions={trailingActions}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          { backgroundColor: pressed ? colors.systemGray5 : 'transparent' },
         ]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Conversation with ${displayName}`}
       >
-        <View style={styles.rowTop}>
-          <Text
-            style={[
-              typography.body,
-              styles.nameText,
-              { color: colors.label, fontWeight: hasUnread ? '700' : '400' },
-            ]}
-            numberOfLines={1}
-          >
-            {displayName}
-          </Text>
-          <View style={styles.dateChevronRow}>
-            <Text style={[typography.subhead, { color: colors.secondaryLabel, fontSize: 15 }]}>
-              {conversation.lastMessage.dateFormatted}
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={colors.systemGray3}
-              style={{ marginLeft: 4 }}
-            />
-          </View>
+        {/* Unread indicator */}
+        <View style={styles.unreadIndicatorSlot}>
+          {hasUnread && (
+            <View style={[styles.unreadIndicator, { backgroundColor: colors.systemBlue }]} />
+          )}
         </View>
 
-        <Text
+        {/* Avatar */}
+        <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+          {contact ? (
+            <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
+          ) : (
+            <Ionicons name="person" size={22} color="#FFFFFF" />
+          )}
+        </View>
+
+        {/* Content */}
+        <View
           style={[
-            typography.subhead,
-            styles.previewText,
-            { color: colors.secondaryLabel },
+            styles.rowContent,
+            { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
           ]}
-          numberOfLines={2}
         >
-          {conversation.lastMessage.body}
-        </Text>
-      </View>
-    </Pressable>
+          <View style={styles.rowTop}>
+            <Text
+              style={[
+                typography.body,
+                styles.nameText,
+                { color: colors.label, fontWeight: hasUnread ? '700' : '400' },
+              ]}
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+            <View style={styles.dateChevronRow}>
+              <Text style={[typography.subhead, { color: colors.secondaryLabel, fontSize: 15 }]}>
+                {conversation.lastMessage.dateFormatted}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.systemGray3}
+                style={{ marginLeft: 4 }}
+              />
+            </View>
+          </View>
+
+          <Text
+            style={[
+              typography.subhead,
+              styles.previewText,
+              { color: colors.secondaryLabel },
+            ]}
+            numberOfLines={2}
+          >
+            {draft ? (
+              <>
+                <Text style={{ color: colors.systemGray, fontStyle: 'italic' }}>Draft: </Text>
+                {draft}
+              </>
+            ) : (
+              conversation.lastMessage.body
+            )}
+          </Text>
+        </View>
+      </Pressable>
+    </CupertinoSwipeableRow>
   );
 });
 
@@ -183,6 +206,8 @@ export function MessagesScreen() {
   const device = useDevice();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletedAddresses, setDeletedAddresses] = useState<Set<string>>(new Set());
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
 
@@ -200,9 +225,49 @@ export function MessagesScreen() {
   }, [device.messages]);
 
   const conversations = useMemo(
-    () => groupConversations(device.messages),
-    [device.messages],
+    () => groupConversations(device.messages).filter(
+      (conv) => !deletedAddresses.has(conv.address),
+    ),
+    [device.messages, deletedAddresses],
   );
+
+  // Load drafts for all conversation addresses
+  useEffect(() => {
+    const loadDrafts = async () => {
+      const allConvs = groupConversations(device.messages);
+      if (allConvs.length === 0) return;
+      try {
+        const loaded: Record<string, string> = {};
+        await Promise.all(
+          allConvs.map(async (c) => {
+            const value = await AsyncStorage.getItem(`@draft_${c.address}`);
+            if (value) loaded[c.address] = value;
+          }),
+        );
+        setDrafts(loaded);
+      } catch {
+        // ignore
+      }
+    };
+    loadDrafts();
+  }, [device.messages]);
+
+  const handleDeleteConversation = useCallback((address: string) => {
+    Alert.alert(
+      'Delete Conversation',
+      'Are you sure you want to delete this conversation?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDeletedAddresses((prev) => new Set(prev).add(address));
+          },
+        },
+      ],
+    );
+  }, []);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
@@ -235,9 +300,11 @@ export function MessagesScreen() {
         colors={colors}
         typography={typography}
         onPress={() => handleConversationPress(item.address)}
+        onDelete={() => handleDeleteConversation(item.address)}
+        draft={drafts[item.address]}
       />
     ),
-    [device.contacts, colors, typography, handleConversationPress],
+    [device.contacts, colors, typography, handleConversationPress, handleDeleteConversation, drafts],
   );
 
   const keyExtractor = useCallback((item: Conversation) => item.address, []);
