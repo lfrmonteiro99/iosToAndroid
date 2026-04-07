@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -17,6 +18,7 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { openSystemPanel } = useDevice();
   const [showShutdown, setShowShutdown] = useState(false);
   const [showAirdropPicker, setShowAirdropPicker] = useState(false);
   const [showBgRefreshPicker, setShowBgRefreshPicker] = useState(false);
@@ -67,8 +69,8 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
               }
               onPress={() => setShowAirdropPicker(true)}
             />
-            <CupertinoListTile title="AirPlay & Handoff" onPress={() => {}} />
-            <CupertinoListTile title="CarPlay" onPress={() => {}} />
+            <CupertinoListTile title="AirPlay & Handoff" onPress={() => Alert.alert('AirPlay & Handoff', 'Not available on Android devices.')} />
+            <CupertinoListTile title="CarPlay" onPress={() => Alert.alert('CarPlay', 'Not available on Android devices.')} />
           </CupertinoListSection>
         </View>
 
@@ -103,20 +105,20 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
               }
               onPress={() => navigation.navigate('LanguageRegion')}
             />
-            <CupertinoListTile title="Dictionary" onPress={() => {}} />
+            <CupertinoListTile title="Dictionary" onPress={() => openSystemPanel('locale')} />
           </CupertinoListSection>
         </View>
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
             <CupertinoListTile title="VPN & Device Management" onPress={() => navigation.navigate('Vpn')} />
-            <CupertinoListTile title="Legal & Regulatory" onPress={() => {}} />
+            <CupertinoListTile title="Legal & Regulatory" onPress={() => Alert.alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')} />
           </CupertinoListSection>
         </View>
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="Transfer or Reset Device" onPress={() => {}} />
+            <CupertinoListTile title="Transfer or Reset Device" onPress={() => Alert.alert('Reset', 'Go to Android Settings to reset your device.', [{ text: 'Open Settings', onPress: () => openSystemPanel('reset') }, { text: 'Cancel' }])} />
             <CupertinoListTile title="Backup & Restore" onPress={() => navigation.navigate('BackupRestore')} />
             <CupertinoListTile title="Shut Down" showChevron={false} onPress={() => setShowShutdown(true)} />
           </CupertinoListSection>

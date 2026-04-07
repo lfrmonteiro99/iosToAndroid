@@ -131,7 +131,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
                     {lastBackupTime}
                   </Text>
                 }
-                onPress={() => {}}
+                onPress={() => Alert.alert('Last Backup', `Your last backup was on ${lastBackupTime}.`)}
               />
             )}
           </CupertinoListSection>

@@ -125,7 +125,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
                 backgroundColor: colors.systemGray,
               }}
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('security')}
             />
           </CupertinoListSection>
         </View>

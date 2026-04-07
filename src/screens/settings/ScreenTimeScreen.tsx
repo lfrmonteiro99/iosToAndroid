@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -88,7 +88,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
                       {formatMinutes(settings.dailyLimit)}
                     </Text>
                   }
-                  onPress={() => {}}
+                  onPress={() => Alert.alert('Daily Limit', 'Use Android Digital Wellbeing to configure app timers.')}
                 />
               </CupertinoListSection>
             </View>
@@ -115,7 +115,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
                           {settings.downtimeStart}
                         </Text>
                       }
-                      onPress={() => {}}
+                      onPress={() => Alert.alert('Downtime Start', 'Configure downtime schedule in Android Digital Wellbeing settings.')}
                     />
                     <CupertinoListTile
                       title="End"
@@ -124,7 +124,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
                           {settings.downtimeEnd}
                         </Text>
                       }
-                      onPress={() => {}}
+                      onPress={() => Alert.alert('Downtime End', 'Configure downtime schedule in Android Digital Wellbeing settings.')}
                     />
                   </>
                 )}
@@ -141,11 +141,11 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
                       {settings.dailyLimit > 0 ? 'On' : 'Off'}
                     </Text>
                   }
-                  onPress={() => {}}
+                  onPress={() => Alert.alert('App Limits', 'Use Android Digital Wellbeing to set app timers.')}
                 />
                 <CupertinoListTile
                   title="Content & Privacy Restrictions"
-                  onPress={() => {}}
+                  onPress={() => Alert.alert('Content & Privacy Restrictions', 'Use Android parental controls to manage content restrictions.')}
                 />
               </CupertinoListSection>
             </View>
