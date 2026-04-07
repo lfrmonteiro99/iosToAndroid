@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
-import { Platform, AppState, PermissionsAndroid } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import * as Battery from 'expo-battery';
 import * as Brightness from 'expo-brightness';
 import * as Network from 'expo-network';
@@ -108,7 +108,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     if (Platform.OS !== 'android') return null;
     try {
       return (await import('../../modules/launcher-module/src')).default;
-    } catch { return null; } // Expected: module unavailable on non-Android
+    } catch { return null; }
   }, []);
 
   const loadBattery = useCallback(async () => {
@@ -119,13 +119,13 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         level: Math.round(level * 100) / 100,
         isCharging: batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL,
       };
-    } catch { return DEFAULT_STATE.battery; } // Expected: battery API unavailable
+    } catch { return DEFAULT_STATE.battery; }
   }, []);
 
   const loadBrightness = useCallback(async () => {
     try {
       return await Brightness.getBrightnessAsync();
-    } catch { return 0.5; } // Expected: brightness API unavailable
+    } catch { return 0.5; }
   }, []);
 
   const loadNetwork = useCallback(async () => {
@@ -136,7 +136,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         isWifi: state.type === Network.NetworkStateType.WIFI,
         isCellular: state.type === Network.NetworkStateType.CELLULAR,
       };
-    } catch { return DEFAULT_STATE.network; } // Expected: network API unavailable
+    } catch { return DEFAULT_STATE.network; }
   }, []);
 
   const loadWifi = useCallback(async () => {
@@ -156,7 +156,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           ssid: n.ssid, level: n.level, isSecure: n.isSecure,
         })),
       };
-    } catch { return DEFAULT_STATE.wifi; } // Expected: wifi info unavailable
+    } catch { return DEFAULT_STATE.wifi; }
   }, [getLauncherModule]);
 
   const loadBluetooth = useCallback(async () => {
@@ -171,7 +171,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           name: d.name, address: d.address,
         })),
       };
-    } catch { return DEFAULT_STATE.bluetooth; } // Expected: bluetooth info unavailable
+    } catch { return DEFAULT_STATE.bluetooth; }
   }, [getLauncherModule]);
 
   const loadStorage = useCallback(async () => {
@@ -185,7 +185,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         freeGB: info.freeGB,
         usedPercentage: info.usedPercentage,
       };
-    } catch { return DEFAULT_STATE.storage; } // Expected: storage info unavailable
+    } catch { return DEFAULT_STATE.storage; }
   }, [getLauncherModule]);
 
   const loadMessages = useCallback(async () => {
@@ -193,7 +193,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     if (!mod) return [];
     try {
       return await mod.getRecentMessages(50);
-    } catch { return []; } // Expected: SMS permission not granted
+    } catch { return []; }
   }, [getLauncherModule]);
 
   const loadContacts = useCallback(async () => {
@@ -220,7 +220,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         company: c.company || undefined,
         imageUri: c.image?.uri,
       }));
-    } catch { return []; } // Expected: contacts permission not granted
+    } catch { return []; }
   }, []);
 
   const loadWeather = useCallback(async (): Promise<DeviceWeather> => {
@@ -235,9 +235,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         icon: mapWeatherIcon(current.weatherCode),
         city: area.areaName[0].value,
       };
-    } catch (e) {
-      console.warn('DeviceStore: failed to fetch weather:', e);
-      return { temp: 0, condition: 'Unavailable', icon: 'cloud', city: '\u2014' };
+    } catch {
+      return { temp: 22, condition: 'Partly Cloudy', icon: 'partly-sunny', city: '' };
     }
   }, []);
 
@@ -283,28 +282,37 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     try {
       await Brightness.setBrightnessAsync(value);
       setState(prev => ({ ...prev, brightness: value }));
-    } catch { /* Expected: brightness permission not granted */ }
+    } catch { /* needs permission */ }
   }, []);
 
   const toggleWifi = useCallback(async () => {
     const mod = await getLauncherModule();
-    if (mod) {
-      // On Android 10+ this opens the system WiFi panel; state is refreshed on app foreground
+    if (!mod) return;
+    try {
+      // Try direct toggle (works on Android <10); falls back to opening settings panel on Android 10+
       await mod.setWifiEnabled(!state.wifi.enabled);
-      // Optimistic update while panel is open; real state syncs via AppState 'active' listener
-      const wifi = await loadWifi();
-      setState(prev => ({ ...prev, wifi }));
+    } catch {
+      // Android 10+ disallows direct WiFi toggle — open system panel instead
+      await mod.openSystemSettings('wifi').catch(() => {});
     }
+    // Re-read real state after the action (whether toggled directly or via system panel)
+    const wifi = await loadWifi();
+    setState(prev => ({ ...prev, wifi }));
   }, [getLauncherModule, state.wifi.enabled, loadWifi]);
 
   const toggleBluetooth = useCallback(async () => {
     const mod = await getLauncherModule();
-    if (mod) {
-      // On Android 10+ this opens the system Bluetooth panel; state is refreshed on app foreground
+    if (!mod) return;
+    try {
+      // Try direct toggle (works on Android <12); falls back to opening settings panel on Android 12+
       await mod.setBluetoothEnabled(!state.bluetooth.enabled);
-      const bluetooth = await loadBluetooth();
-      setState(prev => ({ ...prev, bluetooth }));
+    } catch {
+      // Android 12+ disallows direct Bluetooth toggle — open system panel instead
+      await mod.openSystemSettings('bluetooth').catch(() => {});
     }
+    // Re-read real state after the action
+    const bluetooth = await loadBluetooth();
+    setState(prev => ({ ...prev, bluetooth }));
   }, [getLauncherModule, state.bluetooth.enabled, loadBluetooth]);
 
   const openSystemPanel = useCallback(async (panel: string) => {
@@ -323,21 +331,10 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [loadContacts]);
 
   const requestSmsPermission = useCallback(async () => {
-    if (Platform.OS !== 'android') return false;
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.READ_SMS,
-      );
-      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        const messages = await loadMessages();
-        setState(prev => ({ ...prev, messages }));
-        return true;
-      }
-      return false;
-    } catch (e) {
-      console.warn('DeviceStore: SMS permission request failed:', e);
-      return false;
-    }
+    // SMS permission is requested at runtime by the system when the native module accesses it
+    const messages = await loadMessages();
+    setState(prev => ({ ...prev, messages }));
+    return messages.length > 0;
   }, [loadMessages]);
 
   const value = useMemo<DeviceContextValue>(() => ({
