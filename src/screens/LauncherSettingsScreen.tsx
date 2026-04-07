@@ -116,7 +116,7 @@ export function LauncherSettingsScreen() {
             await Promise.all([
               AsyncStorage.removeItem('@iostoandroid/apps_layout'),
               AsyncStorage.removeItem('@iostoandroid/folders'),
-              AsyncStorage.removeItem('@iostoandroid/onboarding_complete'),
+              AsyncStorage.removeItem('@iostoandroid/onboarding_done'),
               AsyncStorage.removeItem('@iostoandroid/custom_wallpaper'),
             ]);
             Alert.alert('Reset complete', 'Please restart the app.');
@@ -132,7 +132,7 @@ export function LauncherSettingsScreen() {
       {
         text: 'Confirm',
         onPress: async () => {
-          await AsyncStorage.removeItem('@iostoandroid/onboarding_complete');
+          await AsyncStorage.removeItem('@iostoandroid/onboarding_done');
           Alert.alert('Done', 'Restart the app to see onboarding.');
         },
       },
