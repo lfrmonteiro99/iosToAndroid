@@ -12,10 +12,10 @@ export interface Profile {
 }
 
 const DEFAULT_PROFILE: Profile = {
-  name: 'John Appleseed',
-  email: 'john.appleseed@icloud.com',
-  bio: 'Designer & developer based in Cupertino. Passionate about creating beautiful user interfaces that feel right at home on any platform.',
-  appleId: 'john@icloud.com',
+  name: '',
+  email: '',
+  bio: '',
+  appleId: '',
   icloudStorage: '50 GB',
 };
 

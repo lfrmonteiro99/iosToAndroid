@@ -46,7 +46,8 @@ const AVATAR_COLORS = [
 ];
 
 function avatarColor(contact: DeviceContact): string {
-  const seed = contact.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const name = getFullName(contact);
+  const seed = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return AVATAR_COLORS[seed % AVATAR_COLORS.length];
 }
 
