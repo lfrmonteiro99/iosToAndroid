@@ -261,6 +261,14 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.getNotifications(); }
       catch (e) { console.warn('LauncherModule.getNotifications failed:', e); return []; }
     },
+    clearNotification: async (key: string) => {
+      try { return await nativeModule.clearNotification(key); }
+      catch (e) { console.warn('LauncherModule.clearNotification failed:', e); return false; }
+    },
+    clearAllNotifications: async () => {
+      try { return await nativeModule.clearAllNotifications(); }
+      catch (e) { console.warn('LauncherModule.clearAllNotifications failed:', e); return false; }
+    },
     isNotificationAccessGranted: async () => {
       try { return await nativeModule.isNotificationAccessGranted(); }
       catch (e) { console.warn('LauncherModule.isNotificationAccessGranted failed:', e); return false; }
