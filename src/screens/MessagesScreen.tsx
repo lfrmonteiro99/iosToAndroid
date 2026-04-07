@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -182,6 +184,20 @@ export function MessagesScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (Platform.OS !== 'android') {
+        setHasSmsPermission(false);
+        return;
+      }
+      const granted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+      );
+      setHasSmsPermission(granted);
+    })();
+  }, [device.messages]);
 
   const conversations = useMemo(
     () => groupConversations(device.messages),
@@ -226,15 +242,20 @@ export function MessagesScreen() {
 
   const keyExtractor = useCallback((item: Conversation) => item.address, []);
 
+  const handleGrantPermission = useCallback(async () => {
+    const granted = await device.requestSmsPermission();
+    setHasSmsPermission(granted);
+  }, [device]);
+
   const ListEmpty = (
     <View style={styles.emptyContainer}>
-      {device.messages.length === 0 ? (
+      {hasSmsPermission === false ? (
         <>
           <View style={[styles.emptyIconBg, { backgroundColor: colors.systemGray5 }]}>
-            <Ionicons name="chatbubble-outline" size={40} color={colors.systemGray} />
+            <Ionicons name="lock-closed-outline" size={40} color={colors.systemGray} />
           </View>
           <Text style={[typography.title3, { color: colors.label, marginTop: 16 }]}>
-            No Messages
+            SMS Permission Required
           </Text>
           <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center' }]}>
             Grant SMS permission to see your messages.
@@ -242,7 +263,7 @@ export function MessagesScreen() {
           <View style={{ marginTop: spacing.lg }}>
             <CupertinoButton
               title="Grant SMS Permission"
-              onPress={() => device.requestSmsPermission()}
+              onPress={handleGrantPermission}
             />
           </View>
         </>
