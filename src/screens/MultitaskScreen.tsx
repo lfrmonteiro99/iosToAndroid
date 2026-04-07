@@ -21,7 +21,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 
-import { useApps, InstalledApp } from '../store/AppsStore';
+import { useApps, InstalledApp, RecentApp } from '../store/AppsStore';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,17 +53,30 @@ function hashName(name: string): number {
   return Math.abs(hash);
 }
 
+/** Returns a human-readable "time since" string given an epoch ms timestamp */
+function timeSince(epochMs: number): string {
+  const seconds = Math.floor((Date.now() - epochMs) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 // ---------------------------------------------------------------------------
 // RecentAppCard
 // ---------------------------------------------------------------------------
 
 interface RecentAppCardProps {
   app: InstalledApp;
+  launchedAt: number;
   onSwipeUp: () => void;
   onTap: () => void;
 }
 
-function RecentAppCard({ app, onSwipeUp, onTap }: RecentAppCardProps) {
+function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps) {
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
 
@@ -135,7 +148,7 @@ function RecentAppCard({ app, onSwipeUp, onTap }: RecentAppCardProps) {
           </View>
         </Pressable>
 
-        {/* App info below card */}
+        {/* App info below card: icon + name + time since launch */}
         <View style={styles.appInfo}>
           {app.icon ? (
             <Image source={{ uri: app.icon }} style={styles.appInfoIcon} resizeMode="contain" />
@@ -144,9 +157,14 @@ function RecentAppCard({ app, onSwipeUp, onTap }: RecentAppCardProps) {
               <Ionicons name="apps" size={14} color="#fff" />
             </View>
           )}
-          <Text style={styles.appInfoName} numberOfLines={1}>
-            {app.name}
-          </Text>
+          <View style={styles.appInfoText}>
+            <Text style={styles.appInfoName} numberOfLines={1}>
+              {app.name}
+            </Text>
+            <Text style={styles.appInfoTime} numberOfLines={1}>
+              {timeSince(launchedAt)}
+            </Text>
+          </View>
         </View>
       </Animated.View>
     </GestureDetector>
@@ -157,35 +175,39 @@ function RecentAppCard({ app, onSwipeUp, onTap }: RecentAppCardProps) {
 // MultitaskScreen
 // ---------------------------------------------------------------------------
 
+interface RecentEntry {
+  app: InstalledApp;
+  launchedAt: number;
+}
+
 export function MultitaskScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
-  const { apps, recentPackages } = useApps();
+  const { apps, recentApps, removeFromRecents, clearRecents } = useApps();
 
-  // Build recents list: prefer actual tracked recents, fall back to sorted-by-name
-  const initialRecents = useMemo(() => {
-    if (recentPackages.length > 0) {
-      return recentPackages
-        .map(pkg => apps.find(a => a.packageName === pkg))
-        .filter(Boolean) as InstalledApp[];
-    }
-    // Fallback: sort by name, take first 8
-    return [...apps]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 8);
-  }, [apps, recentPackages]);
+  // Resolve RecentApp[] to RecentEntry[] by joining with InstalledApp
+  const initialEntries = useMemo<RecentEntry[]>(() => {
+    return recentApps
+      .map((r: RecentApp) => {
+        const app = apps.find(a => a.packageName === r.packageName);
+        return app ? { app, launchedAt: r.launchedAt } : null;
+      })
+      .filter(Boolean) as RecentEntry[];
+  }, [apps, recentApps]);
 
-  const [recents, setRecents] = useState<InstalledApp[]>(initialRecents);
+  const [entries, setEntries] = useState<RecentEntry[]>(initialEntries);
 
-  const handleDismiss = useCallback((pkg: string) => {
-    setRecents((prev) => prev.filter((a) => a.packageName !== pkg));
-  }, []);
+  const handleDismiss = useCallback((packageName: string) => {
+    setEntries(prev => prev.filter(e => e.app.packageName !== packageName));
+    removeFromRecents(packageName);
+  }, [removeFromRecents]);
 
   const handleClearAll = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setRecents([]);
-  }, []);
+    setEntries([]);
+    clearRecents();
+  }, [clearRecents]);
 
-  const handleTap = useCallback((app: InstalledApp) => {
+  const handleTap = useCallback((_app: InstalledApp) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.goBack();
   }, [navigation]);
@@ -205,14 +227,14 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
       {/* Header */}
       <View style={[styles.header, { marginTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Recents</Text>
-        {recents.length > 0 && (
+        {entries.length > 0 && (
           <Pressable onPress={handleClearAll} style={styles.clearAllButton}>
             <Text style={styles.clearAllText}>Clear All</Text>
           </Pressable>
         )}
       </View>
 
-      {recents.length === 0 ? (
+      {entries.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="apps-outline" size={56} color="rgba(255,255,255,0.3)" />
           <Text style={styles.emptyTitle}>No Recent Apps</Text>
@@ -230,10 +252,11 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
           snapToInterval={CARD_WIDTH + CARD_OVERLAP + 20}
           snapToAlignment="center"
         >
-          {recents.map((app) => (
+          {entries.map(({ app, launchedAt }) => (
             <RecentAppCard
               key={app.packageName}
               app={app}
+              launchedAt={launchedAt}
               onSwipeUp={() => handleDismiss(app.packageName)}
               onTap={() => handleTap(app)}
             />
@@ -324,7 +347,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    // Subtle shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -388,11 +410,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  appInfoText: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   appInfoName: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 13,
     fontWeight: '500',
-    flex: 1,
+  },
+  appInfoTime: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 11,
+    fontWeight: '400',
+    marginTop: 1,
   },
 
   empty: {

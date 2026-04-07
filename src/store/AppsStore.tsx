@@ -18,6 +18,11 @@ export interface HomeApp {
   position: number;
 }
 
+export interface RecentApp {
+  packageName: string;
+  launchedAt: number; // epoch ms
+}
+
 interface AppsState {
   allApps: InstalledApp[];
   homeApps: HomeApp[];
@@ -31,6 +36,7 @@ interface AppsContextValue {
   dockApps: InstalledApp[];
   nonDockApps: InstalledApp[];
   recentPackages: string[];
+  recentApps: RecentApp[];
   isLoading: boolean;
   refreshApps: () => Promise<void>;
   launchApp: (packageName: string) => Promise<void>;
@@ -38,6 +44,8 @@ interface AppsContextValue {
   removeFromHome: (packageName: string) => void;
   addToDock: (packageName: string) => void;
   removeFromDock: (packageName: string) => void;
+  removeFromRecents: (packageName: string) => void;
+  clearRecents: () => void;
   isDefaultLauncher: boolean;
   openLauncherSettings: () => Promise<void>;
 }
@@ -68,24 +76,52 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     isLoading: true,
   });
   const [isDefault, setIsDefault] = useState(false);
-  const [recentPackages, setRecentPackages] = useState<string[]>([]);
+  const [recentApps, setRecentApps] = useState<RecentApp[]>([]);
 
-  // Load recent apps from storage
+  // Load recent apps from storage — supports legacy string[] format
   useEffect(() => {
     AsyncStorage.getItem(RECENTS_KEY).then(raw => {
       if (raw) {
-        try { setRecentPackages(JSON.parse(raw)); } catch (e) { console.warn('AppsStore: failed to parse recent apps:', e); }
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            if (parsed.length > 0 && typeof parsed[0] === 'string') {
+              // Legacy format: migrate string[] to RecentApp[]
+              const migrated: RecentApp[] = (parsed as string[]).map((pkg, i) => ({
+                packageName: pkg,
+                launchedAt: Date.now() - i * 60000,
+              }));
+              setRecentApps(migrated);
+              AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(migrated));
+            } else {
+              setRecentApps(parsed as RecentApp[]);
+            }
+          }
+        } catch (e) { console.warn('AppsStore: failed to parse recent apps:', e); }
       }
     });
   }, []);
 
   const addToRecents = useCallback(async (packageName: string) => {
-    setRecentPackages(prev => {
-      const filtered = prev.filter(p => p !== packageName);
-      const next = [packageName, ...filtered].slice(0, MAX_RECENTS);
+    setRecentApps(prev => {
+      const filtered = prev.filter(p => p.packageName !== packageName);
+      const next: RecentApp[] = [{ packageName, launchedAt: Date.now() }, ...filtered].slice(0, MAX_RECENTS);
       AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(next));
       return next;
     });
+  }, []);
+
+  const removeFromRecents = useCallback((packageName: string) => {
+    setRecentApps(prev => {
+      const next = prev.filter(p => p.packageName !== packageName);
+      AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const clearRecents = useCallback(() => {
+    setRecentApps([]);
+    AsyncStorage.setItem(RECENTS_KEY, JSON.stringify([]));
   }, []);
 
   const loadApps = useCallback(async () => {
@@ -117,7 +153,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
           const savedDock = parsed.dockApps || [];
           const hasVirtualApps = DEFAULT_DOCK.some((pkg: string) => savedDock.includes(pkg));
           dockApps = hasVirtualApps ? savedDock : DEFAULT_DOCK;
-        } catch (e) { console.warn('AppsStore: failed to parse saved layout:', e); }
+        } catch { /* ignore */ }
       }
 
       // Ensure our built-in apps are always in the dock
@@ -221,12 +257,16 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     [state.allApps, state.dockApps]
   );
 
+  // Derive recentPackages (string[]) for backward compatibility
+  const recentPackages = useMemo(() => recentApps.map(r => r.packageName), [recentApps]);
+
   const value = useMemo(() => ({
     apps: state.allApps,
     homeApps: state.homeApps,
     dockApps,
     nonDockApps,
     recentPackages,
+    recentApps,
     isLoading: state.isLoading,
     refreshApps: loadApps,
     launchApp,
@@ -234,9 +274,11 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     removeFromHome,
     addToDock,
     removeFromDock,
+    removeFromRecents,
+    clearRecents,
     isDefaultLauncher: isDefault,
     openLauncherSettings,
-  }), [state, dockApps, nonDockApps, recentPackages, isDefault, loadApps, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, openLauncherSettings]);
+  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, loadApps, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }
