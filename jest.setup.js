@@ -177,7 +177,18 @@ jest.mock('react-native-gesture-handler', () => {
   return {
     GestureHandlerRootView: 'View',
     GestureDetector: 'View',
-    Gesture: { Pan: () => ({ onUpdate: () => ({}), onEnd: () => ({}) }), Tap: () => ({}) },
+    Gesture: {
+      Pan: () => {
+        const gesture = {};
+        const chainable = (obj) => new Proxy(obj, { get: (t, p) => typeof t[p] === 'function' ? t[p] : () => chainable(obj) });
+        return chainable(gesture);
+      },
+      Tap: () => {
+        const gesture = {};
+        const chainable = (obj) => new Proxy(obj, { get: (t, p) => typeof t[p] === 'function' ? t[p] : () => chainable(obj) });
+        return chainable(gesture);
+      },
+    },
     Swipeable: 'View',
     DrawerLayout: 'View',
     State: {},
