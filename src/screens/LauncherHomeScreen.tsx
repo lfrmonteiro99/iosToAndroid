@@ -177,15 +177,17 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
     ],
   }));
 
-  const handlePressIn = () => {
+  const handlePressIn = useCallback(() => {
     if (isJiggling) return;
+    // eslint-disable-next-line react-hooks/immutability
     pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, [isJiggling, pressScale]);
 
-  const handlePressOut = () => {
+  const handlePressOut = useCallback(() => {
+    // eslint-disable-next-line react-hooks/immutability
     pressScale.value = withSpring(1.0, { damping: 12, stiffness: 200 });
-  };
+  }, [pressScale]);
 
   return (
     <Pressable

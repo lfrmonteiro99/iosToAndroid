@@ -78,7 +78,7 @@ export function SettingsScreen() {
         { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, type: 'navigate', route: 'Privacy' },
       ],
     },
-  ], []);
+  ], [colors.accent]);
 
   const getTrailing = (item: SettingsItem): string | undefined => {
     switch (item.key) {
