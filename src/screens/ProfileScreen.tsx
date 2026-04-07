@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -31,6 +32,41 @@ export function ProfileScreen() {
   const [showSignOut, setShowSignOut] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
+  const handleTakePhoto = async () => {
+    setShowAvatarSheet(false);
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Camera permission is needed to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  };
+
+  const handleChooseFromLibrary = async () => {
+    setShowAvatarSheet(false);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Photo library permission is needed to choose a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  };
 
   const stats = [
     { label: 'Contacts', value: String(contacts.length) },
@@ -59,17 +95,24 @@ export function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Pressable onPress={() => setShowAvatarSheet(true)} style={styles.avatarWrapper}>
-          <View
-            style={[
-              styles.avatar,
-              {
-                backgroundColor: colors.systemGray5,
-                borderColor: colors.systemBackground,
-              },
-            ]}
-          >
-            <Ionicons name="person" size={60} color={colors.systemGray} />
-          </View>
+          {avatarUri ? (
+            <Image
+              source={{ uri: avatarUri }}
+              style={[styles.avatar, { borderColor: colors.systemBackground }]}
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                {
+                  backgroundColor: colors.systemGray5,
+                  borderColor: colors.systemBackground,
+                },
+              ]}
+            >
+              <Ionicons name="person" size={60} color={colors.systemGray} />
+            </View>
+          )}
           <View style={[styles.cameraBadge, { backgroundColor: colors.systemBlue }]}>
             <Ionicons name="camera" size={14} color="#FFFFFF" />
           </View>
@@ -200,22 +243,16 @@ export function ProfileScreen() {
         options={[
           {
             label: 'Take Photo',
-            onPress: () => {
-              setShowAvatarSheet(false);
-              Alert.alert('Camera not available in demo');
-            },
+            onPress: handleTakePhoto,
           },
           {
             label: 'Choose from Library',
-            onPress: () => {
-              setShowAvatarSheet(false);
-              Alert.alert('Photo library not available in demo');
-            },
+            onPress: handleChooseFromLibrary,
           },
           {
             label: 'Remove Photo',
             destructive: true,
-            onPress: () => setShowAvatarSheet(false),
+            onPress: () => { setAvatarUri(null); setShowAvatarSheet(false); },
           },
         ]}
         cancelLabel="Cancel"
