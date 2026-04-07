@@ -123,7 +123,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setSettings((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch { /* ignore */ }
+        try { setSettings((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch (e) { console.warn('SettingsStore: failed to parse stored settings:', e); }
       }
       setIsReady(true);
     });

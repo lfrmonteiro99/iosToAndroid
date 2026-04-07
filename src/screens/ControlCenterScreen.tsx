@@ -14,7 +14,7 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null;
+    return null; // Expected: module unavailable on non-Android
   }
 };
 import { BlurView } from 'expo-blur';
@@ -145,7 +145,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
           setFlashlightOn(!!flashState);
           setNowPlaying(np);
         } catch {
-          // ignore
+          // Expected: flashlight/now-playing APIs may not be available
         }
       }
     })();
@@ -160,7 +160,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
         const success = await mod.setFlashlight(newState);
         if (success) setFlashlightOn(newState);
       } catch {
-        // ignore
+        // Expected: flashlight not available on this device
       }
     }
   };

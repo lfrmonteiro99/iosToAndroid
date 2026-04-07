@@ -245,8 +245,8 @@ export function MessagesScreen() {
           }),
         );
         setDrafts(loaded);
-      } catch {
-        // ignore
+      } catch (e) {
+        console.warn('MessagesScreen: failed to load drafts:', e);
       }
     };
     loadDrafts();

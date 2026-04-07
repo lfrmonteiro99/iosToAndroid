@@ -272,7 +272,7 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
         const events = await mod.getCalendarEvents(7);
         setCalendarEvents(events as CalendarEventItem[]);
       } catch {
-        // permission not granted or unavailable — leave empty
+        // Expected: calendar permission not granted or module unavailable
       }
     })();
   }, []);

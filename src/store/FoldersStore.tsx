@@ -32,7 +32,7 @@ export function FoldersProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setFolders(JSON.parse(stored)); } catch { /* ignore */ }
+        try { setFolders(JSON.parse(stored)); } catch (e) { console.warn('FoldersStore: failed to parse stored folders:', e); }
       }
       setIsReady(true);
     });

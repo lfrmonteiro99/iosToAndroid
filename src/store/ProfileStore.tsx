@@ -35,7 +35,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setProfile((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch { /* ignore */ }
+        try { setProfile((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch (e) { console.warn('ProfileStore: failed to parse stored profile:', e); }
       }
       setIsReady(true);
     });
