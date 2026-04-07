@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import {
@@ -69,7 +69,7 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
               <CupertinoButton
                 title="Download and Install"
                 variant="filled"
-                onPress={() => {}}
+                onPress={() => Alert.alert('Software Update', 'This is a demo app. No actual update is available.')}
                 style={{ marginTop: spacing.md }}
               />
             </View>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Image, ScrollView, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -164,7 +164,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
                 </Text>
               }
               showChevron
-              onPress={() => {}}
+              onPress={() => Alert.alert('Set Lock Screen', 'Wallpaper applied to lock screen within the app. To change your Android wallpaper, use your device settings.')}
             />
             <CupertinoListTile
               title="Set Home Screen"
@@ -174,7 +174,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
                 </Text>
               }
               showChevron
-              onPress={() => {}}
+              onPress={() => Alert.alert('Set Home Screen', 'Wallpaper applied to home screen within the app. To change your Android wallpaper, use your device settings.')}
             />
           </CupertinoListSection>
         </View>

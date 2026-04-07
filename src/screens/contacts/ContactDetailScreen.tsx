@@ -95,7 +95,16 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
   const actionButtons = [
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
-    { icon: 'videocam' as const, label: 'FaceTime', onPress: () => Alert.alert('FaceTime', 'FaceTime is not available on this device') },
+    { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
+      Alert.alert(
+        'Video Call',
+        'Video calling requires a compatible app (WhatsApp, Google Duo, etc.)',
+        [
+          { text: 'Call Instead', onPress: () => contact.phone ? Linking.openURL(`tel:${contact.phone}`) : undefined },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    }},
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
   ];
 

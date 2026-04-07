@@ -416,7 +416,13 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
         ]}
       >
         <Pressable
-          onPress={() => {}}
+          onPress={() => {
+            Alert.alert('Add Attachment', 'Choose an option', [
+              { text: 'Take Photo', onPress: () => Alert.alert('Coming Soon', 'Attachment support will be added in a future update.') },
+              { text: 'Photo Library', onPress: () => Alert.alert('Coming Soon', 'Attachment support will be added in a future update.') },
+              { text: 'Cancel', style: 'cancel' },
+            ]);
+          }}
           hitSlop={8}
           style={styles.plusButton}
           accessibilityRole="button"

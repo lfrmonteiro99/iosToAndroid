@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -45,7 +45,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
               }
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
             <CupertinoListTile
               title="Zoom"
@@ -53,12 +53,12 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
               }
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
             <CupertinoListTile
               title="Display & Text Size"
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
             <CupertinoListTile
               title="Bold Text"
@@ -79,12 +79,12 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Touch"
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
             <CupertinoListTile
               title="Face ID & Attention"
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('security')}
             />
             <CupertinoListTile
               title="Switch Control"
@@ -92,7 +92,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
               }
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
           </CupertinoListSection>
         </View>
@@ -103,7 +103,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Hearing Devices"
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
             <CupertinoListTile
               title="Sound Recognition"
@@ -111,12 +111,12 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
               }
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
             <CupertinoListTile
               title="Subtitles & Captioning"
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('accessibility')}
             />
           </CupertinoListSection>
         </View>
@@ -137,7 +137,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Per-App Settings"
               showChevron
-              onPress={() => {}}
+              onPress={() => Alert.alert('Per-App Settings', 'Customize settings for individual apps.')}
             />
           </CupertinoListSection>
         </View>

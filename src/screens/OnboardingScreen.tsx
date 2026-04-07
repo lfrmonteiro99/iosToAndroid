@@ -8,6 +8,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,12 +54,19 @@ const PERMISSIONS = [
     label: 'Location',
     description: 'See nearby WiFi networks',
   },
+  {
+    icon: 'calendar' as const,
+    label: 'Calendar',
+    description: 'View upcoming events',
+  },
 ];
 
 export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [permissionResults, setPermissionResults] = useState<Record<string, boolean>>({});
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const goToPage = useCallback((page: number) => {
     scrollRef.current?.scrollTo({ x: page * SCREEN_WIDTH, animated: true });
@@ -69,8 +77,19 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     const mod = await getLauncher();
     if (mod) {
       try {
+        setPermissionError(null);
         await mod.requestAllPermissions();
-      } catch { /* ignore */ }
+        const results = await mod.checkPermissions();
+        setPermissionResults(results);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to request permissions';
+        setPermissionError(msg);
+        // Still check what was granted
+        try {
+          const results = await mod.checkPermissions();
+          setPermissionResults(results);
+        } catch { /* ignore secondary failure */ }
+      }
     }
     goToPage(2);
   }, [goToPage]);
@@ -84,6 +103,11 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     }
     goToPage(3);
   }, [goToPage]);
+
+  const handleDone = useCallback(async () => {
+    await AsyncStorage.setItem('@iostoandroid/onboarding_done', 'true');
+    onDone();
+  }, [onDone]);
 
   return (
     <LinearGradient
@@ -145,8 +169,16 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
               </View>
             ))}
           </View>
+          {permissionError && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="warning" size={18} color="#FF453A" />
+              <Text style={styles.errorText}>{permissionError}</Text>
+            </View>
+          )}
           <Pressable style={styles.primaryButton} onPress={handleGrantPermissions}>
-            <Text style={styles.primaryButtonText}>Grant Permissions</Text>
+            <Text style={styles.primaryButtonText}>
+              {permissionError ? 'Try Again' : 'Grant Permissions'}
+            </Text>
           </Pressable>
         </View>
 
@@ -182,7 +214,24 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
           </View>
           <Text style={styles.pageTitle}>{"You're All Set!"}</Text>
           <Text style={styles.pageSubtitle}>Your iOS experience starts now</Text>
-          <Pressable style={styles.primaryButton} onPress={onDone}>
+
+          {/* Permission status summary */}
+          {Object.keys(permissionResults).length > 0 && (
+            <View style={styles.permSummary}>
+              {Object.entries(permissionResults).map(([key, granted]) => (
+                <View key={key} style={styles.permStatusRow}>
+                  <Ionicons
+                    name={granted ? 'checkmark-circle' : 'close-circle'}
+                    size={18}
+                    color={granted ? '#30D158' : '#FF453A'}
+                  />
+                  <Text style={styles.permStatusLabel}>{key}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Pressable style={styles.primaryButton} onPress={handleDone}>
             <Text style={styles.primaryButtonText}>Start</Text>
           </Pressable>
         </View>
@@ -320,5 +369,38 @@ const styles = StyleSheet.create({
   permDesc: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,69,58,0.15)',
+    borderRadius: 10,
+    padding: 12,
+    alignSelf: 'stretch',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#FF453A',
+  },
+  permSummary: {
+    alignSelf: 'stretch',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    padding: 14,
+  },
+  permStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  permStatusLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    textTransform: 'capitalize',
   },
 });

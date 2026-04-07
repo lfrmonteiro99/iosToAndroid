@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -68,7 +68,7 @@ export function HotspotScreen({ navigation }: { navigation: any }) {
                 backgroundColor: colors.systemBlue,
               }}
               showChevron
-              onPress={() => {}}
+              onPress={() => openSystemPanel('tethering')}
             />
           </CupertinoListSection>
         </View>
@@ -102,7 +102,7 @@ export function HotspotScreen({ navigation }: { navigation: any }) {
                 backgroundColor: colors.systemOrange,
               }}
               showChevron
-              onPress={() => {}}
+              onPress={() => Alert.alert('Family Sharing', 'Not available on Android devices.')}
             />
           </CupertinoListSection>
         </View>
