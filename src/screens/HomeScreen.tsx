@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,14 @@ import {
   CupertinoListTile,
   CupertinoProgressBar,
 } from '../components';
+
+const getLauncher = async () => {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -64,7 +72,7 @@ export function HomeScreen() {
     { title: settings.focusMode !== 'off' ? 'Focus mode active' : 'Focus mode off', subtitle: settings.focusMode !== 'off' ? settings.focusMode : 'No focus mode set', icon: 'moon' as const, time: getRelativeTime(120) },
   ];
 
-  const handleQuickAction = (action: string) => {
+  const handleQuickAction = async (action: string) => {
     const settingsTab = navigation.getParent();
     switch (action) {
       case 'wallpaper':
@@ -73,8 +81,35 @@ export function HomeScreen() {
       case 'storage':
         settingsTab?.navigate('Settings', { screen: 'Storage' });
         break;
+      case 'camera': {
+        const mod = await getLauncher();
+        if (mod) {
+          const launched =
+            (await mod.launchApp('com.android.camera2').catch(() => false)) ||
+            (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
+          if (!launched) {
+            Linking.openURL('content://media/internal/images/media').catch(() =>
+              Alert.alert('Camera', 'Could not open camera app.')
+            );
+          }
+        }
+        break;
+      }
+      case 'music': {
+        const mod = await getLauncher();
+        if (mod) {
+          const launched =
+            (await mod.launchApp('com.spotify.music').catch(() => false)) ||
+            (await mod.launchApp('com.google.android.apps.youtube.music').catch(() => false)) ||
+            (await mod.launchApp('com.android.music').catch(() => false));
+          if (!launched) {
+            Alert.alert('Music', 'No music app found on this device.');
+          }
+        }
+        break;
+      }
       default:
-        Alert.alert('Not Available', `${action.charAt(0).toUpperCase() + action.slice(1)} is not available in this demo.`);
+        Alert.alert('Not Available', `${action.charAt(0).toUpperCase() + action.slice(1)} is not yet implemented.`);
     }
   };
 

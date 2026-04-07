@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   Dimensions,
+  Linking,
   Pressable,
   StatusBar,
 } from 'react-native';
@@ -57,6 +58,14 @@ function formatNotifTime(timestamp: number): string {
   }
   return 'Yesterday';
 }
+
+const getLauncher = async () => {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    return null;
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -171,7 +180,41 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
   const [now, setNow] = useState(new Date());
   const [authFailed, setAuthFailed] = useState(false);
+  const [flashlightOn, setFlashlightOn] = useState(false);
   const [notifications, setNotifications] = useState<RealNotification[]>([]);
+
+  const toggleFlashlight = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const mod = await getLauncher();
+    if (mod) {
+      const newState = !flashlightOn;
+      try {
+        const success = await mod.setFlashlight(newState);
+        if (success) setFlashlightOn(newState);
+      } catch {
+        // flashlight not available
+      }
+    }
+  };
+
+  const openCamera = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const mod = await getLauncher();
+    if (mod) {
+      const launched =
+        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
+        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
+      if (!launched) {
+        Linking.openURL('content://media/internal/images/media').catch(() =>
+          Alert.alert('Camera', 'Could not open camera app.')
+        );
+      }
+    } else {
+      Linking.openURL('content://media/internal/images/media').catch(() =>
+        Alert.alert('Camera', 'Could not open camera app.')
+      );
+    }
+  };
 
   // Fetch real notifications
   useEffect(() => {
@@ -183,7 +226,6 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         const access = await mod.isNotificationAccessGranted();
         if (access && mounted) {
           const notifs = await mod.getNotifications();
-          // Filter out ongoing notifications (media players, etc.) and limit to 5
           const filtered = notifs
             .filter((n: RealNotification) => !n.isOngoing)
             .sort((a: RealNotification, b: RealNotification) => b.time - a.time)
@@ -355,11 +397,11 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
             style={styles.circleButton}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Flashlight', 'Not available in demo.'); }}
+            onPress={toggleFlashlight}
             accessibilityLabel="Flashlight"
           >
-            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
-              <Ionicons name="flashlight" size={22} color="#fff" />
+            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
+              <Ionicons name="flashlight" size={22} color={flashlightOn ? '#000' : '#fff'} />
             </BlurView>
           </Pressable>
 
@@ -381,7 +423,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
           <Pressable
             style={styles.circleButton}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Camera', 'Not available in demo.'); }}
+            onPress={openCamera}
             accessibilityLabel="Camera"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>

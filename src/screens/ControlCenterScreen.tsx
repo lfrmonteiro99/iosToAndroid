@@ -409,7 +409,17 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               <ShortcutButton
                 iconName="radio-button-on"
                 label="Screen Rec"
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Alert.alert('Screen Recording', 'Screen recording requires system permission.'); }}
+                onPress={async () => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  Alert.alert(
+                    'Screen Recording',
+                    'Use your device\'s built-in screen recorder.',
+                    [
+                      { text: 'Open Settings', onPress: async () => { const mod = await getLauncher(); if (mod) mod.openSystemSettings('display'); } },
+                      { text: 'Cancel', style: 'cancel' },
+                    ]
+                  );
+                }}
               />
               <ShortcutButton
                 iconName="calculator-outline"
@@ -430,7 +440,16 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
           <View style={styles.section}>
             <Pressable
               style={styles.mirrorTile}
-              onPress={() => Alert.alert('Screen Mirroring', 'Not available in demo.')}
+              onPress={async () => {
+                Alert.alert(
+                  'Screen Mirroring',
+                  'Use your device\'s cast feature.',
+                  [
+                    { text: 'Open Cast Settings', onPress: async () => { const mod = await getLauncher(); if (mod) mod.openSystemSettings('display'); } },
+                    { text: 'Cancel', style: 'cancel' },
+                  ]
+                );
+              }}
               accessibilityLabel="Screen Mirroring"
             >
               <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
