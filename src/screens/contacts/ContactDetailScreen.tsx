@@ -67,7 +67,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
           title="Contact"
           largeTitle={false}
           leftButton={
-            <Pressable onPress={() => navigation.goBack()} style={styles.navButton}>
+            <Pressable onPress={() => navigation.goBack()} style={styles.navButton} accessibilityRole="button" accessibilityLabel="Go back">
               <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
               <Text style={[typography.body, { color: colors.systemBlue }]}>Contacts</Text>
             </Pressable>
@@ -111,7 +111,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
         title={fullName}
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} style={styles.navButton} hitSlop={8}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.navButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
             <Text style={[typography.body, { color: colors.systemBlue }]}>Contacts</Text>
           </Pressable>

@@ -129,8 +129,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const { theme } = useTheme();
   const { colors } = theme;
 
-  // TODO: Replace with react-native-volume-manager to read/set real system volume
-  const [volume, setVolume] = useState(0.5);
+  const [volume] = useState(0.5);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [nowPlaying, setNowPlaying] = useState({ title: '', artist: '', album: '', isPlaying: false, packageName: '' });
 
@@ -234,7 +233,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
 
       {/* Backdrop — tap to close */}
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityLabel="Close Control Center" accessibilityRole="button" />
       </Animated.View>
 
       {/* Control Center sheet */}
@@ -380,10 +379,12 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   style={styles.verticalSliderTrack}
                   accessibilityLabel="Volume control"
                   accessibilityRole="adjustable"
-                  onPress={(e) => {
-                    const relY = e.nativeEvent.locationY;
-                    const pct = Math.max(0, Math.min(1, 1 - relY / 160));
-                    setVolume(pct);
+                  onPress={async () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    const mod = await getLauncher();
+                    if (mod) {
+                      await mod.openSystemSettings('volume');
+                    }
                   }}
                 >
                   <View
@@ -457,6 +458,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 }
               }}
               accessibilityLabel="Screen Mirroring"
+              accessibilityRole="button"
             >
               <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
               <View style={styles.mirrorInner}>

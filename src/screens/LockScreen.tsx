@@ -509,6 +509,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             <Pressable
               onPress={() => { setShowPasscode(false); setPasscode(''); }}
               style={styles.passcodeCancel}
+              accessibilityLabel="Cancel passcode entry"
+              accessibilityRole="button"
             >
               <Text style={styles.passcodeCancelText}>Cancel</Text>
             </Pressable>
@@ -547,12 +549,16 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                   <Pressable
                     onPress={() => { setAuthFailed(false); triggerBiometric(); }}
                     style={styles.authActionButton}
+                    accessibilityLabel="Try biometric unlock again"
+                    accessibilityRole="button"
                   >
                     <Text style={styles.authActionText}>Try Again</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => { setAuthFailed(false); setShowPasscode(true); }}
                     style={styles.authActionButton}
+                    accessibilityLabel="Use passcode to unlock"
+                    accessibilityRole="button"
                   >
                     <Text style={styles.authActionText}>Use Passcode</Text>
                   </Pressable>
@@ -563,6 +569,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               <Pressable
                 onPress={() => setShowPasscode(true)}
                 style={styles.usePasscodeButton}
+                accessibilityLabel="Use passcode to unlock"
+                accessibilityRole="button"
               >
                 <Text style={styles.usePasscodeText}>Use Passcode</Text>
               </Pressable>

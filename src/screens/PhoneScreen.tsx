@@ -75,6 +75,73 @@ function ContactAvatar({ contact, size = 40 }: { contact: DeviceContact; size?: 
   );
 }
 
+// ─── Call Log Item ──────────────────────────────────────────────────────────
+
+interface CallLogItemProps {
+  call: CallLogEntry;
+  isLast: boolean;
+  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  onPress: () => void;
+}
+
+const CallLogItem = React.memo(function CallLogItem({ call, isLast, colors, typography, onPress }: CallLogItemProps) {
+  const isMissed = call.type === 'missed' || call.type === 'rejected';
+  const displayName = call.name && call.name !== call.number ? call.name : call.number;
+
+  const iconMap: Record<string, { name: 'arrow-down-circle' | 'arrow-up-circle' | 'close-circle' | 'call'; color: string }> = {
+    incoming: { name: 'arrow-down-circle', color: colors.systemGreen },
+    outgoing: { name: 'arrow-up-circle', color: colors.systemBlue },
+    missed: { name: 'close-circle', color: colors.systemRed },
+    rejected: { name: 'close-circle', color: colors.systemRed },
+  };
+  const icon = iconMap[call.type] ?? { name: 'call' as const, color: colors.systemGray };
+
+  const callTypeLabel = (type: CallLogEntry['type']) => {
+    switch (type) {
+      case 'outgoing': return 'Outgoing';
+      case 'missed': return 'Missed';
+      case 'rejected': return 'Rejected';
+      default: return 'Incoming';
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.recentRow,
+        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+        pressed && { backgroundColor: colors.systemGray5 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${call.type} call ${displayName}, ${call.dateFormatted}`}
+    >
+      <View style={styles.recentLeft}>
+        <Ionicons name={icon.name} size={18} color={icon.color} style={{ marginRight: 10 }} />
+        <View>
+          <Text
+            style={[
+              typography.body,
+              { color: isMissed ? colors.systemRed : colors.label, fontWeight: isMissed ? '600' : '400' },
+            ]}
+            numberOfLines={1}
+          >
+            {displayName}
+          </Text>
+          <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+            {callTypeLabel(call.type)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.recentRight}>
+        <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>{call.dateFormatted}</Text>
+        <Ionicons name="information-circle-outline" size={20} color={colors.systemBlue} style={{ marginLeft: 12 }} />
+      </View>
+    </Pressable>
+  );
+});
+
 // ─── Favorites Tab ──────────────────────────────────────────────────────────
 
 function FavoritesTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
@@ -161,25 +228,6 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
     onCall(number, name);
   }, [onCall]);
 
-  const callDirectionIcon = (type: CallLogEntry['type']) => {
-    switch (type) {
-      case 'incoming': return { name: 'arrow-down-circle' as const, color: colors.systemGreen };
-      case 'outgoing': return { name: 'arrow-up-circle' as const, color: colors.systemBlue };
-      case 'missed': return { name: 'close-circle' as const, color: colors.systemRed };
-      case 'rejected': return { name: 'close-circle' as const, color: colors.systemRed };
-      default: return { name: 'call' as const, color: colors.systemGray };
-    }
-  };
-
-  const callTypeLabel = (type: CallLogEntry['type']) => {
-    switch (type) {
-      case 'outgoing': return 'Outgoing';
-      case 'missed': return 'Missed';
-      case 'rejected': return 'Rejected';
-      default: return 'Incoming';
-    }
-  };
-
   if (callLogLoading) {
     return (
       <View style={styles.emptyState}>
@@ -225,47 +273,16 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 20 }} decelerationRate={0.998}>
       <View style={{ backgroundColor: colors.secondarySystemGroupedBackground }}>
-        {callLog.map((call, idx) => {
-          const icon = callDirectionIcon(call.type);
-          const isMissed = call.type === 'missed' || call.type === 'rejected';
-          const isLast = idx === callLog.length - 1;
-          const displayName = call.name && call.name !== call.number ? call.name : call.number;
-          return (
-            <Pressable
-              key={call.id}
-              onPress={() => handleCall(call.number, call.name && call.name !== call.number ? call.name : undefined)}
-              style={({ pressed }) => [
-                styles.recentRow,
-                !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
-                pressed && { backgroundColor: colors.systemGray5 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`${call.type} call ${displayName}, ${call.dateFormatted}`}
-            >
-              <View style={styles.recentLeft}>
-                <Ionicons name={icon.name} size={18} color={icon.color} style={{ marginRight: 10 }} />
-                <View>
-                  <Text
-                    style={[
-                      typography.body,
-                      { color: isMissed ? colors.systemRed : colors.label, fontWeight: isMissed ? '600' : '400' },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {displayName}
-                  </Text>
-                  <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-                    {callTypeLabel(call.type)}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.recentRight}>
-                <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>{call.dateFormatted}</Text>
-                <Ionicons name="information-circle-outline" size={20} color={colors.systemBlue} style={{ marginLeft: 12 }} />
-              </View>
-            </Pressable>
-          );
-        })}
+        {callLog.map((call, idx) => (
+          <CallLogItem
+            key={call.id}
+            call={call}
+            isLast={idx === callLog.length - 1}
+            colors={colors}
+            typography={typography}
+            onPress={() => handleCall(call.number, call.name && call.name !== call.number ? call.name : undefined)}
+          />
+        ))}
       </View>
     </ScrollView>
   );

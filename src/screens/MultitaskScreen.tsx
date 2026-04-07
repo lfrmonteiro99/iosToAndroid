@@ -116,7 +116,7 @@ function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps
   return (
     <GestureDetector gesture={swipeGesture}>
       <Animated.View style={[styles.cardWrapper, animatedStyle]}>
-        <Pressable onPress={onTap} style={styles.cardPressable}>
+        <Pressable onPress={onTap} style={styles.cardPressable} accessibilityLabel={`Switch to ${app.name}`} accessibilityRole="button">
           {/* Card background with gradient-like effect */}
           <View style={[styles.cardBackground, { backgroundColor: bgBottom }]}>
             <View style={[styles.cardGradientTop, { backgroundColor: bgTop }]} />
@@ -228,7 +228,7 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
       <View style={[styles.header, { marginTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Recents</Text>
         {entries.length > 0 && (
-          <Pressable onPress={handleClearAll} style={styles.clearAllButton}>
+          <Pressable onPress={handleClearAll} style={styles.clearAllButton} accessibilityLabel="Clear all recent apps" accessibilityRole="button">
             <Text style={styles.clearAllText}>Clear All</Text>
           </Pressable>
         )}

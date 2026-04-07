@@ -356,12 +356,16 @@ export function MessagesScreen() {
             onPress={() => navigation.goBack()}
             hitSlop={8}
             style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
           </Pressable>
           <Pressable
             onPress={handleComposePress}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Compose new message"
           >
             <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
           </Pressable>
