@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,7 @@ import {
   ScrollView,
   Pressable,
   StatusBar,
-  TouchableOpacity,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,34 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useDevice } from '../store/DeviceStore';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const STORAGE_KEY = 'todayview_widget_config';
-
-const ALL_WIDGET_IDS = ['battery', 'storage', 'weather', 'screenTime', 'calendar', 'messages'] as const;
-type WidgetId = typeof ALL_WIDGET_IDS[number];
-
-const WIDGET_LABELS: Record<WidgetId, string> = {
-  battery: 'Battery',
-  storage: 'Storage',
-  weather: 'Weather',
-  screenTime: 'Screen Time',
-  calendar: 'Up Next',
-  messages: 'Messages',
-};
-
-const DEFAULT_CONFIG: WidgetConfig = {
-  visible: [...ALL_WIDGET_IDS],
-  order: [...ALL_WIDGET_IDS],
-};
-
-interface WidgetConfig {
-  visible: string[];
-  order: string[];
-}
+import { useTheme } from '../theme/ThemeContext';
 
 // ---------------------------------------------------------------------------
 // Date formatting
@@ -67,34 +38,6 @@ function formatDate(date: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// AsyncStorage config helpers
-// ---------------------------------------------------------------------------
-
-async function loadWidgetConfig(): Promise<WidgetConfig> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    const parsed = JSON.parse(raw) as Partial<WidgetConfig>;
-    const visible = Array.isArray(parsed.visible) ? parsed.visible : DEFAULT_CONFIG.visible;
-    const order = Array.isArray(parsed.order) ? parsed.order : DEFAULT_CONFIG.order;
-    // Ensure any newly added widget IDs are included in order/visible for forward-compat
-    const missingFromOrder = ALL_WIDGET_IDS.filter((id) => !order.includes(id));
-    return {
-      visible,
-      order: [...order, ...missingFromOrder],
-    };
-  } catch {
-    return DEFAULT_CONFIG;
-  }
-}
-
-async function saveWidgetConfig(config: WidgetConfig): Promise<void> {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  } catch { /* best-effort */ }
-}
-
-// ---------------------------------------------------------------------------
 // Widget base card
 // ---------------------------------------------------------------------------
 
@@ -102,71 +45,25 @@ interface WidgetCardProps {
   children: React.ReactNode;
   style?: object;
   onPress?: () => void;
-  editMode?: boolean;
-  onRemove?: () => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  isFirst?: boolean;
-  isLast?: boolean;
 }
 
-function WidgetCard({
-  children,
-  style,
-  onPress,
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
-}: WidgetCardProps) {
-  const inner = (
-    <>
-      <BlurView intensity={55} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-      <View style={styles.widgetContent}>{children}</View>
-      {editMode && (
-        <View style={styles.editOverlay}>
-          {/* Remove button top-left */}
-          <TouchableOpacity style={styles.removeBtn} onPress={onRemove} hitSlop={8}>
-            <Ionicons name="remove-circle" size={26} color="#FF453A" />
-          </TouchableOpacity>
-          {/* Up/Down reorder buttons top-right */}
-          <View style={styles.reorderBtns}>
-            <TouchableOpacity
-              style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}
-              onPress={isFirst ? undefined : onMoveUp}
-              hitSlop={6}
-            >
-              <Ionicons name="chevron-up" size={18} color={isFirst ? 'rgba(255,255,255,0.2)' : '#ffffff'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}
-              onPress={isLast ? undefined : onMoveDown}
-              hitSlop={6}
-            >
-              <Ionicons name="chevron-down" size={18} color={isLast ? 'rgba(255,255,255,0.2)' : '#ffffff'} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </>
-  );
-
-  if (!editMode && onPress) {
+function WidgetCard({ children, style, onPress }: WidgetCardProps) {
+  if (onPress) {
     return (
       <Pressable
         style={[styles.widgetCard, style]}
         onPress={onPress}
         android_ripple={{ color: 'rgba(255,255,255,0.1)', borderless: false }}
       >
-        {inner}
+        <BlurView intensity={55} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+        <View style={styles.widgetContent}>{children}</View>
       </Pressable>
     );
   }
   return (
-    <View style={[styles.widgetCard, editMode && styles.widgetCardEdit, style]}>
-      {inner}
+    <View style={[styles.widgetCard, style]}>
+      <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={styles.widgetContent}>{children}</View>
     </View>
   );
 }
@@ -175,10 +72,12 @@ function WidgetCard({
 // Progress bar (minimal, no external dep)
 // ---------------------------------------------------------------------------
 
-function ProgressBar({ value, color = '#0A84FF' }: { value: number; color?: string }) {
+function ProgressBar({ value, color }: { value: number; color?: string }) {
+  const { theme } = useTheme();
+  const barColor = color ?? theme.colors.accent;
   return (
     <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.round(value * 100)}%` as any, backgroundColor: color }]} />
+      <View style={[styles.progressFill, { width: `${Math.round(value * 100)}%` as any, backgroundColor: barColor }]} />
     </View>
   );
 }
@@ -187,46 +86,13 @@ function ProgressBar({ value, color = '#0A84FF' }: { value: number; color?: stri
 // Battery Widget
 // ---------------------------------------------------------------------------
 
-interface EditableWidgetProps {
-  editMode: boolean;
-  onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  isFirst: boolean;
-  isLast: boolean;
-}
-
-function BatteryWidget({
-  level,
-  isCharging,
-  onPress,
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
-}: { level: number; isCharging: boolean; onPress?: () => void } & EditableWidgetProps) {
+function BatteryWidget({ level, isCharging, onPress }: { level: number; isCharging: boolean; onPress?: () => void }) {
   const pct = Math.round(level * 100);
   const color = pct > 20 ? '#30D158' : '#FF453A';
-  const iconName: keyof typeof Ionicons.glyphMap = isCharging
-    ? 'battery-charging'
-    : pct > 50
-    ? 'battery-full'
-    : pct > 20
-    ? 'battery-half'
-    : 'battery-dead';
+  const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
 
   return (
-    <WidgetCard
-      onPress={onPress}
-      editMode={editMode}
-      onRemove={onRemove}
-      onMoveUp={onMoveUp}
-      onMoveDown={onMoveDown}
-      isFirst={isFirst}
-      isLast={isLast}
-    >
+    <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={28} color={color} />
         <Text style={styles.widgetTitle}>Battery</Text>
@@ -247,52 +113,30 @@ function BatteryWidget({
 function StorageWidget({
   usedGB,
   totalGB,
-  freeGB,
   usedPercentage,
   onPress,
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
 }: {
   usedGB: string;
   totalGB: string;
-  freeGB: string;
   usedPercentage: number;
   onPress?: () => void;
-} & EditableWidgetProps) {
+}) {
+  const { theme } = useTheme();
   const pct = usedPercentage / 100;
-  const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : '#0A84FF';
-  const hasData = parseFloat(totalGB) > 0;
+  const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : theme.colors.accent;
 
   return (
-    <WidgetCard
-      onPress={onPress}
-      editMode={editMode}
-      onRemove={onRemove}
-      onMoveUp={onMoveUp}
-      onMoveDown={onMoveDown}
-      isFirst={isFirst}
-      isLast={isLast}
-    >
+    <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="server-outline" size={22} color={color} />
         <Text style={styles.widgetTitle}>Storage</Text>
       </View>
-      {hasData ? (
-        <>
-          <View style={styles.storageRow}>
-            <Text style={styles.widgetBigNumber}>{usedGB} GB</Text>
-            <Text style={styles.widgetSubtext}> / {totalGB} GB total</Text>
-          </View>
-          <ProgressBar value={pct} color={color} />
-          <Text style={styles.widgetSubtext}>{freeGB} GB free · {Math.round(usedPercentage)}% used</Text>
-        </>
-      ) : (
-        <Text style={styles.widgetSubtext}>Storage data unavailable</Text>
-      )}
+      <View style={styles.storageRow}>
+        <Text style={styles.widgetBigNumber}>{usedGB} GB</Text>
+        <Text style={styles.widgetSubtext}> / {totalGB} GB used</Text>
+      </View>
+      <ProgressBar value={pct} color={color} />
+      <Text style={styles.widgetSubtext}>{Math.round(usedPercentage)}% full</Text>
     </WidgetCard>
   );
 }
@@ -301,92 +145,36 @@ function StorageWidget({
 // Weather Widget (live data from wttr.in)
 // ---------------------------------------------------------------------------
 
-function WeatherWidget({
-  temp,
-  condition,
-  icon,
-  city,
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
-}: {
-  temp: number;
-  condition: string;
-  icon: string;
-  city: string;
-} & EditableWidgetProps) {
-  const hasLocation = city.trim().length > 0;
-  const iconName = hasLocation
-    ? (`${icon}-outline` as keyof typeof Ionicons.glyphMap)
-    : ('location-outline' as keyof typeof Ionicons.glyphMap);
-
+function WeatherWidget({ temp, condition, icon, city }: { temp: number; condition: string; icon: string; city: string }) {
+  const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
   return (
-    <WidgetCard
-      editMode={editMode}
-      onRemove={onRemove}
-      onMoveUp={onMoveUp}
-      onMoveDown={onMoveDown}
-      isFirst={isFirst}
-      isLast={isLast}
-    >
+    <WidgetCard>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color="#FFD60A" />
         <Text style={styles.widgetTitle}>Weather</Text>
-        {hasLocation ? (
-          <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none' }]}>{city}</Text>
-        ) : null}
+        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none' }]}>{city}</Text> : null}
       </View>
-      {hasLocation ? (
-        <View style={styles.weatherRow}>
-          <Text style={styles.weatherTemp}>{temp}°C</Text>
-          <Text style={styles.weatherDesc}>{condition || '—'}</Text>
-        </View>
-      ) : (
-        <View style={styles.upNextBody}>
-          <Text style={styles.widgetSubtext}>Enable Location for weather</Text>
-          <Text style={[styles.widgetSubtext, { fontSize: 11, marginTop: 2 }]}>
-            Settings → Privacy → Location Services
-          </Text>
-        </View>
-      )}
+      <View style={styles.weatherRow}>
+        <Text style={styles.weatherTemp}>{temp}°C</Text>
+        <Text style={styles.weatherDesc}>{condition || '—'}</Text>
+      </View>
     </WidgetCard>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Screen Time Widget (Android — data unavailable without native module)
+// Screen Time Widget (static placeholder)
 // ---------------------------------------------------------------------------
 
-function ScreenTimeWidget({
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
-}: EditableWidgetProps) {
+function ScreenTimeWidget() {
   return (
-    <WidgetCard
-      editMode={editMode}
-      onRemove={onRemove}
-      onMoveUp={onMoveUp}
-      onMoveDown={onMoveDown}
-      isFirst={isFirst}
-      isLast={isLast}
-    >
+    <WidgetCard>
       <View style={styles.widgetRow}>
         <Ionicons name="time-outline" size={22} color="#BF5AF2" />
         <Text style={styles.widgetTitle}>Screen Time</Text>
       </View>
-      <Text style={[styles.widgetSubtext, { color: 'rgba(255,255,255,0.6)', fontSize: 14 }]}>
-        Usage data unavailable
-      </Text>
-      <Text style={styles.widgetSubtext}>
-        Check Android Digital Wellbeing for screen time stats
-      </Text>
+      <Text style={[styles.widgetBigNumber, { color: '#BF5AF2' }]}>2h 34m</Text>
+      <Text style={styles.widgetSubtext}>today · 18% more than yesterday</Text>
     </WidgetCard>
   );
 }
@@ -412,24 +200,9 @@ function formatEventTime(ts: number, allDay: boolean): string {
   return `${h}:${m}`;
 }
 
-function UpNextWidget({
-  events,
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
-}: { events: CalendarEventItem[] } & EditableWidgetProps) {
+function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
   return (
-    <WidgetCard
-      editMode={editMode}
-      onRemove={onRemove}
-      onMoveUp={onMoveUp}
-      onMoveDown={onMoveDown}
-      isFirst={isFirst}
-      isLast={isLast}
-    >
+    <WidgetCard>
       <View style={styles.widgetRow}>
         <Ionicons name="calendar-outline" size={22} color="#FF9F0A" />
         <Text style={styles.widgetTitle}>Up Next</Text>
@@ -440,7 +213,7 @@ function UpNextWidget({
           <Text style={styles.upNextText}>No upcoming events</Text>
         </View>
       ) : (
-        events.map((ev) => (
+        events.slice(0, 3).map((ev) => (
           <View key={ev.id} style={styles.eventRow}>
             <View style={styles.eventDot} />
             <View style={styles.eventMeta}>
@@ -458,26 +231,9 @@ function UpNextWidget({
 // Messages Widget
 // ---------------------------------------------------------------------------
 
-function MessagesWidget({
-  unreadCount,
-  onPress,
-  editMode,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  isFirst,
-  isLast,
-}: { unreadCount: number; onPress?: () => void } & EditableWidgetProps) {
+function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress?: () => void }) {
   return (
-    <WidgetCard
-      onPress={onPress}
-      editMode={editMode}
-      onRemove={onRemove}
-      onMoveUp={onMoveUp}
-      onMoveDown={onMoveDown}
-      isFirst={isFirst}
-      isLast={isLast}
-    >
+    <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
         <Text style={styles.widgetTitle}>Messages</Text>
@@ -495,30 +251,13 @@ function MessagesWidget({
 }
 
 // ---------------------------------------------------------------------------
-// Add Widget card (shown in edit mode at bottom)
-// ---------------------------------------------------------------------------
-
-function AddWidgetCard({ id, onAdd }: { id: WidgetId; onAdd: (id: WidgetId) => void }) {
-  return (
-    <TouchableOpacity
-      style={styles.addWidgetRow}
-      onPress={() => onAdd(id)}
-      activeOpacity={0.7}
-    >
-      <Ionicons name="add-circle" size={26} color="#30D158" />
-      <Text style={styles.addWidgetLabel}>{WIDGET_LABELS[id]}</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main Screen
 // ---------------------------------------------------------------------------
 
 export function TodayViewScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
-  const nav = useNavigation<any>();
+  const nav = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const today = useMemo(() => formatDate(new Date()), []);
 
@@ -527,28 +266,9 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
     [device.messages],
   );
 
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
-  const [editMode, setEditMode] = useState(false);
-  const [config, setConfig] = useState<WidgetConfig>(DEFAULT_CONFIG);
-  const [configLoaded, setConfigLoaded] = useState(false);
+  const [calendarEvents, setCalendarEvents] = React.useState<CalendarEventItem[]>([]);
 
-  // Load widget config from AsyncStorage
-  useEffect(() => {
-    loadWidgetConfig().then((c) => {
-      setConfig(c);
-      setConfigLoaded(true);
-    });
-  }, []);
-
-  // Persist config changes
-  useEffect(() => {
-    if (configLoaded) {
-      saveWidgetConfig(config);
-    }
-  }, [config, configLoaded]);
-
-  // Load calendar events
-  useEffect(() => {
+  React.useEffect(() => {
     (async () => {
       try {
         const mod = (await import('../../modules/launcher-module/src')).default;
@@ -558,51 +278,6 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
         // permission not granted or unavailable — leave empty
       }
     })();
-  }, []);
-
-  // Ordered + visible widget IDs
-  const visibleWidgets = useMemo(
-    () => config.order.filter((id) => config.visible.includes(id)) as WidgetId[],
-    [config],
-  );
-
-  const hiddenWidgets = useMemo(
-    () => ALL_WIDGET_IDS.filter((id) => !config.visible.includes(id)),
-    [config],
-  );
-
-  const removeWidget = useCallback((id: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      visible: prev.visible.filter((v) => v !== id),
-    }));
-  }, []);
-
-  const addWidget = useCallback((id: WidgetId) => {
-    setConfig((prev) => ({
-      ...prev,
-      visible: [...prev.visible, id],
-      // Ensure it's in order list too (it should already be, but guard)
-      order: prev.order.includes(id) ? prev.order : [...prev.order, id],
-    }));
-  }, []);
-
-  const moveWidget = useCallback((id: string, direction: 'up' | 'down') => {
-    setConfig((prev) => {
-      const orderedVisible = prev.order.filter((o) => prev.visible.includes(o));
-      const idx = orderedVisible.indexOf(id);
-      if (idx === -1) return prev;
-      const newIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (newIdx < 0 || newIdx >= orderedVisible.length) return prev;
-      const newOrderedVisible = [...orderedVisible];
-      [newOrderedVisible[idx], newOrderedVisible[newIdx]] = [newOrderedVisible[newIdx], newOrderedVisible[idx]];
-      // Rebuild full order: keep hidden widgets in their relative positions at the end
-      const hiddenInOrder = prev.order.filter((o) => !prev.visible.includes(o));
-      return {
-        ...prev,
-        order: [...newOrderedVisible, ...hiddenInOrder],
-      };
-    });
   }, []);
 
   // Swipe-left gesture to dismiss
@@ -633,81 +308,6 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
     opacity: opacity.value,
   }));
 
-  const renderWidget = (id: WidgetId, index: number) => {
-    const isFirst = index === 0;
-    const isLast = index === visibleWidgets.length - 1;
-    const editProps: EditableWidgetProps = {
-      editMode,
-      onRemove: () => removeWidget(id),
-      onMoveUp: () => moveWidget(id, 'up'),
-      onMoveDown: () => moveWidget(id, 'down'),
-      isFirst,
-      isLast,
-    };
-
-    switch (id) {
-      case 'battery':
-        return (
-          <BatteryWidget
-            key={id}
-            level={device.battery.level}
-            isCharging={device.battery.isCharging}
-            onPress={() => nav.navigate('Battery')}
-            {...editProps}
-          />
-        );
-      case 'storage':
-        return (
-          <StorageWidget
-            key={id}
-            usedGB={device.storage.usedGB}
-            totalGB={device.storage.totalGB}
-            freeGB={device.storage.freeGB}
-            usedPercentage={device.storage.usedPercentage}
-            onPress={() => nav.navigate('Storage')}
-            {...editProps}
-          />
-        );
-      case 'weather':
-        return (
-          <WeatherWidget
-            key={id}
-            temp={device.weather.temp}
-            condition={device.weather.condition}
-            icon={device.weather.icon}
-            city={device.weather.city}
-            {...editProps}
-          />
-        );
-      case 'screenTime':
-        return (
-          <ScreenTimeWidget
-            key={id}
-            {...editProps}
-          />
-        );
-      case 'calendar':
-        return (
-          <UpNextWidget
-            key={id}
-            events={calendarEvents}
-            {...editProps}
-          />
-        );
-      case 'messages':
-        return (
-          <MessagesWidget
-            key={id}
-            unreadCount={unreadCount}
-            onPress={() => nav.navigate('Messages')}
-            {...editProps}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
     <View style={styles.root}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
@@ -727,35 +327,35 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
             ]}
             showsVerticalScrollIndicator={false}
           >
-            {/* Date header + Edit button */}
-            <View style={styles.headerRow}>
-              <Text style={styles.dateText}>{today}</Text>
-              <TouchableOpacity
-                style={[styles.editBtn, editMode && styles.editBtnActive]}
-                onPress={() => setEditMode((v) => !v)}
-                hitSlop={8}
-              >
-                <Text style={[styles.editBtnText, editMode && styles.editBtnTextActive]}>
-                  {editMode ? 'Done' : 'Edit'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            {/* Date header */}
+            <Text style={styles.dateText}>{today}</Text>
 
             {/* Widgets */}
-            {visibleWidgets.map((id, index) => renderWidget(id, index))}
+            <BatteryWidget
+              level={device.battery.level}
+              isCharging={device.battery.isCharging}
+              onPress={() => nav.navigate('Battery')}
+            />
 
-            {/* Add Widget section (edit mode only) */}
-            {editMode && hiddenWidgets.length > 0 && (
-              <View style={styles.addWidgetSection}>
-                <BlurView intensity={55} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-                <View style={styles.addWidgetContent}>
-                  <Text style={styles.addWidgetHeader}>Add Widget</Text>
-                  {hiddenWidgets.map((id) => (
-                    <AddWidgetCard key={id} id={id} onAdd={addWidget} />
-                  ))}
-                </View>
-              </View>
-            )}
+            <StorageWidget
+              usedGB={device.storage.usedGB}
+              totalGB={device.storage.totalGB}
+              usedPercentage={device.storage.usedPercentage}
+              onPress={() => nav.navigate('Storage')}
+            />
+
+            <WeatherWidget
+              temp={device.weather.temp}
+              condition={device.weather.condition}
+              icon={device.weather.icon}
+              city={device.weather.city}
+            />
+
+            <ScreenTimeWidget />
+
+            <UpNextWidget events={calendarEvents} />
+
+            <MessagesWidget unreadCount={unreadCount} onPress={() => nav.navigate('Messages')} />
           </ScrollView>
         </Animated.View>
       </GestureDetector>
@@ -780,35 +380,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  // Header
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
+  // Date header
   dateText: {
     color: '#ffffff',
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: -0.5,
-  },
-  editBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  editBtnActive: {
-    backgroundColor: 'rgba(10,132,255,0.25)',
-  },
-  editBtnText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  editBtnTextActive: {
-    color: '#0A84FF',
+    marginBottom: 20,
   },
 
   // Widget card
@@ -818,43 +396,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: 'rgba(30,30,35,0.6)',
   },
-  widgetCardEdit: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
   widgetContent: {
     padding: 16,
-  },
-
-  // Edit overlay (remove + reorder buttons)
-  editOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-  },
-  removeBtn: {
-    zIndex: 10,
-  },
-  reorderBtns: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  reorderBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reorderBtnDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
 
   // Widget internals
@@ -962,38 +505,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     marginTop: 2,
-  },
-
-  // Add Widget section
-  addWidgetSection: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginTop: 8,
-    marginBottom: 14,
-    backgroundColor: 'rgba(30,30,35,0.6)',
-  },
-  addWidgetContent: {
-    padding: 16,
-  },
-  addWidgetHeader: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  addWidgetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  addWidgetLabel: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '400',
   },
 });

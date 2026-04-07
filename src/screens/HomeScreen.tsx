@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,11 +37,11 @@ function getRelativeTime(minutes: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const QUICK_ACTIONS = [
+const STATIC_QUICK_ACTIONS = [
   { icon: 'camera' as const, label: 'Camera', color: '#FF9500', bg: '#FFF3E0', action: 'camera' },
   { icon: 'image' as const, label: 'Photos', color: '#AF52DE', bg: '#F3E5F5', action: 'wallpaper' },
   { icon: 'musical-notes' as const, label: 'Music', color: '#FF2D55', bg: '#FCE4EC', action: 'music' },
-  { icon: 'document-text' as const, label: 'Files', color: '#007AFF', bg: '#E3F2FD', action: 'storage' },
+  { icon: 'document-text' as const, label: 'Files', color: null as string | null, bg: '#E3F2FD', action: 'storage' },
 ];
 
 export function HomeScreen() {
@@ -58,6 +58,11 @@ export function HomeScreen() {
     const interval = setInterval(() => setGreeting(getGreeting()), 60000);
     return () => clearInterval(interval);
   }, []);
+
+  const quickActions = useMemo(
+    () => STATIC_QUICK_ACTIONS.map((a) => ({ ...a, color: a.color ?? colors.accent })),
+    [colors.accent],
+  );
 
   const batteryPct = Math.round(device.battery.level * 100);
   const batteryLevel = `${batteryPct}%`;
@@ -162,7 +167,7 @@ export function HomeScreen() {
             Quick Actions
           </Text>
           <View style={styles.quickActionsGrid}>
-            {QUICK_ACTIONS.map((action) => (
+            {quickActions.map((action) => (
               <Pressable
                 key={action.label}
                 onPress={() => handleQuickAction(action.action)}

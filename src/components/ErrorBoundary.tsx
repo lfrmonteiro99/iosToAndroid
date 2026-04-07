@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { SystemColors } from '../theme/CupertinoTheme';
 
 interface Props {
   children: React.ReactNode;
@@ -46,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <View style={styles.container}>
           {this.state.recovering ? (
             <>
-              <ActivityIndicator size="large" color="#007AFF" style={styles.spinner} />
+              <ActivityIndicator size="large" color={SystemColors.light.accent} style={styles.spinner} />
               <Text style={styles.title}>Recovering...</Text>
               <Text style={styles.message}>
                 The launcher encountered an error and is restarting automatically.
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: SystemColors.light.accent,
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: 9999,

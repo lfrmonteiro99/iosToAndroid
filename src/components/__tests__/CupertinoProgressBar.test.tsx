@@ -2,9 +2,10 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { CupertinoProgressBar } from '../CupertinoProgressBar';
 import { ThemeProvider } from '../../theme/ThemeContext';
+import { SettingsProvider } from '../../store/SettingsStore';
 
 const renderWithTheme = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
+  render(<SettingsProvider><ThemeProvider>{ui}</ThemeProvider></SettingsProvider>);
 
 describe('CupertinoProgressBar', () => {
   it('renders at 0%', () => {

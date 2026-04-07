@@ -161,8 +161,8 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <SettingsProvider>
+        <SettingsProvider>
+          <ThemeProvider>
             <ContactsProvider>
               <ProfileProvider>
                 <AppsProvider>
@@ -176,8 +176,8 @@ export default function App() {
                 </AppsProvider>
               </ProfileProvider>
             </ContactsProvider>
-          </SettingsProvider>
-        </ThemeProvider>
+          </ThemeProvider>
+        </SettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

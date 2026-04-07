@@ -503,6 +503,8 @@ export function LauncherHomeScreen() {
   const { settings } = useSettings();
   const device = useDevice();
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
+  const { theme: launcherTheme } = useTheme();
+  const colors = launcherTheme.colors;
 
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
@@ -882,7 +884,7 @@ export function LauncherHomeScreen() {
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={styles.defaultBannerText}>Set as default launcher</Text>
           <Pressable
-            style={styles.defaultBannerButton}
+            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
             android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
           >
@@ -1136,7 +1138,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   defaultBannerButton: {
-    backgroundColor: '#007AFF',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 5,
