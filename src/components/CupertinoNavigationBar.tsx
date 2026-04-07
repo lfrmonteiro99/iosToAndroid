@@ -131,6 +131,7 @@ export function CupertinoNavigationBar({
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        decelerationRate={0.998}
         contentContainerStyle={contentContainerStyle}
       >
         {/* Spacer for the nav bar + large title */}

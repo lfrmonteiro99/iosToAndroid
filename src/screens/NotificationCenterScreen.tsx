@@ -240,6 +240,7 @@ export function NotificationCenterScreen() {
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            decelerationRate={0.998}
           >
             {groups.length === 0 ? (
               <View style={styles.emptyState}>

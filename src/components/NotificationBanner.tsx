@@ -37,17 +37,20 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
 
   const translateY = useSharedValue(-150);
   const scale = useSharedValue(0.95);
+  const opacity = useSharedValue(1);
 
   const dismiss = useCallback(() => {
     translateY.value = withTiming(-150, { duration: 200 });
     scale.value = withTiming(0.95, { duration: 200 });
+    opacity.value = withTiming(0, { duration: 200 });
     setTimeout(onDismiss, 250);
-  }, [onDismiss, translateY, scale]);
+  }, [onDismiss, translateY, scale, opacity]);
 
   // Show animation
   useEffect(() => {
     if (notification) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      opacity.value = 1;
       translateY.value = withSpring(0, { damping: 22, stiffness: 350, mass: 0.8 });
       scale.value = withSpring(1, { damping: 22, stiffness: 350 });
 
@@ -55,7 +58,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
       const timer = setTimeout(dismiss, 5000);
       return () => clearTimeout(timer);
     }
-  }, [notification, translateY, scale, dismiss]);
+  }, [notification, translateY, scale, opacity, dismiss]);
 
   // Swipe UP to dismiss (iOS gesture)
   const swipeGesture = Gesture.Pan()
@@ -71,6 +74,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         // Dismiss
         translateY.value = withTiming(-150, { duration: 200 });
         scale.value = withTiming(0.95, { duration: 200 });
+        opacity.value = withTiming(0, { duration: 200 });
         runOnJS(onDismiss)();
       } else {
         // Snap back
@@ -89,6 +93,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
   const composed = Gesture.Race(swipeGesture, tapGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
     transform: [
       { translateY: translateY.value },
       { scale: scale.value },
