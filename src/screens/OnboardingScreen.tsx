@@ -53,6 +53,11 @@ const PERMISSIONS = [
     label: 'Location',
     description: 'See nearby WiFi networks',
   },
+  {
+    icon: 'calendar' as const,
+    label: 'Calendar',
+    description: 'View upcoming events',
+  },
 ];
 
 export function OnboardingScreen({ onDone }: OnboardingScreenProps) {

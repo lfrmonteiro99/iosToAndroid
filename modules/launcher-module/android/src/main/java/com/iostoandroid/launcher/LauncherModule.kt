@@ -486,7 +486,7 @@ class LauncherModule : Module() {
 
         AsyncFunction("requestAllPermissions") {
             val activity = appContext.currentActivity ?: throw Exception("No activity")
-            val permissions = arrayOf(
+            val permissions = mutableListOf(
                 android.Manifest.permission.READ_CONTACTS,
                 android.Manifest.permission.READ_CALL_LOG,
                 android.Manifest.permission.CALL_PHONE,
@@ -494,25 +494,39 @@ class LauncherModule : Module() {
                 android.Manifest.permission.SEND_SMS,
                 android.Manifest.permission.CAMERA,
                 android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.READ_PHONE_STATE
+                android.Manifest.permission.READ_PHONE_STATE,
+                android.Manifest.permission.READ_CALENDAR
             )
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
             val REQUEST_CODE = 1001
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                activity.requestPermissions(permissions, REQUEST_CODE)
+                activity.requestPermissions(permissions.toTypedArray(), REQUEST_CODE)
             }
             true
         }
 
         AsyncFunction("checkPermissions") {
-            val perms = mapOf(
+            val perms = mutableMapOf(
                 "contacts" to hasPermission(android.Manifest.permission.READ_CONTACTS),
                 "callLog" to hasPermission(android.Manifest.permission.READ_CALL_LOG),
                 "phone" to hasPermission(android.Manifest.permission.CALL_PHONE),
                 "sms" to hasPermission(android.Manifest.permission.READ_SMS),
                 "sendSms" to hasPermission(android.Manifest.permission.SEND_SMS),
                 "camera" to hasPermission(android.Manifest.permission.CAMERA),
-                "location" to hasPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                "location" to hasPermission(android.Manifest.permission.ACCESS_FINE_LOCATION),
+                "calendar" to hasPermission(android.Manifest.permission.READ_CALENDAR)
             )
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                perms["bluetooth"] = hasPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                perms["notifications"] = hasPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
             perms
         }
     }
