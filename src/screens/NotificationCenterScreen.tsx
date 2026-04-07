@@ -2,19 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  SectionList,
   Pressable,
   StyleSheet,
   Dimensions,
   Image,
+  Alert,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+
+const READ_IDS_KEY = '@notification_read_ids';
 
 const getLauncher = async () => {
   try {
@@ -45,15 +49,20 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 function formatNotifTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
-  if (diff < 60_000) return 'now';
+  if (diff < 60_000) return 'Just now';
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) {
-    const d = new Date(timestamp);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
-  }
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
   const d = new Date(timestamp);
+  if (
+    d.getDate() === yesterday.getDate() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getFullYear() === yesterday.getFullYear()
+  ) {
+    return 'Yesterday';
+  }
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
@@ -74,6 +83,23 @@ export function NotificationCenterScreen() {
 
   const [notifications, setNotifications] = useState<DeviceNotification[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  // Load read IDs from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(READ_IDS_KEY);
+        if (stored) setReadIds(new Set(JSON.parse(stored)));
+      } catch {}
+    })();
+  }, []);
+
+  const persistReadIds = useCallback(async (ids: Set<string>) => {
+    try {
+      await AsyncStorage.setItem(READ_IDS_KEY, JSON.stringify([...ids]));
+    } catch {}
+  }, []);
 
   const loadNotifications = useCallback(async () => {
     const mod = await getLauncher();
@@ -109,20 +135,41 @@ export function NotificationCenterScreen() {
   }, []);
 
   const handleClearAll = useCallback(() => {
-    setNotifications([]);
+    Alert.alert(
+      'Clear All Notifications?',
+      'This will remove all notifications from the list.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            setNotifications([]);
+            setReadIds(new Set());
+            await AsyncStorage.removeItem(READ_IDS_KEY);
+          },
+        },
+      ],
+    );
   }, []);
 
   const handleDismiss = useCallback(() => {
     navigation.goBack();
   }, [navigation]);
 
-  const handleNotificationTap = useCallback((packageName: string) => {
+  const handleNotificationTap = useCallback((notifId: string, packageName: string) => {
+    setReadIds(prev => {
+      const next = new Set(prev);
+      next.add(notifId);
+      persistReadIds(next);
+      return next;
+    });
     launchApp(packageName);
     navigation.goBack();
-  }, [launchApp, navigation]);
+  }, [launchApp, navigation, persistReadIds]);
 
-  // Group notifications by packageName
-  const groups: NotificationGroup[] = React.useMemo(() => {
+  // Group notifications by packageName, sorted by most recent
+  const sections = React.useMemo(() => {
     const map = new Map<string, NotificationGroup>();
     for (const notif of notifications) {
       if (!map.has(notif.packageName)) {
@@ -136,7 +183,19 @@ export function NotificationCenterScreen() {
       }
       map.get(notif.packageName)!.notifications.push(notif);
     }
-    return Array.from(map.values());
+    const groups = Array.from(map.values());
+    // Sort sections by most recent notification timestamp (descending)
+    groups.sort((a, b) => {
+      const aMax = Math.max(...a.notifications.map(n => n.time));
+      const bMax = Math.max(...b.notifications.map(n => n.time));
+      return bMax - aMax;
+    });
+    return groups.map(group => ({
+      title: group.appName,
+      appIcon: group.appIcon,
+      packageName: group.packageName,
+      data: group.notifications,
+    }));
   }, [notifications, apps]);
 
   const today = new Date();
@@ -174,59 +233,59 @@ export function NotificationCenterScreen() {
 
         {/* Notification list */}
         {hasAccess && (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {groups.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="notifications" size={48} color="rgba(255,255,255,0.4)" />
-                <Text style={[styles.emptyText, typography.subhead, { fontWeight: '500' }]}>No Notifications</Text>
-              </View>
-            ) : (
-              groups.map(group => (
-                <View key={group.packageName} style={styles.group}>
-                  {/* App name header */}
-                  <View style={styles.groupHeader}>
-                    {group.appIcon ? (
-                      <Image source={{ uri: `data:image/png;base64,${group.appIcon}` }} style={styles.appIcon} />
-                    ) : (
-                      <View style={styles.appIconFallback}>
-                        <Ionicons name="apps" size={14} color="#FFFFFF" />
-                      </View>
-                    )}
-                    <Text style={[styles.groupAppName, typography.footnote, { fontWeight: '700' }]}>{group.appName}</Text>
-                  </View>
-
-                  {/* Notification cards */}
-                  {group.notifications.map(notif => (
-                    <Pressable
-                      key={notif.id}
-                      onPress={() => handleNotificationTap(notif.packageName)}
-                      style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
-                    >
-                      <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
-                        <View style={styles.notifCardHeader}>
-                          <Text style={[styles.notifTitle, typography.subhead, { fontWeight: '700' }]} numberOfLines={1}>
-                            {notif.title || group.appName}
-                          </Text>
-                          <Text style={[styles.notifTime, typography.caption1]}>
-                            {formatNotifTime(notif.time)}
-                          </Text>
-                        </View>
-                        {!!notif.text && (
-                          <Text style={[styles.notifBody, typography.footnote]} numberOfLines={2}>
-                            {notif.text}
-                          </Text>
-                        )}
-                      </BlurView>
-                    </Pressable>
-                  ))}
+          sections.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="notifications" size={48} color="rgba(255,255,255,0.4)" />
+              <Text style={[styles.emptyText, typography.subhead, { fontWeight: '500' }]}>No Notifications</Text>
+            </View>
+          ) : (
+            <SectionList
+              sections={sections}
+              keyExtractor={item => item.id}
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              stickySectionHeadersEnabled={false}
+              renderSectionHeader={({ section }) => (
+                <View style={styles.groupHeader}>
+                  {section.appIcon ? (
+                    <Image source={{ uri: `data:image/png;base64,${section.appIcon}` }} style={styles.appIcon} />
+                  ) : (
+                    <View style={styles.appIconFallback}>
+                      <Ionicons name="apps" size={14} color="#FFFFFF" />
+                    </View>
+                  )}
+                  <Text style={[styles.groupAppName, typography.footnote, { fontWeight: '700' }]}>{section.title}</Text>
                 </View>
-              ))
-            )}
-          </ScrollView>
+              )}
+              renderItem={({ item: notif, section }) => {
+                const isRead = readIds.has(notif.id);
+                return (
+                  <Pressable
+                    onPress={() => handleNotificationTap(notif.id, notif.packageName)}
+                    style={({ pressed }) => [{ opacity: pressed ? 0.85 : isRead ? 0.6 : 1 }]}
+                  >
+                    <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
+                      <View style={styles.notifCardHeader}>
+                        <Text style={[styles.notifTitle, typography.subhead, { fontWeight: '700' }]} numberOfLines={1}>
+                          {notif.title || section.title}
+                        </Text>
+                        <Text style={[styles.notifTime, typography.caption1]}>
+                          {formatNotifTime(notif.time)}
+                        </Text>
+                      </View>
+                      {!!notif.text && (
+                        <Text style={[styles.notifBody, typography.footnote]} numberOfLines={2}>
+                          {notif.text}
+                        </Text>
+                      )}
+                    </BlurView>
+                  </Pressable>
+                );
+              }}
+              renderSectionFooter={() => <View style={{ height: 12 }} />}
+            />
+          )
         )}
       </View>
     </View>
