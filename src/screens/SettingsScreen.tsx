@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
 import { useDevice } from '../store/DeviceStore';
+import { useProfile } from '../store/ProfileStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -33,6 +34,7 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const device = useDevice();
+  const { profile } = useProfile();
 
   const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -40,7 +42,7 @@ export function SettingsScreen() {
     {
       section: 'profile',
       items: [
-        { key: 'profile', title: 'John Appleseed', subtitle: 'Apple ID, iCloud+, Media & Purchases', icon: 'person-circle', iconBg: '#8E8E93', type: 'navigate', route: 'ProfileMain' },
+        { key: 'profile', title: profile.name, subtitle: profile.email || 'Apple ID, iCloud+, Media & Purchases', icon: 'person-circle', iconBg: '#8E8E93', type: 'navigate', route: 'ProfileMain' },
       ],
     },
     {
@@ -78,7 +80,7 @@ export function SettingsScreen() {
         { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, type: 'navigate', route: 'Privacy' },
       ],
     },
-  ], [colors.accent]);
+  ], [colors.accent, profile.name, profile.email]);
 
   const getTrailing = (item: SettingsItem): string | undefined => {
     switch (item.key) {

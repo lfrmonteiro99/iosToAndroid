@@ -66,7 +66,7 @@ function categorizeApp(app: InstalledApp): string {
 const ICON_SIZE = 50;
 const ICON_RADIUS = 12;
 
-function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }) {
+const AppIcon = React.memo(function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }) {
   const radius = (size / ICON_SIZE) * ICON_RADIUS;
   if (app.icon) {
     return (
@@ -96,7 +96,7 @@ function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }
       </Text>
     </View>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Category Card
@@ -109,7 +109,7 @@ interface CategoryCardProps {
   cardWidth: number;
 }
 
-function CategoryCard({ title, apps, onPress, cardWidth }: CategoryCardProps) {
+const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, cardWidth }: CategoryCardProps) {
   const { theme } = useTheme();
   const { colors } = theme;
   const iconSize = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
@@ -125,6 +125,8 @@ function CategoryCard({ title, apps, onPress, cardWidth }: CategoryCardProps) {
           opacity: pressed ? 0.8 : 1,
         },
       ]}
+      accessibilityLabel={`${title} category, ${apps.length} app${apps.length !== 1 ? 's' : ''}`}
+      accessibilityRole="button"
     >
       {/* 2x2 icon grid */}
       <View style={styles.iconGrid}>
@@ -148,7 +150,7 @@ function CategoryCard({ title, apps, onPress, cardWidth }: CategoryCardProps) {
       </Text>
     </Pressable>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Category Detail Modal
@@ -197,6 +199,8 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
             <Pressable
               onPress={() => { onLaunch(item.packageName); onClose(); }}
               style={[styles.modalAppCell, { width: cellW }]}
+              accessibilityLabel={`Open ${item.name}`}
+              accessibilityRole="button"
             >
               <AppIcon app={item} size={iconSize} />
               <Text style={[styles.modalAppLabel, { color: colors.label }]} numberOfLines={2}>
@@ -214,7 +218,7 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
 // Horizontal app strip (Recently Added / Suggestions)
 // ---------------------------------------------------------------------------
 
-function AppStrip({
+const AppStrip = React.memo(function AppStrip({
   apps,
   onLaunch,
 }: {
@@ -232,6 +236,8 @@ function AppStrip({
           key={app.packageName}
           onPress={() => onLaunch(app.packageName)}
           style={styles.stripItem}
+          accessibilityLabel={`Open ${app.name}`}
+          accessibilityRole="button"
         >
           <AppIcon app={app} size={stripIconSize} />
           <Text style={[styles.stripLabel, { color: colors.label }]} numberOfLines={2}>
@@ -241,13 +247,13 @@ function AppStrip({
       ))}
     </ScrollView>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Search results list
 // ---------------------------------------------------------------------------
 
-function SearchResults({
+const SearchResults = React.memo(function SearchResults({
   apps,
   onLaunch,
 }: {
@@ -269,6 +275,8 @@ function SearchResults({
         <Pressable
           onPress={() => onLaunch(item.packageName)}
           style={({ pressed }) => [styles.searchRow, { opacity: pressed ? 0.7 : 1 }]}
+          accessibilityLabel={`Open ${item.name}`}
+          accessibilityRole="button"
         >
           <AppIcon app={item} size={46} />
           <Text style={[styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
@@ -276,7 +284,7 @@ function SearchResults({
       )}
     />
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Section Header helper

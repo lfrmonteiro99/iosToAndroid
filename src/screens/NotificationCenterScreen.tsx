@@ -215,7 +215,7 @@ export function NotificationCenterScreen() {
         <View style={styles.headerRow}>
           <Text style={[styles.dateText, typography.title1]}>{formatDateHeader(today)}</Text>
           {notifications.length > 0 && (
-            <Pressable onPress={handleClearAll} hitSlop={12}>
+            <Pressable onPress={handleClearAll} hitSlop={12} accessibilityLabel="Clear all notifications" accessibilityRole="button">
               <Text style={[styles.clearAllText, typography.subhead, { fontWeight: '600', color: colors.accent }]}>Clear All</Text>
             </Pressable>
           )}
@@ -229,7 +229,7 @@ export function NotificationCenterScreen() {
             <Text style={[styles.accessSubtitle, typography.subhead]}>
               Allow access to see your notifications here.
             </Text>
-            <Pressable style={[styles.accessButton, { backgroundColor: colors.accent }]} onPress={handleEnableAccess}>
+            <Pressable style={[styles.accessButton, { backgroundColor: colors.accent }]} onPress={handleEnableAccess} accessibilityLabel="Enable Notification Access" accessibilityRole="button">
               <Text style={[styles.accessButtonText, typography.subhead, { fontWeight: '600' }]}>Enable Notification Access</Text>
             </Pressable>
           </BlurView>
@@ -289,6 +289,8 @@ export function NotificationCenterScreen() {
                             onPress={() => handleNotificationTap(notif)}
                             onLongPress={() => handleLongPress(notif)}
                             style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+                            accessibilityLabel={`${notif.title || group.appName} notification from ${group.appName}`}
+                            accessibilityRole="button"
                           >
                             <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
                               <View style={styles.notifCardHeader}>
@@ -334,6 +336,8 @@ export function NotificationCenterScreen() {
                         onPress={() => toggleGroupExpanded(group.packageName)}
                         style={styles.showMoreButton}
                         hitSlop={8}
+                        accessibilityLabel={isExpanded ? `Show fewer ${group.appName} notifications` : `Show more ${group.appName} notifications`}
+                        accessibilityRole="button"
                       >
                         <Text style={[styles.showMoreText, typography.footnote, { fontWeight: '600' }]}>
                           {isExpanded ? 'Show Less' : `Show More (${hiddenCount})`}

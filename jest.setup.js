@@ -240,7 +240,26 @@ jest.mock('./modules/launcher-module/src', () => ({
     getCallLog: jest.fn(() => Promise.resolve([])),
     makeCall: jest.fn(() => Promise.resolve(true)),
     getNotifications: jest.fn(() => Promise.resolve([])),
+    clearNotification: jest.fn(() => Promise.resolve(true)),
+    clearAllNotifications: jest.fn(() => Promise.resolve(true)),
     isNotificationAccessGranted: jest.fn(() => Promise.resolve(false)),
     openNotificationAccessSettings: jest.fn(() => Promise.resolve(true)),
+    sendSms: jest.fn(() => Promise.resolve(true)),
+    requestAllPermissions: jest.fn(() => Promise.resolve(true)),
+    checkPermissions: jest.fn(() => Promise.resolve({})),
+    getCalendarEvents: jest.fn(() => Promise.resolve([])),
+    getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
+    uninstallApp: jest.fn(() => Promise.resolve(true)),
+  },
+}));
+
+// Mock NativePermissionsAndroid TurboModule so PermissionsAndroid works in tests
+// check returns false → screens show "Grant Permission" UI (matches test expectations)
+jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativePermissionsAndroid', () => ({
+  __esModule: true,
+  default: {
+    checkPermission: jest.fn(() => Promise.resolve(false)),
+    requestPermission: jest.fn(() => Promise.resolve('granted')),
+    requestMultiplePermissions: jest.fn(() => Promise.resolve({})),
   },
 }));

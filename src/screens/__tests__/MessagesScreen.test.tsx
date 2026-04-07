@@ -8,10 +8,10 @@ describe('MessagesScreen', () => {
     expect(getByText('Messages')).toBeTruthy();
   });
 
-  it('shows permission button when no messages', () => {
-    // Device messages are empty in test environment (mock returns [])
-    const { getByText } = render(<MessagesScreen />);
-    expect(getByText('Grant SMS Permission')).toBeTruthy();
+  it('shows permission button when no messages', async () => {
+    // hasSmsPermission resolves async → use findByText to wait for state update
+    const { findByText } = render(<MessagesScreen />);
+    expect(await findByText('Grant SMS Permission')).toBeTruthy();
   });
 
   it('renders compose button', () => {

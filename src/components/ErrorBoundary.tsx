@@ -10,6 +10,7 @@ interface State {
   hasError: boolean;
   error: Error | null;
   recovering: boolean;
+  retryCount: number;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -17,19 +18,28 @@ export class ErrorBoundary extends Component<Props, State> {
 
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, recovering: false };
+    this.state = { hasError: false, error: null, recovering: false, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, recovering: true };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return { hasError: true, error };
   }
+
+  private static readonly MAX_RETRIES = 3;
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Launcher crash:', error, errorInfo);
-    // Auto-recover after 2 seconds
-    this._recoveryTimer = setTimeout(() => {
-      this.setState({ hasError: false, error: null, recovering: false });
-    }, 2000);
+    const nextRetryCount = this.state.retryCount + 1;
+    if (nextRetryCount <= ErrorBoundary.MAX_RETRIES) {
+      // Auto-recover after 2 seconds, up to MAX_RETRIES attempts
+      this.setState({ recovering: true, retryCount: nextRetryCount });
+      this._recoveryTimer = setTimeout(() => {
+        this.setState({ hasError: false, error: null, recovering: false });
+      }, 2000);
+    } else {
+      // Retry limit exceeded — show permanent error screen
+      this.setState({ recovering: false, retryCount: nextRetryCount });
+    }
   }
 
   componentWillUnmount() {
@@ -38,11 +48,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleReset = () => {
     if (this._recoveryTimer) clearTimeout(this._recoveryTimer);
-    this.setState({ hasError: false, error: null, recovering: false });
+    this.setState({ hasError: false, error: null, recovering: false, retryCount: 0 });
   };
 
   render() {
     if (this.state.hasError) {
+      const exhausted = this.state.retryCount > ErrorBoundary.MAX_RETRIES;
       return (
         <View style={styles.container}>
           {this.state.recovering ? (
@@ -54,14 +65,21 @@ export class ErrorBoundary extends Component<Props, State> {
               </Text>
             </>
           ) : (
-            <Text style={styles.emoji}>⚠️</Text>
+            <>
+              <Text style={styles.emoji}>⚠️</Text>
+              {exhausted && (
+                <Text style={styles.title}>App has crashed multiple times. Please restart.</Text>
+              )}
+            </>
           )}
           <Text style={styles.errorText}>
             {this.state.error?.message || 'An unexpected error occurred'}
           </Text>
-          <Pressable style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>Try Again</Text>
-          </Pressable>
+          {!exhausted && (
+            <Pressable style={styles.button} onPress={this.handleReset}>
+              <Text style={styles.buttonText}>Try Again</Text>
+            </Pressable>
+          )}
         </View>
       );
     }

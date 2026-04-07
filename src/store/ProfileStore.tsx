@@ -12,10 +12,10 @@ export interface Profile {
 }
 
 const DEFAULT_PROFILE: Profile = {
-  name: '',
-  email: '',
+  name: 'John Appleseed',
+  email: 'john.appleseed@icloud.com',
   bio: '',
-  appleId: '',
+  appleId: 'john@icloud.com',
   icloudStorage: '50 GB',
 };
 

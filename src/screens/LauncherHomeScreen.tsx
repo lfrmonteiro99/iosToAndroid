@@ -255,6 +255,8 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
               onDelete?.();
             }}
             hitSlop={4}
+            accessibilityLabel={`Remove ${app.name}`}
+            accessibilityRole="button"
           >
             <Text style={styles.jiggleDeleteX}>✕</Text>
           </Pressable>
@@ -384,7 +386,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                 returnKeyType="done"
               />
             ) : (
-              <Pressable onPress={() => setEditing(true)}>
+              <Pressable onPress={() => setEditing(true)} accessibilityLabel={`Rename folder ${folder.name}`} accessibilityRole="button">
                 <Text style={styles.folderOverlayTitle}>{folder.name}</Text>
               </Pressable>
             )}
@@ -876,6 +878,8 @@ export function LauncherHomeScreen() {
         <Pressable
           style={StyleSheet.absoluteFillObject}
           onPress={exitJiggle}
+          accessibilityLabel="Exit edit mode"
+          accessibilityRole="button"
         />
       )}
 
@@ -889,6 +893,8 @@ export function LauncherHomeScreen() {
             style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
             android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+            accessibilityLabel="Set as default launcher"
+            accessibilityRole="button"
           >
             <Text style={styles.defaultBannerButtonText}>Set Now</Text>
           </Pressable>
@@ -908,10 +914,10 @@ export function LauncherHomeScreen() {
           },
         ]}
       >
-        <Pressable onPress={() => navigateTo('NotificationCenter')}>
+        <Pressable onPress={() => navigateTo('NotificationCenter')} accessibilityLabel="Open Notification Center" accessibilityRole="button">
           <Text style={styles.statusTime}>{formatTime(now)}</Text>
         </Pressable>
-        <Pressable style={styles.statusRight} onPress={() => navigateTo('ControlCenter')}>
+        <Pressable style={styles.statusRight} onPress={() => navigateTo('ControlCenter')} accessibilityLabel="Open Control Center" accessibilityRole="button">
           {settings.focusMode !== 'off' && (
             <Ionicons name="moon" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
           )}
