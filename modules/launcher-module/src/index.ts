@@ -70,6 +70,7 @@ export interface CallLogEntry {
 
 export interface DeviceNotification {
   id: string;
+  key: string;
   packageName: string;
   title: string;
   text: string;
@@ -125,6 +126,8 @@ interface LauncherModuleType {
   makeCall(number: string): Promise<boolean>;
   // Notifications
   getNotifications(): Promise<DeviceNotification[]>;
+  clearNotification(key: string): Promise<boolean>;
+  clearAllNotifications(): Promise<boolean>;
   isNotificationAccessGranted(): Promise<boolean>;
   openNotificationAccessSettings(): Promise<boolean>;
   // SMS Send
@@ -163,6 +166,8 @@ const stub: LauncherModuleType = {
   getCallLog: async () => [],
   makeCall: async () => false,
   getNotifications: async () => [],
+  clearNotification: async () => false,
+  clearAllNotifications: async () => false,
   isNotificationAccessGranted: async () => false,
   openNotificationAccessSettings: async () => false,
   sendSms: async () => false,

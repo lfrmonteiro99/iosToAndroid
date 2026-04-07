@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  SectionList,
+  ScrollView,
   Pressable,
   StyleSheet,
   Dimensions,
@@ -13,12 +13,10 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
-
-const READ_IDS_KEY = '@notification_read_ids';
+import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
 
 const getLauncher = async () => {
   try {
@@ -30,6 +28,7 @@ const getLauncher = async () => {
 
 interface DeviceNotification {
   id: string;
+  key: string;
   packageName: string;
   title: string;
   text: string;
@@ -45,24 +44,20 @@ interface NotificationGroup {
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const COLLAPSED_LIMIT = 3;
 
 function formatNotifTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
-  if (diff < 60_000) return 'Just now';
+  if (diff < 60_000) return 'now';
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const d = new Date(timestamp);
-  if (
-    d.getDate() === yesterday.getDate() &&
-    d.getMonth() === yesterday.getMonth() &&
-    d.getFullYear() === yesterday.getFullYear()
-  ) {
-    return 'Yesterday';
+  if (diff < 86_400_000) {
+    const d = new Date(timestamp);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
   }
+  const d = new Date(timestamp);
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
@@ -83,27 +78,8 @@ export function NotificationCenterScreen() {
 
   const [notifications, setNotifications] = useState<DeviceNotification[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-
-  // Load read IDs from AsyncStorage on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const stored = await AsyncStorage.getItem(READ_IDS_KEY);
-        if (stored) setReadIds(new Set(JSON.parse(stored)));
-      } catch {
-        console.log("erro");
-      }
-    })();
-  }, []);
-
-  const persistReadIds = useCallback(async (ids: Set<string>) => {
-    try {
-      await AsyncStorage.setItem(READ_IDS_KEY, JSON.stringify([...ids]));
-    } catch {
-      console.log("erro");
-    }
-  }, []);
 
   const loadNotifications = useCallback(async () => {
     const mod = await getLauncher();
@@ -138,42 +114,77 @@ export function NotificationCenterScreen() {
     await mod.openNotificationAccessSettings();
   }, []);
 
-  const handleClearAll = useCallback(() => {
-    Alert.alert(
-      'Clear All Notifications?',
-      'This will remove all notifications from the list.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            setNotifications([]);
-            setReadIds(new Set());
-            await AsyncStorage.removeItem(READ_IDS_KEY);
-          },
-        },
-      ],
-    );
+  const handleClearAll = useCallback(async () => {
+    const mod = await getLauncher();
+    if (mod) {
+      await mod.clearAllNotifications();
+    }
+    setNotifications([]);
+    setExpandedGroups(new Set());
+  }, []);
+
+  const handleDismissNotification = useCallback(async (notif: DeviceNotification) => {
+    const mod = await getLauncher();
+    if (mod) {
+      await mod.clearNotification(notif.key);
+    }
+    setNotifications(prev => prev.filter(n => n.key !== notif.key));
   }, []);
 
   const handleDismiss = useCallback(() => {
     navigation.goBack();
   }, [navigation]);
 
-  const handleNotificationTap = useCallback((notifId: string, packageName: string) => {
-    setReadIds(prev => {
+  const handleNotificationTap = useCallback((notif: DeviceNotification) => {
+    setReadIds(prev => new Set(prev).add(notif.key));
+    launchApp(notif.packageName);
+    navigation.goBack();
+  }, [launchApp, navigation]);
+
+  const handleMarkAsRead = useCallback((notif: DeviceNotification) => {
+    setReadIds(prev => new Set(prev).add(notif.key));
+  }, []);
+
+  const handleLongPress = useCallback((notif: DeviceNotification) => {
+    Alert.alert(
+      notif.title || 'Notification',
+      undefined,
+      [
+        {
+          text: 'Open App',
+          onPress: () => handleNotificationTap(notif),
+        },
+        {
+          text: 'Dismiss',
+          onPress: () => handleDismissNotification(notif),
+          style: 'destructive',
+        },
+        {
+          text: 'Mark as Read',
+          onPress: () => handleMarkAsRead(notif),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+    );
+  }, [handleNotificationTap, handleDismissNotification, handleMarkAsRead]);
+
+  const toggleGroupExpanded = useCallback((packageName: string) => {
+    setExpandedGroups(prev => {
       const next = new Set(prev);
-      next.add(notifId);
-      persistReadIds(next);
+      if (next.has(packageName)) {
+        next.delete(packageName);
+      } else {
+        next.add(packageName);
+      }
       return next;
     });
-    launchApp(packageName);
-    navigation.goBack();
-  }, [launchApp, navigation, persistReadIds]);
+  }, []);
 
-  // Group notifications by packageName, sorted by most recent
-  const sections = React.useMemo(() => {
+  // Group notifications by packageName
+  const groups: NotificationGroup[] = React.useMemo(() => {
     const map = new Map<string, NotificationGroup>();
     for (const notif of notifications) {
       if (!map.has(notif.packageName)) {
@@ -187,19 +198,7 @@ export function NotificationCenterScreen() {
       }
       map.get(notif.packageName)!.notifications.push(notif);
     }
-    const groups = Array.from(map.values());
-    // Sort sections by most recent notification timestamp (descending)
-    groups.sort((a, b) => {
-      const aMax = Math.max(...a.notifications.map(n => n.time));
-      const bMax = Math.max(...b.notifications.map(n => n.time));
-      return bMax - aMax;
-    });
-    return groups.map(group => ({
-      title: group.appName,
-      appIcon: group.appIcon,
-      packageName: group.packageName,
-      data: group.notifications,
-    }));
+    return Array.from(map.values());
   }, [notifications, apps]);
 
   const today = new Date();
@@ -237,59 +236,113 @@ export function NotificationCenterScreen() {
 
         {/* Notification list */}
         {hasAccess && (
-          sections.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="notifications" size={48} color="rgba(255,255,255,0.4)" />
-              <Text style={[styles.emptyText, typography.subhead, { fontWeight: '500' }]}>No Notifications</Text>
-            </View>
-          ) : (
-            <SectionList
-              sections={sections}
-              keyExtractor={item => item.id}
-              style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              stickySectionHeadersEnabled={false}
-              renderSectionHeader={({ section }) => (
-                <View style={styles.groupHeader}>
-                  {section.appIcon ? (
-                    <Image source={{ uri: `data:image/png;base64,${section.appIcon}` }} style={styles.appIcon} />
-                  ) : (
-                    <View style={styles.appIconFallback}>
-                      <Ionicons name="apps" size={14} color="#FFFFFF" />
-                    </View>
-                  )}
-                  <Text style={[styles.groupAppName, typography.footnote, { fontWeight: '700' }]}>{section.title}</Text>
-                </View>
-              )}
-              renderItem={({ item: notif, section }) => {
-                const isRead = readIds.has(notif.id);
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {groups.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="notifications" size={48} color="rgba(255,255,255,0.4)" />
+                <Text style={[styles.emptyText, typography.subhead, { fontWeight: '500' }]}>No Notifications</Text>
+              </View>
+            ) : (
+              groups.map(group => {
+                const isExpanded = expandedGroups.has(group.packageName);
+                const totalCount = group.notifications.length;
+                const visibleNotifs = totalCount > COLLAPSED_LIMIT && !isExpanded
+                  ? group.notifications.slice(0, COLLAPSED_LIMIT)
+                  : group.notifications;
+                const hiddenCount = totalCount - COLLAPSED_LIMIT;
+
                 return (
-                  <Pressable
-                    onPress={() => handleNotificationTap(notif.id, notif.packageName)}
-                    style={({ pressed }) => [{ opacity: pressed ? 0.85 : isRead ? 0.6 : 1 }]}
-                  >
-                    <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
-                      <View style={styles.notifCardHeader}>
-                        <Text style={[styles.notifTitle, typography.subhead, { fontWeight: '700' }]} numberOfLines={1}>
-                          {notif.title || section.title}
-                        </Text>
-                        <Text style={[styles.notifTime, typography.caption1]}>
-                          {formatNotifTime(notif.time)}
-                        </Text>
-                      </View>
-                      {!!notif.text && (
-                        <Text style={[styles.notifBody, typography.footnote]} numberOfLines={2}>
-                          {notif.text}
-                        </Text>
+                  <View key={group.packageName} style={styles.group}>
+                    {/* App name header */}
+                    <View style={styles.groupHeader}>
+                      {group.appIcon ? (
+                        <Image source={{ uri: `data:image/png;base64,${group.appIcon}` }} style={styles.appIcon} />
+                      ) : (
+                        <View style={styles.appIconFallback}>
+                          <Ionicons name="apps" size={14} color="#FFFFFF" />
+                        </View>
                       )}
-                    </BlurView>
-                  </Pressable>
+                      <Text style={[styles.groupAppName, typography.footnote, { fontWeight: '700' }]}>{group.appName}</Text>
+                    </View>
+
+                    {/* Notification cards */}
+                    {visibleNotifs.map(notif => {
+                      const isRead = readIds.has(notif.key);
+                      return (
+                        <CupertinoSwipeableRow
+                          key={notif.key}
+                          trailingActions={[
+                            {
+                              label: 'Dismiss',
+                              color: '#FF3B30',
+                              onPress: () => handleDismissNotification(notif),
+                            },
+                          ]}
+                        >
+                          <Pressable
+                            onPress={() => handleNotificationTap(notif)}
+                            onLongPress={() => handleLongPress(notif)}
+                            style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+                          >
+                            <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
+                              <View style={styles.notifCardHeader}>
+                                <View style={styles.notifTitleRow}>
+                                  {!isRead && <View style={styles.unreadDot} />}
+                                  <Text
+                                    style={[
+                                      styles.notifTitle,
+                                      typography.subhead,
+                                      { fontWeight: '700' },
+                                      isRead && styles.notifTitleRead,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {notif.title || group.appName}
+                                  </Text>
+                                </View>
+                                <Text style={[styles.notifTime, typography.caption1]}>
+                                  {formatNotifTime(notif.time)}
+                                </Text>
+                              </View>
+                              {!!notif.text && (
+                                <Text
+                                  style={[
+                                    styles.notifBody,
+                                    typography.footnote,
+                                    isRead && styles.notifBodyRead,
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {notif.text}
+                                </Text>
+                              )}
+                            </BlurView>
+                          </Pressable>
+                        </CupertinoSwipeableRow>
+                      );
+                    })}
+
+                    {/* Show More / Show Less button */}
+                    {totalCount > COLLAPSED_LIMIT && (
+                      <Pressable
+                        onPress={() => toggleGroupExpanded(group.packageName)}
+                        style={styles.showMoreButton}
+                        hitSlop={8}
+                      >
+                        <Text style={[styles.showMoreText, typography.footnote, { fontWeight: '600' }]}>
+                          {isExpanded ? 'Show Less' : `Show More (${hiddenCount})`}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
                 );
-              }}
-              renderSectionFooter={() => <View style={{ height: 12 }} />}
-            />
-          )
+              })
+            )}
+          </ScrollView>
         )}
       </View>
     </View>
@@ -370,12 +423,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 4,
   },
+  notifTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0A84FF',
+    marginRight: 6,
+  },
   notifTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
     flex: 1,
-    marginRight: 8,
+  },
+  notifTitleRead: {
+    color: 'rgba(255,255,255,0.6)',
   },
   notifTime: {
     fontSize: 12,
@@ -386,6 +454,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
     lineHeight: 19,
+  },
+  notifBodyRead: {
+    color: 'rgba(255,255,255,0.45)',
+  },
+  showMoreButton: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0A84FF',
   },
   emptyState: {
     alignItems: 'center',
