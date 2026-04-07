@@ -12,6 +12,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -279,6 +280,27 @@ class LauncherModule : Module() {
                 }
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        // ── Volume ───────────────────────────────────────────────────────
+
+        AsyncFunction("getVolume") {
+            try {
+                val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                if (max > 0) current.toDouble() / max.toDouble() else 0.0
+            } catch (e: Exception) { 0.5 }
+        }
+
+        AsyncFunction("setVolume") { level: Double ->
+            try {
+                val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val target = (level.coerceIn(0.0, 1.0) * max).toInt()
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
                 true
             } catch (e: Exception) { false }
         }
