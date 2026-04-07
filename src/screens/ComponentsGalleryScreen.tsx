@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -220,10 +220,10 @@ export function ComponentsGalleryScreen() {
         <View style={{ borderRadius: 12, overflow: 'hidden' }}>
           <CupertinoSwipeableRow
             trailingActions={[
-              { label: 'Delete', color: '#FF3B30', onPress: () => {} },
+              { label: 'Delete', color: '#FF3B30', onPress: () => Alert.alert('Demo', 'Delete action triggered.') },
             ]}
             leadingActions={[
-              { label: 'Pin', color: '#FF9500', onPress: () => {} },
+              { label: 'Pin', color: '#FF9500', onPress: () => Alert.alert('Demo', 'Pin action triggered.') },
             ]}
           >
             <View style={[
@@ -246,12 +246,12 @@ export function ComponentsGalleryScreen() {
           <CupertinoListTile
             title="Messages"
             leading={{ name: 'chatbubble-ellipses', color: '#FFF', backgroundColor: '#34C759' }}
-            onPress={() => {}}
+            onPress={() => Alert.alert('Demo', 'Messages action triggered.')}
           />
           <CupertinoListTile
             title="FaceTime"
             leading={{ name: 'videocam', color: '#FFF', backgroundColor: '#34C759' }}
-            onPress={() => {}}
+            onPress={() => Alert.alert('Demo', 'FaceTime action triggered.')}
           />
           <CupertinoListTile
             title="Mail"
@@ -261,7 +261,7 @@ export function ComponentsGalleryScreen() {
                 <Text style={[typography.caption2, { color: '#FFF', fontWeight: '600' }]}>3</Text>
               </View>
             }
-            onPress={() => {}}
+            onPress={() => Alert.alert('Demo', 'Mail action triggered.')}
           />
         </CupertinoListSection>
 
@@ -286,9 +286,9 @@ export function ComponentsGalleryScreen() {
           title="Choose Action"
           message="Select one of the options below"
           options={[
-            { label: 'Share', onPress: () => {} },
-            { label: 'Save to Photos', onPress: () => {} },
-            { label: 'Delete', onPress: () => {}, destructive: true },
+            { label: 'Share', onPress: () => Alert.alert('Demo', 'Share action triggered.') },
+            { label: 'Save to Photos', onPress: () => Alert.alert('Demo', 'Save to Photos action triggered.') },
+            { label: 'Delete', onPress: () => Alert.alert('Demo', 'Delete action triggered.'), destructive: true },
           ]}
         />
 
@@ -298,8 +298,8 @@ export function ComponentsGalleryScreen() {
           title="Delete Photo?"
           message="This action cannot be undone."
           actions={[
-            { label: 'Cancel', onPress: () => {}, style: 'cancel' },
-            { label: 'Delete', onPress: () => {}, style: 'destructive' },
+            { label: 'Cancel', onPress: () => setShowAlert(false), style: 'cancel' },
+            { label: 'Delete', onPress: () => { setShowAlert(false); Alert.alert('Demo', 'Delete confirmed.'); }, style: 'destructive' },
           ]}
         />
       </ScrollView>

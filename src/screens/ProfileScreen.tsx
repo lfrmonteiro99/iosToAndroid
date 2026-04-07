@@ -128,7 +128,7 @@ export function ProfileScreen() {
                   {profile.appleId}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => Alert.alert('Apple ID', 'Apple ID settings are managed by the system.')}
             />
             <CupertinoListTile
               title="iCloud"
@@ -138,17 +138,17 @@ export function ProfileScreen() {
                   {profile.icloudStorage}
                 </Text>
               }
-              onPress={() => {}}
+              onPress={() => Alert.alert('iCloud', 'iCloud storage management will be available in a future update.')}
             />
             <CupertinoListTile
               title="Media & Purchases"
               leading={{ name: 'bag', color: '#FFF', backgroundColor: '#FF2D55' }}
-              onPress={() => {}}
+              onPress={() => Alert.alert('Media & Purchases', 'Manage your subscriptions and purchase history.')}
             />
             <CupertinoListTile
               title="Find My"
               leading={{ name: 'location', color: '#FFF', backgroundColor: '#34C759' }}
-              onPress={() => {}}
+              onPress={() => Alert.alert('Find My', 'No other devices connected.')}
             />
           </CupertinoListSection>
 
