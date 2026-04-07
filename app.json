@@ -23,7 +23,7 @@
       },
       "permissions": ["android.permission.QUERY_ALL_PACKAGES"],
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": true
     },
     "web": {
       "favicon": "./assets/favicon.png"

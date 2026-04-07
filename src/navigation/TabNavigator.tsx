@@ -105,7 +105,7 @@ export function TabNavigator() {
       <Stack.Screen name="BackupRestore" component={BackupRestoreScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: 'slide_from_right' }} />
+      {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: 'slide_from_right' }} />}
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: 'slide_from_left' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: 'slide_from_right' }} />
