@@ -521,7 +521,7 @@ function VoicemailTab({ onCall }: { onCall: (phone: string, name?: string) => vo
 const TABS = ['Favorites', 'Recents', 'Contacts', 'Keypad', 'Voicemail'];
 
 export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { theme } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const device = useDevice();
