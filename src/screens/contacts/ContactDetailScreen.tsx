@@ -31,7 +31,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
   const { contactId } = route.params as { contactId: string };
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
-  const { getContact, toggleFavorite, deleteContact } = useContacts();
+  const { getContact, toggleFavorite, deleteContact, deviceFavoriteIds } = useContacts();
   const { contacts: deviceContacts } = useDevice();
   const insets = useSafeAreaInsets();
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
@@ -47,7 +47,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
         email: deviceContact.email,
         company: deviceContact.company,
         notes: '',
-        isFavorite: false,
+        isFavorite: deviceFavoriteIds.includes(deviceContact.id),
         createdAt: '',
         _imageUri: deviceContact.imageUri,
         _isDeviceContact: true,
@@ -55,7 +55,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
     }
     const mockContact = getContact(contactId);
     return mockContact ? { ...mockContact, _imageUri: undefined, _isDeviceContact: false } : null;
-  }, [contactId, deviceContacts, getContact]);
+  }, [contactId, deviceContacts, getContact, deviceFavoriteIds]);
 
   const isDeviceContact = contact?._isDeviceContact ?? false;
   const imageUri = contact?._imageUri;

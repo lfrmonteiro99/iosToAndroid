@@ -148,7 +148,27 @@ const CallLogItem = React.memo(function CallLogItem({ call, isLast, colors, typo
 function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const { favorites, toggleFavorite } = useContacts();
+  const { favorites, toggleFavorite, deviceFavoriteIds } = useContacts();
+  const { contacts: deviceContacts } = useDevice();
+
+  // Merge store favorites + device contacts that are marked as favorite
+  const allFavorites = useMemo(() => {
+    const storeFavIds = new Set(favorites.map(f => f.id));
+    const deviceFavs: Contact[] = deviceContacts
+      .filter(dc => deviceFavoriteIds.includes(dc.id) && !storeFavIds.has(dc.id))
+      .map(dc => ({
+        id: dc.id,
+        firstName: dc.firstName,
+        lastName: dc.lastName,
+        phone: dc.phone,
+        email: dc.email,
+        company: dc.company,
+        notes: '',
+        isFavorite: true,
+        createdAt: '',
+      }));
+    return [...favorites, ...deviceFavs];
+  }, [favorites, deviceFavoriteIds, deviceContacts]);
 
   const getContactFullName = (c: Contact) =>
     [c.firstName, c.lastName].filter(Boolean).join(' ') || c.phone;
@@ -158,7 +178,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
     onCall(phone, name);
   }, [onCall]);
 
-  if (favorites.length === 0) {
+  if (allFavorites.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="star-outline" size={52} color={colors.systemGray3} />
@@ -172,7 +192,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
 
   return (
     <FlatList
-      data={favorites}
+      data={allFavorites}
       keyExtractor={(item) => item.id}
       decelerationRate={0.998}
       contentContainerStyle={{ paddingBottom: 20 }}

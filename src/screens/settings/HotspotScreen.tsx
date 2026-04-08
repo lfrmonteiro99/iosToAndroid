@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -18,8 +18,6 @@ export function HotspotScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
-
-  const [maximizeCompatibility, setMaximizeCompatibility] = useState(false);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -75,15 +73,16 @@ export function HotspotScreen({ navigation }: { navigation: any }) {
 
         {settings.hotspotEnabled && (
           <View style={{ paddingHorizontal: spacing.md }}>
-            <CupertinoListSection header="Connected Devices">
+            <CupertinoListSection header="Connected Devices" footer="Connected device count is managed by Android.">
               <CupertinoListTile
-                title="1 Connection"
+                title="No Devices Connected"
                 leading={{
                   name: 'laptop-outline',
                   color: '#FFFFFF',
-                  backgroundColor: colors.systemBlue,
+                  backgroundColor: colors.systemGray,
                 }}
                 showChevron={false}
+                onPress={() => openSystemPanel('tethering')}
               />
             </CupertinoListSection>
           </View>
@@ -97,8 +96,8 @@ export function HotspotScreen({ navigation }: { navigation: any }) {
               title="Maximize Compatibility"
               trailing={
                 <CupertinoSwitch
-                  value={maximizeCompatibility}
-                  onValueChange={setMaximizeCompatibility}
+                  value={settings.hotspotMaxCompatibility}
+                  onValueChange={(v) => update('hotspotMaxCompatibility', v)}
                 />
               }
               showChevron={false}
