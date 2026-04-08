@@ -90,8 +90,7 @@ export function ContactsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  // Keep useContacts available for ContactDetail navigation compatibility
-  useContacts();
+  const { contacts: storeContacts, toggleFavorite } = useContacts();
   const { contacts: deviceContacts, requestContactsPermission } = useDevice();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -112,10 +111,11 @@ export function ContactsScreen() {
 
   const sectionLetters = useMemo(() => sections.map((s) => s.title), [sections]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    await requestContactsPermission();
+    setRefreshing(false);
+  }, [requestContactsPermission]);
 
   const renderItem = useCallback(
     ({ item, section, index }: { item: DeviceContact; section: { data: DeviceContact[] }; index: number }) => (
@@ -228,7 +228,13 @@ export function ContactsScreen() {
           },
           {
             label: 'Add to Favorites',
-            onPress: () => { /* future: persist to local favorites */ },
+            onPress: () => {
+              const match = storeContacts.find(c => c.phone === contextContact.phone);
+              if (match) {
+                toggleFavorite(match.id);
+              }
+              setContextContact(null);
+            },
           },
         ] : []}
         cancelLabel="Cancel"

@@ -308,14 +308,21 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 </View>
                 <View style={styles.musicControls}>
                   <Pressable
-                    onPress={() => Alert.alert('Previous Track', 'Media controls require an active media session.')}
+                    onPress={async () => {
+                      const mod = await getLauncher();
+                      try { if (mod) await (mod as any).mediaPrev?.(); } catch { /* no-op */ }
+                    }}
                     accessibilityLabel="Previous track"
                     style={styles.musicBtn}
                   >
                     <Ionicons name="play-skip-back" size={20} color="#ffffff" />
                   </Pressable>
                   <Pressable
-                    onPress={() => setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }))}
+                    onPress={async () => {
+                      const mod = await getLauncher();
+                      try { if (mod) await (mod as any).mediaPlayPause?.(); } catch { /* no-op */ }
+                      setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
+                    }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
                     style={styles.musicPlayBtn}
                   >
@@ -326,7 +333,10 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     />
                   </Pressable>
                   <Pressable
-                    onPress={() => Alert.alert('Next Track', 'Media controls require an active media session.')}
+                    onPress={async () => {
+                      const mod = await getLauncher();
+                      try { if (mod) await (mod as any).mediaNext?.(); } catch { /* no-op */ }
+                    }}
                     accessibilityLabel="Next track"
                     style={styles.musicBtn}
                   >

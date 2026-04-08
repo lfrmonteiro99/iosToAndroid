@@ -20,9 +20,8 @@ describe('ProfileStore', () => {
     await act(async () => {});
 
     expect(result.current.profile.name).toBe('John Appleseed');
-    expect(result.current.profile.email).toBe('john.appleseed@icloud.com');
-    expect(result.current.profile.appleId).toBe('john@icloud.com');
-    expect(result.current.profile.icloudStorage).toBe('50 GB');
+    expect(result.current.profile.email).toBe('john.appleseed@gmail.com');
+    expect(result.current.profile.avatarUri).toBeNull();
     expect(result.current.isReady).toBe(true);
   });
 
@@ -36,7 +35,7 @@ describe('ProfileStore', () => {
 
     expect(result.current.profile.name).toBe('Jane Appleseed');
     // Other fields remain intact
-    expect(result.current.profile.email).toBe('john.appleseed@icloud.com');
+    expect(result.current.profile.email).toBe('john.appleseed@gmail.com');
   });
 
   it('updateProfile() can update multiple fields at once', async () => {
@@ -44,12 +43,11 @@ describe('ProfileStore', () => {
     await act(async () => {});
 
     await act(async () => {
-      result.current.updateProfile({ name: 'Bob', email: 'bob@example.com', icloudStorage: '200 GB' });
+      result.current.updateProfile({ name: 'Bob', email: 'bob@example.com' });
     });
 
     expect(result.current.profile.name).toBe('Bob');
     expect(result.current.profile.email).toBe('bob@example.com');
-    expect(result.current.profile.icloudStorage).toBe('200 GB');
   });
 
   it('reset() restores defaults', async () => {
@@ -67,7 +65,7 @@ describe('ProfileStore', () => {
     });
 
     expect(result.current.profile.name).toBe('John Appleseed');
-    expect(result.current.profile.email).toBe('john.appleseed@icloud.com');
+    expect(result.current.profile.email).toBe('john.appleseed@gmail.com');
     expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@iostoandroid/profile');
   });
 
@@ -90,10 +88,9 @@ describe('ProfileStore', () => {
   it('hydrates from AsyncStorage on mount', async () => {
     const saved = JSON.stringify({
       name: 'Stored User',
-      email: 'stored@icloud.com',
+      email: 'stored@example.com',
       bio: 'Stored bio',
-      appleId: 'stored@icloud.com',
-      icloudStorage: '2 TB',
+      avatarUri: null,
     });
     (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
 
@@ -101,7 +98,7 @@ describe('ProfileStore', () => {
     await act(async () => {});
 
     expect(result.current.profile.name).toBe('Stored User');
-    expect(result.current.profile.icloudStorage).toBe('2 TB');
+    expect(result.current.profile.email).toBe('stored@example.com');
     expect(result.current.isReady).toBe(true);
   });
 

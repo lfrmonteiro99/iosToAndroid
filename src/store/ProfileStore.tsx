@@ -7,16 +7,14 @@ export interface Profile {
   name: string;
   email: string;
   bio: string;
-  appleId: string;
-  icloudStorage: string;
+  avatarUri: string | null;
 }
 
 const DEFAULT_PROFILE: Profile = {
   name: 'John Appleseed',
-  email: 'john.appleseed@icloud.com',
+  email: 'john.appleseed@gmail.com',
   bio: '',
-  appleId: 'john@icloud.com',
-  icloudStorage: '50 GB',
+  avatarUri: null,
 };
 
 interface ProfileContextValue {

@@ -8,5 +8,7 @@ module.exports = {
   moduleNameMapper: {
     // Stub out Flow-typed RN internals that hermes-parser cannot handle
     'ViewConfigIgnore': '<rootDir>/src/__mocks__/ViewConfigIgnore.js',
+    // Mock the launcher native module (used via dynamic import in AppsStore)
+    '.*modules/launcher-module/src.*': '<rootDir>/src/__mocks__/launcherModule.js',
   },
 };

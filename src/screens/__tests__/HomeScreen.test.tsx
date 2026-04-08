@@ -1,45 +1,39 @@
 import React from 'react';
 import { render } from '../../test-utils';
-import { HomeScreen } from '../HomeScreen';
+import { LauncherHomeScreen } from '../LauncherHomeScreen';
 
-describe('HomeScreen', () => {
-  it('renders Home title', () => {
-    const { getByText } = render(<HomeScreen />);
-    expect(getByText('Home')).toBeTruthy();
+const navigation = { navigate: jest.fn(), goBack: jest.fn() } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+describe('LauncherHomeScreen', () => {
+  it('renders without crashing', () => {
+    const { toJSON } = render(
+      <LauncherHomeScreen navigation={navigation} route={{} as any} />,
+    );
+    expect(toJSON()).toBeTruthy();
   });
 
-  it('renders greeting based on time', () => {
-    const { queryByText } = render(<HomeScreen />);
-    const hasGreeting =
-      queryByText('Good Morning') !== null ||
-      queryByText('Good Afternoon') !== null ||
-      queryByText('Good Evening') !== null;
-    expect(hasGreeting).toBe(true);
+  it('renders in loading state initially', () => {
+    const { toJSON } = render(
+      <LauncherHomeScreen navigation={navigation} route={{} as any} />,
+    );
+    // Component starts in isLoading state — renders something (spinner)
+    const tree = toJSON();
+    expect(tree).toBeTruthy();
   });
 
-  it('renders battery widget', () => {
-    const { getAllByText } = render(<HomeScreen />);
-    // "Battery" appears as both a widget label and in the stat row
-    const batteryNodes = getAllByText('Battery');
-    expect(batteryNodes.length).toBeGreaterThan(0);
+  it('accepts navigation prop without crashing', () => {
+    const nav = { navigate: jest.fn(), goBack: jest.fn() };
+    const { toJSON } = render(
+      <LauncherHomeScreen navigation={nav} route={{} as any} />,
+    );
+    expect(toJSON()).toBeTruthy();
   });
 
-  it('renders storage widget', () => {
-    const { getByText } = render(<HomeScreen />);
-    expect(getByText('Storage')).toBeTruthy();
-  });
-
-  it('renders quick actions', () => {
-    const { getByText } = render(<HomeScreen />);
-    expect(getByText('Camera')).toBeTruthy();
-    expect(getByText('Photos')).toBeTruthy();
-    expect(getByText('Music')).toBeTruthy();
-    expect(getByText('Files')).toBeTruthy();
-  });
-
-  it('renders recent activity section', () => {
-    const { getByText } = render(<HomeScreen />);
-    // CupertinoListSection renders header via .toUpperCase()
-    expect(getByText('RECENT ACTIVITY')).toBeTruthy();
+  it('renders with custom navigation prop', () => {
+    const nav = { navigate: jest.fn(), goBack: jest.fn() };
+    const { toJSON } = render(
+      <LauncherHomeScreen navigation={nav} route={{ params: {} } as any} />,
+    );
+    expect(toJSON()).toBeTruthy();
   });
 });

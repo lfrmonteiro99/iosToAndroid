@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Image, Share } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,15 +24,13 @@ export function ProfileScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { profile } = useProfile();
+  const { profile, updateProfile } = useProfile();
   const { contacts, favorites, reset: resetContacts } = useContacts();
   const { reset: resetSettings } = useSettings();
   const { reset: resetProfile } = useProfile();
 
   const [showSignOut, setShowSignOut] = useState(false);
-  const [showShare, setShowShare] = useState(false);
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   const handleTakePhoto = async () => {
     setShowAvatarSheet(false);
@@ -47,7 +45,7 @@ export function ProfileScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+      updateProfile({ avatarUri: result.assets[0].uri });
     }
   };
 
@@ -64,14 +62,24 @@ export function ProfileScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri);
+      updateProfile({ avatarUri: result.assets[0].uri });
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `${profile.name} — ${profile.email}`,
+        title: 'Share Profile',
+      });
+    } catch {
+      // User dismissed share sheet — no action needed
     }
   };
 
   const stats = [
     { label: 'Contacts', value: String(contacts.length) },
     { label: 'Favorites', value: String(favorites.length) },
-    { label: 'Following', value: '347' },
   ];
 
   const handleSignOut = () => {
@@ -95,9 +103,9 @@ export function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Pressable onPress={() => setShowAvatarSheet(true)} style={styles.avatarWrapper}>
-          {avatarUri ? (
+          {profile.avatarUri ? (
             <Image
-              source={{ uri: avatarUri }}
+              source={{ uri: profile.avatarUri }}
               style={[styles.avatar, { borderColor: colors.systemBackground }]}
             />
           ) : (
@@ -140,16 +148,10 @@ export function ProfileScreen() {
 
         <View style={[styles.actionRow, { marginTop: spacing.lg }]}>
           <CupertinoButton
-            title="Edit Profile"
-            variant="filled"
-            style={{ flex: 1 }}
-            onPress={() => navigation.navigate('EditProfile')}
-          />
-          <CupertinoButton
-            title="Share"
+            title="Share Profile"
             variant="tinted"
             style={{ flex: 1 }}
-            onPress={() => setShowShare(true)}
+            onPress={handleShare}
           />
         </View>
 
@@ -164,34 +166,10 @@ export function ProfileScreen() {
         <View style={[styles.fullWidth, { paddingHorizontal: spacing.md, marginTop: spacing.lg }]}>
           <CupertinoListSection header="Account">
             <CupertinoListTile
-              title="Apple ID"
+              title="Edit Profile"
               leading={{ name: 'person-circle', color: '#FFF', backgroundColor: colors.accent }}
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {profile.appleId}
-                </Text>
-              }
-              onPress={() => Alert.alert('Apple ID', 'Apple ID settings are managed by the system.')}
-            />
-            <CupertinoListTile
-              title="iCloud"
-              leading={{ name: 'cloud', color: '#FFF', backgroundColor: '#5AC8FA' }}
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {profile.icloudStorage}
-                </Text>
-              }
-              onPress={() => Alert.alert('iCloud', 'iCloud storage management will be available in a future update.')}
-            />
-            <CupertinoListTile
-              title="Media & Purchases"
-              leading={{ name: 'bag', color: '#FFF', backgroundColor: '#FF2D55' }}
-              onPress={() => Alert.alert('Media & Purchases', 'Manage your subscriptions and purchase history.')}
-            />
-            <CupertinoListTile
-              title="Find My"
-              leading={{ name: 'location', color: '#FFF', backgroundColor: '#34C759' }}
-              onPress={() => Alert.alert('Find My', 'No other devices connected.')}
+              showChevron
+              onPress={() => navigation.navigate('EditProfile')}
             />
           </CupertinoListSection>
 
@@ -228,18 +206,6 @@ export function ProfileScreen() {
       />
 
       <CupertinoActionSheet
-        visible={showShare}
-        title="Share Profile"
-        options={[
-          { label: 'Copy Link', onPress: () => setShowShare(false) },
-          { label: 'Share via Messages', onPress: () => setShowShare(false) },
-          { label: 'Share via Email', onPress: () => setShowShare(false) },
-        ]}
-        cancelLabel="Cancel"
-        onClose={() => setShowShare(false)}
-      />
-
-      <CupertinoActionSheet
         visible={showAvatarSheet}
         title="Profile Photo"
         options={[
@@ -254,7 +220,7 @@ export function ProfileScreen() {
           {
             label: 'Remove Photo',
             destructive: true,
-            onPress: () => { setAvatarUri(null); setShowAvatarSheet(false); },
+            onPress: () => { updateProfile({ avatarUri: null }); setShowAvatarSheet(false); },
           },
         ]}
         cancelLabel="Cancel"

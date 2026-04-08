@@ -96,11 +96,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
     { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
-      if (contact.phone) {
-        Linking.openURL(`tel:${contact.phone}`);
-      } else {
-        Alert.alert('No phone number', 'No phone number available for this contact.');
-      }
+      Alert.alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
     }},
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
   ];

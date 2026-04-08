@@ -69,8 +69,6 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
               }
               onPress={() => setShowAirdropPicker(true)}
             />
-            <CupertinoListTile title="AirPlay & Handoff" onPress={() => Alert.alert('AirPlay & Handoff', 'Not available on Android devices.')} />
-            <CupertinoListTile title="CarPlay" onPress={() => Alert.alert('CarPlay', 'Not available on Android devices.')} />
           </CupertinoListSection>
         </View>
 

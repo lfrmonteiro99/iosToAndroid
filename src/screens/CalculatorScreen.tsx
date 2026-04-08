@@ -64,8 +64,8 @@ const ACCESSIBILITY_LABELS: Record<string, string> = {
   'x³': 'cube',
   π: 'pi',
   e: "euler's number",
-  '(': 'open parenthesis',
-  ')': 'close parenthesis',
+  '1/x': 'reciprocal',
+  '|x|': 'absolute value',
 };
 
 function getAccessibilityLabel(def: ButtonDef): string {
@@ -117,8 +117,8 @@ const ROWS: ButtonDef[][] = [
 
 const SCIENTIFIC_ROWS: ButtonDef[][] = [
   [
-    { label: '(', type: 'scientific' },
-    { label: ')', type: 'scientific' },
+    { label: '1/x', type: 'scientific', accessibilityLabel: 'reciprocal' },
+    { label: '|x|', type: 'scientific', accessibilityLabel: 'absolute value' },
     { label: 'x²', type: 'scientific' },
   ],
   [
@@ -506,10 +506,13 @@ export function CalculatorScreen() {
         setDisplay(formatNumber(Math.E));
         setResetOnNext(true);
         return;
-      case '(':
-      case ')':
-        // Parentheses are no-ops in this simple calculator model
-        return;
+      case '1/x':
+        if (current === 0) { setDisplay('Error'); setResetOnNext(true); return; }
+        result = 1 / current;
+        break;
+      case '|x|':
+        result = Math.abs(current);
+        break;
       default:
         return;
     }

@@ -1,12 +1,35 @@
 // Mock native modules that don't exist in test environment
 
+// Mock global fetch so DeviceStore's loadWeather() resolves immediately
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({
+      current_condition: [{ temp_C: '22', weatherCode: '113', weatherDesc: [{ value: 'Sunny' }] }],
+      nearest_area: [{ areaName: [{ value: 'Test City' }] }],
+    }),
+    text: () => Promise.resolve(''),
+  })
+);
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   selectionAsync: jest.fn(),
+  notificationAsync: jest.fn(),
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 }));
 
 jest.mock('expo-blur', () => ({ BlurView: 'BlurView' }));
+
+jest.mock('expo-navigation-bar', () => ({
+  setBackgroundColorAsync: jest.fn(() => Promise.resolve()),
+  setVisibilityAsync: jest.fn(() => Promise.resolve()),
+  setBehaviorAsync: jest.fn(() => Promise.resolve()),
+  setButtonStyleAsync: jest.fn(() => Promise.resolve()),
+  setPositionAsync: jest.fn(() => Promise.resolve()),
+  getVisibilityAsync: jest.fn(() => Promise.resolve('visible')),
+}));
 
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 
@@ -177,7 +200,27 @@ jest.mock('react-native-gesture-handler', () => {
   return {
     GestureHandlerRootView: 'View',
     GestureDetector: 'View',
-    Gesture: { Pan: () => ({ onUpdate: () => ({}), onEnd: () => ({}) }), Tap: () => ({}) },
+    Gesture: {
+      Pan: () => {
+        const g = { onUpdate: () => g, onEnd: () => g, onBegin: () => g, onFinalize: () => g, minDistance: () => g, enabled: () => g, activeOffsetX: () => g, activeOffsetY: () => g, failOffsetX: () => g, failOffsetY: () => g, simultaneousWithExternalGesture: () => g, withRef: () => g, onChange: () => g, onStart: () => g, onTouchesBegan: () => g, onTouchesMove: () => g, onTouchesUp: () => g, onTouchesCancelled: () => g };
+        return g;
+      },
+      Tap: () => {
+        const g = { onEnd: () => g, onBegin: () => g, numberOfTaps: () => g, enabled: () => g, simultaneousWithExternalGesture: () => g, withRef: () => g, onChange: () => g, onStart: () => g, maxDuration: () => g };
+        return g;
+      },
+      LongPress: () => {
+        const g = { onStart: () => g, onEnd: () => g, onBegin: () => g, minDuration: () => g, enabled: () => g, simultaneousWithExternalGesture: () => g, withRef: () => g };
+        return g;
+      },
+      Fling: () => {
+        const g = { onStart: () => g, onEnd: () => g, onBegin: () => g, direction: () => g, enabled: () => g, simultaneousWithExternalGesture: () => g, withRef: () => g };
+        return g;
+      },
+      Exclusive: (...gs) => gs[0],
+      Simultaneous: (...gs) => gs[0],
+      Race: (...gs) => gs[0],
+    },
     Swipeable: 'View',
     DrawerLayout: 'View',
     State: {},
