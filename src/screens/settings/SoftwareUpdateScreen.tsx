@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import {
@@ -50,28 +50,14 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Update card */}
+        {/* Up to date */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Available Update">
+          <CupertinoListSection>
             <View style={[styles.updateCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-              <Text style={[typography.headline, { color: colors.label }]}>iosToAndroid 2.0</Text>
-              <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 2 }]}>
-                182.4 MB
+              <Text style={[typography.headline, { color: colors.label }]}>Your software is up to date.</Text>
+              <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: spacing.sm, lineHeight: 18 }]}>
+                iosToAndroid 1.0.0 is the latest version.
               </Text>
-              <Text
-                style={[
-                  typography.footnote,
-                  { color: colors.secondaryLabel, marginTop: spacing.sm, lineHeight: 18 },
-                ]}
-              >
-                This update includes performance improvements, bug fixes, and new features.
-              </Text>
-              <CupertinoButton
-                title="Download and Install"
-                variant="filled"
-                onPress={() => Alert.alert('Software Update', 'This is a demo app. No actual update is available.')}
-                style={{ marginTop: spacing.md }}
-              />
             </View>
           </CupertinoListSection>
         </View>

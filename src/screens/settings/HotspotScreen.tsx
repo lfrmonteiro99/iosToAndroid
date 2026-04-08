@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -88,24 +88,6 @@ export function HotspotScreen({ navigation }: { navigation: any }) {
             </CupertinoListSection>
           </View>
         )}
-
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection
-            header="Family Sharing"
-            footer="Family members can use your hotspot without entering a password. Their devices will appear in Connected Devices when they join."
-          >
-            <CupertinoListTile
-              title="Family Sharing"
-              leading={{
-                name: 'people-outline',
-                color: '#FFFFFF',
-                backgroundColor: colors.systemOrange,
-              }}
-              showChevron
-              onPress={() => Alert.alert('Family Sharing', 'Not available on Android devices.')}
-            />
-          </CupertinoListSection>
-        </View>
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection

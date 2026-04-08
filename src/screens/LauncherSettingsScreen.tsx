@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, Alert, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, Alert, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
@@ -39,9 +39,50 @@ export function LauncherSettingsScreen() {
   const { dockApps } = useApps();
   const { folders, deleteFolder } = useFolders();
 
-  // Local state for settings not yet in SettingsStore
-  const [showLockScreen, setShowLockScreen] = useState(false);
-  const [biometricUnlock, setBiometricUnlock] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
+  const [pinInput, setPinInput] = useState('');
+  const [newPin, setNewPin] = useState('');
+
+  const handleChangePinPress = useCallback(() => {
+    setPinStep('current');
+    setPinInput('');
+    setNewPin('');
+    setShowPinModal(true);
+  }, []);
+
+  const handlePinSubmit = useCallback(async () => {
+    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+      Alert.alert('Invalid PIN', 'PIN must be exactly 4 digits.');
+      return;
+    }
+    if (pinStep === 'current') {
+      const stored = await AsyncStorage.getItem('@lock_pin');
+      const current = stored ?? '1234';
+      if (pinInput !== current) {
+        Alert.alert('Incorrect PIN', 'The current PIN you entered is wrong.');
+        setPinInput('');
+        return;
+      }
+      setPinStep('new');
+      setPinInput('');
+    } else if (pinStep === 'new') {
+      setNewPin(pinInput);
+      setPinStep('confirm');
+      setPinInput('');
+    } else {
+      if (pinInput !== newPin) {
+        Alert.alert('PIN Mismatch', 'The PINs do not match. Please try again.');
+        setPinStep('new');
+        setPinInput('');
+        setNewPin('');
+        return;
+      }
+      await AsyncStorage.setItem('@lock_pin', pinInput);
+      setShowPinModal(false);
+      Alert.alert('Success', 'Your passcode has been changed.');
+    }
+  }, [pinInput, pinStep, newPin]);
 
   const handleResetDock = () => {
     Alert.alert('Reset Dock', 'Restore dock to Phone, Messages, Contacts, Settings?', [
@@ -216,10 +257,8 @@ export function LauncherSettingsScreen() {
           isLast
           trailing={
             <CupertinoSwitch
-              value={true}
-              onValueChange={() => {
-                // Placeholder — extend SettingsState to persist if needed
-              }}
+              value={settings.showSearchLabel}
+              onValueChange={(v) => update('showSearchLabel', v)}
             />
           }
         />
@@ -274,8 +313,8 @@ export function LauncherSettingsScreen() {
           showChevron={false}
           trailing={
             <CupertinoSwitch
-              value={showLockScreen}
-              onValueChange={setShowLockScreen}
+              value={settings.showLockScreen}
+              onValueChange={(v) => update('showLockScreen', v)}
             />
           }
         />
@@ -283,22 +322,61 @@ export function LauncherSettingsScreen() {
           title="Biometric Unlock"
           leading={{ name: 'finger-print', color: '#fff', backgroundColor: '#34C759' }}
           showChevron={false}
-          isLast
           trailing={
             <CupertinoSwitch
-              value={biometricUnlock}
-              onValueChange={setBiometricUnlock}
+              value={settings.biometricUnlock}
+              onValueChange={(v) => update('biometricUnlock', v)}
             />
           }
         />
+        <CupertinoListTile
+          title="Change Passcode"
+          leading={{ name: 'keypad', color: '#fff', backgroundColor: '#8E8E93' }}
+          showChevron
+          isLast
+          onPress={handleChangePinPress}
+        />
       </CupertinoListSection>
+
+      {/* ── PIN Change Modal ───────────────────────────────────── */}
+      <Modal visible={showPinModal} transparent animationType="fade" onRequestClose={() => setShowPinModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowPinModal(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: colors.secondarySystemGroupedBackground }]} onPress={() => {}}>
+            <Text style={[typography.headline, { color: colors.label, marginBottom: 6 }]}>
+              {pinStep === 'current' ? 'Enter Current Passcode' : pinStep === 'new' ? 'Enter New Passcode' : 'Confirm New Passcode'}
+            </Text>
+            <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 16, textAlign: 'center' }]}>
+              {pinStep === 'current' ? 'Default passcode is 1234' : 'Must be exactly 4 digits'}
+            </Text>
+            <TextInput
+              style={[styles.pinInput, { color: colors.label, borderColor: colors.separator, backgroundColor: colors.systemBackground }]}
+              value={pinInput}
+              onChangeText={setPinInput}
+              keyboardType="number-pad"
+              maxLength={4}
+              secureTextEntry
+              placeholder="••••"
+              placeholderTextColor={colors.secondaryLabel}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <Pressable onPress={() => setShowPinModal(false)} style={[styles.modalBtn, { borderColor: colors.separator }]}>
+                <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={handlePinSubmit} style={[styles.modalBtn, { borderColor: colors.separator }]}>
+                <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}>Next</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── About ──────────────────────────────────────────────── */}
       <CupertinoListSection header="About">
         <CupertinoListTile
           title="Version"
           leading={{ name: 'information-circle', color: '#fff', backgroundColor: '#5856D6' }}
-          trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>1.4.0</Text>}
+          trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>1.0.0</Text>}
           showChevron={false}
         />
         <CupertinoListTile
@@ -325,5 +403,40 @@ const styles = StyleSheet.create({
   buttonRow: {
     paddingHorizontal: 16,
     paddingVertical: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: 300,
+    borderRadius: 14,
+    padding: 20,
+    alignItems: 'center',
+  },
+  pinInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+    letterSpacing: 8,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
   },
 });

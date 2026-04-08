@@ -79,37 +79,31 @@ export function CallScreen({
   const { number, name } = (route.params ?? {}) as { number: string; name?: string };
   const displayName = name || number || 'Unknown';
 
-  const [status, setStatus] = useState<'calling' | 'connected'>('calling');
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(false);
 
-  // Pulsing animation for the accept/avatar area during incoming (calling) state
+  // Pulsing animation while the call is being placed
   const pulseScale = useSharedValue(1);
   const pulseGlow = useSharedValue(0);
 
   useEffect(() => {
-    if (status === 'calling') {
-      pulseScale.value = withRepeat(
-        withSequence(
-          withTiming(1.1, { duration: 800 }),
-          withTiming(1.0, { duration: 800 }),
-        ),
-        -1,
-        false,
-      );
-      pulseGlow.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: 800 }),
-          withTiming(0, { duration: 800 }),
-        ),
-        -1,
-        false,
-      );
-    } else {
-      pulseScale.value = withTiming(1, { duration: 300 });
-      pulseGlow.value = withTiming(0, { duration: 300 });
-    }
-  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 800 }),
+        withTiming(1.0, { duration: 800 }),
+      ),
+      -1,
+      false,
+    );
+    pulseGlow.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 800 }),
+        withTiming(0, { duration: 800 }),
+      ),
+      -1,
+      false,
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pulseAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
@@ -130,9 +124,6 @@ export function CallScreen({
         } catch (e) { console.warn('CallScreen: native call failed:', e); }
       }
     })();
-    // Simulate "connected" after a few seconds for UI demo purposes
-    const timer = setTimeout(() => setStatus('connected'), 4000);
-    return () => clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEndCall = useCallback(() => {
@@ -150,22 +141,6 @@ export function CallScreen({
     setIsSpeaker((v) => !v);
   }, []);
 
-  const handleKeypad = useCallback(() => {
-    // Placeholder: would open an in-call keypad
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
-
-  const handleAddCall = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
-
-  const handleFaceTime = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
-
-  const handleContacts = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
 
   return (
     <LinearGradient
@@ -189,16 +164,13 @@ export function CallScreen({
         </Text>
 
         {/* Status */}
-        <Text style={styles.callStatus}>
-          {status === 'calling' ? 'Calling...' : 'Connected'}
-        </Text>
+        <Text style={styles.callStatus}>Calling...</Text>
       </View>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Control buttons (2 × 3 grid)                                        */}
+      {/* Control buttons                                                      */}
       {/* ------------------------------------------------------------------ */}
       <View style={styles.controlsGrid}>
-        {/* Row 1 */}
         <View style={styles.controlsRow}>
           <ControlButton
             icon={isMuted ? 'mic-off' : 'mic'}
@@ -207,34 +179,10 @@ export function CallScreen({
             active={isMuted}
           />
           <ControlButton
-            icon="keypad"
-            label="Keypad"
-            onPress={handleKeypad}
-          />
-          <ControlButton
             icon={isSpeaker ? 'volume-high' : 'volume-medium'}
             label="Speaker"
             onPress={toggleSpeaker}
             active={isSpeaker}
-          />
-        </View>
-
-        {/* Row 2 */}
-        <View style={styles.controlsRow}>
-          <ControlButton
-            icon="add"
-            label="Add Call"
-            onPress={handleAddCall}
-          />
-          <ControlButton
-            icon="videocam"
-            label="FaceTime"
-            onPress={handleFaceTime}
-          />
-          <ControlButton
-            icon="people"
-            label="Contacts"
-            onPress={handleContacts}
           />
         </View>
       </View>

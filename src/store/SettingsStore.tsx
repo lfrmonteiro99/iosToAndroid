@@ -53,6 +53,9 @@ export interface SettingsState {
   wallpaperIndex: number;
   reduceMotion: boolean;
   boldText: boolean;
+  showLockScreen: boolean;
+  biometricUnlock: boolean;
+  showSearchLabel: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -104,6 +107,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   wallpaperIndex: 0,
   reduceMotion: false,
   boldText: false,
+  showLockScreen: true,
+  biometricUnlock: true,
+  showSearchLabel: true,
 };
 
 interface SettingsContextValue {

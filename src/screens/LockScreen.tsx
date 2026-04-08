@@ -61,33 +61,14 @@ function formatNotifTime(timestamp: number): string {
   return 'Yesterday';
 }
 
+import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
+
 const LOCK_PIN_KEY = '@lock_pin';
 const DEFAULT_PIN = '1234';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const WALLPAPERS: readonly string[] = [
-  '#667eea',
-  '#f093fb',
-  '#4facfe',
-  '#43e97b',
-  '#fa709a',
-  '#1C1C1E',
-];
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const SWIPE_THRESHOLD = 100;
-
-function darkenHex(hex: string, amount: number): string {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const r = Math.max(0, (num >> 16) - Math.round(255 * amount));
-  const g = Math.max(0, ((num >> 8) & 0xff) - Math.round(255 * amount));
-  const b = Math.max(0, (num & 0xff) - Math.round(255 * amount));
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
 
 function formatTime(date: Date, use24Hour: boolean): string {
   if (use24Hour) {

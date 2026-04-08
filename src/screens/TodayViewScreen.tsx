@@ -163,23 +163,6 @@ function WeatherWidget({ temp, condition, icon, city }: { temp: number; conditio
 }
 
 // ---------------------------------------------------------------------------
-// Screen Time Widget (static placeholder)
-// ---------------------------------------------------------------------------
-
-function ScreenTimeWidget() {
-  return (
-    <WidgetCard>
-      <View style={styles.widgetRow}>
-        <Ionicons name="time-outline" size={22} color="#BF5AF2" />
-        <Text style={styles.widgetTitle}>Screen Time</Text>
-      </View>
-      <Text style={[styles.widgetBigNumber, { color: '#BF5AF2' }]}>2h 34m</Text>
-      <Text style={styles.widgetSubtext}>today · 18% more than yesterday</Text>
-    </WidgetCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Up Next Widget (real calendar events)
 // ---------------------------------------------------------------------------
 
@@ -350,8 +333,6 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
               icon={device.weather.icon}
               city={device.weather.city}
             />
-
-            <ScreenTimeWidget />
 
             <UpNextWidget events={calendarEvents} />
 

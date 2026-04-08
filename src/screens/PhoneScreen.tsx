@@ -15,6 +15,7 @@ import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
+import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { CupertinoActivityIndicator } from '../components';
@@ -144,10 +145,13 @@ const CallLogItem = React.memo(function CallLogItem({ call, isLast, colors, typo
 
 // ─── Favorites Tab ──────────────────────────────────────────────────────────
 
-function FavoritesTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
+function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const favorites = contacts.slice(0, 8);
+  const { favorites, toggleFavorite } = useContacts();
+
+  const getContactFullName = (c: Contact) =>
+    [c.firstName, c.lastName].filter(Boolean).join(' ') || c.phone;
 
   const handleCall = useCallback((phone: string, name?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -160,7 +164,7 @@ function FavoritesTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall:
         <Ionicons name="star-outline" size={52} color={colors.systemGray3} />
         <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>No Favorites</Text>
         <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center' }]}>
-          Add contacts to Favorites for quick access.
+          Long-press a contact and choose "Add to Favorites".
         </Text>
       </View>
     );
@@ -177,20 +181,32 @@ function FavoritesTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall:
       )}
       renderItem={({ item }) => (
         <View style={[styles.contactRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-          <ContactAvatar contact={item} size={44} />
+          <View style={[styles.avatar, { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.systemBlue }]}>
+            <Text style={[styles.avatarText, { fontSize: 44 * 0.38 }]}>
+              {((item.firstName?.[0] ?? '') + (item.lastName?.[0] ?? '')).toUpperCase() || '?'}
+            </Text>
+          </View>
           <View style={styles.contactInfo}>
             <Text style={[typography.body, { color: colors.label }]} numberOfLines={1}>
-              {getFullName(item)}
+              {getContactFullName(item)}
             </Text>
             <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>mobile</Text>
           </View>
           <TouchableOpacity
-            onPress={() => handleCall(item.phone, getFullName(item))}
+            onPress={() => handleCall(item.phone, getContactFullName(item))}
             style={styles.callBtn}
-            accessibilityLabel={`Call ${getFullName(item)}`}
+            accessibilityLabel={`Call ${getContactFullName(item)}`}
             accessibilityRole="button"
           >
             <Ionicons name="call" size={22} color={colors.systemGreen} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleFavorite(item.id); }}
+            style={[styles.callBtn, { marginLeft: 4 }]}
+            accessibilityLabel={`Remove ${getContactFullName(item)} from favorites`}
+            accessibilityRole="button"
+          >
+            <Ionicons name="star" size={20} color="#FFD60A" />
           </TouchableOpacity>
         </View>
       )}
@@ -521,7 +537,7 @@ export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-dis
 
   const renderContent = () => {
     switch (selectedTab) {
-      case 0: return <FavoritesTab contacts={device.contacts} onCall={handleCall} />;
+      case 0: return <FavoritesTab onCall={handleCall} />;
       case 1: return <RecentsTab onCall={handleCall} />;
       case 2: return <ContactsTab contacts={device.contacts} onCall={handleCall} />;
       case 3: return <KeypadTab onCall={handleCall} />;

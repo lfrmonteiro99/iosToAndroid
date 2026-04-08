@@ -303,7 +303,7 @@ function SectionHeader({ title, colors }: { title: string; colors: any }) {
 export function AppLibraryScreen({ navigation }: { navigation: any }) {
   const { theme, isDark } = useTheme();
   const { colors } = theme;
-  const { apps, launchApp } = useApps();
+  const { apps, launchApp, recentApps } = useApps();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -332,18 +332,28 @@ export function AppLibraryScreen({ navigation }: { navigation: any }) {
     return keys.map((name) => ({ name, apps: map[name] }));
   }, [apps]);
 
-  // Recently Added — first 4 alphabetically as placeholder
-  const recentApps = useMemo(() => {
-    return [...apps]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 4);
-  }, [apps]);
+  // Recently Added — most recently launched apps (by launchedAt timestamp)
+  const recentlyAddedApps = useMemo(() => {
+    const recentPkgs = [...recentApps]
+      .sort((a, b) => b.launchedAt - a.launchedAt)
+      .slice(0, 4)
+      .map(r => apps.find(a => a.packageName === r.packageName))
+      .filter((a): a is InstalledApp => !!a);
+    if (recentPkgs.length > 0) return recentPkgs;
+    // Fallback: newest-named apps when no launch history exists
+    return [...apps].sort((a, b) => b.name.localeCompare(a.name)).slice(0, 4);
+  }, [apps, recentApps]);
 
-  // Suggestions — use apps from index 4-7 (pseudo-random slice)
+  // Suggestions — next 4 most-recently-launched apps after Recently Added
   const suggestedApps = useMemo(() => {
-    const sorted = [...apps].sort((a, b) => a.name.localeCompare(b.name));
-    return sorted.slice(4, 8);
-  }, [apps]);
+    const recentSorted = [...recentApps]
+      .sort((a, b) => b.launchedAt - a.launchedAt)
+      .slice(4, 8)
+      .map(r => apps.find(a => a.packageName === r.packageName))
+      .filter((a): a is InstalledApp => !!a);
+    if (recentSorted.length > 0) return recentSorted;
+    return [...apps].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 4);
+  }, [apps, recentApps]);
 
   // Filtered apps for search
   const filteredApps = useMemo(() => {
@@ -397,11 +407,11 @@ export function AppLibraryScreen({ navigation }: { navigation: any }) {
           showsVerticalScrollIndicator={false}
         >
           {/* Recently Added */}
-          {recentApps.length > 0 && (
+          {recentlyAddedApps.length > 0 && (
             <View style={styles.stripSection}>
               <SectionHeader title="Recently Added" colors={colors} />
               <View style={[styles.stripCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-                <AppStrip apps={recentApps} onLaunch={handleLaunch} />
+                <AppStrip apps={recentlyAddedApps} onLaunch={handleLaunch} />
               </View>
             </View>
           )}
