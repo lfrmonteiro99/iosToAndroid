@@ -164,7 +164,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
         <Ionicons name="star-outline" size={52} color={colors.systemGray3} />
         <Text style={[typography.title3, { color: colors.label, marginTop: 12 }]}>No Favorites</Text>
         <Text style={[typography.subhead, { color: colors.secondaryLabel, marginTop: 6, textAlign: 'center' }]}>
-          Long-press a contact and choose "Add to Favorites".
+          Long-press a contact and choose &quot;Add to Favorites&quot;.
         </Text>
       </View>
     );
@@ -373,7 +373,7 @@ function ContactsTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: 
 // ─── Keypad Tab ──────────────────────────────────────────────────────────────
 
 function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
-  const { theme, typography } = useTheme();
+  const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const [number, setNumber] = useState('');
@@ -521,7 +521,7 @@ function VoicemailTab({ onCall }: { onCall: (phone: string, name?: string) => vo
 const TABS = ['Favorites', 'Recents', 'Contacts', 'Keypad', 'Voicemail'];
 
 export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { theme, typography, spacing } = useTheme();
+  const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const device = useDevice();
