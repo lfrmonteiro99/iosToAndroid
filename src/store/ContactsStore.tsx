@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@iostoandroid/contacts';
+const DEVICE_FAV_KEY = '@iostoandroid/device_favorites';
 
 export interface Contact {
   id: string;
@@ -47,6 +48,7 @@ const SEED_CONTACTS: Contact[] = [
 interface ContactsContextValue {
   contacts: Contact[];
   favorites: Contact[];
+  deviceFavoriteIds: string[];
   addContact: (contact: Omit<Contact, 'id' | 'createdAt'>) => void;
   updateContact: (id: string, updates: Partial<Contact>) => void;
   deleteContact: (id: string) => void;
@@ -60,12 +62,19 @@ const ContactsContext = createContext<ContactsContextValue | null>(null);
 
 export function ContactsProvider({ children }: { children: React.ReactNode }) {
   const [contacts, setContacts] = useState<Contact[]>(SEED_CONTACTS);
+  const [deviceFavoriteIds, setDeviceFavoriteIds] = useState<string[]>([]);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(DEVICE_FAV_KEY),
+    ]).then(([stored, deviceFavs]) => {
       if (stored) {
         try { setContacts(JSON.parse(stored)); } catch (e) { console.warn('ContactsStore: failed to parse stored contacts:', e); }
+      }
+      if (deviceFavs) {
+        try { setDeviceFavoriteIds(JSON.parse(deviceFavs)); } catch { /* ignore */ }
       }
       setIsReady(true);
     });
@@ -74,6 +83,10 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isReady) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
   }, [contacts, isReady]);
+
+  useEffect(() => {
+    if (isReady) AsyncStorage.setItem(DEVICE_FAV_KEY, JSON.stringify(deviceFavoriteIds));
+  }, [deviceFavoriteIds, isReady]);
 
   const addContact = useCallback((contact: Omit<Contact, 'id' | 'createdAt'>) => {
     setContacts((prev) => [...prev, { ...contact, id: Date.now().toString(), createdAt: new Date().toISOString() }]);
@@ -88,7 +101,17 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleFavorite = useCallback((id: string) => {
-    setContacts((prev) => prev.map((c) => c.id === id ? { ...c, isFavorite: !c.isFavorite } : c));
+    setContacts((prev) => {
+      const inStore = prev.some(c => c.id === id);
+      if (inStore) {
+        return prev.map((c) => c.id === id ? { ...c, isFavorite: !c.isFavorite } : c);
+      }
+      // Device contact not in store — toggle in deviceFavoriteIds
+      setDeviceFavoriteIds(ids =>
+        ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]
+      );
+      return prev;
+    });
   }, []);
 
   const getContact = useCallback((id: string) => contacts.find((c) => c.id === id), [contacts]);
@@ -97,12 +120,14 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
 
   const reset = useCallback(() => {
     setContacts(SEED_CONTACTS);
+    setDeviceFavoriteIds([]);
     AsyncStorage.removeItem(STORAGE_KEY);
+    AsyncStorage.removeItem(DEVICE_FAV_KEY);
   }, []);
 
   const value = useMemo(() => ({
-    contacts, favorites, addContact, updateContact, deleteContact, toggleFavorite, getContact, reset, isReady,
-  }), [contacts, favorites, addContact, updateContact, deleteContact, toggleFavorite, getContact, reset, isReady]);
+    contacts, favorites, deviceFavoriteIds, addContact, updateContact, deleteContact, toggleFavorite, getContact, reset, isReady,
+  }), [contacts, favorites, deviceFavoriteIds, addContact, updateContact, deleteContact, toggleFavorite, getContact, reset, isReady]);
 
   return <ContactsContext.Provider value={value}>{children}</ContactsContext.Provider>;
 }

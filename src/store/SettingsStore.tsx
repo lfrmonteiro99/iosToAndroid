@@ -13,6 +13,7 @@ export interface SettingsState {
   cellularDataEnabled: boolean;
   hotspotEnabled: boolean;
   hotspotPassword: string;
+  hotspotMaxCompatibility: boolean;
   notificationsEnabled: boolean;
   notificationSounds: boolean;
   notificationBadges: boolean;
@@ -56,6 +57,7 @@ export interface SettingsState {
   showLockScreen: boolean;
   biometricUnlock: boolean;
   showSearchLabel: boolean;
+  automaticUpdates: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   cellularDataEnabled: true,
   hotspotEnabled: false,
   hotspotPassword: 'password123',
+  hotspotMaxCompatibility: false,
   notificationsEnabled: true,
   notificationSounds: true,
   notificationBadges: true,
@@ -110,6 +113,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   showLockScreen: true,
   biometricUnlock: true,
   showSearchLabel: true,
+  automaticUpdates: true,
 };
 
 interface SettingsContextValue {

@@ -126,10 +126,10 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
       <CupertinoAlertDialog
         visible={showShutdown}
         title="Shut Down"
-        message="Are you sure you want to shut down? This is a demo app — nothing will actually happen."
+        message="This will open the Android power menu."
         actions={[
           { label: 'Cancel', style: 'cancel', onPress: () => setShowShutdown(false) },
-          { label: 'Shut Down', style: 'destructive', onPress: () => setShowShutdown(false) },
+          { label: 'Shut Down', style: 'destructive', onPress: () => { setShowShutdown(false); openSystemPanel('power'); } },
         ]}
         onClose={() => setShowShutdown(false)}
       />

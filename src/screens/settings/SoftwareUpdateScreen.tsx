@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
+import { useSettings } from '../../store/SettingsStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
-  CupertinoButton,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,7 +15,7 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const [autoUpdates, setAutoUpdates] = useState(true);
+  const { settings, update } = useSettings();
 
   const lastChecked = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -70,7 +70,7 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Automatic Updates"
               trailing={
-                <CupertinoSwitch value={autoUpdates} onValueChange={setAutoUpdates} />
+                <CupertinoSwitch value={settings.automaticUpdates} onValueChange={(v) => update('automaticUpdates', v)} />
               }
               showChevron={false}
             />
