@@ -58,6 +58,12 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.messages': { name: 'Messages', packageName: 'com.iostoandroid.messages', icon: '', isSystem: false },
   'com.iostoandroid.contacts': { name: 'Contacts', packageName: 'com.iostoandroid.contacts', icon: '', isSystem: false },
   'com.iostoandroid.settings': { name: 'Settings', packageName: 'com.iostoandroid.settings', icon: '', isSystem: false },
+  'com.iostoandroid.weather': { name: 'Weather', packageName: 'com.iostoandroid.weather', icon: '', isSystem: false },
+  'com.iostoandroid.clock': { name: 'Clock', packageName: 'com.iostoandroid.clock', icon: '', isSystem: false },
+  'com.iostoandroid.camera': { name: 'Camera', packageName: 'com.iostoandroid.camera', icon: '', isSystem: false },
+  'com.iostoandroid.photos': { name: 'Photos', packageName: 'com.iostoandroid.photos', icon: '', isSystem: false },
+  'com.iostoandroid.calendar': { name: 'Calendar', packageName: 'com.iostoandroid.calendar', icon: '', isSystem: false },
+  'com.iostoandroid.calculator': { name: 'Calculator', packageName: 'com.iostoandroid.calculator', icon: '', isSystem: false },
 };
 
 // Default dock apps — our built-in screens

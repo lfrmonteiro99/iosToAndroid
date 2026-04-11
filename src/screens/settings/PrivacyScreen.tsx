@@ -12,11 +12,11 @@ import {
 } from '../../components';
 
 const APP_PRIVACY_ITEMS = [
-  { title: 'Contacts', count: '3 Apps', icon: 'people', color: '#34C759', bg: '#34C759' },
-  { title: 'Calendars', count: '2 Apps', icon: 'calendar', color: '#FF3B30', bg: '#FF3B30' },
-  { title: 'Photos', count: '5 Apps', icon: 'images', color: '#FF9500', bg: '#FF9500' },
-  { title: 'Camera', count: '4 Apps', icon: 'camera', color: '#1C1C1E', bg: '#1C1C1E' },
-  { title: 'Microphone', count: '2 Apps', icon: 'mic', color: '#FF3B30', bg: '#FF3B30' },
+  { title: 'Contacts', icon: 'people', color: '#34C759', bg: '#34C759' },
+  { title: 'Calendars', icon: 'calendar', color: '#FF3B30', bg: '#FF3B30' },
+  { title: 'Photos', icon: 'images', color: '#FF9500', bg: '#FF9500' },
+  { title: 'Camera', icon: 'camera', color: '#1C1C1E', bg: '#1C1C1E' },
+  { title: 'Microphone', icon: 'mic', color: '#FF3B30', bg: '#FF3B30' },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,7 +93,7 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
                 }}
                 trailing={
                   <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                    {item.count}
+                    Manage
                   </Text>
                 }
                 showChevron

@@ -131,12 +131,14 @@ export function CallScreen({
     navigation.goBack();
   }, [navigation]);
 
-  const toggleMute = useCallback(() => {
+  const toggleMute = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsMuted((v) => !v);
+    // Note: mute/speaker toggle the visual state only.
+    // The native Android dialer handles actual call audio routing.
   }, []);
 
-  const toggleSpeaker = useCallback(() => {
+  const toggleSpeaker = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsSpeaker((v) => !v);
   }, []);
@@ -163,8 +165,8 @@ export function CallScreen({
           {displayName}
         </Text>
 
-        {/* Status */}
-        <Text style={styles.callStatus}>Calling...</Text>
+        {/* Status — honest label: native dialer handles the actual call */}
+        <Text style={styles.callStatus}>Call Initiated</Text>
       </View>
 
       {/* ------------------------------------------------------------------ */}

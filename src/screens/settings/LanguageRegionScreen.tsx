@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, ScrollView, StyleSheet, NativeModules, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -21,6 +21,20 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
   const trailing = (text: string) => (
     <Text style={[typography.body, { color: colors.secondaryLabel }]}>{text}</Text>
   );
+
+  // Derive locale-based values from the JS runtime
+  const localeInfo = useMemo(() => {
+    const locale = Platform.OS === 'android'
+      ? (NativeModules.I18nManager?.localeIdentifier ?? 'en_US')
+      : 'en_US';
+    const usesMetric = !['US', 'LR', 'MM'].includes(settings.region);
+    const tempUnit = usesMetric ? '°C' : '°F';
+    const measurement = usesMetric ? 'Metric' : 'US';
+    // Format a sample number using the device locale
+    let numberFormat = '1,234.56';
+    try { numberFormat = (1234.56).toLocaleString(locale.replace('_', '-')); } catch { /* ignore */ }
+    return { tempUnit, measurement, numberFormat };
+  }, [settings.region]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -61,17 +75,17 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
             />
             <CupertinoListTile
               title="Temperature"
-              trailing={trailing('°C')}
+              trailing={trailing(localeInfo.tempUnit)}
               onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Measurement System"
-              trailing={trailing('Metric')}
+              trailing={trailing(localeInfo.measurement)}
               onPress={() => openSystemPanel('locale')}
             />
             <CupertinoListTile
               title="Number Format"
-              trailing={trailing('1,234.56')}
+              trailing={trailing(localeInfo.numberFormat)}
               showChevron={false}
             />
           </CupertinoListSection>

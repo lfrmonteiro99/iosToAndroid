@@ -64,6 +64,12 @@ const BUILT_IN_APPS: Record<string, string> = {
   'com.iostoandroid.messages': 'Messages',
   'com.iostoandroid.contacts': 'Contacts',
   'com.iostoandroid.settings': 'Settings',
+  'com.iostoandroid.weather': 'Weather',
+  'com.iostoandroid.clock': 'Clock',
+  'com.iostoandroid.camera': 'Camera',
+  'com.iostoandroid.photos': 'Photos',
+  'com.iostoandroid.calendar': 'Calendar',
+  'com.iostoandroid.calculator': 'Calculator',
 };
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
@@ -77,6 +83,12 @@ const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.messages': { icon: 'chatbubble-sharp', bg: '#34C759', gradient: ['#65D36E', '#1FB940'], iconSize: 34 },
   'com.iostoandroid.contacts': { icon: 'people', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
   'com.iostoandroid.settings': { icon: 'settings-sharp', bg: '#8E8E93', gradient: ['#8E8E93', '#636366'], iconSize: 34 },
+  'com.iostoandroid.weather': { icon: 'partly-sunny', bg: '#5AC8FA', gradient: ['#64D2FF', '#30B0C7'], iconSize: 34 },
+  'com.iostoandroid.clock': { icon: 'time', bg: '#000000', gradient: ['#1C1C1E', '#000000'], iconSize: 34 },
+  'com.iostoandroid.camera': { icon: 'camera', bg: '#8E8E93', gradient: ['#8E8E93', '#636366'], iconSize: 34 },
+  'com.iostoandroid.photos': { icon: 'images', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
+  'com.iostoandroid.calendar': { icon: 'calendar', bg: '#FF3B30', gradient: ['#FF3B30', '#FF2D55'], iconSize: 34 },
+  'com.iostoandroid.calculator': { icon: 'calculator', bg: '#1C1C1E', gradient: ['#636366', '#1C1C1E'], iconSize: 34 },
 };
 
 // ---------------------------------------------------------------------------

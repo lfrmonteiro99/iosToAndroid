@@ -18,7 +18,7 @@ exports[`CupertinoCard renders with title and subtitle 1`] = `
         "shadowRadius": 10,
       },
       {
-        "backgroundColor": "#1C1C1E",
+        "backgroundColor": "#FFFFFF",
         "borderRadius": 12,
         "padding": 16,
       },
@@ -36,7 +36,7 @@ exports[`CupertinoCard renders with title and subtitle 1`] = `
           "lineHeight": 22,
         },
         {
-          "color": "#FFFFFF",
+          "color": "#000000",
           "marginBottom": 2,
         },
       ]
@@ -54,7 +54,7 @@ exports[`CupertinoCard renders with title and subtitle 1`] = `
           "lineHeight": 20,
         },
         {
-          "color": "rgba(235, 235, 245, 0.6)",
+          "color": "rgba(60, 60, 67, 0.6)",
           "marginBottom": 8,
         },
       ]
@@ -86,7 +86,7 @@ exports[`CupertinoCard renders without title 1`] = `
         "shadowRadius": 10,
       },
       {
-        "backgroundColor": "#1C1C1E",
+        "backgroundColor": "#FFFFFF",
         "borderRadius": 12,
         "padding": 16,
       },

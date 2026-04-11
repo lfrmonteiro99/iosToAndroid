@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -11,6 +11,11 @@ import {
   CupertinoSwitch,
 } from '../../components';
 
+const getLauncher = async () => {
+  try { return (await import('../../../modules/launcher-module/src')).default; }
+  catch { return null; }
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CellularScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
@@ -21,6 +26,19 @@ export function CellularScreen({ navigation }: { navigation: any }) {
 
   const [dataRoaming, setDataRoaming] = useState(false);
   const [lowDataMode, setLowDataMode] = useState(false);
+  const [networkType, setNetworkType] = useState('');
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    (async () => {
+      try {
+        const mod = await getLauncher();
+        if (!mod) return;
+        const info = await mod.getNetworkInfo();
+        setNetworkType(info.isCellular ? 'Cellular' : info.isWifi ? 'Wi-Fi' : 'None');
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -60,7 +78,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
               title="Carrier"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  T-Mobile
+                  {networkType || 'Unknown'}
                 </Text>
               }
               leading={{
@@ -79,7 +97,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
               title="Current Period"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  3.2 GB
+                  Not Available
                 </Text>
               }
               showChevron={false}
@@ -88,7 +106,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
               title="Current Period Roaming"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  0 bytes
+                  Not Available
                 </Text>
               }
               showChevron={false}
