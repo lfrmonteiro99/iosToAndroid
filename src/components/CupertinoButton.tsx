@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { ImpactFeedbackStyle } from 'expo-haptics';
+import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -72,7 +73,7 @@ export const CupertinoButton = React.memo(function CupertinoButton({
   return (
     <Pressable
       onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        hapticImpact(ImpactFeedbackStyle.Light);
         onPress?.();
       }}
       disabled={disabled}

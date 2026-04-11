@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
 import { useFolders } from '../store/FoldersStore';
+import appJson from '../../app.json';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -376,7 +377,7 @@ export function LauncherSettingsScreen() {
         <CupertinoListTile
           title="Version"
           leading={{ name: 'information-circle', color: '#fff', backgroundColor: '#5856D6' }}
-          trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>1.0.0</Text>}
+          trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>{appJson.expo.version}</Text>}
           showChevron={false}
         />
         <CupertinoListTile

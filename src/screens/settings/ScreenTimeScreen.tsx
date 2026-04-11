@@ -68,11 +68,11 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
             <View style={{ paddingHorizontal: spacing.md }}>
               <CupertinoListSection header="Daily Average">
                 <View style={styles.dailyAverageCard}>
-                  <Text style={[styles.dailyAverageTime, { color: colors.label }]}>
-                    2h 34m
+                  <Text style={[styles.dailyAverageTime, { color: colors.secondaryLabel }]}>
+                    —
                   </Text>
                   <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-                    Today
+                    Use Digital Wellbeing for usage stats
                   </Text>
                 </View>
               </CupertinoListSection>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSettings } from '../store/SettingsStore';
 
 // Launcher
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
@@ -50,67 +51,82 @@ import { SpotlightSearchScreen } from '../screens/SpotlightSearchScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
 import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
+import { WeatherScreen } from '../screens/WeatherScreen';
+import { ClockScreen } from '../screens/ClockScreen';
+import { CameraScreen } from '../screens/CameraScreen';
+import { PhotosScreen } from '../screens/PhotosScreen';
+import { CalendarScreen } from '../screens/CalendarScreen';
 
 const Stack = createNativeStackNavigator();
 
 export function TabNavigator() {
+  const { settings } = useSettings();
+  const animation = settings.reduceMotion ? 'none' as const : 'fade_from_bottom' as const;
+  const slideAnimation = settings.reduceMotion ? 'none' as const : 'slide_from_right' as const;
+  const fadeAnimation = settings.reduceMotion ? 'none' as const : 'fade' as const;
+
   return (
     <Stack.Navigator screenOptions={{
       headerShown: false,
       gestureEnabled: true,
       fullScreenGestureEnabled: true,
-      animation: 'fade_from_bottom',
-      animationDuration: 250,
+      animation,
+      animationDuration: settings.reduceMotion ? 0 : 250,
     }}>
       {/* Launcher home — the ROOT screen, fullscreen, no tabs */}
       <Stack.Screen name="HomeMain" component={LauncherHomeScreen} />
       {/* App Drawer removed — iOS doesn't have one. All apps are on home pages. App Library is the last page. */}
-      <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-      <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal', gestureEnabled: false }} />
-      <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
-      <Stack.Screen name="Multitask" component={MultitaskScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
+      <Stack.Screen name="LockScreen" component={LockScreen} options={{ animation: fadeAnimation, gestureEnabled: false }} />
+      <Stack.Screen name="ControlCenter" component={ControlCenterScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal', gestureEnabled: false }} />
+      <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
+      <Stack.Screen name="Multitask" component={MultitaskScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
 
       {/* Built-in apps — zoom up like iOS app launch */}
-      <Stack.Screen name="Calculator" component={CalculatorScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="Phone" component={PhoneScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="CallScreen" component={CallScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-      <Stack.Screen name="Messages" component={MessagesScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="Conversation" component={ConversationScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="Contacts" component={ContactsScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="ContactDetail" component={ContactDetailScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="ContactEdit" component={ContactEditScreen} options={{ animation: 'fade_from_bottom' }} />
+      <Stack.Screen name="Calculator" component={CalculatorScreen} options={{ animation }} />
+      <Stack.Screen name="Phone" component={PhoneScreen} options={{ animation }} />
+      <Stack.Screen name="CallScreen" component={CallScreen} options={{ animation: fadeAnimation, gestureEnabled: false }} />
+      <Stack.Screen name="Messages" component={MessagesScreen} options={{ animation }} />
+      <Stack.Screen name="Conversation" component={ConversationScreen} options={{ animation }} />
+      <Stack.Screen name="Contacts" component={ContactsScreen} options={{ animation }} />
+      <Stack.Screen name="ContactDetail" component={ContactDetailScreen} options={{ animation }} />
+      <Stack.Screen name="ContactEdit" component={ContactEditScreen} options={{ animation }} />
+      <Stack.Screen name="Weather" component={WeatherScreen} options={{ animation }} />
+      <Stack.Screen name="Clock" component={ClockScreen} options={{ animation }} />
+      <Stack.Screen name="Camera" component={CameraScreen} options={{ animation, gestureEnabled: false }} />
+      <Stack.Screen name="Photos" component={PhotosScreen} options={{ animation }} />
+      <Stack.Screen name="Calendar" component={CalendarScreen} options={{ animation }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
-      <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'fade_from_bottom' }} />
-      <Stack.Screen name="WiFi" component={WifiScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Bluetooth" component={BluetoothScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Cellular" component={CellularScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Hotspot" component={HotspotScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="SoundsHaptics" component={SoundsHapticsScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Focus" component={FocusScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="ScreenTime" component={ScreenTimeScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="General" component={GeneralScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="About" component={AboutScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="DisplayBrightness" component={DisplayBrightnessScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Wallpaper" component={WallpaperScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="SoftwareUpdate" component={SoftwareUpdateScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="DateTime" component={DateTimeScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Keyboard" component={KeyboardScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="LanguageRegion" component={LanguageRegionScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Vpn" component={VpnScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="BackupRestore" component={BackupRestoreScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
-      {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: 'slide_from_right' }} />}
+      <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />
+      <Stack.Screen name="WiFi" component={WifiScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Bluetooth" component={BluetoothScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Cellular" component={CellularScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Hotspot" component={HotspotScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="SoundsHaptics" component={SoundsHapticsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Focus" component={FocusScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="ScreenTime" component={ScreenTimeScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="General" component={GeneralScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="About" component={AboutScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="DisplayBrightness" component={DisplayBrightnessScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Wallpaper" component={WallpaperScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="SoftwareUpdate" component={SoftwareUpdateScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="DateTime" component={DateTimeScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Keyboard" component={KeyboardScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="LanguageRegion" component={LanguageRegionScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="Vpn" component={VpnScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="BackupRestore" component={BackupRestoreScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: slideAnimation }} />
+      {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: slideAnimation }} />}
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
-      <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: 'fade', presentation: 'transparentModal' }} />
-      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: 'slide_from_left' }} />
-      <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
+      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left' }} />
+      <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
   );
 }

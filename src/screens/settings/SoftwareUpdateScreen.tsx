@@ -9,6 +9,9 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
 } from '../../components';
+import appJson from '../../../app.json';
+
+const APP_VERSION = appJson.expo.version;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
@@ -43,7 +46,7 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Current Version"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>1.0.0</Text>
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>{APP_VERSION}</Text>
               }
               showChevron={false}
             />
@@ -56,7 +59,7 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: any }) {
             <View style={[styles.updateCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
               <Text style={[typography.headline, { color: colors.label }]}>Your software is up to date.</Text>
               <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: spacing.sm, lineHeight: 18 }]}>
-                iosToAndroid 1.0.0 is the latest version.
+                iosToAndroid {APP_VERSION} is the latest version.
               </Text>
             </View>
           </CupertinoListSection>

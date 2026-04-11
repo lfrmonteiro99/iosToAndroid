@@ -82,17 +82,17 @@ export function VpnScreen({ navigation }: { navigation: any }) {
               <>
                 <CupertinoListTile
                   title="Server"
-                  trailing={trailing('us-east-1.vpn.example.com')}
+                  trailing={trailing('Not Configured')}
                   showChevron={false}
                 />
                 <CupertinoListTile
                   title="Protocol"
-                  trailing={trailing('IKEv2')}
+                  trailing={trailing('—')}
                   showChevron={false}
                 />
                 <CupertinoListTile
                   title="IP Address"
-                  trailing={trailing('10.0.0.42')}
+                  trailing={trailing('—')}
                   showChevron={false}
                 />
               </>
