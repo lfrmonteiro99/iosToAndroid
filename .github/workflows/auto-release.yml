@@ -89,10 +89,16 @@ jobs:
             console.log(`Determined bump: ${bump}`);
             core.setOutput('bump', bump);
 
-      - name: Read current version and compute next
+      - name: Read current version from latest git tag and compute next
         id: version
         run: |
-          CURRENT=$(node -p "require('./app.json').expo.version")
+          # Use the latest semver git tag as the source of truth (not app.json)
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            CURRENT="0.0.0"
+          else
+            CURRENT="${LATEST_TAG#v}"
+          fi
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
 
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
@@ -107,7 +113,7 @@ jobs:
           NEXT="${MAJOR}.${MINOR}.${PATCH}"
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
           echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
-          echo "Version: $CURRENT → $NEXT ($BUMP)"
+          echo "Version: $CURRENT → $NEXT ($BUMP) [from tag: $LATEST_TAG]"
 
       - name: Update version in app.json and package.json
         run: |
