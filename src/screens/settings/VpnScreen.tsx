@@ -8,7 +8,6 @@ import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
-  CupertinoSwitch,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,12 +15,7 @@ export function VpnScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
-
-  const trailing = (text: string) => (
-    <Text style={[typography.body, { color: colors.secondaryLabel }]}>{text}</Text>
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>

@@ -50,7 +50,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [usageAccessGranted, setUsageAccessGranted] = useState(false);
   const [todayData, setTodayData] = useState<DailyScreenTime | null>(null);
-  const [weeklyStats, setWeeklyStats] = useState<ScreenTimeStat[]>([]);
+  const [, setWeeklyStats] = useState<ScreenTimeStat[]>([]);
   const [weeklyAvgMinutes, setWeeklyAvgMinutes] = useState(0);
 
   const loadScreenTimeData = useCallback(async () => {

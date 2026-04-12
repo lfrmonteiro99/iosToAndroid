@@ -9,7 +9,6 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
-  useAlert,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,7 +18,6 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
-  const alert = useAlert();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -160,7 +158,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
 
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          In-app accessibility features apply to iosToAndroid. System features marked "System" are managed by Android.
+          {'In-app accessibility features apply to iosToAndroid. System features marked "System" are managed by Android.'}
         </Text>
       </ScrollView>
     </View>

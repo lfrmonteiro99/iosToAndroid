@@ -21,15 +21,23 @@ const getLauncher = async () => {
 };
 
 // Attempt to import expo-camera; gracefully handle if unavailable
-let CameraView: any = null;
-let useCameraPermissions: any = null;
+let CameraViewComponent: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+let useCameraPermissionsHook: (() => [any, () => Promise<any>]) | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('expo-camera');
-  CameraView = mod.CameraView;
-  useCameraPermissions = mod.useCameraPermissions;
+  CameraViewComponent = mod.CameraView;
+  useCameraPermissionsHook = mod.useCameraPermissions;
 } catch {
   // expo-camera not available
 }
+
+// Stub hook for when expo-camera is unavailable
+function useStubPermissions(): [null, () => Promise<null>] {
+  return [null, async () => null];
+}
+
+const useCamPerms = useCameraPermissionsHook ?? useStubPermissions;
 
 type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 
@@ -46,9 +54,8 @@ export function CameraScreen({ navigation }: { navigation: any }) {
   const [cameraReady, setCameraReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
 
-  // Camera permissions via expo-camera hook (only if available)
-  const permissionHookResult = useCameraPermissions ? useCameraPermissions() : [null, async () => null, async () => null];
-  const [permission, requestPermission] = permissionHookResult;
+  // Camera permissions (uses real hook or stub depending on expo-camera availability)
+  const [permission, requestPermission] = useCamPerms();
 
   // Request permission on mount
   useEffect(() => {
@@ -155,7 +162,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
   const cameraMode = mode === 'VIDEO' ? 'video' : 'picture';
 
   // Fallback: expo-camera not available
-  const cameraUnavailable = !CameraView || !useCameraPermissions;
+  const cameraUnavailable = !CameraViewComponent || !useCameraPermissionsHook;
 
   // Permission not yet determined
   const permissionLoading = !cameraUnavailable && !permission;
@@ -204,7 +211,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
     }
 
     return (
-      <CameraView
+      <CameraViewComponent
         ref={cameraRef}
         style={styles.cameraPreview}
         facing={facing}
