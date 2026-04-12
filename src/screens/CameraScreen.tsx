@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
+import { useTheme } from '../theme/ThemeContext';
 
 const getLauncher = async () => {
   try { return (await import('../../modules/launcher-module/src')).default; }
@@ -36,6 +37,7 @@ type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 export function CameraScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const alert = useAlert();
+  const { textScale } = useTheme();
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);
@@ -166,7 +168,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
       return (
         <View style={styles.placeholderView}>
           <Ionicons name="camera-outline" size={80} color="rgba(255,255,255,0.3)" />
-          <Text style={styles.placeholderText}>
+          <Text style={[styles.placeholderText, { fontSize: 14 * textScale }]}>
             Camera preview unavailable.{'\n'}expo-camera is not installed.
           </Text>
         </View>
@@ -177,7 +179,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
       return (
         <View style={styles.placeholderView}>
           <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.placeholderText}>Requesting camera permission...</Text>
+          <Text style={[styles.placeholderText, { fontSize: 14 * textScale }]}>Requesting camera permission...</Text>
         </View>
       );
     }
@@ -186,7 +188,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
       return (
         <View style={styles.placeholderView}>
           <Ionicons name="lock-closed-outline" size={60} color="rgba(255,255,255,0.4)" />
-          <Text style={styles.placeholderText}>
+          <Text style={[styles.placeholderText, { fontSize: 14 * textScale }]}>
             Camera permission denied.{'\n'}Please enable it in Settings.
           </Text>
           {permission?.canAskAgain && (
@@ -194,7 +196,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
               onPress={requestPermission}
               style={styles.permissionBtn}
             >
-              <Text style={styles.permissionBtnText}>Grant Permission</Text>
+              <Text style={[styles.permissionBtnText, { fontSize: 14 * textScale }]}>Grant Permission</Text>
             </Pressable>
           )}
         </View>
@@ -245,7 +247,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
               pressed && styles.modeButtonPressed,
             ]}
           >
-            <Text style={mode === m ? styles.modeActive : styles.modeInactive}>
+            <Text style={[mode === m ? styles.modeActive : styles.modeInactive, { fontSize: 13 * textScale }]}>
               {m}
             </Text>
             {mode === m && <View style={styles.modeIndicator} />}

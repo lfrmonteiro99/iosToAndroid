@@ -30,6 +30,7 @@ import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
 import { useAlert } from '../components';
+import { useTheme } from '../theme/ThemeContext';
 
 const getLauncher = async () => {
   try {
@@ -117,6 +118,7 @@ function NotificationCard({ item, appName, appIcon }: {
   appName: string;
   appIcon: string;
 }) {
+  const { textScale } = useTheme();
   return (
     <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
       <View style={styles.notifHeader}>
@@ -130,16 +132,16 @@ function NotificationCard({ item, appName, appIcon }: {
             <Ionicons name="notifications" size={14} color="#fff" />
           </View>
         )}
-        <Text style={styles.notifApp}>{appName}</Text>
-        <Text style={styles.notifTime}>{formatNotifTime(item.time)}</Text>
+        <Text style={[styles.notifApp, { fontSize: 12 * textScale }]}>{appName}</Text>
+        <Text style={[styles.notifTime, { fontSize: 12 * textScale }]}>{formatNotifTime(item.time)}</Text>
       </View>
       {!!item.title && (
-        <Text style={styles.notifTitle} numberOfLines={1}>
+        <Text style={[styles.notifTitle, { fontSize: 15 * textScale }]} numberOfLines={1}>
           {item.title}
         </Text>
       )}
       {!!item.text && (
-        <Text style={styles.notifPreview} numberOfLines={2}>
+        <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
           {item.text}
         </Text>
       )}
@@ -157,6 +159,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const { settings } = useSettings();
   const { apps } = useApps();
   const alert = useAlert();
+  const { textScale } = useTheme();
 
   const [now, setNow] = useState(new Date());
   const [authFailed, setAuthFailed] = useState(false);
@@ -406,7 +409,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         {/* Status bar row                                                     */}
         {/* ---------------------------------------------------------------- */}
         <View style={[styles.statusRow, { marginTop: insets.top + 4 }]}>
-          <Text style={styles.statusTime}>{formatTime(now, settings.use24Hour)}</Text>
+          <Text style={[styles.statusTime, { fontSize: 12 * textScale }]}>{formatTime(now, settings.use24Hour)}</Text>
           <View style={styles.statusRight}>
             <Ionicons
               name="lock-closed"
@@ -427,7 +430,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                 <Ionicons name="flash" size={11} color="rgba(255,255,255,0.85)" />
               )}
               <Ionicons name={batteryIconName} size={16} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.batteryText}>{batteryLevel}%</Text>
+              <Text style={[styles.batteryText, { fontSize: 11 * textScale }]}>{batteryLevel}%</Text>
             </View>
           </View>
         </View>
@@ -436,7 +439,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         {/* Large clock                                                        */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.clockArea}>
-          <Text style={styles.fullDate}>{formatFullDate(now)}</Text>
+          <Text style={[styles.fullDate, { fontSize: 20 * textScale }]}>{formatFullDate(now)}</Text>
           <Text style={styles.bigClock}>{formatLargeClock(now, settings.use24Hour)}</Text>
         </View>
 
@@ -463,7 +466,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         {/* ---------------------------------------------------------------- */}
         {showPasscode && (
           <View style={styles.passcodeOverlay}>
-            <Text style={styles.passcodeTitle}>Enter Passcode</Text>
+            <Text style={[styles.passcodeTitle, { fontSize: 18 * textScale }]}>Enter Passcode</Text>
             <Animated.View style={[styles.passcodeDots, passcodeShakeStyle]}>
               {[0, 1, 2, 3].map((i) => (
                 <View
@@ -517,7 +520,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               accessibilityLabel="Cancel passcode entry"
               accessibilityRole="button"
             >
-              <Text style={styles.passcodeCancelText}>Cancel</Text>
+              <Text style={[styles.passcodeCancelText, { fontSize: 15 * textScale }]}>Cancel</Text>
             </Pressable>
           </View>
         )}
@@ -547,7 +550,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             </Pressable>
             {authFailed && (
               <View style={styles.authFailedWrap}>
-                <Text style={styles.authFailedText}>
+                <Text style={[styles.authFailedText, { fontSize: 13 * textScale }]}>
                   Authentication failed
                 </Text>
                 <View style={styles.authFailedButtons}>
@@ -557,7 +560,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                     accessibilityLabel="Try biometric unlock again"
                     accessibilityRole="button"
                   >
-                    <Text style={styles.authActionText}>Try Again</Text>
+                    <Text style={[styles.authActionText, { fontSize: 13 * textScale }]}>Try Again</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => { setAuthFailed(false); setShowPasscode(true); }}
@@ -565,7 +568,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                     accessibilityLabel="Use passcode to unlock"
                     accessibilityRole="button"
                   >
-                    <Text style={styles.authActionText}>Use Passcode</Text>
+                    <Text style={[styles.authActionText, { fontSize: 13 * textScale }]}>Use Passcode</Text>
                   </Pressable>
                 </View>
               </View>
@@ -577,7 +580,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                 accessibilityLabel="Use passcode to unlock"
                 accessibilityRole="button"
               >
-                <Text style={styles.usePasscodeText}>Use Passcode</Text>
+                <Text style={[styles.usePasscodeText, { fontSize: 13 * textScale }]}>Use Passcode</Text>
               </Pressable>
             )}
             <View style={styles.homeIndicator} />
