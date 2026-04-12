@@ -212,7 +212,7 @@ export function MailScreen({ navigation }: { navigation: any }) {
         }
         renderItem={({ item }) => (
           <CupertinoSwipeableRow
-            actions={[
+            trailingActions={[
               { label: 'Archive', color: '#007AFF', onPress: () => handleArchive(item.id) },
               { label: 'Flag', color: '#FF9500', onPress: () => handleFlag(item.id) },
               { label: 'Trash', color: '#FF3B30', onPress: () => handleDelete(item.id) },

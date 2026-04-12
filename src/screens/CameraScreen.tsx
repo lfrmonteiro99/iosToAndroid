@@ -59,7 +59,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
 
   // Request permission on mount
   useEffect(() => {
-    if (useCameraPermissions && permission && !permission.granted && permission.canAskAgain) {
+    if (useCameraPermissionsHook && permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
     }
   }, [permission, requestPermission]);
