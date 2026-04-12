@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -12,6 +12,7 @@ import {
   CupertinoListTile,
   CupertinoButton,
   CupertinoAlertDialog,
+  useAlert,
 } from '../../components';
 
 const getLauncher = async () => {
@@ -34,6 +35,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
   const { getContact, toggleFavorite, deleteContact, deviceFavoriteIds } = useContacts();
   const { contacts: deviceContacts } = useDevice();
   const insets = useSafeAreaInsets();
+  const alert = useAlert();
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
 
   const contact = useMemo(() => {
@@ -96,7 +98,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
     { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
-      Alert.alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
+      alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
     }},
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
   ];

@@ -15,9 +15,11 @@ import { DeviceProvider, useDevice } from './src/store/DeviceStore';
 import { FoldersProvider } from './src/store/FoldersStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
 import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { findContactByPhone } from './src/utils/contacts';
 
 function AppContent() {
   const { isDark } = useTheme();
@@ -67,11 +69,7 @@ function AppContent() {
       const newest = inboxMessages[0]; // messages are sorted newest first
       if (newest) {
         // Resolve contact name
-        const contact = device.contacts.find(c => {
-          const cDigits = c.phone.replace(/\D/g, '').slice(-10);
-          const mDigits = (newest.address || '').replace(/\D/g, '').slice(-10);
-          return cDigits === mDigits && cDigits.length > 0;
-        });
+        const contact = findContactByPhone(newest.address || '', device.contacts);
 
         setBanner({
           id: newest.id,
@@ -169,7 +167,9 @@ export default function App() {
                 <DeviceProvider>
                 <FoldersProvider>
                 <ErrorBoundary>
-                  <AppContent />
+                  <AlertProvider>
+                    <AppContent />
+                  </AlertProvider>
                 </ErrorBoundary>
                 </FoldersProvider>
                 </DeviceProvider>

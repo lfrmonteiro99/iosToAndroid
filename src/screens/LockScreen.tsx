@@ -4,7 +4,6 @@ import {
   Text,
   Image,
   StyleSheet,
-  Alert,
   Dimensions,
   Linking,
   Pressable,
@@ -24,11 +23,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 import * as Haptics from 'expo-haptics';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
+import { useAlert } from '../components';
 
 const getLauncher = async () => {
   try {
@@ -63,8 +64,8 @@ function formatNotifTime(timestamp: number): string {
 
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 
-const LOCK_PIN_KEY = '@lock_pin';
-const DEFAULT_PIN = '1234';
+const LOCK_PIN_KEY = 'lock_pin';
+const LOCK_PIN_LEGACY_KEY = '@lock_pin';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -155,6 +156,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const device = useDevice();
   const { settings } = useSettings();
   const { apps } = useApps();
+  const alert = useAlert();
 
   const [now, setNow] = useState(new Date());
   const [authFailed, setAuthFailed] = useState(false);
@@ -187,12 +189,12 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
       if (!launched) {
         Linking.openURL('content://media/internal/images/media').catch(() =>
-          Alert.alert('Camera', 'Could not open camera app.')
+          alert('Camera', 'Could not open camera app.')
         );
       }
     } else {
       Linking.openURL('content://media/internal/images/media').catch(() =>
-        Alert.alert('Camera', 'Could not open camera app.')
+        alert('Camera', 'Could not open camera app.')
       );
     }
   };
@@ -218,18 +220,35 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
     return () => { mounted = false; };
   }, []);
 
+  // Update clock aligned to minute boundaries (like real iOS)
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
+    const intervalRef: { current: ReturnType<typeof setInterval> | null } = { current: null };
+    const msUntilNextMinute = (60 - new Date().getSeconds()) * 1000 - new Date().getMilliseconds();
+    const timeout = setTimeout(() => {
+      setNow(new Date());
+      intervalRef.current = setInterval(() => setNow(new Date()), 60_000);
+    }, msUntilNextMinute);
+    return () => {
+      clearTimeout(timeout);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
-  // Ensure a default PIN exists in AsyncStorage
+  // Migrate PIN from AsyncStorage to SecureStore if needed
   useEffect(() => {
-    AsyncStorage.getItem(LOCK_PIN_KEY).then((stored) => {
-      if (!stored) {
-        AsyncStorage.setItem(LOCK_PIN_KEY, DEFAULT_PIN);
-      }
-    });
+    (async () => {
+      try {
+        const securePin = await SecureStore.getItemAsync(LOCK_PIN_KEY);
+        if (securePin) return; // Already in SecureStore
+        // Check for legacy AsyncStorage PIN
+        const legacyPin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY);
+        if (legacyPin) {
+          await SecureStore.setItemAsync(LOCK_PIN_KEY, legacyPin);
+          await AsyncStorage.removeItem(LOCK_PIN_LEGACY_KEY);
+        }
+        // No default PIN is set automatically - user must set one in settings
+      } catch { /* SecureStore may not be available on all platforms */ }
+    })();
   }, []);
 
   const passcodeShakeStyle = useAnimatedStyle(() => ({
@@ -241,10 +260,15 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
       if (prev.length >= 4) return prev;
       const next = prev + digit;
       if (next.length === 4) {
-        // Verify PIN asynchronously
-        AsyncStorage.getItem(LOCK_PIN_KEY).then((stored) => {
-          const pin = stored ?? DEFAULT_PIN;
-          if (next === pin) {
+        // Verify PIN from SecureStore (fall back to AsyncStorage for legacy)
+        (async () => {
+          let pin: string | null = null;
+          try { pin = await SecureStore.getItemAsync(LOCK_PIN_KEY); } catch { /* ignore */ }
+          if (!pin) {
+            try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
+          }
+          // If no PIN is set, allow unlock (first-time user should set PIN in settings)
+          if (!pin || next === pin) {
             handleUnlock();
           } else {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -258,7 +282,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             // Clear after a short delay so user sees the dots filled briefly
             setTimeout(() => setPasscode(''), 300);
           }
-        });
+        })();
       }
       return next;
     });

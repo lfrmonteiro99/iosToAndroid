@@ -68,7 +68,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   bluetoothName: 'iosToAndroid',
   cellularDataEnabled: true,
   hotspotEnabled: false,
-  hotspotPassword: 'password123',
+  hotspotPassword: '',
   hotspotMaxCompatibility: false,
   notificationsEnabled: true,
   notificationSounds: true,

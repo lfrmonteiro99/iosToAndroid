@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Alert, Image, Share } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Image, Share } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
   CupertinoListTile,
   CupertinoAlertDialog,
   CupertinoActionSheet,
+  useAlert,
 } from '../components';
 
 export function ProfileScreen() {
@@ -29,6 +30,7 @@ export function ProfileScreen() {
   const { reset: resetSettings } = useSettings();
   const { reset: resetProfile } = useProfile();
 
+  const alert = useAlert();
   const [showSignOut, setShowSignOut] = useState(false);
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
 
@@ -36,7 +38,7 @@ export function ProfileScreen() {
     setShowAvatarSheet(false);
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Camera permission is needed to take a photo.');
+      alert('Permission Required', 'Camera permission is needed to take a photo.');
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -53,7 +55,7 @@ export function ProfileScreen() {
     setShowAvatarSheet(false);
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Photo library permission is needed to choose a photo.');
+      alert('Permission Required', 'Photo library permission is needed to choose a photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({

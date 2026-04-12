@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -10,6 +10,7 @@ import {
   CupertinoListTile,
   CupertinoAlertDialog,
   CupertinoActionSheet,
+  useAlert,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,6 +23,7 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
   const [showShutdown, setShowShutdown] = useState(false);
   const [showAirdropPicker, setShowAirdropPicker] = useState(false);
   const [showBgRefreshPicker, setShowBgRefreshPicker] = useState(false);
+  const alert = useAlert();
 
   const airdropLabel = settings.airdrop === 'off' ? 'Receiving Off' : settings.airdrop === 'contactsOnly' ? 'Contacts Only' : 'Everyone';
   const bgRefreshLabel = settings.backgroundAppRefresh === 'off' ? 'Off' : settings.backgroundAppRefresh === 'wifi' ? 'Wi-Fi' : 'Wi-Fi & Cellular';
@@ -110,13 +112,13 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
             <CupertinoListTile title="VPN & Device Management" onPress={() => navigation.navigate('Vpn')} />
-            <CupertinoListTile title="Legal & Regulatory" onPress={() => Alert.alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')} />
+            <CupertinoListTile title="Legal & Regulatory" onPress={() => alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')} />
           </CupertinoListSection>
         </View>
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="Transfer or Reset Device" onPress={() => Alert.alert('Reset', 'Go to Android Settings to reset your device.', [{ text: 'Open Settings', onPress: () => openSystemPanel('reset') }, { text: 'Cancel' }])} />
+            <CupertinoListTile title="Transfer or Reset Device" onPress={() => alert('Reset', 'Go to Android Settings to reset your device.', [{ text: 'Open Settings', onPress: () => openSystemPanel('reset') }, { text: 'Cancel' }])} />
             <CupertinoListTile title="Backup & Restore" onPress={() => navigation.navigate('BackupRestore')} />
             <CupertinoListTile title="Shut Down" showChevron={false} onPress={() => setShowShutdown(true)} />
           </CupertinoListSection>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Platform, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useAlert } from '../components';
 import { CupertinoNavigationBar } from '../components';
 
 interface CalEvent {
@@ -51,6 +53,36 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
   const [selectedDate, setSelectedDate] = useState(today);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newAllDay, setNewAllDay] = useState(false);
+  const alert = useAlert();
+
+  const handleAddEvent = useCallback(() => {
+    if (!newTitle.trim()) {
+      alert('Missing Title', 'Please enter an event title.');
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const start = new Date(selectedDate);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(selectedDate);
+    end.setHours(10, 0, 0, 0);
+    const newEvent: CalEvent = {
+      id: Date.now().toString(),
+      title: newTitle.trim(),
+      start: start.getTime(),
+      end: end.getTime(),
+      allDay: newAllDay,
+      location: newLocation.trim(),
+    };
+    setEvents((prev) => [...prev, newEvent]);
+    setNewTitle('');
+    setNewLocation('');
+    setNewAllDay(false);
+    setShowAddEvent(false);
+  }, [newTitle, newLocation, newAllDay, selectedDate, alert]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,9 +134,14 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
           </Text>
         }
         rightButton={
-          <Pressable onPress={() => { setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDate(today); }}>
-            <Text style={[typography.body, { color: colors.systemRed }]}>Today</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <Pressable onPress={() => { setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDate(today); }}>
+              <Text style={[typography.body, { color: colors.systemRed }]}>Today</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowAddEvent(true)} hitSlop={8}>
+              <Ionicons name="add" size={28} color={colors.systemRed} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -197,6 +234,50 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
           )}
         </View>
       </ScrollView>
+
+      {/* Add Event Modal */}
+      <Modal visible={showAddEvent} transparent animationType="slide" onRequestClose={() => setShowAddEvent(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+            <View style={styles.modalHeader}>
+              <Pressable onPress={() => setShowAddEvent(false)}>
+                <Text style={[typography.body, { color: colors.systemRed }]}>Cancel</Text>
+              </Pressable>
+              <Text style={[typography.headline, { color: colors.label }]}>New Event</Text>
+              <Pressable onPress={handleAddEvent}>
+                <Text style={[typography.body, { color: colors.systemRed, fontWeight: '600' }]}>Add</Text>
+              </Pressable>
+            </View>
+            <Text style={[typography.caption1, { color: colors.secondaryLabel, marginBottom: 8, paddingHorizontal: 16 }]}>
+              {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.systemBackground, color: colors.label, borderColor: colors.separator }]}
+              placeholder="Event Title"
+              placeholderTextColor={colors.secondaryLabel}
+              value={newTitle}
+              onChangeText={setNewTitle}
+              autoFocus
+            />
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.systemBackground, color: colors.label, borderColor: colors.separator }]}
+              placeholder="Location (optional)"
+              placeholderTextColor={colors.secondaryLabel}
+              value={newLocation}
+              onChangeText={setNewLocation}
+            />
+            <Pressable
+              style={[styles.allDayRow, { borderColor: colors.separator }]}
+              onPress={() => setNewAllDay((v) => !v)}
+            >
+              <Text style={[typography.body, { color: colors.label }]}>All Day</Text>
+              <View style={[styles.checkBox, newAllDay && { backgroundColor: colors.systemRed, borderColor: colors.systemRed }]}>
+                {newAllDay && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -216,4 +297,11 @@ const styles = StyleSheet.create({
   eventCard: { flexDirection: 'row', borderRadius: 10, marginBottom: 8, overflow: 'hidden' },
   eventBar: { width: 4 },
   eventContent: { flex: 1, padding: 12, gap: 2 },
+
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalContent: { borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 40 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  modalInput: { marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, fontSize: 16, borderWidth: StyleSheet.hairlineWidth },
+  allDayRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 16, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  checkBox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1.5, borderColor: '#C7C7CC', alignItems: 'center', justifyContent: 'center' },
 });

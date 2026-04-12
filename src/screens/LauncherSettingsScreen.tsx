@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, Alert, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -14,6 +15,7 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoButton,
+  useAlert,
 } from '../components';
 
 // Default dock package names — mirrors AppsStore constant
@@ -40,6 +42,7 @@ export function LauncherSettingsScreen() {
   const { dockApps } = useApps();
   const { folders, deleteFolder } = useFolders();
 
+  const alert = useAlert();
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
@@ -54,14 +57,18 @@ export function LauncherSettingsScreen() {
 
   const handlePinSubmit = useCallback(async () => {
     if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
-      Alert.alert('Invalid PIN', 'PIN must be exactly 4 digits.');
+      alert('Invalid PIN', 'PIN must be exactly 4 digits.');
       return;
     }
     if (pinStep === 'current') {
-      const stored = await AsyncStorage.getItem('@lock_pin');
-      const current = stored ?? '1234';
-      if (pinInput !== current) {
-        Alert.alert('Incorrect PIN', 'The current PIN you entered is wrong.');
+      // Read PIN from SecureStore (fall back to legacy AsyncStorage)
+      let current: string | null = null;
+      try { current = await SecureStore.getItemAsync('lock_pin'); } catch { /* ignore */ }
+      if (!current) {
+        try { current = await AsyncStorage.getItem('@lock_pin'); } catch { /* ignore */ }
+      }
+      if (current && pinInput !== current) {
+        alert('Incorrect PIN', 'The current PIN you entered is wrong.');
         setPinInput('');
         return;
       }
@@ -73,20 +80,28 @@ export function LauncherSettingsScreen() {
       setPinInput('');
     } else {
       if (pinInput !== newPin) {
-        Alert.alert('PIN Mismatch', 'The PINs do not match. Please try again.');
+        alert('PIN Mismatch', 'The PINs do not match. Please try again.');
         setPinStep('new');
         setPinInput('');
         setNewPin('');
         return;
       }
-      await AsyncStorage.setItem('@lock_pin', pinInput);
+      // Store PIN securely
+      try {
+        await SecureStore.setItemAsync('lock_pin', pinInput);
+        // Remove legacy key if it exists
+        await AsyncStorage.removeItem('@lock_pin');
+      } catch {
+        // Fallback to AsyncStorage if SecureStore unavailable
+        await AsyncStorage.setItem('@lock_pin', pinInput);
+      }
       setShowPinModal(false);
-      Alert.alert('Success', 'Your passcode has been changed.');
+      alert('Success', 'Your passcode has been changed.');
     }
-  }, [pinInput, pinStep, newPin]);
+  }, [pinInput, pinStep, newPin, alert]);
 
   const handleResetDock = () => {
-    Alert.alert('Reset Dock', 'Restore dock to Phone, Messages, Contacts, Settings?', [
+    alert('Reset Dock', 'Restore dock to Phone, Messages, Contacts, Settings?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
@@ -102,14 +117,14 @@ export function LauncherSettingsScreen() {
               homeApps,
             }));
           });
-          Alert.alert('Dock reset', 'Restart the app to apply changes.');
+          alert('Dock reset', 'Restart the app to apply changes.');
         },
       },
     ]);
   };
 
   const handleResetHomeLayout = () => {
-    Alert.alert('Reset Home Layout', 'This will clear all app positions on the home screen.', [
+    alert('Reset Home Layout', 'This will clear all app positions on the home screen.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
@@ -125,14 +140,14 @@ export function LauncherSettingsScreen() {
               homeApps: [],
             }));
           });
-          Alert.alert('Home layout reset', 'Restart the app to apply changes.');
+          alert('Home layout reset', 'Restart the app to apply changes.');
         },
       },
     ]);
   };
 
   const handleResetFolders = () => {
-    Alert.alert('Reset Folders', 'Delete all folders? Apps will remain on the home screen.', [
+    alert('Reset Folders', 'Delete all folders? Apps will remain on the home screen.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete All',
@@ -145,7 +160,7 @@ export function LauncherSettingsScreen() {
   };
 
   const handleResetAll = () => {
-    Alert.alert(
+    alert(
       'Reset All Settings',
       'This will clear all launcher settings, layout, folders, and onboarding. The app will need to be restarted.',
       [
@@ -161,7 +176,7 @@ export function LauncherSettingsScreen() {
               AsyncStorage.removeItem('@iostoandroid/onboarding_done'),
               AsyncStorage.removeItem('@iostoandroid/custom_wallpaper'),
             ]);
-            Alert.alert('Reset complete', 'Please restart the app.');
+            alert('Reset complete', 'Please restart the app.');
           },
         },
       ],
@@ -169,13 +184,13 @@ export function LauncherSettingsScreen() {
   };
 
   const handleRerunOnboarding = () => {
-    Alert.alert('Re-run Onboarding', 'This will show the onboarding flow on next app start.', [
+    alert('Re-run Onboarding', 'This will show the onboarding flow on next app start.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Confirm',
         onPress: async () => {
           await AsyncStorage.removeItem('@iostoandroid/onboarding_done');
-          Alert.alert('Done', 'Restart the app to see onboarding.');
+          alert('Done', 'Restart the app to see onboarding.');
         },
       },
     ]);

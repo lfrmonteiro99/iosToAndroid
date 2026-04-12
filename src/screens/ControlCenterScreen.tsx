@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import {
   View,
@@ -132,6 +132,18 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [nowPlaying, setNowPlaying] = useState({ title: '', artist: '', album: '', isPlaying: false, packageName: '' });
 
+  const refreshNowPlaying = useCallback(async () => {
+    const mod = await getLauncher();
+    if (mod) {
+      try {
+        const np = await mod.getNowPlaying();
+        setNowPlaying(np);
+      } catch {
+        // Expected: now-playing API may not be available
+      }
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       const mod = await getLauncher();
@@ -149,6 +161,12 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
       }
     })();
   }, []);
+
+  // Periodically refresh now-playing info every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(refreshNowPlaying, 5000);
+    return () => clearInterval(interval);
+  }, [refreshNowPlaying]);
 
   const toggleFlashlight = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -225,6 +243,77 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   };
 
   const batteryLevel = Math.round(device.battery.level * 100);
+
+  // ---- Vertical slider gesture support (brightness & volume) ----
+  const SLIDER_HEIGHT = 160;
+
+  const brightnessFill = useSharedValue(device.brightness * SLIDER_HEIGHT);
+  const volumeFill = useSharedValue(device.volume * SLIDER_HEIGHT);
+
+  // Keep shared values in sync with external device state changes
+  useEffect(() => {
+    brightnessFill.value = device.brightness * SLIDER_HEIGHT;
+  }, [device.brightness]);
+  useEffect(() => {
+    volumeFill.value = device.volume * SLIDER_HEIGHT;
+  }, [device.volume]);
+
+  const applyBrightness = useCallback((pct: number) => {
+    device.setBrightness(pct);
+  }, [device]);
+
+  const applyVolume = useCallback((pct: number) => {
+    device.setVolume(pct);
+  }, [device]);
+
+  const brightnessPanGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      // e.y is relative to the gesture view; map to fill height
+      const fill = Math.max(0, Math.min(SLIDER_HEIGHT, SLIDER_HEIGHT - e.y));
+      brightnessFill.value = fill;
+    })
+    .onEnd(() => {
+      const pct = Math.max(0, Math.min(1, brightnessFill.value / SLIDER_HEIGHT));
+      runOnJS(applyBrightness)(pct);
+    });
+
+  const brightnessTapGesture = Gesture.Tap()
+    .onEnd((e) => {
+      const fill = Math.max(0, Math.min(SLIDER_HEIGHT, SLIDER_HEIGHT - e.y));
+      brightnessFill.value = fill;
+      const pct = Math.max(0, Math.min(1, fill / SLIDER_HEIGHT));
+      runOnJS(applyBrightness)(pct);
+    });
+
+  const brightnessGesture = Gesture.Race(brightnessPanGesture, brightnessTapGesture);
+
+  const volumePanGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      const fill = Math.max(0, Math.min(SLIDER_HEIGHT, SLIDER_HEIGHT - e.y));
+      volumeFill.value = fill;
+    })
+    .onEnd(() => {
+      const pct = Math.max(0, Math.min(1, volumeFill.value / SLIDER_HEIGHT));
+      runOnJS(applyVolume)(pct);
+    });
+
+  const volumeTapGesture = Gesture.Tap()
+    .onEnd((e) => {
+      const fill = Math.max(0, Math.min(SLIDER_HEIGHT, SLIDER_HEIGHT - e.y));
+      volumeFill.value = fill;
+      const pct = Math.max(0, Math.min(1, fill / SLIDER_HEIGHT));
+      runOnJS(applyVolume)(pct);
+    });
+
+  const volumeGesture = Gesture.Race(volumePanGesture, volumeTapGesture);
+
+  const brightnessFillStyle = useAnimatedStyle(() => ({
+    height: brightnessFill.value,
+  }));
+
+  const volumeFillStyle = useAnimatedStyle(() => ({
+    height: volumeFill.value,
+  }));
 
   return (
     <View style={styles.root}>
@@ -310,7 +399,9 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   <Pressable
                     onPress={async () => {
                       const mod = await getLauncher();
-                      try { if (mod) await (mod as any).mediaPrev?.(); } catch { /* no-op */ }
+                      if (mod) {
+                        try { await mod.mediaPrev(); } catch { /* no-op */ }
+                      }
                     }}
                     accessibilityLabel="Previous track"
                     style={styles.musicBtn}
@@ -320,7 +411,9 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   <Pressable
                     onPress={async () => {
                       const mod = await getLauncher();
-                      try { if (mod) await (mod as any).mediaPlayPause?.(); } catch { /* no-op */ }
+                      if (mod) {
+                        try { await mod.mediaPlayPause(); } catch { /* no-op */ }
+                      }
                       setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
                     }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
@@ -335,7 +428,9 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   <Pressable
                     onPress={async () => {
                       const mod = await getLauncher();
-                      try { if (mod) await (mod as any).mediaNext?.(); } catch { /* no-op */ }
+                      if (mod) {
+                        try { await mod.mediaNext(); } catch { /* no-op */ }
+                      }
                     }}
                     accessibilityLabel="Next track"
                     style={styles.musicBtn}
@@ -355,58 +450,46 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               {/* Brightness */}
               <View style={styles.verticalSliderWrap}>
                 <Ionicons name="sunny" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
-                <Pressable
-                  style={styles.verticalSliderTrack}
-                  accessibilityLabel="Brightness control"
-                  accessibilityRole="adjustable"
-                  onPress={(e) => {
-                    const relY = e.nativeEvent.locationY;
-                    const pct = Math.max(0, Math.min(1, 1 - relY / 160));
-                    device.setBrightness(pct);
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.verticalSliderFill,
-                      { height: `${device.brightness * 100}%` as unknown as number },
-                    ]}
-                  />
-                  <Ionicons
-                    name="sunny"
-                    size={16}
-                    color="rgba(255,255,255,0.8)"
-                    style={styles.verticalSliderIconBottom}
-                  />
-                </Pressable>
+                <GestureDetector gesture={brightnessGesture}>
+                  <Animated.View
+                    style={styles.verticalSliderTrack}
+                    accessibilityLabel="Brightness control"
+                    accessibilityRole="adjustable"
+                  >
+                    <Animated.View
+                      style={[styles.verticalSliderFill, brightnessFillStyle]}
+                    />
+                    <Ionicons
+                      name="sunny"
+                      size={16}
+                      color="rgba(255,255,255,0.8)"
+                      style={styles.verticalSliderIconBottom}
+                    />
+                  </Animated.View>
+                </GestureDetector>
                 <Text style={styles.verticalSliderLabel}>Brightness</Text>
               </View>
 
               {/* Volume */}
               <View style={styles.verticalSliderWrap}>
                 <Ionicons name="volume-high" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
-                <Pressable
-                  style={styles.verticalSliderTrack}
-                  accessibilityLabel="Volume control"
-                  accessibilityRole="adjustable"
-                  onPress={(e) => {
-                    const relY = e.nativeEvent.locationY;
-                    const pct = Math.max(0, Math.min(1, 1 - relY / 160));
-                    device.setVolume(pct);
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.verticalSliderFill,
-                      { height: `${device.volume * 100}%` as unknown as number },
-                    ]}
-                  />
-                  <Ionicons
-                    name="volume-low"
-                    size={16}
-                    color="rgba(255,255,255,0.8)"
-                    style={styles.verticalSliderIconBottom}
-                  />
-                </Pressable>
+                <GestureDetector gesture={volumeGesture}>
+                  <Animated.View
+                    style={styles.verticalSliderTrack}
+                    accessibilityLabel="Volume control"
+                    accessibilityRole="adjustable"
+                  >
+                    <Animated.View
+                      style={[styles.verticalSliderFill, volumeFillStyle]}
+                    />
+                    <Ionicons
+                      name="volume-low"
+                      size={16}
+                      color="rgba(255,255,255,0.8)"
+                      style={styles.verticalSliderIconBottom}
+                    />
+                  </Animated.View>
+                </GestureDetector>
                 <Text style={styles.verticalSliderLabel}>Volume</Text>
               </View>
             </View>

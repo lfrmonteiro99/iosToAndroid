@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Image, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,6 +10,7 @@ import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  useAlert,
 } from '../../components';
 
 const CUSTOM_WALLPAPER_KEY = '@iostoandroid/custom_wallpaper';
@@ -30,6 +31,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
+  const alert = useAlert();
 
   useEffect(() => {
     AsyncStorage.getItem(CUSTOM_WALLPAPER_KEY).then((uri) => {
@@ -164,7 +166,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
                 </Text>
               }
               showChevron
-              onPress={() => Alert.alert('Set Lock Screen', 'Wallpaper applied to lock screen within the app. To change your Android wallpaper, use your device settings.')}
+              onPress={() => alert('Set Lock Screen', 'Wallpaper applied to lock screen within the app. To change your Android wallpaper, use your device settings.')}
             />
             <CupertinoListTile
               title="Set Home Screen"
@@ -174,7 +176,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
                 </Text>
               }
               showChevron
-              onPress={() => Alert.alert('Set Home Screen', 'Wallpaper applied to home screen within the app. To change your Android wallpaper, use your device settings.')}
+              onPress={() => alert('Set Home Screen', 'Wallpaper applied to home screen within the app. To change your Android wallpaper, use your device settings.')}
             />
           </CupertinoListSection>
         </View>

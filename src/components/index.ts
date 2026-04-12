@@ -15,3 +15,4 @@ export { CupertinoProgressBar } from './CupertinoProgressBar';
 export { CupertinoPicker } from './CupertinoPicker';
 export { CupertinoSwipeableRow } from './CupertinoSwipeableRow';
 export { ErrorBoundary } from './ErrorBoundary';
+export { AlertProvider, useAlert } from './AlertProvider';

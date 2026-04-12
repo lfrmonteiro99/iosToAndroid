@@ -1,17 +1,19 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  useAlert,
 } from '../../components';
 
 export function AboutScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const alert = useAlert();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -93,7 +95,7 @@ export function AboutScreen({ navigation }: { navigation: any }) {
           <CupertinoListSection footer="This app demonstrates iOS Cupertino-style UI components running natively on Android using React Native and Expo.">
             <CupertinoListTile
               title="Legal & Regulatory"
-              onPress={() => Alert.alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')}
+              onPress={() => alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')}
             />
           </CupertinoListSection>
         </View>

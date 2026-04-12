@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -9,6 +9,7 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  useAlert,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,6 +19,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
+  const alert = useAlert();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -137,7 +139,7 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Per-App Settings"
               showChevron
-              onPress={() => Alert.alert('Per-App Settings', 'Customize settings for individual apps.')}
+              onPress={() => alert('Per-App Settings', 'Customize settings for individual apps.')}
             />
           </CupertinoListSection>
         </View>

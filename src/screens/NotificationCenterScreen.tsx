@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Dimensions,
   Image,
-  Alert,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
+import { useAlert } from '../components';
 
 const getLauncher = async () => {
   try {
@@ -76,6 +76,7 @@ export function NotificationCenterScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { apps, launchApp } = useApps();
+  const alert = useAlert();
 
   const [notifications, setNotifications] = useState<DeviceNotification[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
@@ -147,7 +148,7 @@ export function NotificationCenterScreen() {
   }, []);
 
   const handleLongPress = useCallback((notif: DeviceNotification) => {
-    Alert.alert(
+    alert(
       notif.title || 'Notification',
       undefined,
       [

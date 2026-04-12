@@ -73,16 +73,28 @@ export function WeatherScreen({ navigation }: { navigation: any }) {
         });
         setHourly(hrs);
 
-        // 3-day forecast
+        // 5-day forecast
         const days: ForecastDay[] = (data.weather ?? []).slice(0, 5).map((d: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
           const dateStr = d.date;
           const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
           const dt = new Date(dateStr + 'T00:00:00');
+          // Derive icon from average weather code of hourly data
+          const avgCode = d.hourly?.length
+            ? d.hourly.reduce((sum: number, h: any) => sum + parseInt(h.weatherCode, 10), 0) / d.hourly.length // eslint-disable-line @typescript-eslint/no-explicit-any
+            : 116;
+          let dayIcon = 'cloud';
+          if (avgCode <= 113) dayIcon = 'sunny';
+          else if (avgCode <= 116) dayIcon = 'partly-sunny';
+          else if (avgCode <= 119) dayIcon = 'cloud';
+          else if (avgCode <= 143) dayIcon = 'cloud';
+          else if (avgCode <= 299) dayIcon = 'rainy';
+          else if (avgCode <= 338) dayIcon = 'snow';
+          else dayIcon = 'thunderstorm';
           return {
             date: dayNames[dt.getDay()],
             high: parseInt(d.maxtempC, 10),
             low: parseInt(d.mintempC, 10),
-            icon: 'partly-sunny',
+            icon: dayIcon,
           };
         });
         setForecast(days);

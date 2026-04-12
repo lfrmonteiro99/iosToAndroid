@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,7 +18,8 @@ import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoTextField } from '../components';
+import { CupertinoTextField, useAlert } from '../components';
+import { findContactByPhone } from '../utils/contacts';
 
 // ─── Native module helper ─────────────────────────────────────────────────────
 
@@ -30,13 +30,6 @@ const getLauncher = async () => {
     return null; // Expected: module unavailable on non-Android
   }
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function findContactByPhone(phone: string, contacts: DeviceContact[]): DeviceContact | undefined {
-  const digits = phone.replace(/\D/g, '').slice(-10);
-  return contacts.find((c) => c.phone.replace(/\D/g, '').slice(-10) === digits);
-}
 
 // ─── Date grouping ──────────────────────────────────────────────────────────
 
@@ -211,6 +204,7 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
   const { colors, dark } = theme;
   const insets = useSafeAreaInsets();
   const device = useDevice();
+  const alert = useAlert();
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -282,10 +276,10 @@ export function ConversationScreen({ navigation, route }: { navigation: any; rou
           await device.refresh();
           listRef.current?.scrollToIndex({ index: 0, animated: true });
         } else {
-          Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
+          alert('Failed', 'Could not send message. Check permissions and try again.');
         }
       } catch {
-        Alert.alert('Failed', 'Could not send message. Check permissions and try again.');
+        alert('Failed', 'Could not send message. Check permissions and try again.');
       } finally {
         setIsSending(false);
       }
