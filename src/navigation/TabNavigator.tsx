@@ -1,6 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSettings } from '../store/SettingsStore';
+import type { RootStackParamList } from './types';
 
 // Launcher
 import { LauncherHomeScreen } from '../screens/LauncherHomeScreen';
@@ -56,8 +57,9 @@ import { ClockScreen } from '../screens/ClockScreen';
 import { CameraScreen } from '../screens/CameraScreen';
 import { PhotosScreen } from '../screens/PhotosScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
+import { NotesScreen } from '../screens/NotesScreen';
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function TabNavigator() {
   const { settings } = useSettings();
@@ -95,6 +97,7 @@ export function TabNavigator() {
       <Stack.Screen name="Camera" component={CameraScreen} options={{ animation, gestureEnabled: false }} />
       <Stack.Screen name="Photos" component={PhotosScreen} options={{ animation }} />
       <Stack.Screen name="Calendar" component={CalendarScreen} options={{ animation }} />
+      <Stack.Screen name="Notes" component={NotesScreen} options={{ animation }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />

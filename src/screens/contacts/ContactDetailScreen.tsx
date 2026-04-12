@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +13,7 @@ import {
   CupertinoAlertDialog,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp, AppRouteProp } from '../../navigation/types';
 
 const getLauncher = async () => {
   try {
@@ -27,9 +27,13 @@ function getInitials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ContactDetailScreen({ navigation, route }: { navigation: any; route: any }) {
-  const { contactId } = route.params as { contactId: string };
+interface ContactDetailScreenProps {
+  navigation: AppNavigationProp;
+  route: AppRouteProp<'ContactDetail'>;
+}
+
+export function ContactDetailScreen({ navigation, route }: ContactDetailScreenProps) {
+  const { contactId } = route.params;
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const { getContact, toggleFavorite, deleteContact, deviceFavoriteIds } = useContacts();

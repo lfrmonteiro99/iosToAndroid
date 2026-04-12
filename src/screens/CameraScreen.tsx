@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Alert,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { useAlert } from '../components';
 
 const getLauncher = async () => {
   try { return (await import('../../modules/launcher-module/src')).default; }
@@ -35,6 +35,7 @@ type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CameraScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
+  const alert = useAlert();
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);
@@ -209,7 +210,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         mode={cameraMode}
         onCameraReady={onCameraReady}
         onMountError={() => {
-          Alert.alert('Camera Error', 'Could not start camera preview.');
+          alert('Camera Error', 'Could not start camera preview.');
         }}
       />
     );

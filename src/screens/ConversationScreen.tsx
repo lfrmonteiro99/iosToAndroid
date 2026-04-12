@@ -20,6 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
+import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 
 // ─── Native module helper ─────────────────────────────────────────────────────
 
@@ -197,8 +198,13 @@ const MessageBubble = React.memo(function MessageBubble({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-export function ConversationScreen({ navigation, route }: { navigation: any; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { address } = route.params as { address: string };
+interface ConversationScreenProps {
+  navigation: AppNavigationProp;
+  route: AppRouteProp<'Conversation'>;
+}
+
+export function ConversationScreen({ navigation, route }: ConversationScreenProps) {
+  const { address } = route.params;
 
   const { theme, typography, spacing } = useTheme();
   const { colors, dark } = theme;

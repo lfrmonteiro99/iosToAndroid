@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDevice } from '../store/DeviceStore';
 import { CupertinoNavigationBar } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 interface ForecastDay {
   date: string;
@@ -33,8 +34,11 @@ function WeatherIcon({ name, size = 24 }: { name: string; size?: number }) {
   return <Ionicons name={ionName} size={size} color="#fff" />;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function WeatherScreen({ navigation }: { navigation: any }) {
+interface WeatherScreenProps {
+  navigation: AppNavigationProp;
+}
+
+export function WeatherScreen({ navigation }: WeatherScreenProps) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { weather } = device;

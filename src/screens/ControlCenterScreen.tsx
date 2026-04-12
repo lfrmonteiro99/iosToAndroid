@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   Pressable,
   StatusBar,
   Dimensions,
@@ -32,6 +31,7 @@ import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { SystemColors } from '../theme/CupertinoTheme';
+import { useAlert } from '../components';
 import * as Haptics from 'expo-haptics';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +129,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const { theme } = useTheme();
   const { colors } = theme;
 
+  const alert = useAlert();
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [nowPlaying, setNowPlaying] = useState({ title: '', artist: '', album: '', isPlaying: false, packageName: '' });
 
@@ -193,7 +194,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
       const launched =
         (await mod.launchApp('com.android.camera2').catch(() => false)) ||
         (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
-      if (!launched) Alert.alert('Camera not found');
+      if (!launched) alert('Camera not found');
     }
   };
 
@@ -515,7 +516,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   if (mod) {
                     await mod.openSystemSettings('cast');
                   } else {
-                    Alert.alert('Screen Recording', 'Could not open screen recorder settings.');
+                    alert('Screen Recording', 'Could not open screen recorder settings.');
                   }
                 }}
               />
@@ -544,7 +545,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 if (mod) {
                   await mod.openSystemSettings('cast');
                 } else {
-                  Alert.alert('Screen Mirroring', 'Could not open cast settings.');
+                  alert('Screen Mirroring', 'Could not open cast settings.');
                 }
               }}
               accessibilityLabel="Screen Mirroring"
@@ -644,7 +645,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   toggleSublabel: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 10,
     fontWeight: '400',
     textAlign: 'center',
@@ -680,7 +681,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   musicArtist: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 13,
     fontWeight: '400',
     marginTop: 1,
@@ -731,7 +732,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   verticalSliderLabel: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 11,
     fontWeight: '400',
     marginTop: 6,
@@ -793,7 +794,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   batteryInfoText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     fontWeight: '400',
   },

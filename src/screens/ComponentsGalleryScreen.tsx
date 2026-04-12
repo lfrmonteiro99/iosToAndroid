@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -18,6 +18,7 @@ import {
   CupertinoActivityIndicator,
   CupertinoPicker,
   CupertinoSwipeableRow,
+  useAlert,
 } from '../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +44,7 @@ export function ComponentsGalleryScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const alert = useAlert();
 
   const [switchValue, setSwitchValue] = useState(true);
   const [textValue, setTextValue] = useState('');
@@ -220,10 +222,10 @@ export function ComponentsGalleryScreen() {
         <View style={{ borderRadius: 12, overflow: 'hidden' }}>
           <CupertinoSwipeableRow
             trailingActions={[
-              { label: 'Delete', color: '#FF3B30', onPress: () => Alert.alert('Demo', 'Delete action triggered.') },
+              { label: 'Delete', color: '#FF3B30', onPress: () => alert('Demo', 'Delete action triggered.') },
             ]}
             leadingActions={[
-              { label: 'Pin', color: '#FF9500', onPress: () => Alert.alert('Demo', 'Pin action triggered.') },
+              { label: 'Pin', color: '#FF9500', onPress: () => alert('Demo', 'Pin action triggered.') },
             ]}
           >
             <View style={[
@@ -246,12 +248,12 @@ export function ComponentsGalleryScreen() {
           <CupertinoListTile
             title="Messages"
             leading={{ name: 'chatbubble-ellipses', color: '#FFF', backgroundColor: '#34C759' }}
-            onPress={() => Alert.alert('Demo', 'Messages action triggered.')}
+            onPress={() => alert('Demo', 'Messages action triggered.')}
           />
           <CupertinoListTile
             title="FaceTime"
             leading={{ name: 'videocam', color: '#FFF', backgroundColor: '#34C759' }}
-            onPress={() => Alert.alert('Demo', 'FaceTime action triggered.')}
+            onPress={() => alert('Demo', 'FaceTime action triggered.')}
           />
           <CupertinoListTile
             title="Mail"
@@ -261,7 +263,7 @@ export function ComponentsGalleryScreen() {
                 <Text style={[typography.caption2, { color: '#FFF', fontWeight: '600' }]}>3</Text>
               </View>
             }
-            onPress={() => Alert.alert('Demo', 'Mail action triggered.')}
+            onPress={() => alert('Demo', 'Mail action triggered.')}
           />
         </CupertinoListSection>
 
@@ -286,9 +288,9 @@ export function ComponentsGalleryScreen() {
           title="Choose Action"
           message="Select one of the options below"
           options={[
-            { label: 'Share', onPress: () => Alert.alert('Demo', 'Share action triggered.') },
-            { label: 'Save to Photos', onPress: () => Alert.alert('Demo', 'Save to Photos action triggered.') },
-            { label: 'Delete', onPress: () => Alert.alert('Demo', 'Delete action triggered.'), destructive: true },
+            { label: 'Share', onPress: () => alert('Demo', 'Share action triggered.') },
+            { label: 'Save to Photos', onPress: () => alert('Demo', 'Save to Photos action triggered.') },
+            { label: 'Delete', onPress: () => alert('Demo', 'Delete action triggered.'), destructive: true },
           ]}
         />
 
@@ -299,7 +301,7 @@ export function ComponentsGalleryScreen() {
           message="This action cannot be undone."
           actions={[
             { label: 'Cancel', onPress: () => setShowAlert(false), style: 'cancel' },
-            { label: 'Delete', onPress: () => { setShowAlert(false); Alert.alert('Demo', 'Delete confirmed.'); }, style: 'destructive' },
+            { label: 'Delete', onPress: () => { setShowAlert(false); alert('Demo', 'Delete confirmed.'); }, style: 'destructive' },
           ]}
         />
       </ScrollView>
