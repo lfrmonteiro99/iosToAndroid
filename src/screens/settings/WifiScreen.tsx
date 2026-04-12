@@ -37,9 +37,7 @@ function getSignalBars(level: number): number {
   return 1;
 }
 
-function getSignalIconName(bars: number): keyof typeof Ionicons.glyphMap {
-  // Ionicons doesn't have separate bar-count wifi icons, so we use the standard wifi icon
-  // but we can express quality via the icon name hint
+function getSignalIconName(_bars: number): keyof typeof Ionicons.glyphMap {
   return 'wifi';
 }
 

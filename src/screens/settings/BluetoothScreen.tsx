@@ -24,7 +24,7 @@ function getDeviceIcon(type: number): keyof typeof Ionicons.glyphMap {
   }
 }
 
-function getDeviceIconBackground(type: number, accentColor: string, grayColor: string): string {
+function getDeviceIconBackground(type: number, accentColor: string, _grayColor: string): string {
   switch (type) {
     case 7: // Audio
       return '#FF9500'; // orange for audio devices
