@@ -16,6 +16,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withRepeat,
+  withTiming,
+  withSequence,
+  withDelay,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
@@ -87,6 +97,47 @@ function insertDateSeparators(messages: DeviceSms[]): ListItem[] {
   return result.reverse();
 }
 
+// ─── Reactions ───────────────────────────────────────────────────────────────
+
+const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
+const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
+
+// ─── Typing Indicator ────────────────────────────────────────────────────────
+
+function TypingIndicator({ visible, colors }: { visible: boolean; colors: any }) {
+  const dot1 = useSharedValue(0.3);
+  const dot2 = useSharedValue(0.3);
+  const dot3 = useSharedValue(0.3);
+
+  useEffect(() => {
+    if (visible) {
+      dot1.value = withRepeat(withSequence(withTiming(1, { duration: 400 }), withTiming(0.3, { duration: 400 })), -1);
+      dot2.value = withRepeat(withSequence(withDelay(150, withTiming(1, { duration: 400 })), withTiming(0.3, { duration: 400 })), -1);
+      dot3.value = withRepeat(withSequence(withDelay(300, withTiming(1, { duration: 400 })), withTiming(0.3, { duration: 400 })), -1);
+    } else {
+      dot1.value = 0.3;
+      dot2.value = 0.3;
+      dot3.value = 0.3;
+    }
+  }, [visible, dot1, dot2, dot3]);
+
+  const s1 = useAnimatedStyle(() => ({ opacity: dot1.value }));
+  const s2 = useAnimatedStyle(() => ({ opacity: dot2.value }));
+  const s3 = useAnimatedStyle(() => ({ opacity: dot3.value }));
+
+  if (!visible) return null;
+
+  return (
+    <View style={[styles.bubbleRow, styles.bubbleRowLeft, { marginVertical: 4 }]}>
+      <View style={[styles.bubble, styles.bubbleReceived, { backgroundColor: colors.systemGray5, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', gap: 4 }]}>
+        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s1]} />
+        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s2]} />
+        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s3]} />
+      </View>
+    </View>
+  );
+}
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -97,6 +148,11 @@ interface BubbleProps {
   isDark: boolean;
   colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  reactions?: string[];
+  deliveryStatus?: string;
+  onLongPress?: () => void;
+  showReactionPicker?: boolean;
+  onReaction?: (emoji: string) => void;
 }
 
 const MessageBubble = React.memo(function MessageBubble({
@@ -104,8 +160,23 @@ const MessageBubble = React.memo(function MessageBubble({
   isDark,
   colors,
   typography,
+  reactions,
+  deliveryStatus,
+  onLongPress,
+  showReactionPicker,
+  onReaction,
 }: BubbleProps) {
   const isSent = message.type === 2;
+  const pickerScale = useSharedValue(showReactionPicker ? 1 : 0);
+
+  useEffect(() => {
+    pickerScale.value = withSpring(showReactionPicker ? 1 : 0, { damping: 18, stiffness: 400 });
+  }, [showReactionPicker, pickerScale]);
+
+  const pickerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pickerScale.value }],
+    opacity: pickerScale.value,
+  }));
 
   const bubbleBackground = isSent
     ? colors.systemGreen
@@ -122,57 +193,75 @@ const MessageBubble = React.memo(function MessageBubble({
         isSent ? styles.bubbleRowRight : styles.bubbleRowLeft,
       ]}
     >
-      <View
-        style={[
-          styles.bubble,
-          {
-            backgroundColor: bubbleBackground,
-            maxWidth: BUBBLE_MAX_WIDTH,
-            elevation: isSent ? 1 : 0,
-            ...(isSent && Platform.OS === 'ios' ? {
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-            } : {}),
-          },
-          isSent ? styles.bubbleSent : styles.bubbleReceived,
-        ]}
-      >
-        <Text style={[typography.callout, { color: textColor }]}>
-          {message.body}
-        </Text>
-        {isSent ? (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              right: -6,
-              width: 0,
-              height: 0,
-              borderLeftWidth: 8,
-              borderLeftColor: colors.systemGreen,
-              borderTopWidth: 8,
-              borderTopColor: 'transparent',
-              borderBottomWidth: 0,
-            }}
-          />
-        ) : (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: -6,
-              width: 0,
-              height: 0,
-              borderRightWidth: 8,
-              borderRightColor: bubbleBackground,
-              borderTopWidth: 8,
-              borderTopColor: 'transparent',
-            }}
-          />
-        )}
-      </View>
+      {/* Reaction picker */}
+      {showReactionPicker && (
+        <Animated.View style={[styles.reactionPicker, isSent ? styles.reactionPickerRight : styles.reactionPickerLeft, { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }, pickerStyle]}>
+          {REACTIONS.map((emoji) => (
+            <Pressable
+              key={emoji}
+              onPress={() => onReaction?.(emoji)}
+              style={({ pressed }) => [styles.reactionBtn, pressed && { transform: [{ scale: 1.3 }] }]}
+            >
+              <Text style={{ fontSize: 24 }}>{emoji}</Text>
+            </Pressable>
+          ))}
+        </Animated.View>
+      )}
+      <Pressable onLongPress={onLongPress} delayLongPress={400}>
+        <View
+          style={[
+            styles.bubble,
+            {
+              backgroundColor: bubbleBackground,
+              maxWidth: BUBBLE_MAX_WIDTH,
+              elevation: isSent ? 1 : 0,
+            },
+            isSent ? styles.bubbleSent : styles.bubbleReceived,
+          ]}
+        >
+          <Text style={[typography.callout, { color: textColor }]}>
+            {message.body}
+          </Text>
+          {/* Reaction badges */}
+          {reactions && reactions.length > 0 && (
+            <View style={[styles.reactionBadge, { backgroundColor: isDark ? '#3A3A3C' : '#E8E8ED', borderColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+              {reactions.map((r, i) => (
+                <Text key={i} style={{ fontSize: 12 }}>{r}</Text>
+              ))}
+            </View>
+          )}
+          {isSent ? (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: -6,
+                width: 0,
+                height: 0,
+                borderLeftWidth: 8,
+                borderLeftColor: colors.systemGreen,
+                borderTopWidth: 8,
+                borderTopColor: 'transparent',
+                borderBottomWidth: 0,
+              }}
+            />
+          ) : (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: -6,
+                width: 0,
+                height: 0,
+                borderRightWidth: 8,
+                borderRightColor: bubbleBackground,
+                borderTopWidth: 8,
+                borderTopColor: 'transparent',
+              }}
+            />
+          )}
+        </View>
+      </Pressable>
       <View style={[styles.bubbleMeta, isSent ? styles.bubbleMetaRight : styles.bubbleMetaLeft]}>
         <Text
           style={[
@@ -185,9 +274,9 @@ const MessageBubble = React.memo(function MessageBubble({
         </Text>
         {isSent && (
           <View style={styles.sentIndicator}>
-            <Ionicons name="checkmark" size={12} color={colors.secondaryLabel} />
-            <Text style={[typography.caption2, { color: colors.secondaryLabel, marginLeft: 2 }]}>
-              Sent
+            <Ionicons name="checkmark-done" size={12} color={deliveryStatus === 'Read' ? colors.systemBlue : colors.secondaryLabel} />
+            <Text style={[typography.caption2, { color: deliveryStatus === 'Read' ? colors.systemBlue : colors.secondaryLabel, marginLeft: 2 }]}>
+              {deliveryStatus || 'Sent'}
             </Text>
           </View>
         )}
@@ -214,9 +303,53 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [reactions, setReactions] = useState<Record<string, string[]>>({});
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [showTyping, setShowTyping] = useState(false);
+  const [deliveryStatuses, setDeliveryStatuses] = useState<Record<string, string>>({});
   const listRef = useRef<FlatList>(null);
   const draftKey = `@draft_${address}`;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load reactions from storage
+  useEffect(() => {
+    AsyncStorage.getItem(REACTIONS_STORAGE_KEY).then((val) => {
+      if (val) try { setReactions(JSON.parse(val)); } catch { /* ignore */ }
+    }).catch(() => {});
+  }, []);
+
+  // Save reactions
+  const saveReactions = useCallback((updated: Record<string, string[]>) => {
+    setReactions(updated);
+    AsyncStorage.setItem(REACTIONS_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+  }, []);
+
+  const handleReaction = useCallback((msgId: string, emoji: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReactions((prev) => {
+      const current = prev[msgId] || [];
+      const updated = current.includes(emoji)
+        ? current.filter((r) => r !== emoji)
+        : [...current, emoji];
+      const next = { ...prev, [msgId]: updated.length > 0 ? updated : [] };
+      if (updated.length === 0) delete next[msgId];
+      saveReactions(next);
+      return next;
+    });
+    setSelectedMsgId(null);
+  }, [saveReactions]);
+
+  const handleLongPress = useCallback((msgId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedMsgId((prev) => (prev === msgId ? null : msgId));
+  }, []);
+
+  // Simulate delivery status for sent messages
+  const simulateDelivery = useCallback((msgId: string) => {
+    setDeliveryStatuses((prev) => ({ ...prev, [msgId]: 'Sent' }));
+    setTimeout(() => setDeliveryStatuses((prev) => ({ ...prev, [msgId]: 'Delivered' })), 1500);
+    setTimeout(() => setDeliveryStatuses((prev) => ({ ...prev, [msgId]: 'Read' })), 4000);
+  }, []);
 
   // Load draft on mount
   useEffect(() => {
@@ -281,6 +414,13 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
           AsyncStorage.removeItem(draftKey).catch(() => {});
           await device.refresh();
           listRef.current?.scrollToIndex({ index: 0, animated: true });
+          // Simulate delivery status
+          const sentMsgId = `sent-${Date.now()}`;
+          simulateDelivery(sentMsgId);
+          // Show typing indicator briefly (simulated)
+          const typingDelay = 2000 + Math.random() * 2000;
+          setShowTyping(true);
+          setTimeout(() => setShowTyping(false), typingDelay);
         } else {
           alert('Failed', 'Could not send message. Check permissions and try again.');
         }
@@ -290,7 +430,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         setIsSending(false);
       }
     }
-  }, [inputText, isSending, address, device, draftKey]);
+  }, [inputText, isSending, address, device, draftKey, alert, simulateDelivery]);
 
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => {
@@ -304,15 +444,22 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         );
       }
       return (
-        <MessageBubble
-          message={item}
-          isDark={dark}
-          colors={colors}
-          typography={typography}
-        />
+        <Pressable onPress={() => selectedMsgId ? setSelectedMsgId(null) : undefined}>
+          <MessageBubble
+            message={item}
+            isDark={dark}
+            colors={colors}
+            typography={typography}
+            reactions={reactions[item.id]}
+            deliveryStatus={item.type === 2 ? (deliveryStatuses[item.id] || 'Sent') : undefined}
+            onLongPress={() => handleLongPress(item.id)}
+            showReactionPicker={selectedMsgId === item.id}
+            onReaction={(emoji) => handleReaction(item.id, emoji)}
+          />
+        </Pressable>
       );
     },
-    [dark, colors, typography],
+    [dark, colors, typography, reactions, selectedMsgId, deliveryStatuses, handleLongPress, handleReaction],
   );
 
   const keyExtractor = useCallback((item: ListItem) => isSeparator(item) ? item.id : item.id, []);
@@ -387,6 +534,11 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         </View>
       </BlurView>
 
+      {/* Dismiss reaction picker on tap */}
+      {selectedMsgId && (
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedMsgId(null)} />
+      )}
+
       {/* Message List */}
       <FlatList
         ref={listRef}
@@ -395,6 +547,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         renderItem={renderItem}
         inverted={rawMessages.length > 0}
         ListEmptyComponent={ListEmpty}
+        ListHeaderComponent={<TypingIndicator visible={showTyping} colors={colors} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
           rawMessages.length === 0
@@ -545,5 +698,43 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     flex: 1,
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  reactionPicker: {
+    flexDirection: 'row',
+    borderRadius: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
+    gap: 2,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  reactionPickerLeft: {
+    alignSelf: 'flex-start',
+  },
+  reactionPickerRight: {
+    alignSelf: 'flex-end',
+  },
+  reactionBtn: {
+    padding: 4,
+  },
+  reactionBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -4,
+    flexDirection: 'row',
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderWidth: 2,
+    gap: 1,
   },
 });

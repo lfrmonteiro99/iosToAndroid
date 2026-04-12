@@ -154,6 +154,7 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
 // ---------------------------------------------------------------------------
 
 function BatteryWidget({ level, isCharging, onPress }: { level: number; isCharging: boolean; onPress?: () => void }) {
+  const { textScale } = useTheme();
   const pct = Math.round(level * 100);
   const color = pct > 20 ? '#30D158' : '#FF453A';
   const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
@@ -162,11 +163,11 @@ function BatteryWidget({ level, isCharging, onPress }: { level: number; isChargi
     <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={28} color={color} />
-        <Text style={styles.widgetTitle}>Battery</Text>
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Battery</Text>
       </View>
-      <Text style={[styles.widgetBigNumber, { color }]}>{pct}%</Text>
+      <Text style={[styles.widgetBigNumber, { color, fontSize: 36 * textScale }]}>{pct}%</Text>
       <ProgressBar value={level} color={color} />
-      <Text style={styles.widgetSubtext}>
+      <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>
         {isCharging ? 'Charging' : 'On battery'}
       </Text>
     </WidgetCard>
@@ -188,7 +189,7 @@ function StorageWidget({
   usedPercentage: number;
   onPress?: () => void;
 }) {
-  const { theme } = useTheme();
+  const { theme, textScale } = useTheme();
   const pct = usedPercentage / 100;
   const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : theme.colors.accent;
 
@@ -196,14 +197,14 @@ function StorageWidget({
     <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="server-outline" size={22} color={color} />
-        <Text style={styles.widgetTitle}>Storage</Text>
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Storage</Text>
       </View>
       <View style={styles.storageRow}>
-        <Text style={styles.widgetBigNumber}>{usedGB} GB</Text>
-        <Text style={styles.widgetSubtext}> / {totalGB} GB used</Text>
+        <Text style={[styles.widgetBigNumber, { fontSize: 36 * textScale }]}>{usedGB} GB</Text>
+        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}> / {totalGB} GB used</Text>
       </View>
       <ProgressBar value={pct} color={color} />
-      <Text style={styles.widgetSubtext}>{Math.round(usedPercentage)}% full</Text>
+      <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>{Math.round(usedPercentage)}% full</Text>
     </WidgetCard>
   );
 }
@@ -213,17 +214,18 @@ function StorageWidget({
 // ---------------------------------------------------------------------------
 
 function WeatherWidget({ temp, condition, icon, city }: { temp: number; condition: string; icon: string; city: string }) {
+  const { textScale } = useTheme();
   const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
   return (
     <WidgetCard>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color="#FFD60A" />
-        <Text style={styles.widgetTitle}>Weather</Text>
-        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none' }]}>{city}</Text> : null}
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
+        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none', fontSize: 14 * textScale }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
         <Text style={styles.weatherTemp}>{temp}°C</Text>
-        <Text style={styles.weatherDesc}>{condition || '—'}</Text>
+        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale }]}>{condition || '—'}</Text>
       </View>
     </WidgetCard>
   );
@@ -251,24 +253,25 @@ function formatEventTime(ts: number, allDay: boolean): string {
 }
 
 function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
+  const { textScale } = useTheme();
   return (
     <WidgetCard>
       <View style={styles.widgetRow}>
         <Ionicons name="calendar-outline" size={22} color="#FF9F0A" />
-        <Text style={styles.widgetTitle}>Up Next</Text>
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Up Next</Text>
       </View>
       {events.length === 0 ? (
         <View style={styles.upNextBody}>
           <Ionicons name="calendar" size={36} color="rgba(255,255,255,0.2)" />
-          <Text style={styles.upNextText}>No upcoming events</Text>
+          <Text style={[styles.upNextText, { fontSize: 15 * textScale }]}>No upcoming events</Text>
         </View>
       ) : (
         events.slice(0, 3).map((ev) => (
           <View key={ev.id} style={styles.eventRow}>
             <View style={styles.eventDot} />
             <View style={styles.eventMeta}>
-              <Text style={styles.eventTitle} numberOfLines={1}>{ev.title}</Text>
-              <Text style={styles.eventTime}>{formatEventTime(ev.start, ev.allDay)}{ev.location ? `  ·  ${ev.location}` : ''}</Text>
+              <Text style={[styles.eventTitle, { fontSize: 14 * textScale }]} numberOfLines={1}>{ev.title}</Text>
+              <Text style={[styles.eventTime, { fontSize: 12 * textScale }]}>{formatEventTime(ev.start, ev.allDay)}{ev.location ? `  ·  ${ev.location}` : ''}</Text>
             </View>
           </View>
         ))
@@ -282,19 +285,20 @@ function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
 // ---------------------------------------------------------------------------
 
 function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress?: () => void }) {
+  const { textScale } = useTheme();
   return (
     <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
-        <Text style={styles.widgetTitle}>Messages</Text>
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Messages</Text>
       </View>
       {unreadCount > 0 ? (
         <>
-          <Text style={[styles.widgetBigNumber, { color: '#30D158' }]}>{unreadCount}</Text>
-          <Text style={styles.widgetSubtext}>unread message{unreadCount !== 1 ? 's' : ''}</Text>
+          <Text style={[styles.widgetBigNumber, { color: '#30D158', fontSize: 36 * textScale }]}>{unreadCount}</Text>
+          <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>unread message{unreadCount !== 1 ? 's' : ''}</Text>
         </>
       ) : (
-        <Text style={styles.widgetSubtext}>No unread messages</Text>
+        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>No unread messages</Text>
       )}
     </WidgetCard>
   );
@@ -305,13 +309,14 @@ function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress
 // ---------------------------------------------------------------------------
 
 function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
+  const { textScale } = useTheme();
   return (
     <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
-        <Text style={styles.widgetTitle}>Screen Time</Text>
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
       </View>
-      <Text style={styles.widgetSubtext}>Tap to view screen time details</Text>
+      <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>Tap to view screen time details</Text>
     </WidgetCard>
   );
 }
@@ -337,6 +342,7 @@ function EditableWidgetRow({
   isFirst?: boolean;
   isLast?: boolean;
 }) {
+  const { textScale } = useTheme();
   return (
     <View style={styles.editRow}>
       <Pressable
@@ -352,7 +358,7 @@ function EditableWidgetRow({
       </Pressable>
 
       <Ionicons name={WIDGET_ICONS[widgetType]} size={20} color="rgba(255,255,255,0.7)" />
-      <Text style={styles.editLabel}>{WIDGET_LABELS[widgetType]}</Text>
+      <Text style={[styles.editLabel, { fontSize: 15 * textScale }]}>{WIDGET_LABELS[widgetType]}</Text>
 
       {isEnabled && (
         <View style={styles.editReorderGroup}>
@@ -381,6 +387,7 @@ function EditWidgetsPanel({
   onSave: (next: WidgetType[]) => void;
   onCancel: () => void;
 }) {
+  const { textScale } = useTheme();
   const [draft, setDraft] = useState<WidgetType[]>(enabled);
 
   const disabled = ALL_WIDGET_TYPES.filter((t) => !draft.includes(t));
@@ -412,7 +419,7 @@ function EditWidgetsPanel({
 
   return (
     <View style={styles.editPanel}>
-      <Text style={styles.editSectionHeader}>Enabled Widgets</Text>
+      <Text style={[styles.editSectionHeader, { fontSize: 12 * textScale }]}>Enabled Widgets</Text>
       {draft.map((w, i) => (
         <EditableWidgetRow
           key={w}
@@ -426,12 +433,12 @@ function EditWidgetsPanel({
         />
       ))}
       {draft.length === 0 && (
-        <Text style={styles.editEmptyText}>No widgets enabled</Text>
+        <Text style={[styles.editEmptyText, { fontSize: 14 * textScale }]}>No widgets enabled</Text>
       )}
 
       {disabled.length > 0 && (
         <>
-          <Text style={[styles.editSectionHeader, { marginTop: 18 }]}>Available Widgets</Text>
+          <Text style={[styles.editSectionHeader, { marginTop: 18, fontSize: 12 * textScale }]}>Available Widgets</Text>
           {disabled.map((w) => (
             <EditableWidgetRow
               key={w}
@@ -445,7 +452,7 @@ function EditWidgetsPanel({
 
       <View style={styles.editButtonRow}>
         <Pressable style={styles.editDoneBtn} onPress={() => onSave(draft)}>
-          <Text style={styles.editDoneBtnText}>Done</Text>
+          <Text style={[styles.editDoneBtnText, { fontSize: 16 * textScale }]}>Done</Text>
         </Pressable>
       </View>
     </View>
@@ -459,6 +466,7 @@ function EditWidgetsPanel({
 export function TodayViewScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
+  const { textScale } = useTheme();
   const nav = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const today = useMemo(() => formatDate(new Date()), []);
@@ -589,7 +597,7 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
             showsVerticalScrollIndicator={false}
           >
             {/* Date header */}
-            <Text style={styles.dateText}>{today}</Text>
+            <Text style={[styles.dateText, { fontSize: 28 * textScale }]}>{today}</Text>
 
             {/* Widgets — rendered in configured order */}
             {editMode ? (
@@ -608,7 +616,7 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
                   onPress={() => setEditMode(true)}
                 >
                   <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.editOpenBtnText}>Edit Widgets</Text>
+                  <Text style={[styles.editOpenBtnText, { fontSize: 14 * textScale }]}>Edit Widgets</Text>
                 </Pressable>
               </>
             )}

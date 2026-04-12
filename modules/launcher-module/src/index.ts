@@ -95,6 +95,24 @@ export interface NowPlaying {
   packageName: string;
 }
 
+export interface ScreenTimeApp {
+  name: string;
+  packageName: string;
+  minutes: number;
+}
+
+export interface ScreenTimeStat {
+  packageName: string;
+  totalTimeMs: number;
+  appName: string;
+  date: string;
+}
+
+export interface DailyScreenTime {
+  totalMinutes: number;
+  topApps: ScreenTimeApp[];
+}
+
 interface LauncherModuleType {
   // Apps
   getInstalledApps(): Promise<InstalledApp[]>;
@@ -142,6 +160,11 @@ interface LauncherModuleType {
   mediaPrev(): Promise<boolean>;
   mediaPlayPause(): Promise<boolean>;
   mediaNext(): Promise<boolean>;
+  // Screen Time
+  isUsageAccessGranted(): Promise<boolean>;
+  openUsageAccessSettings(): Promise<boolean>;
+  getScreenTimeStats(daysBack: number): Promise<ScreenTimeStat[]>;
+  getTodayScreenTime(): Promise<DailyScreenTime>;
   // Permissions
   requestAllPermissions(): Promise<boolean>;
   checkPermissions(): Promise<Record<string, boolean>>;
@@ -186,6 +209,10 @@ const stub: LauncherModuleType = {
   mediaPrev: async () => false,
   mediaPlayPause: async () => false,
   mediaNext: async () => false,
+  isUsageAccessGranted: async () => false,
+  openUsageAccessSettings: async () => false,
+  getScreenTimeStats: async () => [],
+  getTodayScreenTime: async () => ({ totalMinutes: 0, topApps: [] }),
 };
 
 function createBridgedModule(): LauncherModuleType {
@@ -327,6 +354,22 @@ function createBridgedModule(): LauncherModuleType {
     mediaNext: async () => {
       try { return await nativeModule.mediaNext(); }
       catch (e) { console.warn('LauncherModule.mediaNext failed:', e); return false; }
+    },
+    isUsageAccessGranted: async () => {
+      try { return await nativeModule.isUsageAccessGranted(); }
+      catch (e) { console.warn('LauncherModule.isUsageAccessGranted failed:', e); return false; }
+    },
+    openUsageAccessSettings: async () => {
+      try { return await nativeModule.openUsageAccessSettings(); }
+      catch (e) { console.warn('LauncherModule.openUsageAccessSettings failed:', e); return false; }
+    },
+    getScreenTimeStats: async (daysBack: number) => {
+      try { return await nativeModule.getScreenTimeStats(daysBack); }
+      catch (e) { console.warn('LauncherModule.getScreenTimeStats failed:', e); return []; }
+    },
+    getTodayScreenTime: async () => {
+      try { return await nativeModule.getTodayScreenTime(); }
+      catch (e) { console.warn('LauncherModule.getTodayScreenTime failed:', e); return { totalMinutes: 0, topApps: [] }; }
     },
   };
 }

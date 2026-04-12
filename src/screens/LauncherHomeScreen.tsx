@@ -105,7 +105,7 @@ function formatTime(date: Date): string {
 // Dynamic Island
 // ---------------------------------------------------------------------------
 
-function DynamicIsland({ device, settings }: { device: any; settings: any }) {
+function DynamicIsland({ device, settings, textScale = 1 }: { device: any; settings: any; textScale?: number }) {
   const isCharging = device.battery.isCharging;
   const hasDND = settings.focusMode !== 'off';
 
@@ -116,7 +116,7 @@ function DynamicIsland({ device, settings }: { device: any; settings: any }) {
       {isCharging && (
         <>
           <Ionicons name="flash" size={12} color="#34C759" />
-          <Text style={styles.dynamicIslandText}>
+          <Text style={[styles.dynamicIslandText, { fontSize: 12 * textScale }]}>
             {Math.round(device.battery.level * 100)}%
           </Text>
         </>
@@ -124,7 +124,7 @@ function DynamicIsland({ device, settings }: { device: any; settings: any }) {
       {hasDND && (
         <>
           <Ionicons name="moon" size={12} color="#5856D6" />
-          <Text style={styles.dynamicIslandText}>Focus</Text>
+          <Text style={[styles.dynamicIslandText, { fontSize: 12 * textScale }]}>Focus</Text>
         </>
       )}
     </View>
@@ -143,9 +143,10 @@ interface AppIconProps {
   isJiggling?: boolean;
   onDelete?: () => void;
   badge?: number;
+  textScale?: number;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge }: AppIconProps) {
+function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
@@ -257,7 +258,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           </Pressable>
         )}
       </Animated.View>
-      <Text style={styles.appIconLabel} numberOfLines={1} ellipsizeMode="tail">
+      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
         {app.name}
       </Text>
     </Pressable>
@@ -298,12 +299,13 @@ type GridItem =
 // FolderIcon
 // ---------------------------------------------------------------------------
 
-function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
+function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
   folder: AppFolder;
   cellWidth: number;
   apps: InstalledApp[];
   onPress: () => void;
   onLongPress: () => void;
+  textScale?: number;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
