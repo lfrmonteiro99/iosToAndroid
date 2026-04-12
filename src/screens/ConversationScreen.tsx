@@ -371,6 +371,16 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     }, 500);
   }, [draftKey]);
 
+  // Cleanup draft debounce timeout on unmount to avoid missed saves
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        // Flush the pending draft save immediately
+      }
+    };
+  }, []);
+
   // Match contact
   const contact = useMemo(
     () => findContactByPhone(address, device.contacts),

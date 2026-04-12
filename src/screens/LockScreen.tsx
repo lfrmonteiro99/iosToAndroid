@@ -436,11 +436,19 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         // Verify PIN from SecureStore (fall back to AsyncStorage for legacy)
         (async () => {
           let pin: string | null = null;
-          try { pin = await SecureStore.getItemAsync(LOCK_PIN_KEY); } catch { /* ignore */ }
-          if (!pin) {
+          let storeAvailable = false;
+          try {
+            pin = await SecureStore.getItemAsync(LOCK_PIN_KEY);
+            storeAvailable = true;
+          } catch { /* SecureStore unavailable */ }
+          if (!pin && !storeAvailable) {
+            // SecureStore failed — try legacy AsyncStorage as last resort
+            try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
+          } else if (!pin) {
+            // SecureStore is available but no PIN set — try legacy migration
             try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
           }
-          // If no PIN is set, allow unlock (first-time user should set PIN in settings)
+          // If no PIN is set anywhere, allow unlock (first-time user)
           if (!pin || next === pin) {
             handleUnlock();
           } else {
@@ -452,8 +460,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               withTiming(12, { duration: 50 }),
               withTiming(0, { duration: 50 }),
             );
-            // Clear after a short delay so user sees the dots filled briefly
-            setTimeout(() => setPasscode(''), 300);
+            // Clear after shake animation completes (250ms)
+            setTimeout(() => setPasscode(''), 350);
           }
         })();
       }
@@ -488,15 +496,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
       if (result.success) {
         handleUnlock();
       } else {
-        // User cancelled or biometric failed
+        // Biometric failed or user cancelled — always show passcode as fallback
         setAuthFailed(true);
-        if (result.error === 'user_cancel' || result.error === 'system_cancel' || result.error === 'app_cancel') {
-          // User cancelled — stay on lock screen, offer passcode
-          setShowPasscode(false);
-        } else {
-          // Authentication failure — show both retry and passcode
-          setShowPasscode(false);
-        }
+        setShowPasscode(true);
       }
     } catch {
       // Expected: biometrics not available — fall back to passcode

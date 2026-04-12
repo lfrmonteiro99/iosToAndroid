@@ -291,7 +291,12 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
   }, []);
 
   // ── Counts ──────────────────────────────────────────────────
-  const [currentTime] = useState(() => Date.now());
+  // Update currentTime every minute so "today" calculations stay accurate across midnight
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const counts = useMemo(() => {
     const now = currentTime;
@@ -305,7 +310,7 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
       all: reminders.filter((r) => !r.completed).length,
       flagged: reminders.filter((r) => !r.completed && r.flagged).length,
     };
-  }, [reminders]);
+  }, [reminders, currentTime]);
 
   // ── Filtered Reminders ──────────────────────────────────────
 

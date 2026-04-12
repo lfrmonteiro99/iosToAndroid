@@ -70,9 +70,12 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
           const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
           const code = parseInt(h.weatherCode, 10);
           let icon = 'cloud';
-          if (code === 113) icon = 'sunny';
-          else if (code === 116) icon = 'partly-sunny';
-          else if (code >= 176) icon = 'rainy';
+          if (code <= 113) icon = 'sunny';
+          else if (code <= 116) icon = 'partly-sunny';
+          else if (code <= 143) icon = 'cloud';
+          else if (code <= 299) icon = 'rainy';
+          else if (code <= 338) icon = 'snow';
+          else icon = 'thunderstorm';
           return { time: `${display}${suffix}`, temp: parseInt(h.tempC, 10), icon };
         });
         setHourly(hrs);

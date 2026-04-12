@@ -420,9 +420,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     onPress={async () => {
                       const mod = await getLauncher();
                       if (mod) {
-                        try { await mod.mediaPlayPause(); } catch { /* no-op */ }
+                        try {
+                          const ok = await mod.mediaPlayPause();
+                          if (ok) setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
+                        } catch { /* no-op */ }
                       }
-                      setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
                     }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
                     style={styles.musicPlayBtn}

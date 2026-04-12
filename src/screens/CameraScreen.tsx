@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
@@ -78,15 +79,30 @@ export function CameraScreen({ navigation }: { navigation: any }) {
     setFlashOn((f) => !f);
   }, []);
 
+  const saveToLibrary = useCallback(async (uri: string) => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status === 'granted') {
+        await MediaLibrary.saveToLibraryAsync(uri);
+      }
+    } catch {
+      // Media library save failed — photo is still in lastPhoto state
+    }
+  }, []);
+
   const takePhoto = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (!cameraRef.current || !cameraReady) return;
+    if (!cameraRef.current || !cameraReady) {
+      alert('Camera Not Ready', 'Please wait for the camera to initialize.');
+      return;
+    }
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
       if (photo?.uri) {
         setLastPhoto(photo.uri);
+        await saveToLibrary(photo.uri);
       }
-    } catch (e) {
+    } catch {
       // Fallback: use ImagePicker system camera
       try {
         const result = await ImagePicker.launchCameraAsync({
@@ -96,6 +112,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         });
         if (!result.canceled && result.assets[0]) {
           setLastPhoto(result.assets[0].uri);
+          await saveToLibrary(result.assets[0].uri);
         }
       } catch {
         if (Platform.OS === 'android') {
@@ -104,28 +121,37 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         }
       }
     }
-  }, [cameraReady]);
+  }, [cameraReady, alert, saveToLibrary]);
 
   const startRecording = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (!cameraRef.current || !cameraReady) return;
+    if (!cameraRef.current || !cameraReady) {
+      alert('Camera Not Ready', 'Please wait for the camera to initialize.');
+      return;
+    }
     setIsRecording(true);
     try {
       const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
       if (result?.uri) {
         setLastPhoto(result.uri);
+        await saveToLibrary(result.uri);
       }
     } catch {
       // recording failed or was stopped
     } finally {
       setIsRecording(false);
     }
-  }, [cameraReady]);
+  }, [cameraReady, alert, saveToLibrary]);
 
   const stopRecording = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (cameraRef.current) {
-      cameraRef.current.stopRecording();
+    try {
+      if (cameraRef.current) {
+        cameraRef.current.stopRecording();
+      }
+    } catch {
+      // stop recording failed
+      setIsRecording(false);
     }
   }, []);
 
@@ -137,7 +163,6 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         startRecording();
       }
     } else {
-      // PHOTO and PORTRAIT both take a photo
       takePhoto();
     }
   }, [mode, isRecording, takePhoto, startRecording, stopRecording]);
