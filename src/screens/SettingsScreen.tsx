@@ -15,6 +15,7 @@ import {
   CupertinoSwitch,
   CupertinoSearchBar,
 } from '../components';
+import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
 
 interface SettingsItem {
   key: string;
@@ -23,14 +24,14 @@ interface SettingsItem {
   icon: string;
   iconBg: string;
   type: 'navigate' | 'switch';
-  route?: string;
+  route?: keyof RootStackParamList;
   settingsKey?: string;
 }
 
 export function SettingsScreen() {
   const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
   const { colors } = theme;
-  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<AppNavigationProp>();
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const device = useDevice();
@@ -114,7 +115,7 @@ export function SettingsScreen() {
       return;
     }
     if (item.route) {
-      navigation.navigate(item.route);
+      (navigation as AppNavigationProp).navigate(item.route as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- route is a dynamic key from config
     }
   };
 
@@ -123,7 +124,7 @@ export function SettingsScreen() {
       return (
         <Pressable
           key={item.key}
-          onPress={() => item.route && navigation.navigate(item.route)}
+          onPress={() => item.route && (navigation as AppNavigationProp).navigate(item.route as any)} // eslint-disable-line @typescript-eslint/no-explicit-any -- route is a dynamic key from config
           style={({ pressed }) => [
             styles.profileCard,
             { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },

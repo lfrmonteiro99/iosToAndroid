@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,76 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
+
+// ---------------------------------------------------------------------------
+// Widget configuration types & storage
+// ---------------------------------------------------------------------------
+
+type WidgetType = 'battery' | 'storage' | 'weather' | 'upNext' | 'messages' | 'screenTime';
+
+const ALL_WIDGET_TYPES: WidgetType[] = ['battery', 'storage', 'weather', 'upNext', 'messages', 'screenTime'];
+const DEFAULT_ENABLED: WidgetType[] = ['battery', 'weather', 'storage', 'upNext', 'messages'];
+const WIDGET_CONFIG_KEY = '@iostoandroid/widget_config';
+
+const WIDGET_LABELS: Record<WidgetType, string> = {
+  battery: 'Battery',
+  storage: 'Storage',
+  weather: 'Weather',
+  upNext: 'Up Next',
+  messages: 'Messages',
+  screenTime: 'Screen Time',
+};
+
+const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = {
+  battery: 'battery-full',
+  storage: 'server-outline',
+  weather: 'partly-sunny-outline',
+  upNext: 'calendar-outline',
+  messages: 'chatbubble-ellipses-outline',
+  screenTime: 'hourglass-outline',
+};
+
+async function loadWidgetConfig(): Promise<WidgetType[]> {
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as WidgetType[];
+      // Validate: only keep known types
+      return parsed.filter((t) => ALL_WIDGET_TYPES.includes(t));
+    }
+  } catch {
+    // fall through
+  }
+  return DEFAULT_ENABLED;
+}
+
+async function saveWidgetConfig(config: WidgetType[]): Promise<void> {
+  await AsyncStorage.setItem(WIDGET_CONFIG_KEY, JSON.stringify(config));
+}
+
+function useWidgetConfig() {
+  const [enabled, setEnabled] = useState<WidgetType[]>(DEFAULT_ENABLED);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    loadWidgetConfig().then((cfg) => {
+      setEnabled(cfg);
+      setLoaded(true);
+    });
+  }, []);
+
+  const persist = useCallback((next: WidgetType[]) => {
+    setEnabled(next);
+    saveWidgetConfig(next);
+  }, []);
+
+  return { enabled, setEnabled: persist, loaded };
+}
 
 // ---------------------------------------------------------------------------
 // Date formatting
@@ -234,6 +301,158 @@ function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress
 }
 
 // ---------------------------------------------------------------------------
+// Screen Time Widget
+// ---------------------------------------------------------------------------
+
+function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
+  return (
+    <WidgetCard onPress={onPress}>
+      <View style={styles.widgetRow}>
+        <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
+        <Text style={styles.widgetTitle}>Screen Time</Text>
+      </View>
+      <Text style={styles.widgetSubtext}>Tap to view screen time details</Text>
+    </WidgetCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit-mode row for a single widget
+// ---------------------------------------------------------------------------
+
+function EditableWidgetRow({
+  widgetType,
+  isEnabled,
+  onToggle,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
+}: {
+  widgetType: WidgetType;
+  isEnabled: boolean;
+  onToggle: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
+}) {
+  return (
+    <View style={styles.editRow}>
+      <Pressable
+        onPress={onToggle}
+        hitSlop={8}
+        style={styles.editToggleBtn}
+      >
+        <Ionicons
+          name={isEnabled ? 'remove-circle' : 'add-circle'}
+          size={24}
+          color={isEnabled ? '#FF453A' : '#30D158'}
+        />
+      </Pressable>
+
+      <Ionicons name={WIDGET_ICONS[widgetType]} size={20} color="rgba(255,255,255,0.7)" />
+      <Text style={styles.editLabel}>{WIDGET_LABELS[widgetType]}</Text>
+
+      {isEnabled && (
+        <View style={styles.editReorderGroup}>
+          <Pressable onPress={onMoveUp} disabled={isFirst} hitSlop={6} style={styles.editArrowBtn}>
+            <Ionicons name="chevron-up" size={20} color={isFirst ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)'} />
+          </Pressable>
+          <Pressable onPress={onMoveDown} disabled={isLast} hitSlop={6} style={styles.editArrowBtn}>
+            <Ionicons name="chevron-down" size={20} color={isLast ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)'} />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit Widgets Panel
+// ---------------------------------------------------------------------------
+
+function EditWidgetsPanel({
+  enabled,
+  onSave,
+  onCancel,
+}: {
+  enabled: WidgetType[];
+  onSave: (next: WidgetType[]) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<WidgetType[]>(enabled);
+
+  const disabled = ALL_WIDGET_TYPES.filter((t) => !draft.includes(t));
+
+  const toggle = (w: WidgetType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (draft.includes(w)) {
+      setDraft(draft.filter((t) => t !== w));
+    } else {
+      setDraft([...draft, w]);
+    }
+  };
+
+  const moveUp = (idx: number) => {
+    if (idx <= 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const next = [...draft];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    setDraft(next);
+  };
+
+  const moveDown = (idx: number) => {
+    if (idx >= draft.length - 1) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const next = [...draft];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    setDraft(next);
+  };
+
+  return (
+    <View style={styles.editPanel}>
+      <Text style={styles.editSectionHeader}>Enabled Widgets</Text>
+      {draft.map((w, i) => (
+        <EditableWidgetRow
+          key={w}
+          widgetType={w}
+          isEnabled
+          onToggle={() => toggle(w)}
+          onMoveUp={() => moveUp(i)}
+          onMoveDown={() => moveDown(i)}
+          isFirst={i === 0}
+          isLast={i === draft.length - 1}
+        />
+      ))}
+      {draft.length === 0 && (
+        <Text style={styles.editEmptyText}>No widgets enabled</Text>
+      )}
+
+      {disabled.length > 0 && (
+        <>
+          <Text style={[styles.editSectionHeader, { marginTop: 18 }]}>Available Widgets</Text>
+          {disabled.map((w) => (
+            <EditableWidgetRow
+              key={w}
+              widgetType={w}
+              isEnabled={false}
+              onToggle={() => toggle(w)}
+            />
+          ))}
+        </>
+      )}
+
+      <View style={styles.editButtonRow}>
+        <Pressable style={styles.editDoneBtn} onPress={() => onSave(draft)}>
+          <Text style={styles.editDoneBtnText}>Done</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Screen
 // ---------------------------------------------------------------------------
 
@@ -262,6 +481,65 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
       }
     })();
   }, []);
+
+  // Widget configuration
+  const { enabled, setEnabled, loaded } = useWidgetConfig();
+  const [editMode, setEditMode] = useState(false);
+
+  const handleSaveEdit = useCallback(
+    (next: WidgetType[]) => {
+      setEnabled(next);
+      setEditMode(false);
+    },
+    [setEnabled],
+  );
+
+  // Map of widget type -> rendered JSX
+  const widgetMap: Record<WidgetType, React.ReactNode> = useMemo(
+    () => ({
+      battery: (
+        <BatteryWidget
+          key="battery"
+          level={device.battery.level}
+          isCharging={device.battery.isCharging}
+          onPress={() => nav.navigate('Battery')}
+        />
+      ),
+      storage: (
+        <StorageWidget
+          key="storage"
+          usedGB={device.storage.usedGB}
+          totalGB={device.storage.totalGB}
+          usedPercentage={device.storage.usedPercentage}
+          onPress={() => nav.navigate('Storage')}
+        />
+      ),
+      weather: (
+        <WeatherWidget
+          key="weather"
+          temp={device.weather.temp}
+          condition={device.weather.condition}
+          icon={device.weather.icon}
+          city={device.weather.city}
+        />
+      ),
+      upNext: <UpNextWidget key="upNext" events={calendarEvents} />,
+      messages: (
+        <MessagesWidget
+          key="messages"
+          unreadCount={unreadCount}
+          onPress={() => nav.navigate('Messages')}
+        />
+      ),
+      screenTime: (
+        <ScreenTimeWidget
+          key="screenTime"
+          onPress={() => nav.navigate('ScreenTime')}
+        />
+      ),
+    }),
+    [device, calendarEvents, unreadCount, nav],
+  );
 
   // Swipe-left gesture to dismiss
   const translateX = useSharedValue(0);
@@ -313,30 +591,27 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
             {/* Date header */}
             <Text style={styles.dateText}>{today}</Text>
 
-            {/* Widgets */}
-            <BatteryWidget
-              level={device.battery.level}
-              isCharging={device.battery.isCharging}
-              onPress={() => nav.navigate('Battery')}
-            />
+            {/* Widgets — rendered in configured order */}
+            {editMode ? (
+              <EditWidgetsPanel
+                enabled={enabled}
+                onSave={handleSaveEdit}
+                onCancel={() => setEditMode(false)}
+              />
+            ) : (
+              <>
+                {loaded && enabled.map((type) => widgetMap[type])}
 
-            <StorageWidget
-              usedGB={device.storage.usedGB}
-              totalGB={device.storage.totalGB}
-              usedPercentage={device.storage.usedPercentage}
-              onPress={() => nav.navigate('Storage')}
-            />
-
-            <WeatherWidget
-              temp={device.weather.temp}
-              condition={device.weather.condition}
-              icon={device.weather.icon}
-              city={device.weather.city}
-            />
-
-            <UpNextWidget events={calendarEvents} />
-
-            <MessagesWidget unreadCount={unreadCount} onPress={() => nav.navigate('Messages')} />
+                {/* Edit button */}
+                <Pressable
+                  style={styles.editOpenBtn}
+                  onPress={() => setEditMode(true)}
+                >
+                  <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.6)" />
+                  <Text style={styles.editOpenBtnText}>Edit Widgets</Text>
+                </Pressable>
+              </>
+            )}
           </ScrollView>
         </Animated.View>
       </GestureDetector>
@@ -486,5 +761,86 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     marginTop: 2,
+  },
+
+  // Edit button (bottom of widget list)
+  editOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 4,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  editOpenBtnText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Edit panel
+  editPanel: {
+    marginBottom: 8,
+  },
+  editSectionHeader: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  editToggleBtn: {
+    width: 28,
+    alignItems: 'center',
+  },
+  editLabel: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  editReorderGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  editArrowBtn: {
+    padding: 4,
+  },
+  editEmptyText: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  editButtonRow: {
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  editDoneBtn: {
+    backgroundColor: 'rgba(10,132,255,0.9)',
+    paddingHorizontal: 48,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  editDoneBtnText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

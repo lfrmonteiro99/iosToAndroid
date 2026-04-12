@@ -18,6 +18,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -68,15 +70,14 @@ function ControlButton({ icon, label, onPress, active }: ControlButtonProps) {
 // CallScreen
 // ---------------------------------------------------------------------------
 
-export function CallScreen({
-  navigation,
-  route,
-}: {
-  navigation: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  route: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-}) {
+interface CallScreenProps {
+  navigation: AppNavigationProp;
+  route: AppRouteProp<'CallScreen'>;
+}
+
+export function CallScreen({ navigation, route }: CallScreenProps) {
   const insets = useSafeAreaInsets();
-  const { number, name } = (route.params ?? {}) as { number: string; name?: string };
+  const { number, name } = route.params;
   const displayName = name || number || 'Unknown';
 
   const [isMuted, setIsMuted] = useState(false);

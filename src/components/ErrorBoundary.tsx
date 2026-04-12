@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo } from 'react';
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet, Appearance } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SystemColors } from '../theme/CupertinoTheme';
 
 interface Props {
@@ -54,25 +55,30 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       const exhausted = this.state.retryCount > ErrorBoundary.MAX_RETRIES;
+      const isDark = Appearance.getColorScheme() === 'dark';
+      const bg = isDark ? '#000000' : '#F2F2F7';
+      const textColor = isDark ? '#FFFFFF' : '#000000';
+      const secondaryColor = isDark ? '#98989D' : '#8E8E93';
+      const iconColor = isDark ? '#FF9F0A' : '#FF9500';
       return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: bg }]}>
           {this.state.recovering ? (
             <>
               <ActivityIndicator size="large" color={SystemColors.light.accent} style={styles.spinner} />
-              <Text style={styles.title}>Recovering...</Text>
-              <Text style={styles.message}>
+              <Text style={[styles.title, { color: textColor }]}>Recovering...</Text>
+              <Text style={[styles.message, { color: secondaryColor }]}>
                 The launcher encountered an error and is restarting automatically.
               </Text>
             </>
           ) : (
             <>
-              <Text style={styles.emoji}>⚠️</Text>
+              <Ionicons name="warning-outline" size={48} color={iconColor} style={{ marginBottom: 16 }} />
               {exhausted && (
-                <Text style={styles.title}>App has crashed multiple times. Please restart.</Text>
+                <Text style={[styles.title, { color: textColor }]}>App has crashed multiple times. Please restart.</Text>
               )}
             </>
           )}
-          <Text style={styles.errorText}>
+          <Text style={[styles.errorText, { color: secondaryColor }]}>
             {this.state.error?.message || 'An unexpected error occurred'}
           </Text>
           {!exhausted && (
@@ -94,31 +100,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: '#F2F2F7',
   },
   spinner: {
-    marginBottom: 16,
-  },
-  emoji: {
-    fontSize: 48,
     marginBottom: 16,
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#000',
     marginBottom: 8,
   },
   message: {
     fontSize: 15,
-    color: '#8E8E93',
     textAlign: 'center',
     marginBottom: 12,
     lineHeight: 22,
   },
   errorText: {
     fontSize: 13,
-    color: '#8E8E93',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 18,

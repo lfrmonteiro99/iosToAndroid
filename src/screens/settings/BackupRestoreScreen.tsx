@@ -7,7 +7,6 @@ import {
   Modal,
   TextInput,
   Pressable,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +18,7 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoAlertDialog,
+  useAlert,
 } from '../../components';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,6 +33,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const alert = useAlert();
 
   const handleExport = useCallback(async () => {
     try {
@@ -47,9 +48,9 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
       await Clipboard.setStringAsync(json);
       const now = new Date().toLocaleString();
       setLastBackupTime(now);
-      Alert.alert('Backup Copied', 'Settings exported to clipboard. Paste the JSON somewhere safe.');
+      alert('Backup Copied', 'Settings exported to clipboard. Paste the JSON somewhere safe.');
     } catch (e) {
-      Alert.alert('Export Failed', String(e));
+      alert('Export Failed', String(e));
     } finally {
       setBusy(false);
     }
@@ -57,7 +58,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
 
   const handleImportConfirm = useCallback(async () => {
     if (!importText.trim()) {
-      Alert.alert('Error', 'Paste your backup JSON first.');
+      alert('Error', 'Paste your backup JSON first.');
       return;
     }
     try {
@@ -73,9 +74,9 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
       await AsyncStorage.setMany(entries);
       setShowImportModal(false);
       setImportText('');
-      Alert.alert('Restored', 'Settings imported successfully. Restart the app to apply all changes.');
+      alert('Restored', 'Settings imported successfully. Restart the app to apply all changes.');
     } catch (e) {
-      Alert.alert('Error', `Invalid backup data: ${String(e)}`);
+      alert('Error', `Invalid backup data: ${String(e)}`);
     } finally {
       setImporting(false);
     }
@@ -86,9 +87,9 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
       setBusy(true);
       await AsyncStorage.clear();
       setShowResetConfirm(false);
-      Alert.alert('Reset Complete', 'All settings cleared. Restart the app to apply changes.');
+      alert('Reset Complete', 'All settings cleared. Restart the app to apply changes.');
     } catch (e) {
-      Alert.alert('Reset Failed', String(e));
+      alert('Reset Failed', String(e));
     } finally {
       setBusy(false);
     }
@@ -131,7 +132,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
                     {lastBackupTime}
                   </Text>
                 }
-                onPress={() => Alert.alert('Last Backup', `Your last backup was on ${lastBackupTime}.`)}
+                onPress={() => alert('Last Backup', `Your last backup was on ${lastBackupTime}.`)}
               />
             )}
           </CupertinoListSection>

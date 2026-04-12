@@ -139,6 +139,9 @@ interface LauncherModuleType {
   getCalendarEvents(daysAhead: number): Promise<CalendarEvent[]>;
   // Media session
   getNowPlaying(): Promise<NowPlaying>;
+  mediaPrev(): Promise<boolean>;
+  mediaPlayPause(): Promise<boolean>;
+  mediaNext(): Promise<boolean>;
   // Permissions
   requestAllPermissions(): Promise<boolean>;
   checkPermissions(): Promise<Record<string, boolean>>;
@@ -180,6 +183,9 @@ const stub: LauncherModuleType = {
   checkPermissions: async () => ({}),
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
+  mediaPrev: async () => false,
+  mediaPlayPause: async () => false,
+  mediaNext: async () => false,
 };
 
 function createBridgedModule(): LauncherModuleType {
@@ -309,6 +315,18 @@ function createBridgedModule(): LauncherModuleType {
     getNowPlaying: async () => {
       try { return await nativeModule.getNowPlaying(); }
       catch (e) { console.warn('LauncherModule.getNowPlaying failed:', e); return { title: '', artist: '', album: '', isPlaying: false, packageName: '' }; }
+    },
+    mediaPrev: async () => {
+      try { return await nativeModule.mediaPrev(); }
+      catch (e) { console.warn('LauncherModule.mediaPrev failed:', e); return false; }
+    },
+    mediaPlayPause: async () => {
+      try { return await nativeModule.mediaPlayPause(); }
+      catch (e) { console.warn('LauncherModule.mediaPlayPause failed:', e); return false; }
+    },
+    mediaNext: async () => {
+      try { return await nativeModule.mediaNext(); }
+      catch (e) { console.warn('LauncherModule.mediaNext failed:', e); return false; }
     },
   };
 }

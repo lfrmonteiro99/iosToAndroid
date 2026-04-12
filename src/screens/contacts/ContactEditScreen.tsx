@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,10 +9,15 @@ import {
   CupertinoListSection,
   CupertinoTextField,
 } from '../../components';
+import type { AppNavigationProp, AppRouteProp } from '../../navigation/types';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ContactEditScreen({ navigation, route }: { navigation: any; route: any }) {
-  const { contactId } = (route.params ?? {}) as { contactId?: string };
+interface ContactEditScreenProps {
+  navigation: AppNavigationProp;
+  route: AppRouteProp<'ContactEdit'>;
+}
+
+export function ContactEditScreen({ navigation, route }: ContactEditScreenProps) {
+  const { contactId } = route.params ?? {};
   const isEditMode = Boolean(contactId);
 
   const { theme, typography, spacing } = useTheme();

@@ -1,6 +1,5 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -12,7 +11,9 @@ import {
   CupertinoListTile,
   CupertinoButton,
   CupertinoAlertDialog,
+  useAlert,
 } from '../../components';
+import type { AppNavigationProp, AppRouteProp } from '../../navigation/types';
 
 const getLauncher = async () => {
   try {
@@ -26,14 +27,19 @@ function getInitials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ContactDetailScreen({ navigation, route }: { navigation: any; route: any }) {
-  const { contactId } = route.params as { contactId: string };
+interface ContactDetailScreenProps {
+  navigation: AppNavigationProp;
+  route: AppRouteProp<'ContactDetail'>;
+}
+
+export function ContactDetailScreen({ navigation, route }: ContactDetailScreenProps) {
+  const { contactId } = route.params;
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const { getContact, toggleFavorite, deleteContact, deviceFavoriteIds } = useContacts();
   const { contacts: deviceContacts } = useDevice();
   const insets = useSafeAreaInsets();
+  const alert = useAlert();
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
 
   const contact = useMemo(() => {
@@ -96,7 +102,7 @@ export function ContactDetailScreen({ navigation, route }: { navigation: any; ro
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
     { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
-      Alert.alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
+      alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
     }},
     { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
   ];

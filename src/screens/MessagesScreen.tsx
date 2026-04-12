@@ -5,7 +5,6 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
-  Alert,
   TextInput,
   Platform,
   PermissionsAndroid,
@@ -17,7 +16,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow } from '../components';
+import { CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow, useAlert } from '../components';
+import { findContactByPhone } from '../utils/contacts';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -54,11 +54,6 @@ function groupConversations(messages: DeviceSms[]): Conversation[] {
       const bTime = (b.lastMessage as DeviceSms & { date?: number }).date ?? 0;
       return bTime - aTime;
     });
-}
-
-function findContactByPhone(phone: string, contacts: DeviceContact[]): DeviceContact | undefined {
-  const digits = phone.replace(/\D/g, '').slice(-9);
-  return contacts.find((c) => c.phone.replace(/\D/g, '').slice(-9) === digits);
 }
 
 function getInitials(contact: DeviceContact): string {
@@ -204,12 +199,25 @@ export function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const device = useDevice();
+  const alert = useAlert();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [deletedAddresses, setDeletedAddresses] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
+
+  // Load persisted deleted addresses on mount
+  useEffect(() => {
+    AsyncStorage.getItem('@iostoandroid/deleted_sms').then((raw) => {
+      if (raw) {
+        try {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) setDeletedAddresses(new Set(arr));
+        } catch { /* ignore parse errors */ }
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -253,7 +261,7 @@ export function MessagesScreen() {
   }, [device.messages]);
 
   const handleDeleteConversation = useCallback((address: string) => {
-    Alert.alert(
+    alert(
       'Delete Conversation',
       'Are you sure you want to delete this conversation?',
       [
@@ -262,12 +270,16 @@ export function MessagesScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            setDeletedAddresses((prev) => new Set(prev).add(address));
+            setDeletedAddresses((prev) => {
+              const next = new Set(prev).add(address);
+              AsyncStorage.setItem('@iostoandroid/deleted_sms', JSON.stringify([...next])).catch(() => {});
+              return next;
+            });
           },
         },
       ],
     );
-  }, []);
+  }, [alert]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
