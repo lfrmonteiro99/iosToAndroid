@@ -301,7 +301,7 @@ function createBridgedModule(): LauncherModuleType {
     },
     makeCall: async (number: string) => {
       try { return await nativeModule.makeCall(number); }
-      catch (e) { console.warn('LauncherModule.makeCall failed:', e); return false; }
+      catch (e) { console.warn('LauncherModule.makeCall failed:', e); reportBridgeError('makeCall', e); return false; }
     },
     getNotifications: async () => {
       try { return await nativeModule.getNotifications(); }
@@ -325,11 +325,11 @@ function createBridgedModule(): LauncherModuleType {
     },
     sendSms: async (address: string, body: string) => {
       try { return await nativeModule.sendSms(address, body); }
-      catch (e) { console.warn('LauncherModule.sendSms failed:', e); return false; }
+      catch (e) { console.warn('LauncherModule.sendSms failed:', e); reportBridgeError('sendSms', e); return false; }
     },
     requestAllPermissions: async () => {
       try { return await nativeModule.requestAllPermissions(); }
-      catch (e) { console.warn('LauncherModule.requestAllPermissions failed:', e); return false; }
+      catch (e) { console.warn('LauncherModule.requestAllPermissions failed:', e); reportBridgeError('requestAllPermissions', e); return false; }
     },
     checkPermissions: async () => {
       try { return await nativeModule.checkPermissions(); }
@@ -375,6 +375,25 @@ function createBridgedModule(): LauncherModuleType {
 }
 
 const LauncherModule: LauncherModuleType = createBridgedModule();
+
+// ─── Error reporting ────────────────────────────────────────────────────────
+// Subscribe to native module errors. The app can use this to display
+// user-facing error notifications instead of silently swallowing failures.
+
+type ErrorListener = (method: string, error: unknown) => void;
+const errorListeners: Set<ErrorListener> = new Set();
+
+export function onBridgeError(listener: ErrorListener): () => void {
+  errorListeners.add(listener);
+  return () => { errorListeners.delete(listener); };
+}
+
+/** Called internally by the bridged methods when an error occurs. */
+export function reportBridgeError(method: string, error: unknown): void {
+  for (const listener of errorListeners) {
+    try { listener(method, error); } catch { /* don't let listener errors propagate */ }
+  }
+}
 
 export { LauncherModuleType };
 export default LauncherModule;

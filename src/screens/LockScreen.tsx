@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -109,6 +109,35 @@ function formatFullDate(date: Date): string {
 // Notification helpers
 // ---------------------------------------------------------------------------
 
+/** Extract a human-readable app name from a packageName.
+ *  e.g. "com.whatsapp" → "Whatsapp", "com.google.android.gm" → "Gm"
+ *  The caller may override this with the real app name from the app store. */
+function appNameFromPackage(packageName: string): string {
+  const last = packageName.split('.').pop() ?? 'App';
+  return last.charAt(0).toUpperCase() + last.slice(1);
+}
+
+/** Generate a stable colour for an app icon circle based on packageName hash. */
+const APP_ICON_COLORS = [
+  '#5856D6', '#FF9500', '#FF2D55', '#4CD964', '#007AFF',
+  '#FFCC00', '#FF3B30', '#5AC8FA', '#AF52DE', '#34C759',
+];
+
+function appIconColor(packageName: string): string {
+  let hash = 0;
+  for (let i = 0; i < packageName.length; i++) {
+    hash = (hash * 31 + packageName.charCodeAt(i)) | 0;
+  }
+  return APP_ICON_COLORS[Math.abs(hash) % APP_ICON_COLORS.length];
+}
+
+interface NotificationGroupData {
+  packageName: string;
+  appName: string;
+  appIcon: string;
+  notifications: RealNotification[];
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -149,6 +178,112 @@ function NotificationCard({ item, appName, appIcon }: {
   );
 }
 
+function NotificationGroupCard({
+  group,
+  expanded,
+  onToggle,
+}: {
+  group: NotificationGroupData;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { textScale } = useTheme();
+  const color = appIconColor(group.packageName);
+  const initial = group.appName.charAt(0).toUpperCase();
+  const count = group.notifications.length;
+  // Most recent notification is first (already sorted by time desc)
+  const latest = group.notifications[0];
+
+  return (
+    <View style={styles.groupContainer}>
+      {/* App header row */}
+      <Pressable onPress={count > 1 ? onToggle : undefined} style={styles.groupHeader}>
+        {group.appIcon ? (
+          <Image
+            source={{ uri: `data:image/png;base64,${group.appIcon}` }}
+            style={styles.groupAppIcon}
+          />
+        ) : (
+          <View style={[styles.groupAppIcon, { backgroundColor: color }]}>
+            <Text style={styles.groupAppIconLetter}>{initial}</Text>
+          </View>
+        )}
+        <Text style={[styles.groupAppName, { fontSize: 13 * textScale }]}>
+          {group.appName}
+        </Text>
+        {count > 1 && !expanded && (
+          <Text style={[styles.groupCount, { fontSize: 12 * textScale }]}>
+            {count} notifications
+          </Text>
+        )}
+        {count > 1 && (
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={14}
+            color="rgba(255,255,255,0.5)"
+            style={{ marginLeft: 4 }}
+          />
+        )}
+        <Text style={[styles.notifTime, { fontSize: 12 * textScale, marginLeft: 'auto' }]}>
+          {formatNotifTime(latest.time)}
+        </Text>
+      </Pressable>
+
+      {/* Collapsed: show only latest notification */}
+      {!expanded && (
+        <BlurView
+          intensity={40}
+          tint="dark"
+          experimentalBlurMethod="dimezisBlurView"
+          style={styles.groupNotifCard}
+        >
+          {!!latest.title && (
+            <Text style={[styles.notifTitle, { fontSize: 15 * textScale }]} numberOfLines={1}>
+              {latest.title}
+            </Text>
+          )}
+          {!!latest.text && (
+            <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
+              {latest.text}
+            </Text>
+          )}
+        </BlurView>
+      )}
+
+      {/* Expanded: show all notifications */}
+      {expanded &&
+        group.notifications.map((item) => (
+          <BlurView
+            key={item.id}
+            intensity={40}
+            tint="dark"
+            experimentalBlurMethod="dimezisBlurView"
+            style={styles.groupNotifCard}
+          >
+            <View style={styles.expandedNotifHeader}>
+              {!!item.title && (
+                <Text
+                  style={[styles.notifTitle, { fontSize: 15 * textScale, flex: 1 }]}
+                  numberOfLines={1}
+                >
+                  {item.title}
+                </Text>
+              )}
+              <Text style={[styles.notifTime, { fontSize: 11 * textScale }]}>
+                {formatNotifTime(item.time)}
+              </Text>
+            </View>
+            {!!item.text && (
+              <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
+                {item.text}
+              </Text>
+            )}
+          </BlurView>
+        ))}
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main Screen
 // ---------------------------------------------------------------------------
@@ -168,6 +303,41 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const passcodeShake = useSharedValue(0);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [notifications, setNotifications] = useState<RealNotification[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const groupedNotifications = useMemo((): NotificationGroupData[] => {
+    const groupMap = new Map<string, RealNotification[]>();
+    for (const n of notifications) {
+      const existing = groupMap.get(n.packageName);
+      if (existing) {
+        existing.push(n);
+      } else {
+        groupMap.set(n.packageName, [n]);
+      }
+    }
+    const groups: NotificationGroupData[] = [];
+    for (const [packageName, notifs] of groupMap) {
+      // Sort each group by time descending (most recent first)
+      notifs.sort((a, b) => b.time - a.time);
+      const appInfo = apps.find(a => a.packageName === packageName);
+      groups.push({
+        packageName,
+        appName: appInfo?.name ?? appNameFromPackage(packageName),
+        appIcon: appInfo?.icon ?? '',
+        notifications: notifs,
+      });
+    }
+    // Sort groups by the most recent notification time (most recent group first)
+    groups.sort((a, b) => b.notifications[0].time - a.notifications[0].time);
+    return groups;
+  }, [notifications, apps]);
+
+  const toggleGroup = useCallback((packageName: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [packageName]: !prev[packageName],
+    }));
+  }, []);
 
   const toggleFlashlight = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -444,21 +614,17 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         </View>
 
         {/* ---------------------------------------------------------------- */}
-        {/* Notification cards (real device notifications only)               */}
+        {/* Notification cards (grouped by app, iOS-style)                   */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.notifArea}>
-          {notifications.map((item) => {
-            const appInfo = apps.find(a => a.packageName === item.packageName);
-            const appName = appInfo?.name ?? item.packageName.split('.').pop() ?? 'App';
-            return (
-              <NotificationCard
-                key={item.id}
-                item={item}
-                appName={appName}
-                appIcon={appInfo?.icon ?? ''}
-              />
-            );
-          })}
+          {groupedNotifications.map((group) => (
+            <NotificationGroupCard
+              key={group.packageName}
+              group={group}
+              expanded={!!expandedGroups[group.packageName]}
+              onToggle={() => toggleGroup(group.packageName)}
+            />
+          ))}
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -716,6 +882,56 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     letterSpacing: -0.2,
     lineHeight: 19,
+  },
+
+  // Notification groups (iOS-style)
+  groupContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  groupAppIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  groupAppIconLetter: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  groupAppName: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  groupCount: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    fontWeight: '400',
+    marginLeft: 8,
+  },
+  groupNotifCard: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  expandedNotifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
   },
 
   // Bottom

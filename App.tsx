@@ -20,6 +20,7 @@ import { NotificationBanner, BannerNotification } from './src/components/Notific
 import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
+import { onBridgeError } from './modules/launcher-module/src';
 
 function AppContent() {
   const { isDark } = useTheme();
@@ -31,6 +32,25 @@ function AppContent() {
 
   // Track last known message count to detect new messages
   const lastMsgCount = useRef(0);
+
+  // Surface native bridge errors as notification banners
+  useEffect(() => {
+    const unsub = onBridgeError((method, error) => {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Only show banners for user-facing operations
+      if (['makeCall', 'sendSms', 'requestAllPermissions'].includes(method)) {
+        setBanner({
+          id: `error-${Date.now()}`,
+          appName: 'System',
+          iconName: 'warning-outline',
+          iconColor: '#FF9500',
+          title: `${method} failed`,
+          body: msg || 'An error occurred. Please try again.',
+        });
+      }
+    });
+    return unsub;
+  }, []);
 
   // Immersive mode — hide system bars globally so all screens benefit
   useEffect(() => {

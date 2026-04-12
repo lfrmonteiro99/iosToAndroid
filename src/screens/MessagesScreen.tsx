@@ -16,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
-import { CupertinoButton, CupertinoActivityIndicator, CupertinoSwipeableRow, useAlert } from '../components';
+import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -411,8 +411,10 @@ export function MessagesScreen() {
 
       {/* List or loading */}
       {!device.isReady ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <CupertinoActivityIndicator />
+        <View style={{ flex: 1, paddingTop: 8 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonListRow key={i} />
+          ))}
         </View>
       ) : (
         <FlatList

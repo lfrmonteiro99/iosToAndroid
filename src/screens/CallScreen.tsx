@@ -115,7 +115,8 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
     elevation: pulseGlow.value * 12,
   }));
 
-  // Initiate the native call on mount
+  // Initiate the native call on mount, then go back after a short delay
+  // (the system dialer takes over, so this screen is just a transition)
   useEffect(() => {
     (async () => {
       const mod = await getLauncher();
@@ -124,6 +125,8 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
           await mod.makeCall(number);
         } catch (e) { console.warn('CallScreen: native call failed:', e); }
       }
+      // Go back after the system dialer opens (slight delay for UX)
+      setTimeout(() => { try { navigation.goBack(); } catch { /* ignore */ } }, 1500);
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
