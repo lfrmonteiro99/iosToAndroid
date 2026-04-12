@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   Image,
+  Alert,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -35,7 +36,6 @@ type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CameraScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
-  const alert = useAlert();
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);
@@ -210,7 +210,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         mode={cameraMode}
         onCameraReady={onCameraReady}
         onMountError={() => {
-          alert('Camera Error', 'Could not start camera preview.');
+          Alert.alert('Camera Error', 'Could not start camera preview.');
         }}
       />
     );
