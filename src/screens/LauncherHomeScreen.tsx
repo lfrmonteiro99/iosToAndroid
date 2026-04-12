@@ -332,7 +332,7 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
           )}
         </View>
       </View>
-      <Text style={styles.appIconLabel} numberOfLines={1}>{folder.name}</Text>
+      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
     </Pressable>
   );
 }
@@ -341,13 +341,14 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
 // FolderOverlay
 // ---------------------------------------------------------------------------
 
-function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename }: {
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1 }: {
   folder: AppFolder;
   apps: InstalledApp[];
   onClose: () => void;
   onLaunchApp: (app: InstalledApp) => void;
   onLongPressApp: (app: InstalledApp) => void;
   onRename: (newName: string) => void;
+  textScale?: number;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -373,7 +374,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
           <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput
-                style={styles.folderOverlayTitleInput}
+                style={[styles.folderOverlayTitleInput, { fontSize: 17 * textScale }]}
                 value={nameValue}
                 onChangeText={setNameValue}
                 onBlur={commitRename}
@@ -384,7 +385,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
               />
             ) : (
               <Pressable onPress={() => setEditing(true)} accessibilityLabel={`Rename folder ${folder.name}`} accessibilityRole="button">
-                <Text style={styles.folderOverlayTitle}>{folder.name}</Text>
+                <Text style={[styles.folderOverlayTitle, { fontSize: 17 * textScale }]}>{folder.name}</Text>
               </Pressable>
             )}
             <View style={styles.folderOverlayGrid}>
@@ -504,7 +505,7 @@ export function LauncherHomeScreen() {
   const { settings } = useSettings();
   const device = useDevice();
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
-  const { theme: launcherTheme } = useTheme();
+  const { theme: launcherTheme, textScale } = useTheme();
   const colors = launcherTheme.colors;
 
   // Folder open state
@@ -885,7 +886,7 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {!isDefaultLauncher && !isJiggling && (
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
-          <Text style={styles.defaultBannerText}>Set as default launcher</Text>
+          <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
           <Pressable
             style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
@@ -893,7 +894,7 @@ export function LauncherHomeScreen() {
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
-            <Text style={styles.defaultBannerButtonText}>Set Now</Text>
+            <Text style={[styles.defaultBannerButtonText, { fontSize: 12 * textScale }]}>Set Now</Text>
           </Pressable>
         </View>
       )}
