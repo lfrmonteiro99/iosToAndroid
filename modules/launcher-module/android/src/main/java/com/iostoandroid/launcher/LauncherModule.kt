@@ -585,6 +585,53 @@ class LauncherModule : Module() {
             }
         }
 
+        // ── Media Transport Controls ─────────────────────────────────────
+
+        AsyncFunction("mediaPrev") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+                if (controllers.isNotEmpty()) {
+                    controllers[0].transportControls.skipToPrevious()
+                    true
+                } else false
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("mediaPlayPause") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+                if (controllers.isNotEmpty()) {
+                    val controller = controllers[0]
+                    val state = controller.playbackState
+                    if (state?.state == android.media.session.PlaybackState.STATE_PLAYING) {
+                        controller.transportControls.pause()
+                    } else {
+                        controller.transportControls.play()
+                    }
+                    true
+                } else false
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("mediaNext") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+                if (controllers.isNotEmpty()) {
+                    controllers[0].transportControls.skipToNext()
+                    true
+                } else false
+            } catch (e: Exception) { false }
+        }
+
         // ── Screen Time / Usage Stats ────────────────────────────────────
 
         AsyncFunction("isUsageAccessGranted") {

@@ -414,9 +414,13 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
           AsyncStorage.removeItem(draftKey).catch(() => {});
           await device.refresh();
           listRef.current?.scrollToIndex({ index: 0, animated: true });
-          // Simulate delivery status
-          const sentMsgId = `sent-${Date.now()}`;
-          simulateDelivery(sentMsgId);
+          // Simulate delivery status — find the newest sent message for this address
+          const newestSent = device.messages
+            .filter((m) => m.address === address && m.type === 2)
+            .sort((a, b) => ((b as any).date ?? 0) - ((a as any).date ?? 0))[0]; // eslint-disable-line @typescript-eslint/no-explicit-any
+          if (newestSent) {
+            simulateDelivery(newestSent.id);
+          }
           // Show typing indicator briefly (simulated)
           const typingDelay = 2000 + Math.random() * 2000;
           setShowTyping(true);
