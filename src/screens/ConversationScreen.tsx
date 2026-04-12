@@ -20,6 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
+import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 
 // ─── Native module helper ─────────────────────────────────────────────────────
 

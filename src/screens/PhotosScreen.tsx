@@ -9,7 +9,6 @@ import {
   Pressable,
   Dimensions,
   ActivityIndicator,
-  Alert,
   Platform,
   TextInput,
 } from 'react-native';
@@ -58,6 +57,8 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+
+  const alert = useAlert();
 
   // ---- shared state ----
   const [tabIndex, setTabIndex] = useState(0);
@@ -302,7 +303,7 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
   const handleCreateAlbum = useCallback(async () => {
     const name = newAlbumName.trim();
     if (!name) {
-      Alert.alert('Error', 'Please enter an album name.');
+      alert('Error', 'Please enter an album name.');
       return;
     }
     try {
@@ -312,9 +313,9 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
       setAlbums((prev) => [album, ...prev]);
       setNewAlbumName('');
       setShowCreateAlbum(false);
-      Alert.alert('Success', `Album "${name}" created.`);
+      alert('Success', `Album "${name}" created.`);
     } catch {
-      Alert.alert(
+      alert(
         'Cannot Create Album',
         Platform.OS === 'android'
           ? 'On Android, an album needs at least one photo. Add a photo to create the album.'
@@ -332,12 +333,12 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
       const uri = info.localUri || info.uri;
       const available = await Sharing.isAvailableAsync();
       if (!available) {
-        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
+        alert('Sharing Unavailable', 'Sharing is not available on this device.');
         return;
       }
       await Sharing.shareAsync(uri);
     } catch {
-      Alert.alert('Error', 'Unable to share this photo.');
+      alert('Error', 'Unable to share this photo.');
     }
   }, []);
 
