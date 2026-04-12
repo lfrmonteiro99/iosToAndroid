@@ -21,7 +21,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { brightness, setBrightness, openSystemPanel } = useDevice();
+  const { brightness, setBrightness } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
 
   return (

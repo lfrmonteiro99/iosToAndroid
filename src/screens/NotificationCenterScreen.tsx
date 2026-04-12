@@ -171,7 +171,7 @@ export function NotificationCenterScreen() {
         },
       ],
     );
-  }, [handleNotificationTap, handleDismissNotification, handleMarkAsRead]);
+  }, [alert, handleNotificationTap, handleDismissNotification, handleMarkAsRead]);
 
   const toggleGroupExpanded = useCallback((packageName: string) => {
     setExpandedGroups(prev => {
