@@ -569,7 +569,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 <Ionicons
                   name="chevron-forward"
                   size={14}
-                  color="rgba(255,255,255,0.5)"
+                  color="rgba(255,255,255,0.7)"
                   style={{ marginLeft: 'auto' as unknown as number }}
                 />
               </View>
