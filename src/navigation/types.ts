@@ -24,6 +24,9 @@ export type RootStackParamList = {
   Photos: undefined;
   Calendar: undefined;
   Notes: undefined;
+  Maps: undefined;
+  Reminders: undefined;
+  Mail: undefined;
 
   // Settings
   Settings: undefined;

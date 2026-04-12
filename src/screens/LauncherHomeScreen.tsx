@@ -394,6 +394,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   key={app.packageName}
                   app={app}
                   cellWidth={70}
+                  textScale={textScale}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -913,7 +914,7 @@ export function LauncherHomeScreen() {
         ]}
       >
         <Pressable onPress={() => navigateTo('NotificationCenter')} accessibilityLabel="Open Notification Center" accessibilityRole="button">
-          <Text style={styles.statusTime}>{formatTime(now)}</Text>
+          <Text style={[styles.statusTime, { fontSize: 15 * textScale }]}>{formatTime(now)}</Text>
         </Pressable>
         <Pressable style={styles.statusRight} onPress={() => navigateTo('ControlCenter')} accessibilityLabel="Open Control Center" accessibilityRole="button">
           {settings.focusMode !== 'off' && (
@@ -935,7 +936,7 @@ export function LauncherHomeScreen() {
                 size={14}
                 color="rgba(255,255,255,0.85)"
               />
-              <Text style={styles.batteryText}>
+              <Text style={[styles.batteryText, { fontSize: 11 * textScale }]}>
                 {Math.round(device.battery.level * 100)}%
               </Text>
             </View>
@@ -948,14 +949,14 @@ export function LauncherHomeScreen() {
               accessibilityLabel="Done"
               accessibilityRole="button"
             >
-              <Text style={styles.jiggleDoneBtnText}>Done</Text>
+              <Text style={[styles.jiggleDoneBtnText, { fontSize: 14 * textScale }]}>Done</Text>
             </Pressable>
           )}
         </Pressable>
       </View>
 
       {/* Dynamic Island placeholder */}
-      <DynamicIsland device={device} settings={settings} />
+      <DynamicIsland device={device} settings={settings} textScale={textScale} />
 
       {/* ---------------------------------------------------------------- */}
       {/* Swipeable app pages                                                */}
@@ -983,6 +984,7 @@ export function LauncherHomeScreen() {
                       folder={item.folder}
                       cellWidth={CELL_WIDTH}
                       apps={apps}
+                      textScale={textScale}
                       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setOpenFolder(item.folder); }}
                       onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIsJiggling(true); }}
                     />
@@ -993,6 +995,7 @@ export function LauncherHomeScreen() {
                     key={item.app.packageName}
                     app={item.app}
                     cellWidth={CELL_WIDTH}
+                    textScale={textScale}
                     onPress={() => handleAppPress(item.app)}
                     onLongPress={() => handleLongPress(item.app)}
                     isJiggling={isJiggling}
@@ -1017,8 +1020,8 @@ export function LauncherHomeScreen() {
           accessibilityRole="button"
         >
           <Ionicons name="grid" size={52} color="rgba(255,255,255,0.7)" />
-          <Text style={styles.appLibraryText}>App Library</Text>
-          <Text style={styles.appLibrarySubtext}>Tap to open all apps</Text>
+          <Text style={[styles.appLibraryText, { fontSize: 22 * textScale }]}>App Library</Text>
+          <Text style={[styles.appLibrarySubtext, { fontSize: 14 * textScale }]}>Tap to open all apps</Text>
         </Pressable>
       </ScrollView>
 
@@ -1032,7 +1035,7 @@ export function LauncherHomeScreen() {
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
-        <Text style={styles.searchLabelText}>{isJiggling ? 'Tap background to exit' : 'Search'}</Text>
+        <Text style={[styles.searchLabelText, { fontSize: 13 * textScale }]}>{isJiggling ? 'Tap background to exit' : 'Search'}</Text>
       </Pressable>
 
       {/* ---------------------------------------------------------------- */}
@@ -1051,6 +1054,7 @@ export function LauncherHomeScreen() {
                 key={app.packageName}
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
+                textScale={textScale}
                 onPress={() => handleAppPress(app)}
                 onLongPress={() => handleLongPress(app)}
                 isJiggling={isJiggling}
@@ -1076,6 +1080,7 @@ export function LauncherHomeScreen() {
         <FolderOverlay
           folder={openFolder}
           apps={apps}
+          textScale={textScale}
           onClose={() => setOpenFolder(null)}
           onLaunchApp={(app) => {
             setOpenFolder(null);
