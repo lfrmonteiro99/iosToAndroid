@@ -114,6 +114,16 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Clean up orphaned device favorite IDs (IDs that don't match any contact)
+  useEffect(() => {
+    if (!isReady || deviceFavoriteIds.length === 0) return;
+    const contactIds = new Set(contacts.map(c => c.id));
+    const valid = deviceFavoriteIds.filter(id => contactIds.has(id));
+    if (valid.length !== deviceFavoriteIds.length) {
+      setDeviceFavoriteIds(valid);
+    }
+  }, [isReady, contacts]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const getContact = useCallback((id: string) => contacts.find((c) => c.id === id), [contacts]);
 
   const favorites = useMemo(() => contacts.filter((c) => c.isFavorite), [contacts]);

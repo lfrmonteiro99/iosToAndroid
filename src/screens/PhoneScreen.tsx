@@ -18,7 +18,7 @@ import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
-import { CupertinoActivityIndicator } from '../components';
+import { SkeletonListRow } from '../components';
 
 const getLauncher = async () => {
   try {
@@ -266,8 +266,10 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
 
   if (callLogLoading) {
     return (
-      <View style={styles.emptyState}>
-        <CupertinoActivityIndicator />
+      <View style={{ flex: 1, paddingTop: 8 }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <SkeletonListRow key={i} />
+        ))}
       </View>
     );
   }
@@ -326,7 +328,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
 
 // ─── Contacts Tab ────────────────────────────────────────────────────────────
 
-function ContactsTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void }) {
+function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void; isLoading?: boolean }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
 
@@ -342,6 +344,16 @@ function ContactsTab({ contacts, onCall }: { contacts: DeviceContact[]; onCall: 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onCall(phone, name);
   }, [onCall]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, paddingTop: 8 }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <SkeletonListRow key={i} />
+        ))}
+      </View>
+    );
+  }
 
   if (sorted.length === 0) {
     return (
