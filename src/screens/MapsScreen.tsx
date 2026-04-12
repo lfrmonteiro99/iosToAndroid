@@ -7,6 +7,7 @@ import {
   Pressable,
   Linking,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -179,19 +180,6 @@ export function MapsScreen({ navigation }: { navigation: any }) {
 
   // ── Persistence ─────────────────────────────────────────────
 
-  const loadRecents = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed: RecentLocation[] = JSON.parse(raw);
-        setRecents(parsed.sort((a, b) => b.timestamp - a.timestamp));
-      }
-    } catch {
-      // silently fail
-    }
-    setLoaded(true);
-  }, []);
-
   const persistRecents = useCallback(async (updated: RecentLocation[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -201,8 +189,19 @@ export function MapsScreen({ navigation }: { navigation: any }) {
   }, []);
 
   useEffect(() => {
-    loadRecents();
-  }, [loadRecents]);
+    let cancelled = false;
+    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (cancelled) return;
+      if (raw) {
+        try {
+          const parsed: RecentLocation[] = JSON.parse(raw);
+          setRecents(parsed.sort((a, b) => b.timestamp - a.timestamp));
+        } catch { /* ignore */ }
+      }
+      setLoaded(true);
+    }).catch(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Location ────────────────────────────────────────────────
 
@@ -210,17 +209,18 @@ export function MapsScreen({ navigation }: { navigation: any }) {
     setLocationLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const Location = await import('expo-location');
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationText('Location permission denied');
-        setLocationLoading(false);
-        return;
+      // Open device maps at current location
+      const url = Platform.OS === 'android'
+        ? 'geo:0,0?q=my+location'
+        : 'maps:0,0?q=my+location';
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        setLocationText('Opened in Maps');
+      } else {
+        await Linking.openURL('https://maps.google.com');
+        setLocationText('Opened in browser');
       }
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocationText(
-        `${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`,
-      );
     } catch {
       setLocationText('Location not available');
     }

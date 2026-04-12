@@ -223,6 +223,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -275,7 +277,6 @@ async function scheduleAlarmNotifications(alarm: Alarm): Promise<string[]> {
           weekday,
           hour: alarm.hour,
           minute: alarm.minute,
-          repeats: true,
         },
       });
       ids.push(id);

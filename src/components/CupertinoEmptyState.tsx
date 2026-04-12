@@ -56,7 +56,7 @@ export function CupertinoEmptyState({
       ) : null}
       {actionLabel && onAction ? (
         <CupertinoButton
-          label={actionLabel}
+          title={actionLabel}
           onPress={onAction}
           style={{ marginTop: 20 }}
         />
