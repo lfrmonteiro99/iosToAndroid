@@ -20,6 +20,14 @@ export function DateTimeScreen({ navigation }: { navigation: any }) {
   const { openSystemPanel } = useDevice();
 
   const now = new Date();
+  const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const utcOffset = (() => {
+    const offset = -now.getTimezoneOffset();
+    const h = Math.floor(Math.abs(offset) / 60);
+    const m = Math.abs(offset) % 60;
+    const sign = offset >= 0 ? '+' : '-';
+    return `GMT${sign}${h}${m > 0 ? `:${String(m).padStart(2, '0')}` : ''}`;
+  })();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -56,10 +64,19 @@ export function DateTimeScreen({ navigation }: { navigation: any }) {
               title="Time Zone"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {settings.timezone}
+                  {detectedTimezone}
                 </Text>
               }
-              onPress={() => openSystemPanel('date_time')}
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="UTC Offset"
+              trailing={
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  {utcOffset}
+                </Text>
+              }
+              showChevron={false}
             />
             <CupertinoListTile
               title="24-Hour Time"
@@ -98,11 +115,20 @@ export function DateTimeScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Open System Settings */}
+        {/* Calendar format */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
+          <CupertinoListSection header="Calendar"
+            footer="Changing the system timezone requires Android Settings."
+          >
             <CupertinoListTile
-              title="Open Date & Time Settings"
+              title="Calendar"
+              trailing={
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Gregorian</Text>
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Change Timezone"
               leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
               onPress={() => openSystemPanel('date_time')}
             />

@@ -87,6 +87,22 @@ export interface CalendarEvent {
   location: string;
 }
 
+export interface CarrierInfo {
+  carrierName: string;
+  networkType: string;
+  signalStrength: number;
+  isRoaming: boolean;
+  phoneNumber: string;
+  simOperator: string;
+}
+
+export interface AppStorageStat {
+  packageName: string;
+  appName: string;
+  totalBytes: number;
+  cacheBytes: number;
+}
+
 export interface NowPlaying {
   title: string;
   artist: string;
@@ -139,6 +155,10 @@ interface LauncherModuleType {
   openSystemSettings(panel: string): Promise<boolean>;
   // Network
   getNetworkInfo(): Promise<NetworkInfo>;
+  // Carrier
+  getCarrierInfo(): Promise<CarrierInfo>;
+  // App Storage Stats
+  getAppStorageStats(): Promise<AppStorageStat[]>;
   // Flashlight
   setFlashlight(enabled: boolean): Promise<boolean>;
   isFlashlightOn(): Promise<boolean>;
@@ -192,6 +212,8 @@ const stub: LauncherModuleType = {
   setVolume: async () => false,
   openSystemSettings: async () => false,
   getNetworkInfo: async () => ({ isConnected: false, isWifi: false, isCellular: false, isVpn: false }),
+  getCarrierInfo: async () => ({ carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }),
+  getAppStorageStats: async () => [],
   setFlashlight: async () => false,
   isFlashlightOn: async () => false,
   getCallLog: async () => [],
@@ -286,6 +308,14 @@ function createBridgedModule(): LauncherModuleType {
     getNetworkInfo: async () => {
       try { return await nativeModule.getNetworkInfo(); }
       catch (e) { console.warn('LauncherModule.getNetworkInfo failed:', e); return { isConnected: false, isWifi: false, isCellular: false, isVpn: false }; }
+    },
+    getCarrierInfo: async () => {
+      try { return await nativeModule.getCarrierInfo(); }
+      catch (e) { console.warn('LauncherModule.getCarrierInfo failed:', e); return { carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }; }
+    },
+    getAppStorageStats: async () => {
+      try { return await nativeModule.getAppStorageStats(); }
+      catch (e) { console.warn('LauncherModule.getAppStorageStats failed:', e); return []; }
     },
     setFlashlight: async (enabled: boolean) => {
       try { return await nativeModule.setFlashlight(enabled); }

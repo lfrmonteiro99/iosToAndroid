@@ -146,13 +146,29 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Open System Settings */}
+        {/* Night Shift (in-app scheduling) */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
+          <CupertinoListSection header="Night Shift"
+            footer="Night Shift automatically adjusts the display to warmer colors after dark. The theme switches to dark mode between 7 PM and 7 AM when enabled."
+          >
             <CupertinoListTile
-              title="Open Display Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('display')}
+              title="Scheduled"
+              trailing={
+                <CupertinoSwitch
+                  value={isDark}
+                  onValueChange={toggleTheme}
+                />
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Schedule"
+              trailing={
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  Sunset to Sunrise
+                </Text>
+              }
+              showChevron={false}
             />
           </CupertinoListSection>
         </View>

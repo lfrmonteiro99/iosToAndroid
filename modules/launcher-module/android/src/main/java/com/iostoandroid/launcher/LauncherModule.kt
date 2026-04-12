@@ -19,8 +19,10 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.Settings
@@ -272,6 +274,7 @@ class LauncherModule : Module() {
                 "cast" -> "android.settings.CAST_SETTINGS"
                 "hotspot" -> "android.settings.TETHER_SETTINGS"
                 "cellular" -> Settings.ACTION_NETWORK_OPERATOR_SETTINGS
+                "data_roaming" -> Settings.ACTION_DATA_ROAMING_SETTINGS
                 "appinfo" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                 else -> Settings.ACTION_SETTINGS
             }
@@ -320,6 +323,72 @@ class LauncherModule : Module() {
                 "isCellular" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ?: false),
                 "isVpn" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false)
             )
+        }
+
+        // ── Carrier Info ─────────────────────────────────────────────────
+
+        AsyncFunction("getCarrierInfo") {
+            try {
+                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                mapOf(
+                    "carrierName" to (telephonyManager.networkOperatorName ?: ""),
+                    "networkType" to getNetworkTypeString(telephonyManager),
+                    "signalStrength" to getSignalLevel(),
+                    "isRoaming" to telephonyManager.isNetworkRoaming,
+                    "phoneNumber" to (try { telephonyManager.line1Number ?: "" } catch (e: SecurityException) { "" }),
+                    "simOperator" to (telephonyManager.simOperatorName ?: "")
+                )
+            } catch (e: Exception) {
+                mapOf(
+                    "carrierName" to "",
+                    "networkType" to "Unknown",
+                    "signalStrength" to 0,
+                    "isRoaming" to false,
+                    "phoneNumber" to "",
+                    "simOperator" to ""
+                )
+            }
+        }
+
+        // ── App Storage Stats ────────────────────────────────────────────
+
+        AsyncFunction("getAppStorageStats") {
+            try {
+                val pm = context.packageManager
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                }
+                val activities = pm.queryIntentActivities(mainIntent, 0)
+
+                val appStats = activities.map { resolveInfo ->
+                    val packageName = resolveInfo.activityInfo.packageName
+                    val appName = resolveInfo.loadLabel(pm).toString()
+                    val appInfo = try { pm.getApplicationInfo(packageName, 0) } catch (e: Exception) { null }
+                    val sourceDir = appInfo?.sourceDir
+                    val totalBytes = if (sourceDir != null) {
+                        try { java.io.File(sourceDir).length() } catch (e: Exception) { 0L }
+                    } else { 0L }
+
+                    // Try to get cache size
+                    val cacheBytes = try {
+                        val cacheDir = context.createPackageContext(packageName, 0).cacheDir
+                        dirSize(cacheDir)
+                    } catch (e: Exception) { 0L }
+
+                    mapOf(
+                        "packageName" to packageName,
+                        "appName" to appName,
+                        "totalBytes" to totalBytes,
+                        "cacheBytes" to cacheBytes
+                    )
+                }
+                    .sortedByDescending { it["totalBytes"] as Long }
+                    .take(20)
+
+                appStats
+            } catch (e: Exception) {
+                emptyList<Map<String, Any>>()
+            }
         }
 
         // ── Flashlight ───────────────────────────────────────────────────
@@ -730,5 +799,52 @@ class LauncherModule : Module() {
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
         return bitmap
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getNetworkTypeString(telephonyManager: TelephonyManager): String {
+        val networkType = try {
+            telephonyManager.dataNetworkType
+        } catch (e: SecurityException) {
+            TelephonyManager.NETWORK_TYPE_UNKNOWN
+        }
+        return when (networkType) {
+            TelephonyManager.NETWORK_TYPE_NR -> "5G"
+            TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
+            TelephonyManager.NETWORK_TYPE_HSPAP,
+            TelephonyManager.NETWORK_TYPE_HSPA,
+            TelephonyManager.NETWORK_TYPE_HSDPA,
+            TelephonyManager.NETWORK_TYPE_HSUPA -> "HSPA+"
+            TelephonyManager.NETWORK_TYPE_UMTS,
+            TelephonyManager.NETWORK_TYPE_EVDO_0,
+            TelephonyManager.NETWORK_TYPE_EVDO_A,
+            TelephonyManager.NETWORK_TYPE_EVDO_B -> "3G"
+            TelephonyManager.NETWORK_TYPE_EDGE,
+            TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
+            TelephonyManager.NETWORK_TYPE_CDMA,
+            TelephonyManager.NETWORK_TYPE_1xRTT -> "2G"
+            else -> "Unknown"
+        }
+    }
+
+    private fun getSignalLevel(): Int {
+        return try {
+            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                telephonyManager.signalStrength?.level ?: 0
+            } else {
+                2 // Default mid-level for older APIs
+            }
+        } catch (e: Exception) { 0 }
+    }
+
+    private fun dirSize(dir: java.io.File?): Long {
+        if (dir == null || !dir.exists()) return 0L
+        var size = 0L
+        val files = dir.listFiles() ?: return 0L
+        for (file in files) {
+            size += if (file.isDirectory) dirSize(file) else file.length()
+        }
+        return size
     }
 }

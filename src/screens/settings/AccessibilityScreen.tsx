@@ -38,30 +38,9 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Vision */}
+        {/* Vision — in-app controls */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Vision">
-            <CupertinoListTile
-              title="VoiceOver"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Zoom"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Display & Text Size"
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
             <CupertinoListTile
               title="Bold Text"
               trailing={
@@ -71,6 +50,62 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
                 />
               }
               showChevron={false}
+            />
+            <CupertinoListTile
+              title="Reduce Motion"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.reduceMotion}
+                  onValueChange={(v) => update('reduceMotion', v)}
+                />
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Increase Contrast"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.boldText && settings.reduceMotion}
+                  onValueChange={() => {
+                    update('boldText', true);
+                    update('reduceMotion', true);
+                  }}
+                />
+              }
+              showChevron={false}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* Vision — requires system settings */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="System Accessibility"
+            footer="These features are managed by Android. Tapping opens system settings."
+          >
+            <CupertinoListTile
+              title="TalkBack (VoiceOver)"
+              trailing={
+                <Text style={[typography.caption1, { color: colors.tertiaryLabel }]}>System</Text>
+              }
+              showChevron
+              onPress={() => openSystemPanel('accessibility')}
+            />
+            <CupertinoListTile
+              title="Magnification (Zoom)"
+              trailing={
+                <Text style={[typography.caption1, { color: colors.tertiaryLabel }]}>System</Text>
+              }
+              showChevron
+              onPress={() => openSystemPanel('accessibility')}
+            />
+            <CupertinoListTile
+              title="Display Size"
+              trailing={
+                <Text style={[typography.caption1, { color: colors.tertiaryLabel }]}>System</Text>
+              }
+              showChevron
+              onPress={() => openSystemPanel('accessibility')}
             />
           </CupertinoListSection>
         </View>
@@ -123,41 +158,9 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* General */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="General">
-            <CupertinoListTile
-              title="Reduce Motion"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.reduceMotion}
-                  onValueChange={(v) => update('reduceMotion', v)}
-                />
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Per-App Settings"
-              showChevron
-              onPress={() => alert('Per-App Settings', 'Customize settings for individual apps.')}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Accessibility Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('accessibility')}
-            />
-          </CupertinoListSection>
-        </View>
-
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          Accessibility features help you customize your device.
+          In-app accessibility features apply to iosToAndroid. System features marked "System" are managed by Android.
         </Text>
       </ScrollView>
     </View>
