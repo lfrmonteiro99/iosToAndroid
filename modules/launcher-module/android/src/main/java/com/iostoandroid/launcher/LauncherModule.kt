@@ -2,6 +2,8 @@ package com.iostoandroid.launcher
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -29,6 +31,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -510,6 +513,118 @@ class LauncherModule : Module() {
                 }
             } catch (e: Exception) {
                 mapOf("title" to "", "artist" to "", "album" to "", "isPlaying" to false, "packageName" to "")
+            }
+        }
+
+        // ── Screen Time / Usage Stats ────────────────────────────────────
+
+        AsyncFunction("isUsageAccessGranted") {
+            try {
+                val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                val mode = appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),
+                    context.packageName
+                )
+                mode == AppOpsManager.MODE_ALLOWED
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("openUsageAccessSettings") {
+            try {
+                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("getScreenTimeStats") { daysBack: Int ->
+            try {
+                val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                val pm = context.packageManager
+                val cal = Calendar.getInstance()
+                val endTime = cal.timeInMillis
+                cal.add(Calendar.DAY_OF_YEAR, -daysBack)
+                val startTime = cal.timeInMillis
+
+                val stats = usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startTime,
+                    endTime
+                )
+
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+                stats?.filter { it.totalTimeInForeground > 0 }
+                    ?.map { stat ->
+                        val appName = try {
+                            val appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                            pm.getApplicationLabel(appInfo).toString()
+                        } catch (e: Exception) { stat.packageName }
+
+                        mapOf(
+                            "packageName" to stat.packageName,
+                            "totalTimeMs" to stat.totalTimeInForeground,
+                            "appName" to appName,
+                            "date" to dateFormat.format(Date(stat.lastTimeUsed))
+                        )
+                    }
+                    ?.sortedByDescending { it["totalTimeMs"] as Long }
+                    ?: emptyList()
+            } catch (e: Exception) {
+                emptyList<Map<String, Any>>()
+            }
+        }
+
+        AsyncFunction("getTodayScreenTime") {
+            try {
+                val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                val pm = context.packageManager
+                val cal = Calendar.getInstance()
+                val endTime = cal.timeInMillis
+                // Start of today
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val startTime = cal.timeInMillis
+
+                val stats = usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startTime,
+                    endTime
+                )
+
+                val usedApps = stats?.filter { it.totalTimeInForeground > 60000 } // >1 min
+                    ?.sortedByDescending { it.totalTimeInForeground }
+                    ?: emptyList()
+
+                val totalMs = usedApps.sumOf { it.totalTimeInForeground }
+                val totalMinutes = (totalMs / 60000).toInt()
+
+                val topApps = usedApps.take(10).map { stat ->
+                    val appName = try {
+                        val appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                        pm.getApplicationLabel(appInfo).toString()
+                    } catch (e: Exception) { stat.packageName }
+
+                    mapOf(
+                        "name" to appName,
+                        "packageName" to stat.packageName,
+                        "minutes" to (stat.totalTimeInForeground / 60000).toInt()
+                    )
+                }
+
+                mapOf(
+                    "totalMinutes" to totalMinutes,
+                    "topApps" to topApps
+                )
+            } catch (e: Exception) {
+                mapOf(
+                    "totalMinutes" to 0,
+                    "topApps" to emptyList<Map<String, Any>>()
+                )
             }
         }
 
