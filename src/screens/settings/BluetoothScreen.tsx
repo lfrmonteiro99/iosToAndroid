@@ -91,12 +91,12 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
                   }
                   showChevron={false}
                 />
-                {'address' in bluetooth && (bluetooth as { address?: string }).address ? (
+                {bluetooth.address ? (
                   <CupertinoListTile
                     title="Address"
                     trailing={
                       <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                        {(bluetooth as { address: string }).address}
+                        {bluetooth.address}
                       </Text>
                     }
                     showChevron={false}
@@ -110,7 +110,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
               <CupertinoListSection header="Paired Devices">
                 {bluetooth.pairedDevices.length > 0 ? (
                   bluetooth.pairedDevices.map((device) => {
-                    const deviceType = (device as { type?: number }).type ?? 0;
+                    const deviceType = device.type ?? 0;
                     return (
                       <CupertinoListTile
                         key={device.address}

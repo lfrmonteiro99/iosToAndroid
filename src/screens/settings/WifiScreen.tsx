@@ -214,12 +214,12 @@ export function WifiScreen({ navigation }: { navigation: any }) {
                   showChevron={false}
                 />
               ) : null}
-              {linkSpeed > 0 ? (
+              {wifi.linkSpeed > 0 ? (
                 <CupertinoListTile
                   title="Link Speed"
                   trailing={
                     <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                      {linkSpeed} Mbps
+                      {wifi.linkSpeed} Mbps
                     </Text>
                   }
                   showChevron={false}
