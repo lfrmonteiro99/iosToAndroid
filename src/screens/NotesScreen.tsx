@@ -172,19 +172,6 @@ export function NotesScreen({ navigation }: { navigation: any }) {
 
   // ── Persistence ─────────────────────────────────────────────
 
-  const loadNotes = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed: Note[] = JSON.parse(raw);
-        setNotes(parsed.sort((a, b) => b.updatedAt - a.updatedAt));
-      }
-    } catch {
-      // silently fail
-    }
-    setLoaded(true);
-  }, []);
-
   const persistNotes = useCallback(async (updated: Note[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -193,9 +180,21 @@ export function NotesScreen({ navigation }: { navigation: any }) {
     }
   }, []);
 
+  // Load notes on mount
   useEffect(() => {
-    loadNotes();
-  }, [loadNotes]);
+    let cancelled = false;
+    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (cancelled) return;
+      if (raw) {
+        try {
+          const parsed: Note[] = JSON.parse(raw);
+          setNotes(parsed.sort((a, b) => b.updatedAt - a.updatedAt));
+        } catch { /* ignore */ }
+      }
+      setLoaded(true);
+    }).catch(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Filtered Notes ──────────────────────────────────────────
 

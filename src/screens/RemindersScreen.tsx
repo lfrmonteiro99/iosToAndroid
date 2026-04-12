@@ -9,7 +9,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Animated as RNAnimated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -94,17 +93,6 @@ interface CheckboxProps {
 }
 
 function Checkbox({ checked, color, onToggle }: CheckboxProps) {
-  const scaleAnim = useRef(new RNAnimated.Value(checked ? 1 : 0)).current;
-
-  useEffect(() => {
-    RNAnimated.spring(scaleAnim, {
-      toValue: checked ? 1 : 0,
-      friction: 5,
-      tension: 100,
-      useNativeDriver: true,
-    }).start();
-  }, [checked, scaleAnim]);
-
   return (
     <Pressable onPress={onToggle} hitSlop={8} style={styles.checkbox}>
       <View
@@ -114,9 +102,7 @@ function Checkbox({ checked, color, onToggle }: CheckboxProps) {
           checked && { backgroundColor: color, borderColor: color },
         ]}
       >
-        <RNAnimated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
-        </RNAnimated.View>
+        {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
       </View>
     </Pressable>
   );
@@ -127,6 +113,7 @@ function Checkbox({ checked, color, onToggle }: CheckboxProps) {
 interface ReminderRowProps {
   reminder: Reminder;
   listColor: string;
+  now: number;
   onToggle: () => void;
   onDelete: () => void;
   onFlag: () => void;
@@ -137,6 +124,7 @@ interface ReminderRowProps {
 const ReminderRow = React.memo(function ReminderRow({
   reminder,
   listColor,
+  now,
   onToggle,
   onDelete,
   onFlag,
@@ -189,7 +177,7 @@ const ReminderRow = React.memo(function ReminderRow({
                   typography.caption2,
                   {
                     color:
-                      reminder.dueDate < Date.now() && !reminder.completed
+                      reminder.dueDate < now && !reminder.completed
                         ? colors.systemRed
                         : colors.tertiaryLabel,
                   },
@@ -281,18 +269,6 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
 
   // ── Persistence ─────────────────────────────────────────────
 
-  const loadReminders = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        setReminders(JSON.parse(raw));
-      }
-    } catch {
-      // silently fail
-    }
-    setLoaded(true);
-  }, []);
-
   const persistReminders = useCallback(async (updated: Reminder[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -301,14 +277,24 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
     }
   }, []);
 
+  // Load reminders on mount
   useEffect(() => {
-    loadReminders();
-  }, [loadReminders]);
+    let cancelled = false;
+    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (cancelled) return;
+      if (raw) {
+        try { setReminders(JSON.parse(raw)); } catch { /* ignore */ }
+      }
+      setLoaded(true);
+    }).catch(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Counts ──────────────────────────────────────────────────
+  const [currentTime] = useState(() => Date.now());
 
   const counts = useMemo(() => {
-    const now = Date.now();
+    const now = currentTime;
     return {
       today: reminders.filter(
         (r) => !r.completed && r.dueDate && isToday(r.dueDate),
@@ -440,6 +426,17 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
     setActiveFilter('');
   }, []);
 
+  // ── List counts (must be above early returns to satisfy hooks rules) ────
+  const listCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const l of DEFAULT_LISTS) {
+      c[l.name] = reminders.filter(
+        (r) => !r.completed && r.listName === l.name,
+      ).length;
+    }
+    return c;
+  }, [reminders]);
+
   // ── Render: List View ──────────────────────────────────────
 
   if (viewMode === 'list') {
@@ -450,6 +447,7 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
       <ReminderRow
         reminder={item}
         listColor={activeListColor}
+        now={currentTime}
         onToggle={() => toggleReminder(item.id)}
         onDelete={() => deleteReminder(item.id)}
         onFlag={() => toggleFlag(item.id)}
@@ -585,16 +583,6 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
   }
 
   // ── Render: Home View ──────────────────────────────────────
-
-  const listCounts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const l of DEFAULT_LISTS) {
-      c[l.name] = reminders.filter(
-        (r) => !r.completed && r.listName === l.name,
-      ).length;
-    }
-    return c;
-  }, [reminders]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>

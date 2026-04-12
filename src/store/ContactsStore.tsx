@@ -70,11 +70,18 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.getItem(STORAGE_KEY),
       AsyncStorage.getItem(DEVICE_FAV_KEY),
     ]).then(([stored, deviceFavs]) => {
+      let parsedContacts = SEED_CONTACTS;
       if (stored) {
-        try { setContacts(JSON.parse(stored)); } catch (e) { console.warn('ContactsStore: failed to parse stored contacts:', e); }
+        try { parsedContacts = JSON.parse(stored); } catch (e) { console.warn('ContactsStore: failed to parse stored contacts:', e); }
       }
+      setContacts(parsedContacts);
       if (deviceFavs) {
-        try { setDeviceFavoriteIds(JSON.parse(deviceFavs)); } catch { /* ignore */ }
+        try {
+          const parsedFavs: string[] = JSON.parse(deviceFavs);
+          // Clean up orphaned favorite IDs during hydration
+          const contactIds = new Set(parsedContacts.map((c: Contact) => c.id));
+          setDeviceFavoriteIds(parsedFavs.filter((id: string) => contactIds.has(id)));
+        } catch { /* ignore */ }
       }
       setIsReady(true);
     });
@@ -113,16 +120,6 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
       return prev;
     });
   }, []);
-
-  // Clean up orphaned device favorite IDs (IDs that don't match any contact)
-  useEffect(() => {
-    if (!isReady || deviceFavoriteIds.length === 0) return;
-    const contactIds = new Set(contacts.map(c => c.id));
-    const valid = deviceFavoriteIds.filter(id => contactIds.has(id));
-    if (valid.length !== deviceFavoriteIds.length) {
-      setDeviceFavoriteIds(valid);
-    }
-  }, [isReady, contacts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getContact = useCallback((id: string) => contacts.find((c) => c.id === id), [contacts]);
 

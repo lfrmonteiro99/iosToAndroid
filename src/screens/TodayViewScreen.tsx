@@ -381,11 +381,9 @@ function EditableWidgetRow({
 function EditWidgetsPanel({
   enabled,
   onSave,
-  onCancel,
 }: {
   enabled: WidgetType[];
   onSave: (next: WidgetType[]) => void;
-  onCancel: () => void;
 }) {
   const { textScale } = useTheme();
   const [draft, setDraft] = useState<WidgetType[]>(enabled);
@@ -604,7 +602,6 @@ export function TodayViewScreen({ navigation }: { navigation: any }) {
               <EditWidgetsPanel
                 enabled={enabled}
                 onSave={handleSaveEdit}
-                onCancel={() => setEditMode(false)}
               />
             ) : (
               <>
