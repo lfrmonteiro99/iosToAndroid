@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useDevice } from '../../store/DeviceStore';
@@ -9,6 +10,32 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
 } from '../../components';
+
+function getDeviceIcon(type: number): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case 1: // Computer
+      return 'laptop-outline';
+    case 2: // Phone
+      return 'phone-portrait-outline';
+    case 7: // Audio (headphones / speaker)
+      return 'headset-outline';
+    default:
+      return 'bluetooth';
+  }
+}
+
+function getDeviceIconBackground(type: number, accentColor: string, _grayColor: string): string {
+  switch (type) {
+    case 7: // Audio
+      return '#FF9500'; // orange for audio devices
+    case 1: // Computer
+      return '#5856D6'; // purple for computers
+    case 2: // Phone
+      return '#34C759'; // green for phones
+    default:
+      return accentColor;
+  }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function BluetoothScreen({ navigation }: { navigation: any }) {
@@ -34,6 +61,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Bluetooth Toggle */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
             <CupertinoListTile
@@ -51,56 +79,75 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
 
         {bluetooth.enabled && (
           <>
+            {/* My Device Info */}
             <View style={{ paddingHorizontal: spacing.md }}>
-              <CupertinoListSection>
+              <CupertinoListSection header="My Device">
                 <CupertinoListTile
-                  title="Device Name"
+                  title="Name"
                   trailing={
                     <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                      {bluetooth.name}
+                      {bluetooth.name || 'Unknown'}
                     </Text>
                   }
-                  onPress={() => openSystemPanel('bluetooth')}
+                  showChevron={false}
                 />
-              </CupertinoListSection>
-            </View>
-
-            {bluetooth.pairedDevices.length > 0 && (
-              <View style={{ paddingHorizontal: spacing.md }}>
-                <CupertinoListSection header="Paired Devices">
-                  {bluetooth.pairedDevices.map((device) => (
-                    <CupertinoListTile
-                      key={device.address}
-                      title={device.name}
-                      leading={{
-                        name: 'bluetooth' as const,
-                        color: '#FFFFFF',
-                        backgroundColor: colors.systemBlue,
-                      }}
-                      showChevron
-                      onPress={() => openSystemPanel('bluetooth')}
-                    />
-                  ))}
-                </CupertinoListSection>
-              </View>
-            )}
-
-            {bluetooth.pairedDevices.length === 0 && (
-              <View style={{ paddingHorizontal: spacing.md }}>
-                <CupertinoListSection header="Paired Devices">
+                {bluetooth.address ? (
                   <CupertinoListTile
-                    title="No paired devices"
+                    title="Address"
                     trailing={
                       <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                        —
+                        {bluetooth.address}
                       </Text>
                     }
                     showChevron={false}
-                    onPress={() => openSystemPanel('bluetooth')}
                   />
-                </CupertinoListSection>
-              </View>
-            )}
+                ) : null}
+              </CupertinoListSection>
+            </View>
+
+            {/* Paired Devices */}
+            <View style={{ paddingHorizontal: spacing.md }}>
+              <CupertinoListSection header="Paired Devices">
+                {bluetooth.pairedDevices.length > 0 ? (
+                  bluetooth.pairedDevices.map((device) => {
+                    const deviceType = device.type ?? 0;
+                    return (
+                      <CupertinoListTile
+                        key={device.address}
+                        title={device.name || 'Unknown Device'}
+                        subtitle="Not Connected"
+                        leading={{
+                          name: getDeviceIcon(deviceType),
+                          color: '#FFFFFF',
+                          backgroundColor: getDeviceIconBackground(
+                            deviceType,
+                            colors.systemBlue,
+                            colors.systemGray3,
+                          ),
+                        }}
+                        trailing={
+                          <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+                            Connect
+                          </Text>
+                        }
+                        showChevron
+                        onPress={() => openSystemPanel('bluetooth')}
+                      />
+                    );
+                  })
+                ) : (
+                  <CupertinoListTile
+                    title="No paired devices"
+                    showChevron={false}
+                  />
+                )}
+              </CupertinoListSection>
+            </View>
+
+            {/* Info footer */}
+            <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
+              Pairing new devices requires Android Bluetooth settings
+            </Text>
           </>
         )}
       </ScrollView>
@@ -110,4 +157,10 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  footer: {
+    marginHorizontal: 32,
+    marginTop: 8,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
 });

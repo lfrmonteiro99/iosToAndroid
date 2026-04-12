@@ -58,6 +58,9 @@ import { CameraScreen } from '../screens/CameraScreen';
 import { PhotosScreen } from '../screens/PhotosScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { NotesScreen } from '../screens/NotesScreen';
+import { MapsScreen } from '../screens/MapsScreen';
+import { RemindersScreen } from '../screens/RemindersScreen';
+import { MailScreen } from '../screens/MailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -98,6 +101,9 @@ export function TabNavigator() {
       <Stack.Screen name="Photos" component={PhotosScreen} options={{ animation }} />
       <Stack.Screen name="Calendar" component={CalendarScreen} options={{ animation }} />
       <Stack.Screen name="Notes" component={NotesScreen} options={{ animation }} />
+      <Stack.Screen name="Maps" component={MapsScreen} options={{ animation }} />
+      <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
+      <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />

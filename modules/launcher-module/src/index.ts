@@ -87,12 +87,46 @@ export interface CalendarEvent {
   location: string;
 }
 
+export interface CarrierInfo {
+  carrierName: string;
+  networkType: string;
+  signalStrength: number;
+  isRoaming: boolean;
+  phoneNumber: string;
+  simOperator: string;
+}
+
+export interface AppStorageStat {
+  packageName: string;
+  appName: string;
+  totalBytes: number;
+  cacheBytes: number;
+}
+
 export interface NowPlaying {
   title: string;
   artist: string;
   album: string;
   isPlaying: boolean;
   packageName: string;
+}
+
+export interface ScreenTimeApp {
+  name: string;
+  packageName: string;
+  minutes: number;
+}
+
+export interface ScreenTimeStat {
+  packageName: string;
+  totalTimeMs: number;
+  appName: string;
+  date: string;
+}
+
+export interface DailyScreenTime {
+  totalMinutes: number;
+  topApps: ScreenTimeApp[];
 }
 
 interface LauncherModuleType {
@@ -121,6 +155,10 @@ interface LauncherModuleType {
   openSystemSettings(panel: string): Promise<boolean>;
   // Network
   getNetworkInfo(): Promise<NetworkInfo>;
+  // Carrier
+  getCarrierInfo(): Promise<CarrierInfo>;
+  // App Storage Stats
+  getAppStorageStats(): Promise<AppStorageStat[]>;
   // Flashlight
   setFlashlight(enabled: boolean): Promise<boolean>;
   isFlashlightOn(): Promise<boolean>;
@@ -142,6 +180,11 @@ interface LauncherModuleType {
   mediaPrev(): Promise<boolean>;
   mediaPlayPause(): Promise<boolean>;
   mediaNext(): Promise<boolean>;
+  // Screen Time
+  isUsageAccessGranted(): Promise<boolean>;
+  openUsageAccessSettings(): Promise<boolean>;
+  getScreenTimeStats(daysBack: number): Promise<ScreenTimeStat[]>;
+  getTodayScreenTime(): Promise<DailyScreenTime>;
   // Permissions
   requestAllPermissions(): Promise<boolean>;
   checkPermissions(): Promise<Record<string, boolean>>;
@@ -169,6 +212,8 @@ const stub: LauncherModuleType = {
   setVolume: async () => false,
   openSystemSettings: async () => false,
   getNetworkInfo: async () => ({ isConnected: false, isWifi: false, isCellular: false, isVpn: false }),
+  getCarrierInfo: async () => ({ carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }),
+  getAppStorageStats: async () => [],
   setFlashlight: async () => false,
   isFlashlightOn: async () => false,
   getCallLog: async () => [],
@@ -186,6 +231,10 @@ const stub: LauncherModuleType = {
   mediaPrev: async () => false,
   mediaPlayPause: async () => false,
   mediaNext: async () => false,
+  isUsageAccessGranted: async () => false,
+  openUsageAccessSettings: async () => false,
+  getScreenTimeStats: async () => [],
+  getTodayScreenTime: async () => ({ totalMinutes: 0, topApps: [] }),
 };
 
 function createBridgedModule(): LauncherModuleType {
@@ -260,6 +309,14 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.getNetworkInfo(); }
       catch (e) { console.warn('LauncherModule.getNetworkInfo failed:', e); return { isConnected: false, isWifi: false, isCellular: false, isVpn: false }; }
     },
+    getCarrierInfo: async () => {
+      try { return await nativeModule.getCarrierInfo(); }
+      catch (e) { console.warn('LauncherModule.getCarrierInfo failed:', e); return { carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }; }
+    },
+    getAppStorageStats: async () => {
+      try { return await nativeModule.getAppStorageStats(); }
+      catch (e) { console.warn('LauncherModule.getAppStorageStats failed:', e); return []; }
+    },
     setFlashlight: async (enabled: boolean) => {
       try { return await nativeModule.setFlashlight(enabled); }
       catch (e) { console.warn('LauncherModule.setFlashlight failed:', e); return false; }
@@ -274,7 +331,7 @@ function createBridgedModule(): LauncherModuleType {
     },
     makeCall: async (number: string) => {
       try { return await nativeModule.makeCall(number); }
-      catch (e) { console.warn('LauncherModule.makeCall failed:', e); return false; }
+      catch (e) { console.warn('LauncherModule.makeCall failed:', e); reportBridgeError('makeCall', e); return false; }
     },
     getNotifications: async () => {
       try { return await nativeModule.getNotifications(); }
@@ -298,11 +355,11 @@ function createBridgedModule(): LauncherModuleType {
     },
     sendSms: async (address: string, body: string) => {
       try { return await nativeModule.sendSms(address, body); }
-      catch (e) { console.warn('LauncherModule.sendSms failed:', e); return false; }
+      catch (e) { console.warn('LauncherModule.sendSms failed:', e); reportBridgeError('sendSms', e); return false; }
     },
     requestAllPermissions: async () => {
       try { return await nativeModule.requestAllPermissions(); }
-      catch (e) { console.warn('LauncherModule.requestAllPermissions failed:', e); return false; }
+      catch (e) { console.warn('LauncherModule.requestAllPermissions failed:', e); reportBridgeError('requestAllPermissions', e); return false; }
     },
     checkPermissions: async () => {
       try { return await nativeModule.checkPermissions(); }
@@ -328,10 +385,45 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.mediaNext(); }
       catch (e) { console.warn('LauncherModule.mediaNext failed:', e); return false; }
     },
+    isUsageAccessGranted: async () => {
+      try { return await nativeModule.isUsageAccessGranted(); }
+      catch (e) { console.warn('LauncherModule.isUsageAccessGranted failed:', e); return false; }
+    },
+    openUsageAccessSettings: async () => {
+      try { return await nativeModule.openUsageAccessSettings(); }
+      catch (e) { console.warn('LauncherModule.openUsageAccessSettings failed:', e); return false; }
+    },
+    getScreenTimeStats: async (daysBack: number) => {
+      try { return await nativeModule.getScreenTimeStats(daysBack); }
+      catch (e) { console.warn('LauncherModule.getScreenTimeStats failed:', e); return []; }
+    },
+    getTodayScreenTime: async () => {
+      try { return await nativeModule.getTodayScreenTime(); }
+      catch (e) { console.warn('LauncherModule.getTodayScreenTime failed:', e); return { totalMinutes: 0, topApps: [] }; }
+    },
   };
 }
 
 const LauncherModule: LauncherModuleType = createBridgedModule();
+
+// ─── Error reporting ────────────────────────────────────────────────────────
+// Subscribe to native module errors. The app can use this to display
+// user-facing error notifications instead of silently swallowing failures.
+
+type ErrorListener = (method: string, error: unknown) => void;
+const errorListeners: Set<ErrorListener> = new Set();
+
+export function onBridgeError(listener: ErrorListener): () => void {
+  errorListeners.add(listener);
+  return () => { errorListeners.delete(listener); };
+}
+
+/** Called internally by the bridged methods when an error occurs. */
+export function reportBridgeError(method: string, error: unknown): void {
+  for (const listener of errorListeners) {
+    try { listener(method, error); } catch { /* don't let listener errors propagate */ }
+  }
+}
 
 export { LauncherModuleType };
 export default LauncherModule;

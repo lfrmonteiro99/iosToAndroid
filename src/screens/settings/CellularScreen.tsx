@@ -16,6 +16,54 @@ const getLauncher = async () => {
   catch { return null; }
 };
 
+interface CarrierData {
+  carrierName: string;
+  networkType: string;
+  signalStrength: number;
+  isRoaming: boolean;
+  phoneNumber: string;
+  simOperator: string;
+}
+
+interface NetworkData {
+  isConnected: boolean;
+  isWifi: boolean;
+  isCellular: boolean;
+  isVpn: boolean;
+}
+
+function SignalBars({ level, color }: { level: number; color: string }) {
+  const bars = [1, 2, 3, 4];
+  return (
+    <View style={signalStyles.container}>
+      {bars.map((bar) => (
+        <View
+          key={bar}
+          style={[
+            signalStyles.bar,
+            {
+              height: 4 + bar * 4,
+              backgroundColor: bar <= level ? color : `${color}33`,
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const signalStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  bar: {
+    width: 4,
+    borderRadius: 1,
+  },
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CellularScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
@@ -24,9 +72,9 @@ export function CellularScreen({ navigation }: { navigation: any }) {
   const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
 
-  const [dataRoaming, setDataRoaming] = useState(false);
   const [lowDataMode, setLowDataMode] = useState(false);
-  const [networkType, setNetworkType] = useState('');
+  const [carrier, setCarrier] = useState<CarrierData | null>(null);
+  const [network, setNetwork] = useState<NetworkData | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -34,11 +82,31 @@ export function CellularScreen({ navigation }: { navigation: any }) {
       try {
         const mod = await getLauncher();
         if (!mod) return;
-        const info = await mod.getNetworkInfo();
-        setNetworkType(info.isCellular ? 'Cellular' : info.isWifi ? 'Wi-Fi' : 'None');
+        const [carrierInfo, networkInfo] = await Promise.all([
+          mod.getCarrierInfo(),
+          mod.getNetworkInfo(),
+        ]);
+        setCarrier(carrierInfo);
+        setNetwork(networkInfo);
       } catch { /* ignore */ }
     })();
   }, []);
+
+  const connectionStatus = network
+    ? network.isCellular
+      ? 'Cellular'
+      : network.isWifi
+        ? 'Wi-Fi'
+        : network.isConnected
+          ? 'Connected'
+          : 'No Connection'
+    : 'Checking...';
+
+  const carrierName = carrier?.carrierName || 'Unknown';
+  const networkType = carrier?.networkType || 'Unknown';
+  const signalLevel = carrier?.signalStrength ?? 0;
+  const isRoaming = carrier?.isRoaming ?? false;
+  const simOperator = carrier?.simOperator || '';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -72,13 +140,14 @@ export function CellularScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
+        {/* Carrier & Network Info */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
+          <CupertinoListSection header="Carrier">
             <CupertinoListTile
               title="Carrier"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {networkType || 'Unknown'}
+                  {carrierName}
                 </Text>
               }
               leading={{
@@ -88,40 +157,88 @@ export function CellularScreen({ navigation }: { navigation: any }) {
               }}
               showChevron={false}
             />
+            <CupertinoListTile
+              title="Network Type"
+              trailing={
+                <View style={styles.trailingRow}>
+                  <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600', marginRight: 6 }]}>
+                    {networkType}
+                  </Text>
+                  <SignalBars level={signalLevel} color={colors.systemGreen} />
+                </View>
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Connection"
+              trailing={
+                <View style={styles.trailingRow}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      {
+                        backgroundColor: network?.isConnected
+                          ? colors.systemGreen
+                          : colors.systemRed,
+                      },
+                    ]}
+                  />
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                    {connectionStatus}
+                  </Text>
+                </View>
+              }
+              showChevron={false}
+            />
+            {simOperator ? (
+              <CupertinoListTile
+                title="SIM Operator"
+                trailing={
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                    {simOperator}
+                  </Text>
+                }
+                showChevron={false}
+              />
+            ) : null}
           </CupertinoListSection>
         </View>
 
+        {/* Roaming Status */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Current Period">
+          <CupertinoListSection header="Roaming">
             <CupertinoListTile
-              title="Current Period"
+              title="Roaming Status"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  Not Available
-                </Text>
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Current Period Roaming"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  Not Available
-                </Text>
+                <View style={styles.trailingRow}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: isRoaming ? colors.systemOrange : colors.systemGreen },
+                    ]}
+                  />
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                    {isRoaming ? 'Roaming' : 'Home Network'}
+                  </Text>
+                </View>
               }
               showChevron={false}
             />
           </CupertinoListSection>
         </View>
 
+        {/* Cellular Data Options */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Cellular Data Options">
             <CupertinoListTile
               title="Data Roaming"
               trailing={
-                <CupertinoSwitch value={dataRoaming} onValueChange={setDataRoaming} />
+                <Text style={[typography.body, { color: colors.systemBlue }]}>
+                  Manage
+                </Text>
               }
-              showChevron={false}
+              showChevron
+              onPress={() => openSystemPanel('data_roaming')}
             />
             <CupertinoListTile
               title="Low Data Mode"
@@ -133,6 +250,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
+        {/* SIM PIN */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
             <CupertinoListTile
@@ -147,17 +265,6 @@ export function CellularScreen({ navigation }: { navigation: any }) {
             />
           </CupertinoListSection>
         </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Cellular Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('data_roaming')}
-            />
-          </CupertinoListSection>
-        </View>
       </ScrollView>
     </View>
   );
@@ -165,4 +272,14 @@ export function CellularScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  trailingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
 });

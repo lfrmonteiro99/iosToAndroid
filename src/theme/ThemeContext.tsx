@@ -59,6 +59,7 @@ interface ThemeContextValue {
   isReady: boolean;
   accentColor: AccentColorKey;
   highContrast: boolean;
+  textScale: number;
   toggleTheme: () => void;
   setDark: (dark: boolean) => void;
   setAccentColor: (color: AccentColorKey) => void;
@@ -150,6 +151,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setHighContrastState(enabled);
   }, []);
 
+  const textScale = TEXT_SIZE_SCALE[settings.textSizeIndex] ?? 1.0;
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme: getTheme(isDark, accentColor, highContrast),
@@ -162,12 +165,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       isReady,
       accentColor,
       highContrast,
+      textScale,
       toggleTheme,
       setDark,
       setAccentColor,
       setHighContrast,
     }),
-    [isDark, isReady, accentColor, highContrast, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setAccentColor, setHighContrast]
+    [isDark, isReady, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setAccentColor, setHighContrast]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

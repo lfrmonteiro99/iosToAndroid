@@ -41,62 +41,20 @@ export function VpnScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* VPN toggle */}
+        {/* VPN info */}
         <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="VPN"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.vpnEnabled}
-                  onValueChange={(v) => update('vpnEnabled', v)}
-                />
-              }
-              showChevron={false}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Status section */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Status">
+          <CupertinoListSection
+            footer="VPN connections are managed by your device. Tap below to configure VPN in Android Settings."
+          >
             <CupertinoListTile
               title="Status"
               trailing={
-                <Text
-                  style={[
-                    typography.body,
-                    {
-                      color: settings.vpnEnabled
-                        ? colors.systemGreen
-                        : colors.secondaryLabel,
-                    },
-                  ]}
-                >
-                  {settings.vpnEnabled ? 'Connected' : 'Not Connected'}
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  Not Configured
                 </Text>
               }
               showChevron={false}
             />
-            {settings.vpnEnabled && (
-              <>
-                <CupertinoListTile
-                  title="Server"
-                  trailing={trailing('Not Configured')}
-                  showChevron={false}
-                />
-                <CupertinoListTile
-                  title="Protocol"
-                  trailing={trailing('—')}
-                  showChevron={false}
-                />
-                <CupertinoListTile
-                  title="IP Address"
-                  trailing={trailing('—')}
-                  showChevron={false}
-                />
-              </>
-            )}
           </CupertinoListSection>
         </View>
 

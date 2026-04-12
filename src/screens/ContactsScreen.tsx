@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useContacts } from '../store/ContactsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
-import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton } from '../components';
+import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton, SkeletonListRow } from '../components';
 
 function groupByLetter(contacts: DeviceContact[]) {
   const groups: Record<string, DeviceContact[]> = {};
@@ -91,7 +91,7 @@ export function ContactsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
   const { contacts: storeContacts, toggleFavorite } = useContacts();
-  const { contacts: deviceContacts, requestContactsPermission } = useDevice();
+  const { contacts: deviceContacts, requestContactsPermission, isReady: deviceReady } = useDevice();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [contextContact, setContextContact] = useState<DeviceContact | null>(null);
@@ -173,34 +173,42 @@ export function ContactsScreen() {
         />
       </View>
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        stickySectionHeadersEnabled
-        decelerationRate={0.998}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
-        showsVerticalScrollIndicator
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="person-outline" size={48} color={colors.systemGray3} />
-            <Text style={[typography.body, { color: colors.secondaryLabel, marginTop: 12 }]}>
-              No contacts found
-            </Text>
-            <View style={{ marginTop: 16 }}>
-              <CupertinoButton
-                title="Grant Contacts Permission"
-                variant="filled"
-                onPress={requestContactsPermission}
-              />
+      {!deviceReady ? (
+        <View style={{ flex: 1, paddingTop: 8 }}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <SkeletonListRow key={i} />
+          ))}
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled
+          decelerationRate={0.998}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+          showsVerticalScrollIndicator
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="person-outline" size={48} color={colors.systemGray3} />
+              <Text style={[typography.body, { color: colors.secondaryLabel, marginTop: 12 }]}>
+                No contacts found
+              </Text>
+              <View style={{ marginTop: 16 }}>
+                <CupertinoButton
+                  title="Grant Contacts Permission"
+                  variant="filled"
+                  onPress={requestContactsPermission}
+                />
+              </View>
             </View>
-          </View>
-        }
-      />
+          }
+        />
+      )}
 
       <View style={[styles.sectionIndex, { top: insets.top + 44 + 48 }]}>
         {sectionLetters.map((letter) => (

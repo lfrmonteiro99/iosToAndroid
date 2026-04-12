@@ -105,7 +105,7 @@ function formatTime(date: Date): string {
 // Dynamic Island
 // ---------------------------------------------------------------------------
 
-function DynamicIsland({ device, settings }: { device: any; settings: any }) {
+function DynamicIsland({ device, settings, textScale = 1 }: { device: any; settings: any; textScale?: number }) {
   const isCharging = device.battery.isCharging;
   const hasDND = settings.focusMode !== 'off';
 
@@ -116,7 +116,7 @@ function DynamicIsland({ device, settings }: { device: any; settings: any }) {
       {isCharging && (
         <>
           <Ionicons name="flash" size={12} color="#34C759" />
-          <Text style={styles.dynamicIslandText}>
+          <Text style={[styles.dynamicIslandText, { fontSize: 12 * textScale }]}>
             {Math.round(device.battery.level * 100)}%
           </Text>
         </>
@@ -124,7 +124,7 @@ function DynamicIsland({ device, settings }: { device: any; settings: any }) {
       {hasDND && (
         <>
           <Ionicons name="moon" size={12} color="#5856D6" />
-          <Text style={styles.dynamicIslandText}>Focus</Text>
+          <Text style={[styles.dynamicIslandText, { fontSize: 12 * textScale }]}>Focus</Text>
         </>
       )}
     </View>
@@ -143,9 +143,10 @@ interface AppIconProps {
   isJiggling?: boolean;
   onDelete?: () => void;
   badge?: number;
+  textScale?: number;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge }: AppIconProps) {
+function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
@@ -257,7 +258,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           </Pressable>
         )}
       </Animated.View>
-      <Text style={styles.appIconLabel} numberOfLines={1} ellipsizeMode="tail">
+      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
         {app.name}
       </Text>
     </Pressable>
@@ -298,12 +299,13 @@ type GridItem =
 // FolderIcon
 // ---------------------------------------------------------------------------
 
-function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
+function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
   folder: AppFolder;
   cellWidth: number;
   apps: InstalledApp[];
   onPress: () => void;
   onLongPress: () => void;
+  textScale?: number;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -330,7 +332,7 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
           )}
         </View>
       </View>
-      <Text style={styles.appIconLabel} numberOfLines={1}>{folder.name}</Text>
+      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
     </Pressable>
   );
 }
@@ -339,13 +341,14 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress }: {
 // FolderOverlay
 // ---------------------------------------------------------------------------
 
-function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename }: {
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1 }: {
   folder: AppFolder;
   apps: InstalledApp[];
   onClose: () => void;
   onLaunchApp: (app: InstalledApp) => void;
   onLongPressApp: (app: InstalledApp) => void;
   onRename: (newName: string) => void;
+  textScale?: number;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -371,7 +374,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
           <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput
-                style={styles.folderOverlayTitleInput}
+                style={[styles.folderOverlayTitleInput, { fontSize: 17 * textScale }]}
                 value={nameValue}
                 onChangeText={setNameValue}
                 onBlur={commitRename}
@@ -382,7 +385,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
               />
             ) : (
               <Pressable onPress={() => setEditing(true)} accessibilityLabel={`Rename folder ${folder.name}`} accessibilityRole="button">
-                <Text style={styles.folderOverlayTitle}>{folder.name}</Text>
+                <Text style={[styles.folderOverlayTitle, { fontSize: 17 * textScale }]}>{folder.name}</Text>
               </Pressable>
             )}
             <View style={styles.folderOverlayGrid}>
@@ -391,6 +394,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   key={app.packageName}
                   app={app}
                   cellWidth={70}
+                  textScale={textScale}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -502,7 +506,7 @@ export function LauncherHomeScreen() {
   const { settings } = useSettings();
   const device = useDevice();
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
-  const { theme: launcherTheme } = useTheme();
+  const { theme: launcherTheme, textScale } = useTheme();
   const colors = launcherTheme.colors;
 
   // Folder open state
@@ -883,7 +887,7 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {!isDefaultLauncher && !isJiggling && (
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
-          <Text style={styles.defaultBannerText}>Set as default launcher</Text>
+          <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
           <Pressable
             style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
@@ -891,7 +895,7 @@ export function LauncherHomeScreen() {
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
-            <Text style={styles.defaultBannerButtonText}>Set Now</Text>
+            <Text style={[styles.defaultBannerButtonText, { fontSize: 12 * textScale }]}>Set Now</Text>
           </Pressable>
         </View>
       )}
@@ -910,7 +914,7 @@ export function LauncherHomeScreen() {
         ]}
       >
         <Pressable onPress={() => navigateTo('NotificationCenter')} accessibilityLabel="Open Notification Center" accessibilityRole="button">
-          <Text style={styles.statusTime}>{formatTime(now)}</Text>
+          <Text style={[styles.statusTime, { fontSize: 15 * textScale }]}>{formatTime(now)}</Text>
         </Pressable>
         <Pressable style={styles.statusRight} onPress={() => navigateTo('ControlCenter')} accessibilityLabel="Open Control Center" accessibilityRole="button">
           {settings.focusMode !== 'off' && (
@@ -932,7 +936,7 @@ export function LauncherHomeScreen() {
                 size={14}
                 color="rgba(255,255,255,0.85)"
               />
-              <Text style={styles.batteryText}>
+              <Text style={[styles.batteryText, { fontSize: 11 * textScale }]}>
                 {Math.round(device.battery.level * 100)}%
               </Text>
             </View>
@@ -945,14 +949,14 @@ export function LauncherHomeScreen() {
               accessibilityLabel="Done"
               accessibilityRole="button"
             >
-              <Text style={styles.jiggleDoneBtnText}>Done</Text>
+              <Text style={[styles.jiggleDoneBtnText, { fontSize: 14 * textScale }]}>Done</Text>
             </Pressable>
           )}
         </Pressable>
       </View>
 
       {/* Dynamic Island placeholder */}
-      <DynamicIsland device={device} settings={settings} />
+      <DynamicIsland device={device} settings={settings} textScale={textScale} />
 
       {/* ---------------------------------------------------------------- */}
       {/* Swipeable app pages                                                */}
@@ -980,6 +984,7 @@ export function LauncherHomeScreen() {
                       folder={item.folder}
                       cellWidth={CELL_WIDTH}
                       apps={apps}
+                      textScale={textScale}
                       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setOpenFolder(item.folder); }}
                       onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIsJiggling(true); }}
                     />
@@ -990,6 +995,7 @@ export function LauncherHomeScreen() {
                     key={item.app.packageName}
                     app={item.app}
                     cellWidth={CELL_WIDTH}
+                    textScale={textScale}
                     onPress={() => handleAppPress(item.app)}
                     onLongPress={() => handleLongPress(item.app)}
                     isJiggling={isJiggling}
@@ -1014,8 +1020,8 @@ export function LauncherHomeScreen() {
           accessibilityRole="button"
         >
           <Ionicons name="grid" size={52} color="rgba(255,255,255,0.7)" />
-          <Text style={styles.appLibraryText}>App Library</Text>
-          <Text style={styles.appLibrarySubtext}>Tap to open all apps</Text>
+          <Text style={[styles.appLibraryText, { fontSize: 22 * textScale }]}>App Library</Text>
+          <Text style={[styles.appLibrarySubtext, { fontSize: 14 * textScale }]}>Tap to open all apps</Text>
         </Pressable>
       </ScrollView>
 
@@ -1029,7 +1035,7 @@ export function LauncherHomeScreen() {
         accessibilityLabel="Search apps"
         accessibilityRole="search"
       >
-        <Text style={styles.searchLabelText}>{isJiggling ? 'Tap background to exit' : 'Search'}</Text>
+        <Text style={[styles.searchLabelText, { fontSize: 13 * textScale }]}>{isJiggling ? 'Tap background to exit' : 'Search'}</Text>
       </Pressable>
 
       {/* ---------------------------------------------------------------- */}
@@ -1048,6 +1054,7 @@ export function LauncherHomeScreen() {
                 key={app.packageName}
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
+                textScale={textScale}
                 onPress={() => handleAppPress(app)}
                 onLongPress={() => handleLongPress(app)}
                 isJiggling={isJiggling}
@@ -1073,6 +1080,7 @@ export function LauncherHomeScreen() {
         <FolderOverlay
           folder={openFolder}
           apps={apps}
+          textScale={textScale}
           onClose={() => setOpenFolder(null)}
           onLaunchApp={(app) => {
             setOpenFolder(null);

@@ -53,6 +53,7 @@ interface ToggleButtonProps {
   active: boolean;
   activeColor?: string;
   onPress: () => void;
+  textScale?: number;
 }
 
 function ToggleButton({
@@ -62,6 +63,7 @@ function ToggleButton({
   active,
   activeColor = SystemColors.dark.accent,
   onPress,
+  textScale = 1,
 }: ToggleButtonProps) {
   return (
     <Pressable
@@ -78,11 +80,11 @@ function ToggleButton({
       >
         <Ionicons name={iconName} size={26} color="#ffffff" />
       </View>
-      <Text style={styles.toggleLabel} numberOfLines={1}>
+      <Text style={[styles.toggleLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>
         {label}
       </Text>
       {sublabel ? (
-        <Text style={styles.toggleSublabel} numberOfLines={1}>
+        <Text style={[styles.toggleSublabel, { fontSize: 10 * textScale }]} numberOfLines={1}>
           {sublabel}
         </Text>
       ) : null}
@@ -99,9 +101,10 @@ interface ShortcutButtonProps {
   label: string;
   active?: boolean;
   onPress: () => void;
+  textScale?: number;
 }
 
-function ShortcutButton({ iconName, label, active = false, onPress }: ShortcutButtonProps) {
+function ShortcutButton({ iconName, label, active = false, onPress, textScale = 1 }: ShortcutButtonProps) {
   return (
     <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={label} accessibilityRole="button">
       <View
@@ -112,7 +115,7 @@ function ShortcutButton({ iconName, label, active = false, onPress }: ShortcutBu
       >
         <Ionicons name={iconName} size={22} color={active ? '#000000' : '#ffffff'} />
       </View>
-      <Text style={styles.shortcutLabel}>{label}</Text>
+      <Text style={[styles.shortcutLabel, { fontSize: 11 * textScale }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -126,7 +129,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings, update } = useSettings();
-  const { theme } = useTheme();
+  const { theme, textScale } = useTheme();
   const { colors } = theme;
 
   const alert = useAlert();
@@ -345,6 +348,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 label="Airplane"
                 active={settings.airplaneMode}
                 activeColor={colors.accent}
+                textScale={textScale}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   update('airplaneMode', !settings.airplaneMode);
@@ -357,6 +361,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 sublabel={device.wifi.enabled ? (device.wifi.ssid || 'On') : 'Off'}
                 active={device.wifi.enabled}
                 activeColor={colors.accent}
+                textScale={textScale}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleWifi(); }}
               />
               <ToggleButton
@@ -365,6 +370,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 sublabel={device.bluetooth.enabled ? 'On' : 'Off'}
                 active={device.bluetooth.enabled}
                 activeColor={colors.accent}
+                textScale={textScale}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleBluetooth(); }}
               />
               <ToggleButton
@@ -373,6 +379,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 sublabel={settings.focusMode !== 'off' ? 'Do Not Disturb' : 'Off'}
                 active={settings.focusMode !== 'off'}
                 activeColor={colors.systemPurple}
+                textScale={textScale}
                 onPress={toggleFocus}
               />
             </View>
@@ -389,10 +396,10 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   <Ionicons name="musical-notes" size={28} color="rgba(255,255,255,0.4)" />
                 </View>
                 <View style={styles.musicMeta}>
-                  <Text style={styles.musicTitle} numberOfLines={1}>
+                  <Text style={[styles.musicTitle, { fontSize: 14 * textScale }]} numberOfLines={1}>
                     {nowPlaying.title || 'Not Playing'}
                   </Text>
-                  <Text style={styles.musicArtist} numberOfLines={1}>
+                  <Text style={[styles.musicArtist, { fontSize: 13 * textScale }]} numberOfLines={1}>
                     {nowPlaying.artist || '—'}
                   </Text>
                 </View>
@@ -468,7 +475,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     />
                   </Animated.View>
                 </GestureDetector>
-                <Text style={styles.verticalSliderLabel}>Brightness</Text>
+                <Text style={[styles.verticalSliderLabel, { fontSize: 11 * textScale }]}>Brightness</Text>
               </View>
 
               {/* Volume */}
@@ -491,7 +498,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     />
                   </Animated.View>
                 </GestureDetector>
-                <Text style={styles.verticalSliderLabel}>Volume</Text>
+                <Text style={[styles.verticalSliderLabel, { fontSize: 11 * textScale }]}>Volume</Text>
               </View>
             </View>
           </View>
@@ -505,11 +512,13 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 iconName="flashlight"
                 label="Torch"
                 active={flashlightOn}
+                textScale={textScale}
                 onPress={toggleFlashlight}
               />
               <ShortcutButton
                 iconName="radio-button-on"
                 label="Screen Rec"
+                textScale={textScale}
                 onPress={async () => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   const mod = await getLauncher();
@@ -523,11 +532,13 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               <ShortcutButton
                 iconName="calculator-outline"
                 label="Calculator"
+                textScale={textScale}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCalculator(); }}
               />
               <ShortcutButton
                 iconName="camera-outline"
                 label="Camera"
+                textScale={textScale}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCamera(); }}
               />
             </View>
@@ -554,11 +565,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
               <View style={styles.mirrorInner}>
                 <Ionicons name="tv-outline" size={18} color="#ffffff" />
-                <Text style={styles.mirrorLabel}>Screen Mirroring</Text>
+                <Text style={[styles.mirrorLabel, { fontSize: 14 * textScale }]}>Screen Mirroring</Text>
                 <Ionicons
                   name="chevron-forward"
                   size={14}
-                  color="rgba(255,255,255,0.5)"
+                  color="rgba(255,255,255,0.7)"
                   style={{ marginLeft: 'auto' as unknown as number }}
                 />
               </View>
@@ -572,7 +583,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
               size={16}
               color="rgba(255,255,255,0.6)"
             />
-            <Text style={styles.batteryInfoText}>
+            <Text style={[styles.batteryInfoText, { fontSize: 12 * textScale }]}>
               {batteryLevel}% {device.battery.isCharging ? '· Charging' : ''}
             </Text>
           </View>

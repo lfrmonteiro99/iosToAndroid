@@ -9,6 +9,7 @@ export interface DeviceWifi {
   enabled: boolean;
   ssid: string;
   rssi: number;
+  linkSpeed: number;
   ip: string;
   networks: { ssid: string; level: number; isSecure: boolean }[];
 }
@@ -16,7 +17,8 @@ export interface DeviceWifi {
 export interface DeviceBluetooth {
   enabled: boolean;
   name: string;
-  pairedDevices: { name: string; address: string }[];
+  address: string;
+  pairedDevices: { name: string; address: string; type: number }[];
 }
 
 export interface DeviceStorage {
@@ -94,8 +96,8 @@ const DEFAULT_STATE: DeviceState = {
   battery: { level: 1, isCharging: false },
   brightness: 0.5,
   volume: 0.5,
-  wifi: { enabled: false, ssid: '', rssi: 0, ip: '', networks: [] },
-  bluetooth: { enabled: false, name: '', pairedDevices: [] },
+  wifi: { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '', networks: [] },
+  bluetooth: { enabled: false, name: '', address: '', pairedDevices: [] },
   storage: { totalGB: '0', usedGB: '0', freeGB: '0', usedPercentage: 0 },
   network: { isConnected: false, isWifi: false, isCellular: false },
   messages: [],
@@ -161,6 +163,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         enabled: info.enabled,
         ssid: info.ssid,
         rssi: info.rssi,
+        linkSpeed: info.linkSpeed ?? 0,
         ip: info.ip,
         networks: networks.map((n: { ssid: string; level: number; isSecure: boolean }) => ({
           ssid: n.ssid, level: n.level, isSecure: n.isSecure,
@@ -177,8 +180,9 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       return {
         enabled: info.enabled,
         name: info.name,
-        pairedDevices: info.pairedDevices.map((d: { name: string; address: string }) => ({
-          name: d.name, address: d.address,
+        address: info.address ?? '',
+        pairedDevices: info.pairedDevices.map((d: { name: string; address: string; type: number }) => ({
+          name: d.name, address: d.address, type: d.type ?? 0,
         })),
       };
     } catch { return DEFAULT_STATE.bluetooth; }

@@ -2,6 +2,8 @@ package com.iostoandroid.launcher
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -17,8 +19,10 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.Settings
@@ -29,6 +33,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -269,6 +274,7 @@ class LauncherModule : Module() {
                 "cast" -> "android.settings.CAST_SETTINGS"
                 "hotspot" -> "android.settings.TETHER_SETTINGS"
                 "cellular" -> Settings.ACTION_NETWORK_OPERATOR_SETTINGS
+                "data_roaming" -> Settings.ACTION_DATA_ROAMING_SETTINGS
                 "appinfo" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                 else -> Settings.ACTION_SETTINGS
             }
@@ -317,6 +323,72 @@ class LauncherModule : Module() {
                 "isCellular" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ?: false),
                 "isVpn" to (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false)
             )
+        }
+
+        // ── Carrier Info ─────────────────────────────────────────────────
+
+        AsyncFunction("getCarrierInfo") {
+            try {
+                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                mapOf(
+                    "carrierName" to (telephonyManager.networkOperatorName ?: ""),
+                    "networkType" to getNetworkTypeString(telephonyManager),
+                    "signalStrength" to getSignalLevel(),
+                    "isRoaming" to telephonyManager.isNetworkRoaming,
+                    "phoneNumber" to (try { telephonyManager.line1Number ?: "" } catch (e: SecurityException) { "" }),
+                    "simOperator" to (telephonyManager.simOperatorName ?: "")
+                )
+            } catch (e: Exception) {
+                mapOf(
+                    "carrierName" to "",
+                    "networkType" to "Unknown",
+                    "signalStrength" to 0,
+                    "isRoaming" to false,
+                    "phoneNumber" to "",
+                    "simOperator" to ""
+                )
+            }
+        }
+
+        // ── App Storage Stats ────────────────────────────────────────────
+
+        AsyncFunction("getAppStorageStats") {
+            try {
+                val pm = context.packageManager
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                }
+                val activities = pm.queryIntentActivities(mainIntent, 0)
+
+                val appStats = activities.map { resolveInfo ->
+                    val packageName = resolveInfo.activityInfo.packageName
+                    val appName = resolveInfo.loadLabel(pm).toString()
+                    val appInfo = try { pm.getApplicationInfo(packageName, 0) } catch (e: Exception) { null }
+                    val sourceDir = appInfo?.sourceDir
+                    val totalBytes = if (sourceDir != null) {
+                        try { java.io.File(sourceDir).length() } catch (e: Exception) { 0L }
+                    } else { 0L }
+
+                    // Try to get cache size
+                    val cacheBytes = try {
+                        val cacheDir = context.createPackageContext(packageName, 0).cacheDir
+                        dirSize(cacheDir)
+                    } catch (e: Exception) { 0L }
+
+                    mapOf(
+                        "packageName" to packageName,
+                        "appName" to appName,
+                        "totalBytes" to totalBytes,
+                        "cacheBytes" to cacheBytes
+                    )
+                }
+                    .sortedByDescending { it["totalBytes"] as Long }
+                    .take(20)
+
+                appStats
+            } catch (e: Exception) {
+                emptyList<Map<String, Any>>()
+            }
         }
 
         // ── Flashlight ───────────────────────────────────────────────────
@@ -513,6 +585,165 @@ class LauncherModule : Module() {
             }
         }
 
+        // ── Media Transport Controls ─────────────────────────────────────
+
+        AsyncFunction("mediaPrev") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+                if (controllers.isNotEmpty()) {
+                    controllers[0].transportControls.skipToPrevious()
+                    true
+                } else false
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("mediaPlayPause") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+                if (controllers.isNotEmpty()) {
+                    val controller = controllers[0]
+                    val state = controller.playbackState
+                    if (state?.state == android.media.session.PlaybackState.STATE_PLAYING) {
+                        controller.transportControls.pause()
+                    } else {
+                        controller.transportControls.play()
+                    }
+                    true
+                } else false
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("mediaNext") {
+            try {
+                val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+                val controllers = mediaSessionManager?.getActiveSessions(
+                    android.content.ComponentName(context, NotificationService::class.java)
+                ) ?: emptyList()
+                if (controllers.isNotEmpty()) {
+                    controllers[0].transportControls.skipToNext()
+                    true
+                } else false
+            } catch (e: Exception) { false }
+        }
+
+        // ── Screen Time / Usage Stats ────────────────────────────────────
+
+        AsyncFunction("isUsageAccessGranted") {
+            try {
+                val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                val mode = appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),
+                    context.packageName
+                )
+                mode == AppOpsManager.MODE_ALLOWED
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("openUsageAccessSettings") {
+            try {
+                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("getScreenTimeStats") { daysBack: Int ->
+            try {
+                val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                val pm = context.packageManager
+                val cal = Calendar.getInstance()
+                val endTime = cal.timeInMillis
+                cal.add(Calendar.DAY_OF_YEAR, -daysBack)
+                val startTime = cal.timeInMillis
+
+                val stats = usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startTime,
+                    endTime
+                )
+
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+                stats?.filter { it.totalTimeInForeground > 0 }
+                    ?.map { stat ->
+                        val appName = try {
+                            val appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                            pm.getApplicationLabel(appInfo).toString()
+                        } catch (e: Exception) { stat.packageName }
+
+                        mapOf(
+                            "packageName" to stat.packageName,
+                            "totalTimeMs" to stat.totalTimeInForeground,
+                            "appName" to appName,
+                            "date" to dateFormat.format(Date(stat.lastTimeUsed))
+                        )
+                    }
+                    ?.sortedByDescending { it["totalTimeMs"] as Long }
+                    ?: emptyList()
+            } catch (e: Exception) {
+                emptyList<Map<String, Any>>()
+            }
+        }
+
+        AsyncFunction("getTodayScreenTime") {
+            try {
+                val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                val pm = context.packageManager
+                val cal = Calendar.getInstance()
+                val endTime = cal.timeInMillis
+                // Start of today
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val startTime = cal.timeInMillis
+
+                val stats = usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startTime,
+                    endTime
+                )
+
+                val usedApps = stats?.filter { it.totalTimeInForeground > 60000 } // >1 min
+                    ?.sortedByDescending { it.totalTimeInForeground }
+                    ?: emptyList()
+
+                val totalMs = usedApps.sumOf { it.totalTimeInForeground }
+                val totalMinutes = (totalMs / 60000).toInt()
+
+                val topApps = usedApps.take(10).map { stat ->
+                    val appName = try {
+                        val appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                        pm.getApplicationLabel(appInfo).toString()
+                    } catch (e: Exception) { stat.packageName }
+
+                    mapOf(
+                        "name" to appName,
+                        "packageName" to stat.packageName,
+                        "minutes" to (stat.totalTimeInForeground / 60000).toInt()
+                    )
+                }
+
+                mapOf(
+                    "totalMinutes" to totalMinutes,
+                    "topApps" to topApps
+                )
+            } catch (e: Exception) {
+                mapOf(
+                    "totalMinutes" to 0,
+                    "topApps" to emptyList<Map<String, Any>>()
+                )
+            }
+        }
+
         // ── Permissions ──────────────────────────────────────────────────
 
         AsyncFunction("requestAllPermissions") {
@@ -615,5 +846,52 @@ class LauncherModule : Module() {
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
         return bitmap
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getNetworkTypeString(telephonyManager: TelephonyManager): String {
+        val networkType = try {
+            telephonyManager.dataNetworkType
+        } catch (e: SecurityException) {
+            TelephonyManager.NETWORK_TYPE_UNKNOWN
+        }
+        return when (networkType) {
+            TelephonyManager.NETWORK_TYPE_NR -> "5G"
+            TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
+            TelephonyManager.NETWORK_TYPE_HSPAP,
+            TelephonyManager.NETWORK_TYPE_HSPA,
+            TelephonyManager.NETWORK_TYPE_HSDPA,
+            TelephonyManager.NETWORK_TYPE_HSUPA -> "HSPA+"
+            TelephonyManager.NETWORK_TYPE_UMTS,
+            TelephonyManager.NETWORK_TYPE_EVDO_0,
+            TelephonyManager.NETWORK_TYPE_EVDO_A,
+            TelephonyManager.NETWORK_TYPE_EVDO_B -> "3G"
+            TelephonyManager.NETWORK_TYPE_EDGE,
+            TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
+            TelephonyManager.NETWORK_TYPE_CDMA,
+            TelephonyManager.NETWORK_TYPE_1xRTT -> "2G"
+            else -> "Unknown"
+        }
+    }
+
+    private fun getSignalLevel(): Int {
+        return try {
+            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                telephonyManager.signalStrength?.level ?: 0
+            } else {
+                2 // Default mid-level for older APIs
+            }
+        } catch (e: Exception) { 0 }
+    }
+
+    private fun dirSize(dir: java.io.File?): Long {
+        if (dir == null || !dir.exists()) return 0L
+        var size = 0L
+        val files = dir.listFiles() ?: return 0L
+        for (file in files) {
+            size += if (file.isDirectory) dirSize(file) else file.length()
+        }
+        return size
     }
 }

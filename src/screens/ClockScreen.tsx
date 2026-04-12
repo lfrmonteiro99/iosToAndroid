@@ -505,8 +505,10 @@ function AlarmTab() {
       } else {
         // Turning on: reschedule notifications
         const notificationIds = await scheduleAlarmNotifications(alarm);
+        // Only enable if at least one notification was actually scheduled
+        const didSchedule = notificationIds.length > 0;
         updatedAlarms = alarms.map((a) =>
-          a.id === id ? { ...a, enabled: true, notificationIds } : a,
+          a.id === id ? { ...a, enabled: didSchedule, notificationIds } : a,
         );
       }
       persistAlarms(updatedAlarms);
