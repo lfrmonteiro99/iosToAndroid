@@ -103,13 +103,20 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
     navigation.navigate('Conversation', { address: contact.phone });
   };
 
+  const handleMail = () => {
+    // Navigate to in-app Mail screen with composed draft (no Android email app)
+    if (contact.email) {
+      navigation.navigate('Mail', { composeTo: contact.email });
+    }
+  };
+
   const actionButtons = [
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: handleMessage },
     { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
       alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
     }},
-    { icon: 'mail' as const, label: 'mail', onPress: () => contact.email ? Linking.openURL(`mailto:${contact.email}`) : undefined },
+    { icon: 'mail' as const, label: 'mail', onPress: handleMail },
   ];
 
   return (
@@ -215,7 +222,7 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
             <CupertinoListTile
               title={contact.email}
               showChevron={false}
-              onPress={() => Linking.openURL(`mailto:${contact.email}`)}
+              onPress={handleMail}
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>home</Text>
               }

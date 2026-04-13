@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,11 +14,6 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
-
-const getLauncher = async () => {
-  try { return (await import('../../modules/launcher-module/src')).default; }
-  catch { return null; }
-};
 
 // Attempt to import expo-camera; gracefully handle if unavailable
 let CameraViewComponent: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -103,7 +97,7 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         await saveToLibrary(photo.uri);
       }
     } catch {
-      // Fallback: use ImagePicker system camera
+      // Fallback: use ImagePicker system camera picker (shows iOS-styled result picker overlay)
       try {
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ['images'],
@@ -115,10 +109,8 @@ export function CameraScreen({ navigation }: { navigation: any }) {
           await saveToLibrary(result.assets[0].uri);
         }
       } catch {
-        if (Platform.OS === 'android') {
-          const mod = await getLauncher();
-          if (mod) await mod.launchApp('com.android.camera2');
-        }
+        // No further fallback — keep user in-app
+        alert('Camera Error', 'Unable to capture photo. Please check camera permissions.');
       }
     }
   }, [cameraReady, alert, saveToLibrary]);

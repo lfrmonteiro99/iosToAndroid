@@ -5,7 +5,6 @@ import {
   Image,
   StyleSheet,
   Dimensions,
-  Linking,
   Pressable,
   StatusBar,
 } from 'react-native';
@@ -355,21 +354,13 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
   const openCamera = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const mod = await getLauncher();
-    if (mod) {
-      const launched =
-        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
-        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
-      if (!launched) {
-        Linking.openURL('content://media/internal/images/media').catch(() =>
-          alert('Camera', 'Could not open camera app.')
-        );
+    // Unlock first, then navigate to in-app Camera screen (no Android system apps)
+    handleUnlock();
+    setTimeout(() => {
+      if (navigation) {
+        navigation.navigate('Camera');
       }
-    } else {
-      Linking.openURL('content://media/internal/images/media').catch(() =>
-        alert('Camera', 'Could not open camera app.')
-      );
-    }
+    }, 300);
   };
 
   // Fetch real notifications

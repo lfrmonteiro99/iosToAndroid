@@ -191,14 +191,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
     setTimeout(() => nav.navigate('Calculator'), 300);
   };
 
-  const launchCamera = async () => {
-    const mod = await getLauncher();
-    if (mod) {
-      const launched =
-        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
-        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
-      if (!launched) alert('Camera not found');
-    }
+  const launchCamera = () => {
+    // Navigate to in-app Camera screen (no Android system apps)
+    const nav = navigation.getParent() || navigation;
+    navigation.goBack();
+    setTimeout(() => nav.navigate('Camera'), 300);
   };
 
   // Swipe-down gesture to close

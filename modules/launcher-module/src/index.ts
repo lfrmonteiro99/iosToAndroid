@@ -31,6 +31,14 @@ export interface BluetoothInfo {
   pairedDevices: { name: string; address: string; type: number }[];
 }
 
+export interface DiscoveredBluetoothDevice {
+  name: string;
+  address: string;
+  type: number;
+  rssi: number;
+  bondState: number;
+}
+
 export interface StorageInfo {
   totalBytes: number;
   freeBytes: number;
@@ -141,9 +149,16 @@ interface LauncherModuleType {
   getWifiInfo(): Promise<WifiInfo>;
   setWifiEnabled(enabled: boolean): Promise<boolean>;
   getWifiNetworks(): Promise<WifiNetwork[]>;
+  joinWifiNetwork(ssid: string, password: string, security: string): Promise<boolean>;
+  forgetWifiNetwork(ssid: string): Promise<boolean>;
   // Bluetooth
   getBluetoothInfo(): Promise<BluetoothInfo>;
   setBluetoothEnabled(enabled: boolean): Promise<boolean>;
+  startBluetoothDiscovery(): Promise<boolean>;
+  stopBluetoothDiscovery(): Promise<boolean>;
+  getDiscoveredBluetoothDevices(): Promise<DiscoveredBluetoothDevice[]>;
+  pairBluetoothDevice(address: string): Promise<boolean>;
+  unpairBluetoothDevice(address: string): Promise<boolean>;
   // Storage
   getStorageInfo(): Promise<StorageInfo>;
   // SMS
@@ -204,8 +219,15 @@ const stub: LauncherModuleType = {
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
   getWifiNetworks: async () => [],
+  joinWifiNetwork: async () => false,
+  forgetWifiNetwork: async () => false,
   getBluetoothInfo: async () => ({ enabled: false, name: '', address: '', pairedDevices: [] }),
   setBluetoothEnabled: async () => false,
+  startBluetoothDiscovery: async () => false,
+  stopBluetoothDiscovery: async () => false,
+  getDiscoveredBluetoothDevices: async () => [],
+  pairBluetoothDevice: async () => false,
+  unpairBluetoothDevice: async () => false,
   getStorageInfo: async () => ({ totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }),
   getRecentMessages: async () => [],
   getVolume: async () => 0.5,
@@ -277,6 +299,14 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.getWifiNetworks(); }
       catch (e) { console.warn('LauncherModule.getWifiNetworks failed:', e); return []; }
     },
+    joinWifiNetwork: async (ssid: string, password: string, security: string) => {
+      try { return await nativeModule.joinWifiNetwork(ssid, password, security); }
+      catch (e) { console.warn('LauncherModule.joinWifiNetwork failed:', e); return false; }
+    },
+    forgetWifiNetwork: async (ssid: string) => {
+      try { return await nativeModule.forgetWifiNetwork(ssid); }
+      catch (e) { console.warn('LauncherModule.forgetWifiNetwork failed:', e); return false; }
+    },
     getBluetoothInfo: async () => {
       try { return await nativeModule.getBluetoothInfo(); }
       catch (e) { console.warn('LauncherModule.getBluetoothInfo failed:', e); return { enabled: false, name: '', address: '', pairedDevices: [] }; }
@@ -284,6 +314,26 @@ function createBridgedModule(): LauncherModuleType {
     setBluetoothEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setBluetoothEnabled(enabled); }
       catch (e) { console.warn('LauncherModule.setBluetoothEnabled failed:', e); return false; }
+    },
+    startBluetoothDiscovery: async () => {
+      try { return await nativeModule.startBluetoothDiscovery(); }
+      catch (e) { console.warn('LauncherModule.startBluetoothDiscovery failed:', e); return false; }
+    },
+    stopBluetoothDiscovery: async () => {
+      try { return await nativeModule.stopBluetoothDiscovery(); }
+      catch (e) { console.warn('LauncherModule.stopBluetoothDiscovery failed:', e); return false; }
+    },
+    getDiscoveredBluetoothDevices: async () => {
+      try { return await nativeModule.getDiscoveredBluetoothDevices(); }
+      catch (e) { console.warn('LauncherModule.getDiscoveredBluetoothDevices failed:', e); return []; }
+    },
+    pairBluetoothDevice: async (address: string) => {
+      try { return await nativeModule.pairBluetoothDevice(address); }
+      catch (e) { console.warn('LauncherModule.pairBluetoothDevice failed:', e); return false; }
+    },
+    unpairBluetoothDevice: async (address: string) => {
+      try { return await nativeModule.unpairBluetoothDevice(address); }
+      catch (e) { console.warn('LauncherModule.unpairBluetoothDevice failed:', e); return false; }
     },
     getStorageInfo: async () => {
       try { return await nativeModule.getStorageInfo(); }

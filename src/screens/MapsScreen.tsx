@@ -5,9 +5,7 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
-  Linking,
-  ActivityIndicator,
-  Platform,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -175,8 +173,7 @@ export function MapsScreen({ navigation }: { navigation: any }) {
   const [recents, setRecents] = useState<RecentLocation[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [locationText, setLocationText] = useState('Location unavailable');
-  const [locationLoading, setLocationLoading] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<RecentLocation | null>(null);
 
   // ── Persistence ─────────────────────────────────────────────
 
@@ -205,29 +202,18 @@ export function MapsScreen({ navigation }: { navigation: any }) {
 
   // ── Location ────────────────────────────────────────────────
 
-  const handleCurrentLocation = useCallback(async () => {
-    setLocationLoading(true);
+  const handleCurrentLocation = useCallback(() => {
+    // In-app only: show My Location in the modal view
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      // Open device maps at current location
-      const url = Platform.OS === 'android'
-        ? 'geo:0,0?q=my+location'
-        : 'maps:0,0?q=my+location';
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-        setLocationText('Opened in Maps');
-      } else {
-        await Linking.openURL('https://maps.google.com');
-        setLocationText('Opened in browser');
-      }
-    } catch {
-      setLocationText('Location not available');
-    }
-    setLocationLoading(false);
+    setSelectedLocation({
+      id: 'current',
+      name: 'My Location',
+      address: 'Current position',
+      timestamp: Date.now(),
+    });
   }, []);
 
-  // ── Search / Open Maps ──────────────────────────────────────
+  // ── Search / Open Maps (in-app) ──────────────────────────────
 
   const handleSearch = useCallback(() => {
     if (!searchQuery.trim()) return;
@@ -246,31 +232,15 @@ export function MapsScreen({ navigation }: { navigation: any }) {
     setRecents(updated);
     persistRecents(updated);
 
-    // Try to open in maps
-    const encoded = encodeURIComponent(query);
-    const geoUrl = `geo:0,0?q=${encoded}`;
-    Linking.canOpenURL(geoUrl).then((supported) => {
-      if (supported) {
-        Linking.openURL(geoUrl);
-      } else {
-        Linking.openURL(`https://maps.google.com/?q=${encoded}`);
-      }
-    });
-
+    // Show in-app detail view instead of launching external map app
+    setSelectedLocation(newRecent);
     setSearchQuery('');
   }, [searchQuery, recents, persistRecents]);
 
   const openRecentInMaps = useCallback((item: RecentLocation) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const encoded = encodeURIComponent(item.name);
-    const geoUrl = `geo:0,0?q=${encoded}`;
-    Linking.canOpenURL(geoUrl).then((supported) => {
-      if (supported) {
-        Linking.openURL(geoUrl);
-      } else {
-        Linking.openURL(`https://maps.google.com/?q=${encoded}`);
-      }
-    });
+    // Show in-app detail view instead of launching external map app
+    setSelectedLocation(item);
   }, []);
 
   const deleteRecent = useCallback(
@@ -299,22 +269,16 @@ export function MapsScreen({ navigation }: { navigation: any }) {
 
   const handleDirections = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const url = 'https://maps.google.com/maps/dir/';
-    Linking.openURL(url).catch(() => {
-      alert('Maps', 'Unable to open maps for directions.');
-    });
+    alert('Directions', 'Enter a destination in the search bar above to get directions.');
   }, [alert]);
 
   const handleSearchNearby = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const url = 'https://maps.google.com/maps/search/nearby';
-    Linking.openURL(url).catch(() => {
-      alert('Maps', 'Unable to open maps for nearby search.');
-    });
+    alert('Search Nearby', 'Enter a place type (e.g. "restaurants", "gas stations") in the search bar.');
   }, [alert]);
 
   const handleFavorites = useCallback(() => {
-    alert('Favorites', 'Favorites are not available in the emulator.');
+    alert('Favorites', 'Long-press a recent search to mark as favorite (coming soon).');
   }, [alert]);
 
   // ── Render ──────────────────────────────────────────────────
@@ -380,13 +344,9 @@ export function MapsScreen({ navigation }: { navigation: any }) {
 
           {/* Location label */}
           <View style={[styles.mapLocationLabel, { backgroundColor: 'rgba(255,255,255,0.9)' }]}>
-            {locationLoading ? (
-              <ActivityIndicator size="small" color={MAPS_ACCENT} />
-            ) : (
-              <Text style={[typography.caption1, { color: colors.label }]}>
-                {locationText}
-              </Text>
-            )}
+            <Text style={[typography.caption1, { color: colors.label }]}>
+              {selectedLocation ? selectedLocation.name : 'Tap to search'}
+            </Text>
           </View>
 
           {/* Current Location FAB */}
@@ -484,6 +444,59 @@ export function MapsScreen({ navigation }: { navigation: any }) {
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
       />
+
+      {/* In-app location detail modal (no external app launch) */}
+      <Modal
+        visible={selectedLocation !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedLocation(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.secondarySystemGroupedBackground, paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={[typography.title3, { color: colors.label, fontWeight: '700' }]}>
+                {selectedLocation?.name ?? ''}
+              </Text>
+              <Pressable onPress={() => setSelectedLocation(null)} hitSlop={8}>
+                <Ionicons name="close-circle" size={28} color={colors.tertiaryLabel} />
+              </Pressable>
+            </View>
+            <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 16 }]}>
+              {selectedLocation?.address ?? ''}
+            </Text>
+            <View style={styles.modalMap}>
+              <LinearGradient
+                colors={['#A8D8EA', '#87CEEB', '#6BB3D9']}
+                style={{ flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="location" size={48} color={colors.systemRed} />
+              </LinearGradient>
+            </View>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); alert('Directions', 'Directions from current location will be calculated in a future update.'); }}
+                style={[styles.modalActionBtn, { backgroundColor: MAPS_ACCENT }]}
+              >
+                <Ionicons name="navigate" size={18} color="#fff" />
+                <Text style={[typography.subhead, { color: '#fff', fontWeight: '600' }]}>
+                  Directions
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); alert('Share', 'Location shared to clipboard (coming soon).'); }}
+                style={[styles.modalActionBtn, { backgroundColor: colors.systemGray5 }]}
+              >
+                <Ionicons name="share-outline" size={18} color={colors.label} />
+                <Text style={[typography.subhead, { color: colors.label, fontWeight: '600' }]}>
+                  Share
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -617,5 +630,50 @@ const styles = StyleSheet.create({
   emptyContainer: {
     paddingTop: 40,
     alignItems: 'center',
+  },
+
+  // Detail modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+  },
+  modalHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(128,128,128,0.4)',
+    marginBottom: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  modalMap: {
+    height: 180,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
 });
