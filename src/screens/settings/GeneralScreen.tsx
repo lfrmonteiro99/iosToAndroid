@@ -3,12 +3,10 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
-  CupertinoAlertDialog,
   CupertinoActionSheet,
   useAlert,
 } from '../../components';
@@ -19,8 +17,6 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { openSystemPanel } = useDevice();
-  const [showShutdown, setShowShutdown] = useState(false);
   const [showAirdropPicker, setShowAirdropPicker] = useState(false);
   const [showBgRefreshPicker, setShowBgRefreshPicker] = useState(false);
   const alert = useAlert();
@@ -105,7 +101,6 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
               }
               onPress={() => navigation.navigate('LanguageRegion')}
             />
-            <CupertinoListTile title="Dictionary" onPress={() => openSystemPanel('locale')} />
           </CupertinoListSection>
         </View>
 
@@ -118,23 +113,10 @@ export function GeneralScreen({ navigation }: { navigation: any }) {
 
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection>
-            <CupertinoListTile title="Transfer or Reset Device" onPress={() => alert('Reset', 'Go to Android Settings to reset your device.', [{ text: 'Open Settings', onPress: () => openSystemPanel('reset') }, { text: 'Cancel' }])} />
             <CupertinoListTile title="Backup & Restore" onPress={() => navigation.navigate('BackupRestore')} />
-            <CupertinoListTile title="Shut Down" showChevron={false} onPress={() => setShowShutdown(true)} />
           </CupertinoListSection>
         </View>
       </ScrollView>
-
-      <CupertinoAlertDialog
-        visible={showShutdown}
-        title="Shut Down"
-        message="This will open the Android power menu."
-        actions={[
-          { label: 'Cancel', style: 'cancel', onPress: () => setShowShutdown(false) },
-          { label: 'Shut Down', style: 'destructive', onPress: () => { setShowShutdown(false); openSystemPanel('power'); } },
-        ]}
-        onClose={() => setShowShutdown(false)}
-      />
 
       <CupertinoActionSheet
         visible={showAirdropPicker}

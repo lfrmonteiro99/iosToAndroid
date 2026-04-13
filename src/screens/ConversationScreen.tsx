@@ -407,7 +407,15 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     [rawMessages],
   );
 
-  const handleCall = useCallback(() => {
+  const handleCall = useCallback(async () => {
+    const mod = await getLauncher();
+    if (mod) {
+      try {
+        const ok = await mod.makeCall(address);
+        if (ok) return;
+      } catch { /* fall through to tel: */ }
+    }
+    // Fallback: open dialer
     Linking.openURL(`tel:${address}`);
   }, [address]);
 

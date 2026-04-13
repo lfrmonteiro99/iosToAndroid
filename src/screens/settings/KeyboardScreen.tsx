@@ -3,7 +3,6 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -17,7 +16,6 @@ export function KeyboardScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { openSystemPanel } = useDevice();
 
   const [smartPunctuation, setSmartPunctuation] = useState(true);
   const [dictation, setDictation] = useState(true);
@@ -94,17 +92,6 @@ export function KeyboardScreen({ navigation }: { navigation: any }) {
                 <CupertinoSwitch value={dictation} onValueChange={setDictation} />
               }
               showChevron={false}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Keyboard Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('keyboard')}
             />
           </CupertinoListSection>
         </View>

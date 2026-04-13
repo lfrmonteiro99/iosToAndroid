@@ -217,20 +217,9 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Privacy Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('privacy')}
-            />
-          </CupertinoListSection>
-        </View>
-
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          Privacy settings control which apps can access your data. Tap a permission to manage it in system settings.
+          Tap a permission above to grant or revoke it. Only the grant dialog is shown by the system for security.
         </Text>
       </ScrollView>
     </View>

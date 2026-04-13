@@ -1,22 +1,29 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, NativeModules, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoActionSheet,
 } from '../../components';
+
+const LANGUAGES = ['English', 'Português', 'Español', 'Français', 'Deutsch', 'Italiano', '日本語', '中文', 'Русский', 'العربية'];
+const REGIONS = ['US', 'PT', 'ES', 'FR', 'DE', 'IT', 'JP', 'CN', 'RU', 'BR', 'MX', 'GB'];
+const CALENDAR_TYPES = ['Gregorian', 'Japanese', 'Buddhist', 'Hebrew', 'Islamic'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function LanguageRegionScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings } = useSettings();
-  const { openSystemPanel } = useDevice();
+  const { settings, update } = useSettings();
+  const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showRegionPicker, setShowRegionPicker] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [calendarType, setCalendarType] = useState('Gregorian');
 
   const trailing = (text: string) => (
     <Text style={[typography.body, { color: colors.secondaryLabel }]}>{text}</Text>
@@ -56,32 +63,32 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
       >
         <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
           <CupertinoListSection
-            footer="Apps that support the selected language will use it."
+            footer="These preferences control formatting within the app."
           >
             <CupertinoListTile
               title="Preferred Language"
               trailing={trailing(settings.language)}
-              onPress={() => openSystemPanel('locale')}
+              onPress={() => setShowLangPicker(true)}
             />
             <CupertinoListTile
               title="Region"
               trailing={trailing(settings.region)}
-              onPress={() => openSystemPanel('locale')}
+              onPress={() => setShowRegionPicker(true)}
             />
             <CupertinoListTile
               title="Calendar"
-              trailing={trailing('Gregorian')}
-              onPress={() => openSystemPanel('locale')}
+              trailing={trailing(calendarType)}
+              onPress={() => setShowCalendarPicker(true)}
             />
             <CupertinoListTile
               title="Temperature"
               trailing={trailing(localeInfo.tempUnit)}
-              onPress={() => openSystemPanel('locale')}
+              showChevron={false}
             />
             <CupertinoListTile
               title="Measurement System"
               trailing={trailing(localeInfo.measurement)}
-              onPress={() => openSystemPanel('locale')}
+              showChevron={false}
             />
             <CupertinoListTile
               title="Number Format"
@@ -90,18 +97,38 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
             />
           </CupertinoListSection>
         </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Language Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('locale')}
-            />
-          </CupertinoListSection>
-        </View>
       </ScrollView>
+
+      <CupertinoActionSheet
+        visible={showLangPicker}
+        onClose={() => setShowLangPicker(false)}
+        title="Preferred Language"
+        options={LANGUAGES.map((l) => ({
+          label: l,
+          onPress: () => { update('language', l); setShowLangPicker(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={showRegionPicker}
+        onClose={() => setShowRegionPicker(false)}
+        title="Region"
+        options={REGIONS.map((r) => ({
+          label: r,
+          onPress: () => { update('region', r); setShowRegionPicker(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={showCalendarPicker}
+        onClose={() => setShowCalendarPicker(false)}
+        title="Calendar"
+        options={CALENDAR_TYPES.map((c) => ({
+          label: c,
+          onPress: () => { setCalendarType(c); setShowCalendarPicker(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }

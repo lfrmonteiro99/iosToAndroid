@@ -1,18 +1,21 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoSlider,
+  CupertinoActionSheet,
 } from '../../components';
+
+const RINGTONES = ['Opening (Default)', 'Apex', 'Beacon', 'Bulletin', 'By the Seaside', 'Chimes', 'Circuit', 'Constellation', 'Cosmic', 'Crystals', 'Hillside', 'Illuminate', 'Night Owl', 'Presto', 'Radar', 'Radiate', 'Ripples', 'Sencha', 'Signal', 'Silk', 'Slow Rise', 'Stargaze', 'Summit', 'Twinkle', 'Uplift', 'Waves'];
+const TEXT_TONES = ['Note (Default)', 'Aurora', 'Bamboo', 'Chord', 'Circles', 'Complete', 'Hello', 'Input', 'Keys', 'Popcorn', 'Pulse', 'Synth', 'Tri-tone'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
@@ -20,7 +23,8 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { openSystemPanel } = useDevice();
+  const [showRingtonePicker, setShowRingtonePicker] = useState(false);
+  const [showTextTonePicker, setShowTextTonePicker] = useState(false);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -62,7 +66,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
                   {settings.ringtone}
                 </Text>
               }
-              onPress={() => openSystemPanel('sound')}
+              onPress={() => setShowRingtonePicker(true)}
             />
             <CupertinoListTile
               title="Text Tone"
@@ -71,7 +75,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
                   {settings.textTone}
                 </Text>
               }
-              onPress={() => openSystemPanel('sound')}
+              onPress={() => setShowTextTonePicker(true)}
             />
           </CupertinoListSection>
         </View>
@@ -111,18 +115,29 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
             />
           </CupertinoListSection>
         </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Sound Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('sound')}
-            />
-          </CupertinoListSection>
-        </View>
       </ScrollView>
+
+      <CupertinoActionSheet
+        visible={showRingtonePicker}
+        onClose={() => setShowRingtonePicker(false)}
+        title="Ringtone"
+        options={RINGTONES.map((r) => ({
+          label: r,
+          onPress: () => { update('ringtone', r); setShowRingtonePicker(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
+
+      <CupertinoActionSheet
+        visible={showTextTonePicker}
+        onClose={() => setShowTextTonePicker(false)}
+        title="Text Tone"
+        options={TEXT_TONES.map((t) => ({
+          label: t,
+          onPress: () => { update('textTone', t); setShowTextTonePicker(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }

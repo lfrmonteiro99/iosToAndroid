@@ -98,9 +98,14 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
     }
   };
 
+  const handleMessage = () => {
+    // Navigate to in-app ConversationScreen instead of opening Android SMS app
+    navigation.navigate('Conversation', { address: contact.phone });
+  };
+
   const actionButtons = [
     { icon: 'call' as const, label: 'call', onPress: handleCall },
-    { icon: 'chatbubble' as const, label: 'message', onPress: () => Linking.openURL(`sms:${contact.phone}`) },
+    { icon: 'chatbubble' as const, label: 'message', onPress: handleMessage },
     { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
       alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
     }},

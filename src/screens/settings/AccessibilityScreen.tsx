@@ -1,23 +1,27 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  CupertinoSegmentedControl,
 } from '../../components';
+
+const TEXT_SIZE_LABELS = ['Small', 'Default', 'Large', 'XL'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AccessibilityScreen({ navigation }: { navigation: any }) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography, spacing, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { openSystemPanel } = useDevice();
+  const [reduceTransparency, setReduceTransparency] = useState(false);
+  const [smartInvert, setSmartInvert] = useState(false);
+  const [colorFilters, setColorFilters] = useState(false);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -72,93 +76,52 @@ export function AccessibilityScreen({ navigation }: { navigation: any }) {
               }
               showChevron={false}
             />
+            <CupertinoListTile
+              title="Reduce Transparency"
+              trailing={
+                <CupertinoSwitch value={reduceTransparency} onValueChange={setReduceTransparency} />
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Smart Invert"
+              trailing={
+                <CupertinoSwitch value={smartInvert} onValueChange={setSmartInvert} />
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Color Filters"
+              trailing={
+                <CupertinoSwitch value={colorFilters} onValueChange={setColorFilters} />
+              }
+              showChevron={false}
+            />
           </CupertinoListSection>
         </View>
 
-        {/* Vision — requires system settings */}
+        {/* Text Size — in-app */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection
-            header="System Accessibility"
-            footer="These features are managed by Android. Tapping opens system settings."
+            header="Display & Text Size"
+            footer="Controls text scaling across the app."
           >
-            <CupertinoListTile
-              title="TalkBack (VoiceOver)"
-              trailing={
-                <Text style={[typography.caption1, { color: colors.tertiaryLabel }]}>System</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Magnification (Zoom)"
-              trailing={
-                <Text style={[typography.caption1, { color: colors.tertiaryLabel }]}>System</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Display Size"
-              trailing={
-                <Text style={[typography.caption1, { color: colors.tertiaryLabel }]}>System</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Physical and Motor */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Physical and Motor">
-            <CupertinoListTile
-              title="Touch"
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Face ID & Attention"
-              showChevron
-              onPress={() => openSystemPanel('security')}
-            />
-            <CupertinoListTile
-              title="Switch Control"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Hearing */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Hearing">
-            <CupertinoListTile
-              title="Hearing Devices"
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Sound Recognition"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
-              }
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
-            <CupertinoListTile
-              title="Subtitles & Captioning"
-              showChevron
-              onPress={() => openSystemPanel('accessibility')}
-            />
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={TEXT_SIZE_LABELS}
+                selectedIndex={settings.textSizeIndex}
+                onChange={(i) => update('textSizeIndex', i)}
+              />
+              <Text style={[typography.caption1, { color: colors.tertiaryLabel, marginTop: 8 }]}>
+                Current scale: {Math.round(textScale * 100)}%
+              </Text>
+            </View>
           </CupertinoListSection>
         </View>
 
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          {'In-app accessibility features apply to iosToAndroid. System features marked "System" are managed by Android.'}
+          These accessibility preferences apply within the app.
         </Text>
       </ScrollView>
     </View>
