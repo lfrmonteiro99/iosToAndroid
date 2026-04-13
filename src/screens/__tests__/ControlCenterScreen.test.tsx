@@ -7,6 +7,7 @@ const navigation = { navigate: jest.fn(), goBack: jest.fn() } as any; // eslint-
 describe('ControlCenterScreen', () => {
   it('renders without crashing', () => {
     const { toJSON } = render(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       <ControlCenterScreen navigation={navigation} route={{} as any} />,
     );
     expect(toJSON()).toBeTruthy();
@@ -14,6 +15,7 @@ describe('ControlCenterScreen', () => {
 
   it('renders Wi-Fi toggle', () => {
     const { getByLabelText } = render(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       <ControlCenterScreen navigation={navigation} route={{} as any} />,
     );
     // Label is "Wi-Fi on" or "Wi-Fi off" depending on state
@@ -22,6 +24,7 @@ describe('ControlCenterScreen', () => {
 
   it('renders Bluetooth toggle', () => {
     const { getByLabelText } = render(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       <ControlCenterScreen navigation={navigation} route={{} as any} />,
     );
     expect(getByLabelText(/^Bluetooth/)).toBeTruthy();
@@ -29,6 +32,7 @@ describe('ControlCenterScreen', () => {
 
   it('renders Airplane Mode toggle', () => {
     const { getByLabelText } = render(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       <ControlCenterScreen navigation={navigation} route={{} as any} />,
     );
     expect(getByLabelText(/^Airplane/)).toBeTruthy();
@@ -36,6 +40,7 @@ describe('ControlCenterScreen', () => {
 
   it('renders music player controls', () => {
     const { getByLabelText } = render(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       <ControlCenterScreen navigation={navigation} route={{} as any} />,
     );
     expect(getByLabelText('Previous track')).toBeTruthy();
@@ -44,6 +49,7 @@ describe('ControlCenterScreen', () => {
 
   it('pressing Wi-Fi toggle changes its state', () => {
     const { getByLabelText } = render(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       <ControlCenterScreen navigation={navigation} route={{} as any} />,
     );
     const wifi = getByLabelText(/^Wi-Fi/);

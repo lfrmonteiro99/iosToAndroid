@@ -63,7 +63,9 @@ interface QuickActionProps {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 
@@ -105,7 +107,9 @@ interface RecentRowProps {
   item: RecentLocation;
   onPress: () => void;
   onDelete: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 

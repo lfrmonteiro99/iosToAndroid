@@ -30,7 +30,7 @@ describe('LockScreen', () => {
   });
 
   it('passcode numpad has digit buttons', () => {
-    const { getByLabelText, getByText } = render(<LockScreen />);
+    const { getByLabelText } = render(<LockScreen />);
     fireEvent.press(getByLabelText('Use passcode to unlock'));
     expect(getByLabelText('Digit 1')).toBeTruthy();
     expect(getByLabelText('Digit 0')).toBeTruthy();

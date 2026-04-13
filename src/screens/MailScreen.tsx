@@ -65,7 +65,7 @@ function avatarColor(name: string): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function MailScreen({ navigation, route }: { navigation: any; route?: any }) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const alert = useAlert();

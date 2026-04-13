@@ -91,7 +91,9 @@ interface NoteRowProps {
   note: Note;
   onPress: () => void;
   onDelete: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 

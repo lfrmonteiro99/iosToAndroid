@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, DimensionValue } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -45,7 +45,7 @@ export function CupertinoSkeleton({
     <Animated.View
       style={[
         {
-          width: width as any,
+          width: width as DimensionValue,
           height,
           borderRadius,
           backgroundColor: bgColor,

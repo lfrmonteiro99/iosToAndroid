@@ -6,6 +6,12 @@ module.exports = {
     ecmaVersion: 2021,
     sourceType: 'module',
   },
+  env: {
+    browser: true,
+    node: true,
+    es2021: true,
+    jest: true,
+  },
   plugins: ['@typescript-eslint', 'react', 'react-hooks'],
   extends: [
     'eslint:recommended',
@@ -23,5 +29,13 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     'react/prop-types': 'off',
   },
+  overrides: [
+    {
+      files: ['*.js'],
+      rules: {
+        '@typescript-eslint/no-require-imports': 'off',
+      },
+    },
+  ],
   ignorePatterns: ['node_modules/', 'android/', 'ios/', '.expo/', 'babel.config.js', '.eslintrc.js'],
 };

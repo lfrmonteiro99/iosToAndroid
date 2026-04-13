@@ -84,7 +84,6 @@ jest.mock('react-native-reanimated', () => {
   const stub = () => 0;
   const noop = () => {};
   const identity = (v) => v;
-  const StyleSheet = { create: (s) => s };
 
   // Minimal Animated.Value stub
   function Value(val) { this._value = val; }

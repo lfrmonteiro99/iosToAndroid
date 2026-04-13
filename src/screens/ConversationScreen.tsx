@@ -27,7 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
-import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
+import { useDevice, DeviceSms } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
@@ -104,6 +104,7 @@ const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
 
 // ─── Typing Indicator ────────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function TypingIndicator({ visible, colors }: { visible: boolean; colors: any }) {
   const dot1 = useSharedValue(0.3);
   const dot2 = useSharedValue(0.3);

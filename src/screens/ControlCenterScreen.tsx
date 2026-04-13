@@ -124,7 +124,9 @@ function ShortcutButton({ iconName, label, active = false, onPress, textScale = 
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const device = useDevice();
@@ -248,12 +250,16 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const brightnessFill = useSharedValue(device.brightness * SLIDER_HEIGHT);
   const volumeFill = useSharedValue(device.volume * SLIDER_HEIGHT);
 
-  // Keep shared values in sync with external device state changes
+  // Keep shared values in sync with external device state changes.
+  // Shared values (brightnessFill/volumeFill) are stable refs so we intentionally
+  // omit them from deps to avoid effect re-runs on each render.
   useEffect(() => {
     brightnessFill.value = device.brightness * SLIDER_HEIGHT;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device.brightness]);
   useEffect(() => {
     volumeFill.value = device.volume * SLIDER_HEIGHT;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device.volume]);
 
   const applyBrightness = useCallback((pct: number) => {

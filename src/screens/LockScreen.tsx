@@ -28,7 +28,6 @@ import * as Haptics from 'expo-haptics';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
-import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
 
 const getLauncher = async () => {
@@ -79,7 +78,6 @@ function formatTime(date: Date, use24Hour: boolean): string {
   }
   let h = date.getHours();
   const m = date.getMinutes().toString().padStart(2, '0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${m}`;
 }
@@ -140,42 +138,6 @@ interface NotificationGroupData {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function NotificationCard({ item, appName, appIcon }: {
-  item: RealNotification;
-  appName: string;
-  appIcon: string;
-}) {
-  const { textScale } = useTheme();
-  return (
-    <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
-      <View style={styles.notifHeader}>
-        {appIcon ? (
-          <Image
-            source={{ uri: `data:image/png;base64,${appIcon}` }}
-            style={styles.notifIconWrap}
-          />
-        ) : (
-          <View style={[styles.notifIconWrap, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-            <Ionicons name="notifications" size={14} color="#fff" />
-          </View>
-        )}
-        <Text style={[styles.notifApp, { fontSize: 12 * textScale }]}>{appName}</Text>
-        <Text style={[styles.notifTime, { fontSize: 12 * textScale }]}>{formatNotifTime(item.time)}</Text>
-      </View>
-      {!!item.title && (
-        <Text style={[styles.notifTitle, { fontSize: 15 * textScale }]} numberOfLines={1}>
-          {item.title}
-        </Text>
-      )}
-      {!!item.text && (
-        <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
-          {item.text}
-        </Text>
-      )}
-    </BlurView>
-  );
-}
 
 function NotificationGroupCard({
   group,
@@ -287,12 +249,12 @@ function NotificationGroupCard({
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings } = useSettings();
   const { apps } = useApps();
-  const alert = useAlert();
   const { textScale } = useTheme();
 
   const [now, setNow] = useState(new Date());

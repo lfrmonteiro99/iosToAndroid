@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
-import { useSettings } from '../../store/SettingsStore';
 import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,

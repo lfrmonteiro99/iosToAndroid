@@ -54,7 +54,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [alert]);
 
   const handleImportConfirm = useCallback(async () => {
     if (!importText.trim()) {
@@ -80,7 +80,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
     } finally {
       setImporting(false);
     }
-  }, [importText]);
+  }, [importText, alert]);
 
   const handleReset = useCallback(async () => {
     try {
@@ -93,7 +93,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: any }) {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [alert]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>

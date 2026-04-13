@@ -79,7 +79,9 @@ function avatarColor(address: string): string {
 interface ConversationRowProps {
   conversation: Conversation;
   contacts: DeviceContact[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
   onPress: () => void;
   onDelete: () => void;
@@ -197,6 +199,7 @@ export function MessagesScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const navigation = useNavigation<any>();
   const device = useDevice();
   const alert = useAlert();
@@ -204,7 +207,7 @@ export function MessagesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deletedAddresses, setDeletedAddresses] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [, setIsSearchFocused] = useState(false);
   const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
 
   // Load persisted deleted addresses on mount

@@ -9,6 +9,7 @@ import {
   useAlert,
 } from '../../components';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AboutScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

@@ -19,7 +19,6 @@ import {
   CupertinoNavigationBar,
   CupertinoSwipeableRow,
   CupertinoEmptyState,
-  useAlert,
 } from '../components';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -117,7 +116,9 @@ interface ReminderRowProps {
   onToggle: () => void;
   onDelete: () => void;
   onFlag: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 
@@ -204,7 +205,9 @@ interface SmartListCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   count: number;
   onPress: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   themeColors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 
@@ -253,10 +256,9 @@ const SmartListCard = React.memo(function SmartListCard({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function RemindersScreen({ navigation }: { navigation: any }) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const alert = useAlert();
 
   // ── State ───────────────────────────────────────────────────
   const [reminders, setReminders] = useState<Reminder[]>([]);

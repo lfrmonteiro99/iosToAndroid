@@ -41,6 +41,8 @@ export function CameraScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const { textScale } = useTheme();
+  // cameraRef is typed any because expo-camera ref methods vary by platform; we guard with optional chaining
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);

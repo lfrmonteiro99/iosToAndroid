@@ -105,6 +105,7 @@ function formatTime(date: Date): string {
 // Dynamic Island
 // ---------------------------------------------------------------------------
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function DynamicIsland({ device, settings, textScale = 1 }: { device: any; settings: any; textScale?: number }) {
   const isCharging = device.battery.isCharging;
   const hasDND = settings.focusMode !== 'off';
@@ -526,10 +527,6 @@ export function LauncherHomeScreen() {
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: string) => {
     navigation.navigate(screen);
-  }, [navigation]);
-
-  const navigateToWithParams = useCallback((screen: string, params: object) => {
-    navigation.navigate(screen, params);
   }, [navigation]);
 
   // Vertical swipe gesture: up → App Drawer, down-top-left → Notification Center, down-top-right → Control Center, down-mid → Spotlight
