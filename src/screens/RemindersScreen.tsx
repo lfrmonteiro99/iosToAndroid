@@ -19,7 +19,6 @@ import {
   CupertinoNavigationBar,
   CupertinoSwipeableRow,
   CupertinoEmptyState,
-  useAlert,
 } from '../components';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -117,7 +116,9 @@ interface ReminderRowProps {
   onToggle: () => void;
   onDelete: () => void;
   onFlag: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 
@@ -204,7 +205,9 @@ interface SmartListCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   count: number;
   onPress: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   themeColors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 
@@ -253,10 +256,9 @@ const SmartListCard = React.memo(function SmartListCard({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function RemindersScreen({ navigation }: { navigation: any }) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const alert = useAlert();
 
   // ── State ───────────────────────────────────────────────────
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -291,7 +293,12 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
   }, []);
 
   // ── Counts ──────────────────────────────────────────────────
-  const [currentTime] = useState(() => Date.now());
+  // Update currentTime every minute so "today" calculations stay accurate across midnight
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const counts = useMemo(() => {
     const now = currentTime;
@@ -305,7 +312,7 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
       all: reminders.filter((r) => !r.completed).length,
       flagged: reminders.filter((r) => !r.completed && r.flagged).length,
     };
-  }, [reminders]);
+  }, [reminders, currentTime]);
 
   // ── Filtered Reminders ──────────────────────────────────────
 

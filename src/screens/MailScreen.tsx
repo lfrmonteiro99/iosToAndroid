@@ -64,18 +64,20 @@ function avatarColor(name: string): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function MailScreen({ navigation }: { navigation: any }) {
-  const { theme, typography, spacing } = useTheme();
+export function MailScreen({ navigation, route }: { navigation: any; route?: any }) {
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const alert = useAlert();
 
   const [emails, setEmails] = useState(DEMO_EMAILS);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
-  const [showCompose, setShowCompose] = useState(false);
-  const [composeTo, setComposeTo] = useState('');
-  const [composeSubject, setComposeSubject] = useState('');
-  const [composeBody, setComposeBody] = useState('');
+  // Initialize compose state from route params if navigated here to compose
+  const initialCompose = route?.params?.composeTo;
+  const [showCompose, setShowCompose] = useState(!!initialCompose);
+  const [composeTo, setComposeTo] = useState(initialCompose ?? '');
+  const [composeSubject, setComposeSubject] = useState(route?.params?.composeSubject ?? '');
+  const [composeBody, setComposeBody] = useState(route?.params?.composeBody ?? '');
 
   const unreadCount = emails.filter(e => !e.isRead).length;
 

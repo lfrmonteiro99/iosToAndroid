@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, Platform, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useAlert } from '../components';
 import { CupertinoNavigationBar } from '../components';
+
+const EVENTS_STORAGE_KEY = '@iostoandroid/calendar_events';
 
 interface CalEvent {
   id: string;
@@ -57,7 +60,29 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
   const [newTitle, setNewTitle] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newAllDay, setNewAllDay] = useState(false);
+  const [startHour, setStartHour] = useState(9);
+  const [startMinute, setStartMinute] = useState(0);
+  const [endHour, setEndHour] = useState(10);
+  const [endMinute, setEndMinute] = useState(0);
   const alert = useAlert();
+
+  // Persist user-created events to AsyncStorage
+  const persistEvents = useCallback(async (evts: CalEvent[]) => {
+    try {
+      // Only persist user-created events (not native calendar ones)
+      const userEvents = evts.filter((e) => e.id.startsWith('user_'));
+      await AsyncStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(userEvents));
+    } catch { /* storage error */ }
+  }, []);
+
+  const handleDeleteEvent = useCallback((eventId: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setEvents((prev) => {
+      const next = prev.filter((e) => e.id !== eventId);
+      persistEvents(next);
+      return next;
+    });
+  }, [persistEvents]);
 
   const handleAddEvent = useCallback(() => {
     if (!newTitle.trim()) {
@@ -66,34 +91,61 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const start = new Date(selectedDate);
-    start.setHours(9, 0, 0, 0);
+    start.setHours(startHour, startMinute, 0, 0);
     const end = new Date(selectedDate);
-    end.setHours(10, 0, 0, 0);
+    end.setHours(endHour, endMinute, 0, 0);
+    // Ensure end is after start
+    if (end.getTime() <= start.getTime() && !newAllDay) {
+      end.setHours(startHour + 1, startMinute, 0, 0);
+    }
     const newEvent: CalEvent = {
-      id: Date.now().toString(),
+      id: `user_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
       title: newTitle.trim(),
       start: start.getTime(),
       end: end.getTime(),
       allDay: newAllDay,
       location: newLocation.trim(),
     };
-    setEvents((prev) => [...prev, newEvent]);
+    setEvents((prev) => {
+      const next = [...prev, newEvent];
+      persistEvents(next);
+      return next;
+    });
     setNewTitle('');
     setNewLocation('');
     setNewAllDay(false);
+    setStartHour(9);
+    setStartMinute(0);
+    setEndHour(10);
+    setEndMinute(0);
     setShowAddEvent(false);
-  }, [newTitle, newLocation, newAllDay, selectedDate, alert]);
+  }, [newTitle, newLocation, newAllDay, selectedDate, startHour, startMinute, endHour, endMinute, alert, persistEvents]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (Platform.OS !== 'android') { if (!cancelled) setLoading(false); return; }
+      // Load user-created events from AsyncStorage
+      let userEvents: CalEvent[] = [];
+      try {
+        const stored = await AsyncStorage.getItem(EVENTS_STORAGE_KEY);
+        if (stored) userEvents = JSON.parse(stored);
+      } catch { /* parse error */ }
+
+      if (Platform.OS !== 'android') {
+        if (!cancelled) { setEvents(userEvents); setLoading(false); }
+        return;
+      }
       try {
         const mod = await getLauncher();
-        if (!mod || cancelled) { if (!cancelled) setLoading(false); return; }
+        if (!mod || cancelled) {
+          if (!cancelled) { setEvents(userEvents); setLoading(false); }
+          return;
+        }
         const raw = await mod.getCalendarEvents(90);
-        if (!cancelled) setEvents(raw);
-      } catch { /* no calendar access */ }
+        if (!cancelled) setEvents([...raw, ...userEvents]);
+      } catch {
+        if (!cancelled) setEvents(userEvents);
+      }
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -121,7 +173,7 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
 
   const eventDates = new Set(events.map((e) => {
     const d = new Date(e.start);
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }));
 
   return (
@@ -173,7 +225,7 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
             const cellDate = new Date(viewYear, viewMonth, day);
             const isToday = isSameDay(cellDate, today);
             const isSelected = isSameDay(cellDate, selectedDate);
-            const hasEvent = eventDates.has(`${viewYear}-${viewMonth}-${day}`);
+            const hasEvent = eventDates.has(`${viewYear}-${String(viewMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
 
             return (
               <Pressable
@@ -229,6 +281,11 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
                     </Text>
                   ) : null}
                 </View>
+                {evt.id.startsWith('user_') && (
+                  <Pressable onPress={() => handleDeleteEvent(evt.id)} hitSlop={8} style={{ justifyContent: 'center', paddingRight: 12 }}>
+                    <Ionicons name="trash-outline" size={18} color={colors.systemRed} />
+                  </Pressable>
+                )}
               </View>
             ))
           )}
@@ -275,6 +332,42 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
                 {newAllDay && <Ionicons name="checkmark" size={14} color="#fff" />}
               </View>
             </Pressable>
+            {!newAllDay && (
+              <View style={{ paddingHorizontal: 16, gap: 8, marginTop: 4 }}>
+                <View style={styles.timeRow}>
+                  <Text style={[typography.body, { color: colors.label, flex: 1 }]}>Starts</Text>
+                  <View style={styles.timePicker}>
+                    <Pressable onPress={() => setStartHour((h) => (h + 1) % 24)} style={styles.timeBtn}>
+                      <Text style={[typography.headline, { color: colors.systemRed }]}>
+                        {String(startHour).padStart(2, '0')}
+                      </Text>
+                    </Pressable>
+                    <Text style={[typography.headline, { color: colors.label }]}>:</Text>
+                    <Pressable onPress={() => setStartMinute((m) => (m + 15) % 60)} style={styles.timeBtn}>
+                      <Text style={[typography.headline, { color: colors.systemRed }]}>
+                        {String(startMinute).padStart(2, '0')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.timeRow}>
+                  <Text style={[typography.body, { color: colors.label, flex: 1 }]}>Ends</Text>
+                  <View style={styles.timePicker}>
+                    <Pressable onPress={() => setEndHour((h) => (h + 1) % 24)} style={styles.timeBtn}>
+                      <Text style={[typography.headline, { color: colors.systemRed }]}>
+                        {String(endHour).padStart(2, '0')}
+                      </Text>
+                    </Pressable>
+                    <Text style={[typography.headline, { color: colors.label }]}>:</Text>
+                    <Pressable onPress={() => setEndMinute((m) => (m + 15) % 60)} style={styles.timeBtn}>
+                      <Text style={[typography.headline, { color: colors.systemRed }]}>
+                        {String(endMinute).padStart(2, '0')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -304,4 +397,7 @@ const styles = StyleSheet.create({
   modalInput: { marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, fontSize: 16, borderWidth: StyleSheet.hairlineWidth },
   allDayRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 16, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
   checkBox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1.5, borderColor: '#C7C7CC', alignItems: 'center', justifyContent: 'center' },
+  timeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  timePicker: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  timeBtn: { backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
 });

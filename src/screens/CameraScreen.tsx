@@ -5,20 +5,15 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
-
-const getLauncher = async () => {
-  try { return (await import('../../modules/launcher-module/src')).default; }
-  catch { return null; }
-};
 
 // Attempt to import expo-camera; gracefully handle if unavailable
 let CameraViewComponent: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -46,6 +41,8 @@ export function CameraScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const { textScale } = useTheme();
+  // cameraRef is typed any because expo-camera ref methods vary by platform; we guard with optional chaining
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);
@@ -78,16 +75,31 @@ export function CameraScreen({ navigation }: { navigation: any }) {
     setFlashOn((f) => !f);
   }, []);
 
+  const saveToLibrary = useCallback(async (uri: string) => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status === 'granted') {
+        await MediaLibrary.saveToLibraryAsync(uri);
+      }
+    } catch {
+      // Media library save failed — photo is still in lastPhoto state
+    }
+  }, []);
+
   const takePhoto = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (!cameraRef.current || !cameraReady) return;
+    if (!cameraRef.current || !cameraReady) {
+      alert('Camera Not Ready', 'Please wait for the camera to initialize.');
+      return;
+    }
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
       if (photo?.uri) {
         setLastPhoto(photo.uri);
+        await saveToLibrary(photo.uri);
       }
-    } catch (e) {
-      // Fallback: use ImagePicker system camera
+    } catch {
+      // Fallback: use ImagePicker system camera picker (shows iOS-styled result picker overlay)
       try {
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ['images'],
@@ -96,36 +108,44 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         });
         if (!result.canceled && result.assets[0]) {
           setLastPhoto(result.assets[0].uri);
+          await saveToLibrary(result.assets[0].uri);
         }
       } catch {
-        if (Platform.OS === 'android') {
-          const mod = await getLauncher();
-          if (mod) await mod.launchApp('com.android.camera2');
-        }
+        // No further fallback — keep user in-app
+        alert('Camera Error', 'Unable to capture photo. Please check camera permissions.');
       }
     }
-  }, [cameraReady]);
+  }, [cameraReady, alert, saveToLibrary]);
 
   const startRecording = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (!cameraRef.current || !cameraReady) return;
+    if (!cameraRef.current || !cameraReady) {
+      alert('Camera Not Ready', 'Please wait for the camera to initialize.');
+      return;
+    }
     setIsRecording(true);
     try {
       const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
       if (result?.uri) {
         setLastPhoto(result.uri);
+        await saveToLibrary(result.uri);
       }
     } catch {
       // recording failed or was stopped
     } finally {
       setIsRecording(false);
     }
-  }, [cameraReady]);
+  }, [cameraReady, alert, saveToLibrary]);
 
   const stopRecording = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (cameraRef.current) {
-      cameraRef.current.stopRecording();
+    try {
+      if (cameraRef.current) {
+        cameraRef.current.stopRecording();
+      }
+    } catch {
+      // stop recording failed
+      setIsRecording(false);
     }
   }, []);
 
@@ -137,7 +157,6 @@ export function CameraScreen({ navigation }: { navigation: any }) {
         startRecording();
       }
     } else {
-      // PHOTO and PORTRAIT both take a photo
       takePhoto();
     }
   }, [mode, isRecording, takePhoto, startRecording, stopRecording]);

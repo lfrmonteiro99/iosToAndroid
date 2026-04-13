@@ -31,7 +31,7 @@ export function BatteryScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { battery, openSystemPanel } = useDevice();
+  const { battery } = useDevice();
 
   const batteryLevel = Math.round(battery.level * 100);
   const batteryColor = getBatteryColor(batteryLevel);
@@ -92,20 +92,6 @@ export function BatteryScreen({ navigation }: { navigation: any }) {
         </View>
 
         {/* Battery Usage */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Battery Usage">
-            <CupertinoListTile
-              title="View Battery Usage"
-              leading={{
-                name: 'bar-chart-outline',
-                color: '#FFFFFF',
-                backgroundColor: colors.systemGreen ?? '#34C759',
-              }}
-              onPress={() => openSystemPanel('battery')}
-            />
-          </CupertinoListSection>
-        </View>
-
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
           Battery usage data is calculated since last full charge.

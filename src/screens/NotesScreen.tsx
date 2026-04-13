@@ -91,7 +91,9 @@ interface NoteRowProps {
   note: Note;
   onPress: () => void;
   onDelete: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
 }
 
@@ -327,9 +329,17 @@ export function NotesScreen({ navigation }: { navigation: any }) {
     setEditingNote(null);
   }, [editingNote, editorTitle, editorBody, notes, persistNotes, saveEdit]);
 
-  const handleShare = useCallback(() => {
-    alert('Share', 'Sharing is not available in the emulator.');
-  }, [alert]);
+  const handleShare = useCallback(async () => {
+    if (!editingNote) return;
+    try {
+      const Clipboard = await import('expo-clipboard');
+      const content = editorTitle ? `${editorTitle}\n\n${editorBody}` : editorBody;
+      await Clipboard.setStringAsync(content);
+      alert('Copied', 'Note copied to clipboard.');
+    } catch {
+      alert('Share', 'Could not share note.');
+    }
+  }, [editingNote, editorTitle, editorBody, alert]);
 
   // Cleanup timer on unmount
   useEffect(() => {

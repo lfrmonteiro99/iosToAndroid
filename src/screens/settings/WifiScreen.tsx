@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, TextInput, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, TextInput, Platform, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -57,13 +57,18 @@ export function WifiScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { wifi, toggleWifi, openSystemPanel } = useDevice();
+  const { wifi, toggleWifi } = useDevice();
   const alert = useAlert();
 
   const [scannedNetworks, setScannedNetworks] = useState<ScannedNetwork[]>([]);
   const [scanning, setScanning] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [joinSsid, setJoinSsid] = useState('');
+  const [joinPassword, setJoinPassword] = useState('');
+  const [joinSecurity, setJoinSecurity] = useState<'WPA2' | 'WPA3' | 'Open'>('WPA2');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [pendingNetwork, setPendingNetwork] = useState<ScannedNetwork | null>(null);
 
   const scanNetworks = useCallback(async () => {
     setScanning(true);
@@ -107,9 +112,61 @@ export function WifiScreen({ navigation }: { navigation: any }) {
       alert('Enter Network Name', 'Please type a network name (SSID) to join.');
       return;
     }
-    openSystemPanel('wifi');
-    setJoinSsid('');
-  }, [joinSsid, alert, openSystemPanel]);
+    // Show in-app password modal (no Android Settings panel)
+    setPendingNetwork({ ssid: joinSsid.trim(), bssid: '', level: 0, frequency: 0, isSecure: true });
+    setShowPasswordModal(true);
+  }, [joinSsid, alert]);
+
+  const handleNetworkTap = useCallback((network: ScannedNetwork) => {
+    if (network.isSecure) {
+      setPendingNetwork(network);
+      setJoinPassword('');
+      setJoinSecurity('WPA2');
+      setShowPasswordModal(true);
+    } else {
+      // Open network — join directly
+      (async () => {
+        setConnecting(true);
+        try {
+          const mod = await getLauncher();
+          if (!mod) return;
+          const ok = await mod.joinWifiNetwork(network.ssid, '', 'Open');
+          if (ok) {
+            alert('Joining', `Connecting to "${network.ssid}"…`);
+          } else {
+            alert('Failed', 'Could not add this network.');
+          }
+        } finally {
+          setConnecting(false);
+        }
+      })();
+    }
+  }, [alert]);
+
+  const submitJoin = useCallback(async () => {
+    if (!pendingNetwork) return;
+    if (joinSecurity !== 'Open' && !joinPassword) {
+      alert('Password Required', 'Enter the Wi-Fi password to join this network.');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const mod = await getLauncher();
+      if (!mod) return;
+      const ok = await mod.joinWifiNetwork(pendingNetwork.ssid, joinPassword, joinSecurity);
+      if (ok) {
+        alert('Joining', `Connecting to "${pendingNetwork.ssid}"…`);
+        setShowPasswordModal(false);
+        setJoinSsid('');
+        setJoinPassword('');
+        setPendingNetwork(null);
+      } else {
+        alert('Failed', 'Could not add this network. Check the password and try again.');
+      }
+    } finally {
+      setConnecting(false);
+    }
+  }, [pendingNetwork, joinPassword, joinSecurity, alert]);
 
   const signalBars = wifi.rssi ? getSignalBars(wifi.rssi) : 0;
 
@@ -292,7 +349,7 @@ export function WifiScreen({ navigation }: { navigation: any }) {
                           </View>
                         }
                         showChevron
-                        onPress={() => openSystemPanel('wifi')}
+                        onPress={() => handleNetworkTap(net)}
                       />
                     );
                   })
@@ -336,10 +393,77 @@ export function WifiScreen({ navigation }: { navigation: any }) {
         {/* Footer note */}
         {wifi.enabled && (
           <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-            Connecting to networks requires Android Settings on Android 10+
+            Networks are added as suggestions on Android 10+. Android may ask you to approve the first time.
           </Text>
         )}
       </ScrollView>
+
+      {/* In-app password entry modal (no Android Settings panel) */}
+      <Modal
+        visible={showPasswordModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <View style={styles.pwOverlay}>
+          <View style={[styles.pwDialog, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+            <Text style={[typography.headline, { color: colors.label, textAlign: 'center' }]}>
+              Enter password for
+            </Text>
+            <Text style={[typography.subhead, { color: colors.label, textAlign: 'center', fontWeight: '600' }]}>
+              {pendingNetwork?.ssid ?? ''}
+            </Text>
+            <TextInput
+              style={[
+                typography.body,
+                styles.pwInput,
+                {
+                  color: colors.label,
+                  backgroundColor: colors.systemBackground,
+                  borderColor: colors.separator,
+                },
+              ]}
+              placeholder="Password"
+              placeholderTextColor={colors.tertiaryLabel}
+              value={joinPassword}
+              onChangeText={setJoinPassword}
+              secureTextEntry
+              autoFocus
+              autoCapitalize="none"
+            />
+            <View style={styles.pwSecurityRow}>
+              {(['WPA2', 'WPA3', 'Open'] as const).map((s) => (
+                <Pressable
+                  key={s}
+                  onPress={() => setJoinSecurity(s)}
+                  style={[
+                    styles.pwSecurityChip,
+                    {
+                      backgroundColor: joinSecurity === s ? colors.systemBlue : colors.systemGray5,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.caption1, { color: joinSecurity === s ? '#fff' : colors.label, fontWeight: '600' }]}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.pwActions}>
+              <CupertinoButton
+                title="Cancel"
+                onPress={() => { setShowPasswordModal(false); setJoinPassword(''); }}
+                variant="tinted"
+                style={{ flex: 1 }}
+              />
+              <CupertinoButton
+                title={connecting ? 'Joining…' : 'Join'}
+                onPress={submitJoin}
+                disabled={connecting}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -351,6 +475,40 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
     textAlign: 'center',
+  },
+  pwOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pwDialog: {
+    width: '85%',
+    borderRadius: 14,
+    padding: 20,
+    gap: 10,
+  },
+  pwInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+  },
+  pwSecurityRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  pwSecurityChip: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  pwActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
   },
   signalRow: {
     flexDirection: 'row',

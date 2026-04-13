@@ -43,7 +43,7 @@ export function StorageScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { storage, openSystemPanel } = useDevice();
+  const { storage } = useDevice();
 
   const [appStats, setAppStats] = useState<AppStorageStat[]>([]);
 
@@ -204,20 +204,6 @@ export function StorageScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Manage in System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Manage in System Settings"
-              leading={{
-                name: 'open-outline',
-                color: '#FFFFFF',
-                backgroundColor: colors.systemBlue,
-              }}
-              onPress={() => openSystemPanel('storage')}
-            />
-          </CupertinoListSection>
-        </View>
       </ScrollView>
     </View>
   );

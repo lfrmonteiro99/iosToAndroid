@@ -1,20 +1,21 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoSegmentedControl,
+  CupertinoActionSheet,
 } from '../../components';
 
 const PREVIEW_VALUES = ['always', 'whenUnlocked', 'never'] as const;
 const PREVIEW_LABELS = ['Always', 'When Unlocked', 'Never'];
+const SUMMARY_OPTIONS = ['Off', 'Morning (8:00 AM)', 'Evening (6:00 PM)', 'Both'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function NotificationsScreen({ navigation }: { navigation: any }) {
@@ -22,7 +23,8 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { openSystemPanel } = useDevice();
+  const [summaryIdx, setSummaryIdx] = useState(0);
+  const [showSummaryPicker, setShowSummaryPicker] = useState(false);
 
   const previewIndex = PREVIEW_VALUES.indexOf(settings.notificationPreviews);
 
@@ -98,29 +100,31 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection
             header="Scheduled Summary"
-            footer="Notification preferences are applied system-wide."
+            footer="Deliver notifications in scheduled batches to reduce interruptions."
           >
             <CupertinoListTile
               title="Scheduled Summary"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>Off</Text>
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  {SUMMARY_OPTIONS[summaryIdx]}
+                </Text>
               }
-              onPress={() => openSystemPanel('notification')}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open Notification Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('notification')}
+              onPress={() => setShowSummaryPicker(true)}
             />
           </CupertinoListSection>
         </View>
       </ScrollView>
+
+      <CupertinoActionSheet
+        visible={showSummaryPicker}
+        onClose={() => setShowSummaryPicker(false)}
+        title="Scheduled Summary"
+        options={SUMMARY_OPTIONS.map((label, i) => ({
+          label,
+          onPress: () => { setSummaryIdx(i); setShowSummaryPicker(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }

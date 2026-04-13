@@ -124,7 +124,9 @@ function ShortcutButton({ iconName, label, active = false, onPress, textScale = 
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const device = useDevice();
@@ -191,14 +193,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
     setTimeout(() => nav.navigate('Calculator'), 300);
   };
 
-  const launchCamera = async () => {
-    const mod = await getLauncher();
-    if (mod) {
-      const launched =
-        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
-        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
-      if (!launched) alert('Camera not found');
-    }
+  const launchCamera = () => {
+    // Navigate to in-app Camera screen (no Android system apps)
+    const nav = navigation.getParent() || navigation;
+    navigation.goBack();
+    setTimeout(() => nav.navigate('Camera'), 300);
   };
 
   // Swipe-down gesture to close
@@ -236,14 +235,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
     opacity: backdropOpacity.value,
   }));
 
-  // Focus mode toggle — also opens Android DND settings when enabling
+  // Focus mode toggle — fully in-app (persisted in settings)
   const toggleFocus = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const newMode = settings.focusMode === 'off' ? 'doNotDisturb' : 'off';
     update('focusMode', newMode);
-    if (newMode === 'doNotDisturb') {
-      device.openSystemPanel('notification_policy');
-    }
   };
 
   const batteryLevel = Math.round(device.battery.level * 100);
@@ -254,12 +250,16 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
   const brightnessFill = useSharedValue(device.brightness * SLIDER_HEIGHT);
   const volumeFill = useSharedValue(device.volume * SLIDER_HEIGHT);
 
-  // Keep shared values in sync with external device state changes
+  // Keep shared values in sync with external device state changes.
+  // Shared values (brightnessFill/volumeFill) are stable refs so we intentionally
+  // omit them from deps to avoid effect re-runs on each render.
   useEffect(() => {
     brightnessFill.value = device.brightness * SLIDER_HEIGHT;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device.brightness]);
   useEffect(() => {
     volumeFill.value = device.volume * SLIDER_HEIGHT;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device.volume]);
 
   const applyBrightness = useCallback((pct: number) => {
@@ -352,7 +352,6 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   update('airplaneMode', !settings.airplaneMode);
-                  device.openSystemPanel('airplane');
                 }}
               />
               <ToggleButton
@@ -420,9 +419,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                     onPress={async () => {
                       const mod = await getLauncher();
                       if (mod) {
-                        try { await mod.mediaPlayPause(); } catch { /* no-op */ }
+                        try {
+                          const ok = await mod.mediaPlayPause();
+                          if (ok) setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
+                        } catch { /* no-op */ }
                       }
-                      setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
                     }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
                     style={styles.musicPlayBtn}

@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Dimensions,
-  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
@@ -99,6 +98,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     const mod = await getLauncher();
     if (mod) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (mod as any).openLauncherSettings?.();
       } catch { /* Expected: openLauncherSettings may not exist on all devices */ }
     }

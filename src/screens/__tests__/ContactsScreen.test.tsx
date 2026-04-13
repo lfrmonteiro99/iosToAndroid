@@ -13,9 +13,11 @@ describe('ContactsScreen', () => {
     expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 
-  it('shows permission button when no contacts', () => {
+  it('shows permission button when no contacts after device store is ready', async () => {
     // Device contacts are empty in test environment (mock returns [])
-    const { getByText } = render(<ContactsScreen />);
-    expect(getByText('Grant Contacts Permission')).toBeTruthy();
+    // DeviceStore sets isReady=true after its initial refresh effect completes.
+    const { findByText } = render(<ContactsScreen />);
+    const button = await findByText('Grant Contacts Permission', {}, { timeout: 3000 });
+    expect(button).toBeTruthy();
   });
 });

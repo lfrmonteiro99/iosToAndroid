@@ -228,11 +228,23 @@ export function ContactsScreen() {
         options={contextContact ? [
           {
             label: 'Call',
-            onPress: () => Linking.openURL(`tel:${contextContact.phone}`),
+            onPress: async () => {
+              const mod = await (async () => {
+                try { return (await import('../../modules/launcher-module/src')).default; } catch { return null; }
+              })();
+              if (mod && contextContact.phone) {
+                try {
+                  const ok = await mod.makeCall(contextContact.phone);
+                  if (ok) return;
+                } catch { /* fall through */ }
+              }
+              if (contextContact.phone) Linking.openURL(`tel:${contextContact.phone}`);
+            },
           },
           {
             label: 'Send Message',
-            onPress: () => Linking.openURL(`sms:${contextContact.phone}`),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            onPress: () => (navigation as any).navigate('Conversation', { address: contextContact.phone }),
           },
           {
             label: 'Add to Favorites',

@@ -170,7 +170,7 @@ function CalcButton({
   onPress,
   size = 80,
   gap = 12,
-  isScientific = false,
+  isScientific: _isScientific = false,
   isLandscape = false,
 }: CalcButtonProps) {
   const btnSize = isLandscape ? Math.min(size, 56) : size;
@@ -256,7 +256,7 @@ function CalcButton({
 // ---------------------------------------------------------------------------
 
 export function CalculatorScreen() {
-  const { typography } = useTheme();
+  useTheme();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 

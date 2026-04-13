@@ -111,7 +111,7 @@ export function SettingsScreen() {
 
   const handleItemPress = (item: SettingsItem) => {
     if (item.key === 'airplane') {
-      device.openSystemPanel('airplane');
+      // In-app airplane mode toggle (cosmetic — persisted in settings)
       return;
     }
     if (item.route) {

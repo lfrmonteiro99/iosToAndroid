@@ -151,7 +151,7 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
         }
         setEndCursor(result.endCursor);
         setHasNextPage(result.hasNextPage);
-      } catch (e) {
+      } catch {
         // silently handle
       }
     },
@@ -322,7 +322,7 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
           : 'Failed to create the album. Please try again.',
       );
     }
-  }, [newAlbumName]);
+  }, [newAlbumName, alert]);
 
   // ------------------------------------------------------------------
   // Share
@@ -340,7 +340,7 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
     } catch {
       alert('Error', 'Unable to share this photo.');
     }
-  }, []);
+  }, [alert]);
 
   // ==================================================================
   // Full-screen photo viewer

@@ -73,6 +73,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
   const { openSystemPanel } = useDevice();
 
   const [lowDataMode, setLowDataMode] = useState(false);
+  const [dataRoaming, setDataRoaming] = useState(false);
   const [carrier, setCarrier] = useState<CarrierData | null>(null);
   const [network, setNetwork] = useState<NetworkData | null>(null);
 
@@ -233,12 +234,9 @@ export function CellularScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Data Roaming"
               trailing={
-                <Text style={[typography.body, { color: colors.systemBlue }]}>
-                  Manage
-                </Text>
+                <CupertinoSwitch value={dataRoaming} onValueChange={setDataRoaming} />
               }
-              showChevron
-              onPress={() => openSystemPanel('data_roaming')}
+              showChevron={false}
             />
             <CupertinoListTile
               title="Low Data Mode"
@@ -250,9 +248,9 @@ export function CellularScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* SIM PIN */}
+        {/* SIM PIN — truly OS-only by security design */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
+          <CupertinoListSection footer="Changing SIM PIN requires Android system settings by security design.">
             <CupertinoListTile
               title="SIM PIN"
               leading={{

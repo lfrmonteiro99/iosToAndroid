@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  Dimensions,
   Image,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -43,7 +42,6 @@ interface NotificationGroup {
   notifications: DeviceNotification[];
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLLAPSED_LIMIT = 3;
 
 function formatNotifTime(timestamp: number): string {
@@ -71,7 +69,7 @@ function formatDateHeader(date: Date): string {
 }
 
 export function NotificationCenterScreen() {
-  const { theme, isDark, typography } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -82,17 +80,6 @@ export function NotificationCenterScreen() {
   const [hasAccess, setHasAccess] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-
-  const loadNotifications = useCallback(async () => {
-    const mod = await getLauncher();
-    if (!mod) return;
-    const access = await mod.isNotificationAccessGranted();
-    setHasAccess(access);
-    if (access) {
-      const notifs = await mod.getNotifications();
-      setNotifications(notifs);
-    }
-  }, []);
 
   useEffect(() => {
     let mounted = true;

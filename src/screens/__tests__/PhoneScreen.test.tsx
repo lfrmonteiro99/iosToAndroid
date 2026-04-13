@@ -2,14 +2,17 @@ import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { PhoneScreen } from '../PhoneScreen';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const mockNav = { goBack: jest.fn() } as any;
+
 describe('PhoneScreen', () => {
   it('renders Phone title', () => {
-    const { getByText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
+    const { getByText } = render(<PhoneScreen navigation={mockNav} />);
     expect(getByText('Phone')).toBeTruthy();
   });
 
   it('renders segmented control with 5 tabs', () => {
-    const { getByText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
+    const { getByText } = render(<PhoneScreen navigation={mockNav} />);
     expect(getByText('Favorites')).toBeTruthy();
     expect(getByText('Recents')).toBeTruthy();
     expect(getByText('Contacts')).toBeTruthy();
@@ -18,7 +21,7 @@ describe('PhoneScreen', () => {
   });
 
   it('keypad tab renders number buttons', () => {
-    const { getByText, getAllByText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
+    const { getByText } = render(<PhoneScreen navigation={mockNav} />);
     // Switch to Keypad tab (index 3)
     fireEvent.press(getByText('Keypad'));
 
@@ -38,7 +41,7 @@ describe('PhoneScreen', () => {
   });
 
   it('keypad shows typed number', () => {
-    const { getByText, getByLabelText } = render(<PhoneScreen navigation={{ goBack: jest.fn() } as any} />);
+    const { getByText, getByLabelText } = render(<PhoneScreen navigation={mockNav} />);
     fireEvent.press(getByText('Keypad'));
 
     // Press digit buttons via accessibilityLabel

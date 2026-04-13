@@ -2,10 +2,6 @@ import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { CalculatorScreen } from '../CalculatorScreen';
 
-// Helper: get the calculator display element (first text match — display sits above buttons)
-const getDisplay = (getAllByText: (text: string) => any[], text: string) => // eslint-disable-line @typescript-eslint/no-explicit-any
-  getAllByText(text)[0];
-
 describe('CalculatorScreen', () => {
   it('renders calculator display', () => {
     const { getAllByText } = render(<CalculatorScreen />);

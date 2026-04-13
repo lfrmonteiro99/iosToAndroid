@@ -43,6 +43,7 @@ function scaleTypography(
     const fontWeight = boldText
       ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
       : style.fontWeight;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (result as any)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight };
   }
   return result;

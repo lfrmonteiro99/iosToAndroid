@@ -5,7 +5,6 @@ import {
   Image,
   StyleSheet,
   Dimensions,
-  Linking,
   Pressable,
   StatusBar,
 } from 'react-native';
@@ -29,7 +28,6 @@ import * as Haptics from 'expo-haptics';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
-import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
 
 const getLauncher = async () => {
@@ -80,7 +78,6 @@ function formatTime(date: Date, use24Hour: boolean): string {
   }
   let h = date.getHours();
   const m = date.getMinutes().toString().padStart(2, '0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${m}`;
 }
@@ -141,42 +138,6 @@ interface NotificationGroupData {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function NotificationCard({ item, appName, appIcon }: {
-  item: RealNotification;
-  appName: string;
-  appIcon: string;
-}) {
-  const { textScale } = useTheme();
-  return (
-    <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
-      <View style={styles.notifHeader}>
-        {appIcon ? (
-          <Image
-            source={{ uri: `data:image/png;base64,${appIcon}` }}
-            style={styles.notifIconWrap}
-          />
-        ) : (
-          <View style={[styles.notifIconWrap, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-            <Ionicons name="notifications" size={14} color="#fff" />
-          </View>
-        )}
-        <Text style={[styles.notifApp, { fontSize: 12 * textScale }]}>{appName}</Text>
-        <Text style={[styles.notifTime, { fontSize: 12 * textScale }]}>{formatNotifTime(item.time)}</Text>
-      </View>
-      {!!item.title && (
-        <Text style={[styles.notifTitle, { fontSize: 15 * textScale }]} numberOfLines={1}>
-          {item.title}
-        </Text>
-      )}
-      {!!item.text && (
-        <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
-          {item.text}
-        </Text>
-      )}
-    </BlurView>
-  );
-}
 
 function NotificationGroupCard({
   group,
@@ -288,12 +249,12 @@ function NotificationGroupCard({
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings } = useSettings();
   const { apps } = useApps();
-  const alert = useAlert();
   const { textScale } = useTheme();
 
   const [now, setNow] = useState(new Date());
@@ -355,21 +316,13 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
 
   const openCamera = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const mod = await getLauncher();
-    if (mod) {
-      const launched =
-        (await mod.launchApp('com.android.camera2').catch(() => false)) ||
-        (await mod.launchApp('com.google.android.GoogleCamera').catch(() => false));
-      if (!launched) {
-        Linking.openURL('content://media/internal/images/media').catch(() =>
-          alert('Camera', 'Could not open camera app.')
-        );
+    // Unlock first, then navigate to in-app Camera screen (no Android system apps)
+    handleUnlock();
+    setTimeout(() => {
+      if (navigation) {
+        navigation.navigate('Camera');
       }
-    } else {
-      Linking.openURL('content://media/internal/images/media').catch(() =>
-        alert('Camera', 'Could not open camera app.')
-      );
-    }
+    }, 300);
   };
 
   // Fetch real notifications
@@ -436,11 +389,19 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         // Verify PIN from SecureStore (fall back to AsyncStorage for legacy)
         (async () => {
           let pin: string | null = null;
-          try { pin = await SecureStore.getItemAsync(LOCK_PIN_KEY); } catch { /* ignore */ }
-          if (!pin) {
+          let storeAvailable = false;
+          try {
+            pin = await SecureStore.getItemAsync(LOCK_PIN_KEY);
+            storeAvailable = true;
+          } catch { /* SecureStore unavailable */ }
+          if (!pin && !storeAvailable) {
+            // SecureStore failed — try legacy AsyncStorage as last resort
+            try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
+          } else if (!pin) {
+            // SecureStore is available but no PIN set — try legacy migration
             try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
           }
-          // If no PIN is set, allow unlock (first-time user should set PIN in settings)
+          // If no PIN is set anywhere, allow unlock (first-time user)
           if (!pin || next === pin) {
             handleUnlock();
           } else {
@@ -452,8 +413,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               withTiming(12, { duration: 50 }),
               withTiming(0, { duration: 50 }),
             );
-            // Clear after a short delay so user sees the dots filled briefly
-            setTimeout(() => setPasscode(''), 300);
+            // Clear after shake animation completes (250ms)
+            setTimeout(() => setPasscode(''), 350);
           }
         })();
       }
@@ -488,15 +449,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
       if (result.success) {
         handleUnlock();
       } else {
-        // User cancelled or biometric failed
+        // Biometric failed or user cancelled — always show passcode as fallback
         setAuthFailed(true);
-        if (result.error === 'user_cancel' || result.error === 'system_cancel' || result.error === 'app_cancel') {
-          // User cancelled — stay on lock screen, offer passcode
-          setShowPasscode(false);
-        } else {
-          // Authentication failure — show both retry and passcode
-          setShowPasscode(false);
-        }
+        setShowPasscode(true);
       }
     } catch {
       // Expected: biometrics not available — fall back to passcode

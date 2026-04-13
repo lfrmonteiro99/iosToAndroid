@@ -130,11 +130,86 @@ class LauncherModule : Module() {
         }
 
         AsyncFunction("setWifiEnabled") { enabled: Boolean ->
+            // Try direct toggle (works pre-Android 10 with CHANGE_WIFI_STATE permission).
+            // Android 10+ restricts direct toggling for non-system apps, so we fall back
+            // to the inline Settings Panel (not the full Settings app) — the panel overlays
+            // our activity and returns focus when dismissed.
             try {
-                val intent = Intent(Settings.Panel.ACTION_WIFI)
-                // Don't add FLAG_ACTIVITY_NEW_TASK — we want the panel to appear over our activity
-                appContext.currentActivity?.startActivity(intent)
-                true
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    @Suppress("DEPRECATION")
+                    wifiManager.isWifiEnabled = enabled
+                    true
+                } else {
+                    val intent = Intent(Settings.Panel.ACTION_WIFI)
+                    appContext.currentActivity?.startActivity(intent)
+                    true
+                }
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("joinWifiNetwork") { ssid: String, password: String, security: String ->
+            // Silently add a Wi-Fi network using WifiNetworkSuggestion API (Android 10+)
+            // or legacy WifiConfiguration (pre-10). The user is NOT sent to Settings.
+            try {
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val builder = android.net.wifi.WifiNetworkSuggestion.Builder().setSsid(ssid)
+                    when (security.uppercase()) {
+                        "WPA2", "WPA" -> builder.setWpa2Passphrase(password)
+                        "WPA3" -> {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                builder.setWpa3Passphrase(password)
+                            } else {
+                                builder.setWpa2Passphrase(password)
+                            }
+                        }
+                        else -> { /* open network — no passphrase */ }
+                    }
+                    val suggestion = builder.build()
+                    val status = wifiManager.addNetworkSuggestions(listOf(suggestion))
+                    status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS
+                } else {
+                    @Suppress("DEPRECATION")
+                    val config = android.net.wifi.WifiConfiguration().apply {
+                        SSID = "\"$ssid\""
+                        if (password.isNotEmpty()) {
+                            preSharedKey = "\"$password\""
+                        } else {
+                            allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.NONE)
+                        }
+                    }
+                    @Suppress("DEPRECATION")
+                    val netId = wifiManager.addNetwork(config)
+                    if (netId != -1) {
+                        @Suppress("DEPRECATION")
+                        wifiManager.enableNetwork(netId, true)
+                        true
+                    } else { false }
+                }
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("forgetWifiNetwork") { ssid: String ->
+            try {
+                val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val current = wifiManager.networkSuggestions
+                    val toRemove = current.filter { it.ssid == ssid }
+                    if (toRemove.isNotEmpty()) {
+                        val status = wifiManager.removeNetworkSuggestions(toRemove)
+                        status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS
+                    } else { false }
+                } else {
+                    @Suppress("DEPRECATION")
+                    val configured = wifiManager.configuredNetworks
+                    val target = configured?.find { it.SSID == "\"$ssid\"" }
+                    if (target != null) {
+                        @Suppress("DEPRECATION")
+                        wifiManager.removeNetwork(target.networkId)
+                        true
+                    } else { false }
+                }
             } catch (e: Exception) { false }
         }
 
@@ -175,20 +250,74 @@ class LauncherModule : Module() {
         }
 
         AsyncFunction("setBluetoothEnabled") { enabled: Boolean ->
+            // Attempt direct toggle via BluetoothAdapter. Requires BLUETOOTH_CONNECT permission
+            // on Android 12+. If direct toggle fails (Android 13+ blocks it), fall back to
+            // Settings Panel inline overlay (no full Settings app).
             try {
-                // Panel shows inline overlay, not full settings app
+                val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = btManager?.adapter
+                if (adapter != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                    @Suppress("DEPRECATION")
+                    val ok = if (enabled) adapter.enable() else adapter.disable()
+                    if (ok) return@AsyncFunction true
+                }
+                // Fallback: inline panel overlay
                 val panelIntent = Intent("android.settings.panel.action.BLUETOOTH")
                 appContext.currentActivity?.startActivity(panelIntent)
                 true
-            } catch (e: Exception) {
-                // Fallback for older devices
-                try {
-                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    true
-                } catch (e2: Exception) { false }
-            }
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("startBluetoothDiscovery") {
+            // Start discovering nearby Bluetooth devices. Results come via
+            // getDiscoveredBluetoothDevices(). No UI is shown to the user.
+            try {
+                val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = btManager?.adapter
+                if (adapter == null || !adapter.isEnabled) return@AsyncFunction false
+                BluetoothDiscoveryReceiver.register(context)
+                if (adapter.isDiscovering) {
+                    adapter.cancelDiscovery()
+                }
+                adapter.startDiscovery()
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopBluetoothDiscovery") {
+            try {
+                val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = btManager?.adapter
+                adapter?.cancelDiscovery()
+                BluetoothDiscoveryReceiver.unregister(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("getDiscoveredBluetoothDevices") {
+            BluetoothDiscoveryReceiver.getDiscoveredDevices()
+        }
+
+        AsyncFunction("pairBluetoothDevice") { address: String ->
+            // Initiate pairing silently via BluetoothDevice.createBond().
+            // Android will show a PIN confirmation dialog if the device requires it
+            // — this is a security requirement that cannot be bypassed.
+            try {
+                val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = btManager?.adapter ?: return@AsyncFunction false
+                val device = adapter.getRemoteDevice(address)
+                device.createBond()
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("unpairBluetoothDevice") { address: String ->
+            try {
+                val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val adapter = btManager?.adapter ?: return@AsyncFunction false
+                val device = adapter.getRemoteDevice(address)
+                // removeBond is hidden API; call via reflection
+                val method = device.javaClass.getMethod("removeBond")
+                method.invoke(device) as? Boolean ?: false
+            } catch (e: Exception) { false }
         }
 
         // ── Storage ──────────────────────────────────────────────────────
