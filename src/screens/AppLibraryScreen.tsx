@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -365,6 +366,7 @@ export function AppLibraryScreen({ navigation }: { navigation: any }) {
   }, [apps, query]);
 
   const handleLaunch = useCallback((packageName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     launchApp(packageName);
   }, [launchApp]);
 
