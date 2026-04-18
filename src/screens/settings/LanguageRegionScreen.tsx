@@ -54,9 +54,12 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
 
   // Load persisted language/region preferences
   useEffect(() => {
-    AsyncStorage.multiGet([LANG_STORAGE_KEY, REGION_STORAGE_KEY]).then(([langPair, regionPair]) => {
-      if (langPair[1]) setSelectedLang(langPair[1]);
-      if (regionPair[1]) setSelectedRegion(regionPair[1]);
+    Promise.all([
+      AsyncStorage.getItem(LANG_STORAGE_KEY),
+      AsyncStorage.getItem(REGION_STORAGE_KEY),
+    ]).then(([lang, region]) => {
+      if (lang) setSelectedLang(lang);
+      if (region) setSelectedRegion(region);
     }).catch(() => {});
   }, []);
 

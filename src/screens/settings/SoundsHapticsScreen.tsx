@@ -37,12 +37,15 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
 
   // Load persisted values on mount
   useEffect(() => {
-    AsyncStorage.multiGet([RINGTONE_STORAGE_KEY, TEXT_TONE_STORAGE_KEY, SYSTEM_HAPTICS_STORAGE_KEY])
-      .then(([rtPair, ttPair, hapticsPair]) => {
-        if (rtPair[1]) { setRingtone(rtPair[1]); update('ringtone', rtPair[1]); }
-        if (ttPair[1]) { setTextTone(ttPair[1]); update('textTone', ttPair[1]); }
-        if (hapticsPair[1] !== null) setSystemHaptics(hapticsPair[1] !== 'false');
-      }).catch(() => {});
+    Promise.all([
+      AsyncStorage.getItem(RINGTONE_STORAGE_KEY),
+      AsyncStorage.getItem(TEXT_TONE_STORAGE_KEY),
+      AsyncStorage.getItem(SYSTEM_HAPTICS_STORAGE_KEY),
+    ]).then(([rt, tt, haptics]) => {
+      if (rt) { setRingtone(rt); update('ringtone', rt); }
+      if (tt) { setTextTone(tt); update('textTone', tt); }
+      if (haptics !== null) setSystemHaptics(haptics !== 'false');
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

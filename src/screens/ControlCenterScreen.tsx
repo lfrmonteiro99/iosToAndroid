@@ -551,11 +551,11 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                   const mod = await getLauncher();
                   if (mod) {
                     try {
-                      // Try to open Nearby Share system panel; fall back to system settings
+                      // Try to open Nearby Share system panel; fall back to general settings
                       await mod.openSystemSettings('nearby_share');
                     } catch {
                       try {
-                        await mod.openSystemSettings();
+                        await mod.openSystemSettings('settings');
                       } catch {
                         alert('Nearby Share', 'Opening Nearby Share...');
                       }
