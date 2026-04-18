@@ -53,6 +53,7 @@ const DEMO_EMAILS: Email[] = [
 
 const SENT_STORAGE_KEY = '@iostoandroid/mail_sent';
 const DEMO_BANNER_KEY = '@iostoandroid/mail_demo_dismissed';
+const INBOX_KEY = '@iostoandroid/mail_inbox';
 
 function getInitials(name: string): string {
   const parts = name.split(' ');
@@ -77,22 +78,27 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   const [isLoading, setIsLoading] = useState(true);
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
 
-  // Simulate initial load for 800ms then show email list
+  // Load persisted inbox state on mount; seed with DEMO_EMAILS on first run
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-
-  useEffect(() => {
-    AsyncStorage.getItem(DEMO_BANNER_KEY).then((val) => {
-      if (val !== 'true') setDemoBannerDismissed(false);
-    });
+    Promise.all([
+      AsyncStorage.getItem(INBOX_KEY),
+      AsyncStorage.getItem(DEMO_BANNER_KEY),
+    ]).then(([inboxRaw, bannerRaw]) => {
+      if (inboxRaw) {
+        try { setEmails(JSON.parse(inboxRaw)); } catch { /* keep default */ }
+      }
+      if (bannerRaw !== 'true') setDemoBannerDismissed(false);
+      setIsLoading(false);
+    }).catch(() => setIsLoading(false));
   }, []);
 
   const dismissDemoBanner = useCallback(() => {
     setDemoBannerDismissed(true);
     AsyncStorage.setItem(DEMO_BANNER_KEY, 'true');
+  }, []);
+
+  const persistEmails = useCallback((updated: Email[]) => {
+    AsyncStorage.setItem(INBOX_KEY, JSON.stringify(updated)).catch(() => { /* ignore */ });
   }, []);
   // Initialize compose state from route params if navigated here to compose
   const initialCompose = route?.params?.composeTo;
@@ -105,24 +111,40 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
 
   const handleOpenEmail = useCallback((email: Email) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: true } : e));
+    setEmails(prev => {
+      const updated = prev.map(e => e.id === email.id ? { ...e, isRead: true } : e);
+      persistEmails(updated);
+      return updated;
+    });
     setSelectedEmail(email);
-  }, []);
+  }, [persistEmails]);
 
   const handleArchive = useCallback((id: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setEmails(prev => prev.filter(e => e.id !== id));
-  }, []);
+    setEmails(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      persistEmails(updated);
+      return updated;
+    });
+  }, [persistEmails]);
 
   const handleDelete = useCallback((id: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    setEmails(prev => prev.filter(e => e.id !== id));
-  }, []);
+    setEmails(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      persistEmails(updated);
+      return updated;
+    });
+  }, [persistEmails]);
 
   const handleFlag = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setEmails(prev => prev.map(e => e.id === id ? { ...e, isFlagged: !e.isFlagged } : e));
-  }, []);
+    setEmails(prev => {
+      const updated = prev.map(e => e.id === id ? { ...e, isFlagged: !e.isFlagged } : e);
+      persistEmails(updated);
+      return updated;
+    });
+  }, [persistEmails]);
 
   const handleSend = useCallback(async () => {
     if (!composeTo.trim() || !composeSubject.trim()) {
