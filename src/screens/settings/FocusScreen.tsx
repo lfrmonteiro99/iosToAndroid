@@ -1,7 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import {
@@ -9,6 +10,7 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  useAlert,
 } from '../../components';
 
 type FocusMode = 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
@@ -34,6 +36,29 @@ export function FocusScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const alert = useAlert();
+
+  const isFocusActive = settings.focusMode !== 'off';
+  const activeModeLabel = FOCUS_MODES.find((m) => m.key === settings.focusMode)?.label ?? '';
+
+  const handleSelectMode = useCallback((mode: FocusModeOption) => {
+    const wasActive = settings.focusMode !== 'off';
+    const willBeActive = mode.key !== 'off';
+
+    // NOTE: Actual notification silencing requires native Android integration
+    // (NotificationManager.setInterruptionFilter or similar). Here we only
+    // update the in-app focus state and inform the user of the simulated effect.
+    update('focusMode', mode.key);
+
+    if (!wasActive && willBeActive) {
+      alert(
+        'Focus Mode Active',
+        `${mode.label} is ON. Notifications will be silenced.`,
+      );
+    } else if (wasActive && !willBeActive) {
+      alert('Focus Mode Disabled', 'Focus mode disabled. Notifications restored.');
+    }
+  }, [settings.focusMode, update, alert]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -48,38 +73,52 @@ export function FocusScreen({ navigation }: { navigation: any }) {
           </Text>
         }
       />
+
+      {/* Active focus mode banner */}
+      {isFocusActive && (
+        <View style={[styles.banner, { backgroundColor: colors.systemPurple ?? '#5856D6' }]}>
+          <Ionicons name="moon" size={16} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={[typography.footnote, { color: '#fff', flex: 1 }]}>
+            Focus mode active – notifications are filtered
+          </Text>
+          <Text style={[typography.footnote, { color: 'rgba(255,255,255,0.8)', fontWeight: '600' }]}>
+            {activeModeLabel}
+          </Text>
+        </View>
+      )}
+
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Focus Modes list */}
-        <View style={{ paddingHorizontal: spacing.md }}>
+        <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
           <CupertinoListSection
             header="Focus Modes"
             footer="Focus lets you silence notifications and filter apps based on what you're doing."
           >
-            {FOCUS_MODES.map((mode) => (
-              <CupertinoListTile
-                key={mode.key}
-                title={mode.label}
-                leading={{
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  name: mode.icon as any,
-                  color: '#FFFFFF',
-                  backgroundColor: mode.iconBg,
-                }}
-                trailing={
-                  settings.focusMode === mode.key ? (
-                    <Text style={[typography.body, { color: colors.systemBlue }]}>✓</Text>
-                  ) : undefined
-                }
-                showChevron={false}
-                onPress={() => {
-                  // Focus mode is fully in-app (persisted in settings) — no Android delegation
-                  update('focusMode', mode.key);
-                }}
-              />
-            ))}
+            {FOCUS_MODES.map((mode) => {
+              const isActive = settings.focusMode === mode.key;
+              return (
+                <CupertinoListTile
+                  key={mode.key}
+                  title={mode.label}
+                  leading={{
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    name: mode.icon as any,
+                    color: '#FFFFFF',
+                    backgroundColor: isActive ? mode.iconBg : colors.systemGray4 ?? '#8E8E93',
+                  }}
+                  trailing={
+                    isActive ? (
+                      <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '700' }]}>✓</Text>
+                    ) : undefined
+                  }
+                  showChevron={false}
+                  onPress={() => handleSelectMode(mode)}
+                />
+              );
+            })}
           </CupertinoListSection>
         </View>
 

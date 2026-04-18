@@ -773,8 +773,29 @@ export function LauncherHomeScreen() {
         actions.push({ label: 'Wi-Fi', onPress: () => { closeActionSheet(); navigation.navigate('WiFi'); } });
         actions.push({ label: 'Bluetooth', onPress: () => { closeActionSheet(); navigation.navigate('Bluetooth'); } });
         break;
+      case 'com.iostoandroid.calendar':
+        actions.push({ label: 'New Event', onPress: () => { closeActionSheet(); navigation.navigate('Calendar'); } });
+        break;
+      case 'com.iostoandroid.clock':
+        actions.push({ label: 'New Alarm', onPress: () => { closeActionSheet(); navigation.navigate('Clock'); } });
+        break;
+      case 'com.iostoandroid.camera':
+        actions.push({ label: 'Take Photo', onPress: () => { closeActionSheet(); navigation.navigate('Camera'); } });
+        actions.push({ label: 'Record Video', onPress: () => { closeActionSheet(); navigation.navigate('Camera'); } });
+        break;
     }
     return actions;
+  };
+
+  // App Info alert helper (shows package name)
+  const showAppInfo = (app: InstalledApp) => {
+    import('react-native').then(({ Alert }) => {
+      Alert.alert(
+        app.name,
+        `Package: ${app.packageName}\nSystem App: ${app.isSystem ? 'Yes' : 'No'}`,
+        [{ text: 'OK', style: 'default' }],
+      );
+    });
   };
 
   // Helper to call native module lazily
@@ -793,8 +814,14 @@ export function LauncherHomeScreen() {
 
     // Open
     options.push({
-      label: 'Open',
+      label: 'Open App',
       onPress: () => { closeActionSheet(); handleAppPress(app); },
+    });
+
+    // App Info
+    options.push({
+      label: 'App Info',
+      onPress: () => { closeActionSheet(); showAppInfo(app); },
     });
 
     // Dock: add or remove depending on current state

@@ -224,7 +224,7 @@ export function StorageScreen({ navigation }: { navigation: any }) {
                       style: 'destructive',
                       onPress: async () => {
                         try {
-                          await AsyncStorage.multiRemove(CACHE_KEYS);
+                          await AsyncStorage.removeMany(CACHE_KEYS);
                           alert('Cache Cleared', 'App cache has been cleared successfully.');
                         } catch {
                           alert('Error', 'Could not clear cache. Please try again.');

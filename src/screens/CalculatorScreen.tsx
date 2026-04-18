@@ -475,6 +475,41 @@ export function CalculatorScreen() {
 
   const handleScientific = (label: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (label === '(') {
+      setParenStack(prev => [...prev, { prev: previousValue, op: operation }]);
+      setPreviousValue(null);
+      setOperation(null);
+      setResetOnNext(false);
+      setParenDepth(d => d + 1);
+      return;
+    }
+
+    if (label === ')') {
+      if (parenStack.length === 0) return;
+      const current = parseFloat(display);
+      const top = parenStack[parenStack.length - 1];
+      let result = current;
+      if (previousValue !== null && operation) {
+        result = compute(previousValue, operation, current);
+      }
+      const newStack = parenStack.slice(0, -1);
+      setParenStack(newStack);
+      setParenDepth(d => Math.max(0, d - 1));
+      if (top.prev !== null && top.op) {
+        setPreviousValue(top.prev);
+        setOperation(top.op);
+        setDisplay(formatNumber(result));
+        setResetOnNext(true);
+      } else {
+        setDisplay(formatNumber(result));
+        setPreviousValue(null);
+        setOperation(null);
+        setResetOnNext(true);
+      }
+      return;
+    }
+
     if (resetIfError()) return;
     const current = parseFloat(display);
     let result: number;
@@ -671,6 +706,11 @@ export function CalculatorScreen() {
 
       {/* Display */}
       <View style={[styles.displayArea, isLandscape && { paddingBottom: 8 }]}>
+        {parenDepth > 0 && (
+          <Text style={styles.parenIndicator}>
+            {'('.repeat(parenDepth)}
+          </Text>
+        )}
         <Text
           style={[styles.displayText, { fontSize: displayFontSize }]}
           numberOfLines={1}
@@ -811,6 +851,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '200',
     letterSpacing: -2,
+  },
+
+  parenIndicator: {
+    color: '#FF9F0A',
+    fontSize: 18,
+    fontWeight: '400',
+    alignSelf: 'flex-end',
+    marginBottom: 2,
   },
 
   memoryRow: {

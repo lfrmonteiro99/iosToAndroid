@@ -250,7 +250,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         city: area.areaName[0].value,
       };
     } catch {
-      return { temp: 22, condition: 'Partly Cloudy', icon: 'partly-sunny', city: '' };
+      return { temp: 0, condition: '', icon: 'cloud', city: '' };
     }
   }, []);
 

@@ -18,8 +18,10 @@ import {
   CupertinoSearchBar,
   CupertinoSwipeableRow,
   CupertinoEmptyState,
+  CupertinoShareSheet,
   useAlert,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -166,8 +168,7 @@ const RecentRow = React.memo(function RecentRow({
 
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function MapsScreen({ navigation }: { navigation: any }) {
+export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -178,6 +179,7 @@ export function MapsScreen({ navigation }: { navigation: any }) {
   const [loaded, setLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<RecentLocation | null>(null);
+  const [showShareSheet, setShowShareSheet] = useState(false);
 
   // ── Persistence ─────────────────────────────────────────────
 
@@ -489,7 +491,7 @@ export function MapsScreen({ navigation }: { navigation: any }) {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); alert('Share', 'Location shared to clipboard (coming soon).'); }}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShareSheet(true); }}
                 style={[styles.modalActionBtn, { backgroundColor: colors.systemGray5 }]}
               >
                 <Ionicons name="share-outline" size={18} color={colors.label} />
@@ -501,6 +503,14 @@ export function MapsScreen({ navigation }: { navigation: any }) {
           </View>
         </View>
       </Modal>
+
+      {/* Cupertino Share Sheet */}
+      <CupertinoShareSheet
+        visible={showShareSheet}
+        onClose={() => setShowShareSheet(false)}
+        title={selectedLocation?.name}
+        url={selectedLocation ? `https://maps.apple.com/?q=${encodeURIComponent(selectedLocation.name)}` : undefined}
+      />
     </View>
   );
 }

@@ -93,6 +93,12 @@ async function clearHistory(): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Notes storage key
+// ---------------------------------------------------------------------------
+
+const NOTES_STORAGE_KEY = '@iostoandroid/notes';
+
+// ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
 
@@ -118,7 +124,18 @@ interface SettingResult {
   score: number;
 }
 
-type SearchResult = AppResult | ContactResult | SettingResult;
+interface WebSearchResult {
+  type: 'webSearch';
+  query: string;
+}
+
+interface NoteResult {
+  type: 'note';
+  title: string;
+  id: string;
+}
+
+type SearchResult = AppResult | ContactResult | SettingResult | WebSearchResult | NoteResult;
 
 // ---------------------------------------------------------------------------
 // App Icon (reused pattern from AppLibraryScreen)
@@ -173,6 +190,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+  const [notes, setNotes] = useState<Array<{ id: string; title: string }>>([]);
   const historyLoaded = useRef(false);
 
   // Load history on mount
@@ -181,6 +199,19 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
       historyLoaded.current = true;
       loadHistory().then(setHistory);
     }
+  }, []);
+
+  // Load notes on mount
+  useEffect(() => {
+    AsyncStorage.getItem(NOTES_STORAGE_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setNotes(parsed.map((n: any) => ({ id: n.id ?? String(n.title), title: n.title ?? '' })));
+        }
+      } catch { /* ignore */ }
+    });
   }, []);
 
   // Merge contacts: device contacts + store contacts (deduplicate by id)
@@ -201,6 +232,9 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
   const sections = useMemo(() => {
     const q = query.trim();
     if (!q) return [];
+
+    // Web Search (always shown when searching)
+    const webSearchResults: WebSearchResult[] = [{ type: 'webSearch', query: q }];
 
     // Apps
     const appResults: AppResult[] = [];
@@ -232,6 +266,11 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
     }
     contactResults.sort((a, b) => b.score - a.score);
 
+    // Notes
+    const noteResults: NoteResult[] = notes
+      .filter((n) => fuzzyMatch(n.title, q).match)
+      .map((n) => ({ type: 'note' as const, title: n.title, id: n.id }));
+
     // Settings
     const settingResults: SettingResult[] = [];
     for (const setting of SETTINGS_INDEX) {
@@ -252,11 +291,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
     settingResults.sort((a, b) => b.score - a.score);
 
     const result: { title: string; data: SearchResult[] }[] = [];
+    result.push({ title: 'Web', data: webSearchResults });
     if (appResults.length > 0) result.push({ title: 'Apps', data: appResults });
     if (contactResults.length > 0) result.push({ title: 'Contacts', data: contactResults });
+    if (noteResults.length > 0) result.push({ title: 'Notes', data: noteResults });
     if (settingResults.length > 0) result.push({ title: 'Settings', data: settingResults });
     return result;
-  }, [query, apps, allContacts]);
+  }, [query, apps, allContacts, notes]);
 
   const handleResultPress = useCallback(async (item: SearchResult) => {
     const updatedHistory = await addToHistory(query, history);
@@ -271,6 +312,12 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
         break;
       case 'setting':
         navigation.navigate(item.screen);
+        break;
+      case 'webSearch':
+        // Navigate to browser or open external URL in future; for now no-op
+        break;
+      case 'note':
+        navigation.navigate('Notes');
         break;
     }
   }, [query, history, launchApp, navigation]);
@@ -289,6 +336,22 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
 
   const renderItem = useCallback(({ item }: { item: SearchResult }) => {
     switch (item.type) {
+      case 'webSearch':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: colors.systemBlue }]}>
+              <Ionicons name="globe-outline" size={24} color="#fff" />
+            </View>
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]}>
+                Search Web for &ldquo;{item.query}&rdquo;
+              </Text>
+            </View>
+          </Pressable>
+        );
       case 'app':
         return (
           <Pressable
@@ -315,6 +378,21 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
               {item.phone ? (
                 <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>{item.phone}</Text>
               ) : null}
+            </View>
+          </Pressable>
+        );
+      case 'note':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: '#FFD60A' }]}>
+              <Ionicons name="document-text" size={22} color="#000" />
+            </View>
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.title}</Text>
+              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Notes</Text>
             </View>
           </Pressable>
         );
@@ -411,6 +489,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
             if (item.type === 'app') return `app-${item.app.packageName}`;
             if (item.type === 'contact') return `contact-${item.contactId}`;
             if (item.type === 'setting') return `setting-${item.screen}`;
+            if (item.type === 'webSearch') return `web-${item.query}`;
+            if (item.type === 'note') return `note-${item.id}`;
             return `item-${index}`;
           }}
           renderItem={renderItem}

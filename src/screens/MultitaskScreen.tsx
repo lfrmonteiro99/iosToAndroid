@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -196,6 +196,8 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
   }, [apps, recentApps]);
 
   const [entries, setEntries] = useState<RecentEntry[]>(initialEntries);
+  const [showClearedNotice, setShowClearedNotice] = useState(false);
+  const clearNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleDismiss = useCallback((packageName: string) => {
     setEntries(prev => prev.filter(e => e.app.packageName !== packageName));
@@ -206,6 +208,9 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setEntries([]);
     clearRecents();
+    setShowClearedNotice(true);
+    if (clearNoticeTimer.current) clearTimeout(clearNoticeTimer.current);
+    clearNoticeTimer.current = setTimeout(() => setShowClearedNotice(false), 2000);
   }, [clearRecents]);
 
   const handleTap = useCallback((_app: InstalledApp) => {
@@ -228,12 +233,17 @@ export function MultitaskScreen({ navigation }: { navigation: any }) {
       {/* Header */}
       <View style={[styles.header, { marginTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Recents</Text>
-        {entries.length > 0 && (
+        {(entries.length > 0 || showClearedNotice) && (
           <Pressable onPress={handleClearAll} style={styles.clearAllButton} accessibilityLabel="Clear all recent apps" accessibilityRole="button">
             <Text style={styles.clearAllText}>Clear All</Text>
           </Pressable>
         )}
       </View>
+      {showClearedNotice && (
+        <Text style={styles.clearedNotice}>
+          Recent apps cleared from this view. Background processes are managed by Android.
+        </Text>
+      )}
 
       {entries.length === 0 ? (
         <View style={styles.empty}>
@@ -302,6 +312,15 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
     fontWeight: '500',
+  },
+  clearedNotice: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '400',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    marginTop: -16,
+    marginBottom: 12,
   },
 
   scrollContent: {

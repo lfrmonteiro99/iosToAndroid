@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
@@ -30,6 +31,7 @@ interface Reminder {
   completed: boolean;
   flagged: boolean;
   dueDate?: number;
+  notificationId?: string;
   listName: string;
   createdAt: number;
 }
@@ -60,6 +62,45 @@ const SMART_LISTS = [
   { key: 'all', label: 'All', color: '#5856D6', icon: 'tray-outline' as keyof typeof Ionicons.glyphMap },
   { key: 'flagged', label: 'Flagged', color: '#FF9500', icon: 'flag-outline' as keyof typeof Ionicons.glyphMap },
 ];
+
+// ─── Notification Helpers ────────────────────────────────────────────────────
+
+async function requestNotificationPermissions(): Promise<boolean> {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === 'granted') return true;
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+async function scheduleReminderNotification(reminder: Reminder): Promise<string | undefined> {
+  if (!reminder.dueDate) return undefined;
+  const dueDate = new Date(reminder.dueDate);
+  if (dueDate <= new Date()) return undefined;
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return undefined;
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Reminder', body: reminder.title },
+      trigger: { date: dueDate },
+    });
+    return notificationId;
+  } catch {
+    return undefined;
+  }
+}
+
+async function cancelReminderNotification(notificationId: string | undefined): Promise<void> {
+  if (!notificationId) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(notificationId);
+  } catch {
+    // ignore cancellation errors
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -362,6 +403,11 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
   const toggleReminder = useCallback(
     (id: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const reminder = reminders.find((r) => r.id === id);
+      // When marking a reminder as completed, cancel any pending notification
+      if (reminder && !reminder.completed && reminder.notificationId) {
+        cancelReminderNotification(reminder.notificationId);
+      }
       const updated = reminders.map((r) =>
         r.id === id ? { ...r, completed: !r.completed } : r,
       );
@@ -386,6 +432,10 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
   const deleteReminder = useCallback(
     (id: string) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      const reminder = reminders.find((r) => r.id === id);
+      if (reminder?.notificationId) {
+        cancelReminderNotification(reminder.notificationId);
+      }
       const updated = reminders.filter((r) => r.id !== id);
       setReminders(updated);
       persistReminders(updated);
@@ -393,7 +443,7 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
     [reminders, persistReminders],
   );
 
-  const addReminder = useCallback(() => {
+  const addReminder = useCallback(async () => {
     if (!newTitle.trim()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -412,6 +462,14 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
       listName,
       createdAt: Date.now(),
     };
+
+    // Schedule a local notification if the reminder has a future dueDate
+    if (newReminder.dueDate) {
+      const notificationId = await scheduleReminderNotification(newReminder);
+      if (notificationId) {
+        newReminder.notificationId = notificationId;
+      }
+    }
 
     const updated = [...reminders, newReminder];
     setReminders(updated);

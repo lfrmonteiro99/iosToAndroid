@@ -216,6 +216,22 @@ function StorageWidget({
 function WeatherWidget({ temp, condition, icon, city }: { temp: number; condition: string; icon: string; city: string }) {
   const { textScale } = useTheme();
   const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
+  const isUnavailable = !condition;
+
+  if (isUnavailable) {
+    return (
+      <WidgetCard>
+        <View style={styles.widgetRow}>
+          <Ionicons name="cloud-offline-outline" size={22} color="rgba(255,255,255,0.4)" />
+          <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
+        </View>
+        <Text style={[styles.widgetSubtext, { fontSize: 15 * textScale, marginTop: 8 }]}>
+          Unable to load weather
+        </Text>
+      </WidgetCard>
+    );
+  }
+
   return (
     <WidgetCard>
       <View style={styles.widgetRow}>
@@ -225,7 +241,7 @@ function WeatherWidget({ temp, condition, icon, city }: { temp: number; conditio
       </View>
       <View style={styles.weatherRow}>
         <Text style={styles.weatherTemp}>{temp}°C</Text>
-        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale }]}>{condition || '—'}</Text>
+        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale }]}>{condition}</Text>
       </View>
     </WidgetCard>
   );

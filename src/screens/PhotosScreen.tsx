@@ -11,13 +11,15 @@ import {
   ActivityIndicator,
   Platform,
   TextInput,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
-import { CupertinoNavigationBar, CupertinoSegmentedControl, useAlert } from '../components';
+import { CupertinoNavigationBar, CupertinoSegmentedControl, useAlert, CupertinoSkeleton } from '../components';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 2;
@@ -26,6 +28,16 @@ const THUMB_SIZE = (SCREEN_WIDTH - GRID_GAP * (COLS + 1)) / COLS;
 const PAGE_SIZE = 60;
 
 const TABS = ['Library', 'For You', 'Albums'];
+
+// ---------------------------------------------------------------------------
+// Memories data
+// ---------------------------------------------------------------------------
+const MEMORIES = [
+  { id: '1', title: 'Last Week', colors: ['#667eea', '#764ba2'] as [string, string] },
+  { id: '2', title: 'This Month', colors: ['#f093fb', '#f5576c'] as [string, string] },
+  { id: '3', title: 'Summer 2024', colors: ['#4facfe', '#00f2fe'] as [string, string] },
+  { id: '4', title: 'Recent Highlights', colors: ['#43e97b', '#38f9d7'] as [string, string] },
+];
 
 // ---------------------------------------------------------------------------
 // Helper: group assets by date range
@@ -64,6 +76,8 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
   const [tabIndex, setTabIndex] = useState(0);
   const [permissionStatus, setPermissionStatus] = useState<'undetermined' | 'granted' | 'denied'>('undetermined');
   const [loading, setLoading] = useState(true);
+  const [skeletonLoading, setSkeletonLoading] = useState(true);
+  const [selectedMemory, setSelectedMemory] = useState<{ title: string } | null>(null);
 
   // ---- Library tab state ----
   const [libraryAssets, setLibraryAssets] = useState<MediaLibrary.Asset[]>([]);
@@ -96,6 +110,14 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  // ---- Skeleton loading timer (800ms) ----
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mountedRef.current) setSkeletonLoading(false);
+    }, 800);
+    return () => clearTimeout(timer);
   }, []);
 
   // ------------------------------------------------------------------
@@ -455,7 +477,37 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
         // ============================================================
         // Library Tab
         // ============================================================
-        libraryAssets.length === 0 ? (
+        skeletonLoading ? (
+          // Skeleton loading grid
+          <ScrollView contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
+            {/* Memories skeleton */}
+            <View style={{ marginBottom: 16 }}>
+              <CupertinoSkeleton width="40%" height={18} borderRadius={9} style={{ marginBottom: 12 }} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {[0, 1, 2, 3].map((i) => (
+                  <CupertinoSkeleton
+                    key={i}
+                    width={120}
+                    height={80}
+                    borderRadius={12}
+                    style={{ marginRight: 10 }}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+            {/* Photo grid skeleton */}
+            <View style={styles.grid}>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <CupertinoSkeleton
+                  key={i}
+                  width={THUMB_SIZE}
+                  height={THUMB_SIZE}
+                  borderRadius={0}
+                />
+              ))}
+            </View>
+          </ScrollView>
+        ) : libraryAssets.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="images-outline" size={64} color={colors.systemGray3} />
             <Text style={[typography.headline, { color: colors.label, marginTop: 16 }]}>No Photos Yet</Text>
@@ -475,6 +527,13 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
             numColumns={COLS}
             columnWrapperStyle={{ gap: GRID_GAP }}
             contentContainerStyle={{ gap: GRID_GAP, padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}
+            ListHeaderComponent={
+              <MemoriesSection
+                onSelectMemory={setSelectedMemory}
+                colors={colors}
+                typography={typography}
+              />
+            }
             renderItem={({ item }) => (
               <Pressable onPress={() => setSelectedAsset(item)}>
                 <Image source={{ uri: item.uri }} style={styles.thumb} />
@@ -518,6 +577,64 @@ export function PhotosScreen({ navigation }: { navigation: any }) {
           onOpenAlbum={openAlbum}
         />
       )}
+
+      {/* Memory detail modal */}
+      <Modal
+        visible={selectedMemory !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedMemory(null)}
+      >
+        <View style={styles.memoryModalOverlay}>
+          <View style={[styles.memoryModalCard, { backgroundColor: colors.secondarySystemGroupedBackground ?? colors.systemBackground }]}>
+            <Text style={[typography.title2, { color: colors.label, marginBottom: 8 }]}>
+              {selectedMemory?.title}
+            </Text>
+            <Text style={[typography.body, { color: colors.secondaryLabel, textAlign: 'center' }]}>
+              Coming Soon
+            </Text>
+            <Pressable
+              onPress={() => setSelectedMemory(null)}
+              style={[styles.memoryModalClose, { backgroundColor: colors.systemBlue }]}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+// ======================================================================
+// Memories Section Component
+// ======================================================================
+interface MemoriesSectionProps {
+  onSelectMemory: (memory: { title: string }) => void;
+  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSectionProps) {
+  return (
+    <View style={styles.memoriesSection}>
+      <Text style={[typography.title3, { color: colors.label, fontWeight: '700', marginBottom: 10, paddingHorizontal: 4 }]}>
+        Memories
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 4, gap: 10 }}>
+        {MEMORIES.map((memory) => (
+          <Pressable key={memory.id} onPress={() => onSelectMemory({ title: memory.title })}>
+            <LinearGradient
+              colors={memory.colors}
+              style={styles.memoryCard}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.memoryCardTitle}>{memory.title}</Text>
+            </LinearGradient>
+          </Pressable>
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -771,6 +888,48 @@ const styles = StyleSheet.create({
   thumb: { width: THUMB_SIZE, height: THUMB_SIZE },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 60 },
   browseBtn: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 },
+
+  // Memories
+  memoriesSection: {
+    paddingTop: 12,
+    paddingBottom: 16,
+    marginBottom: GRID_GAP,
+  },
+  memoryCard: {
+    width: 120,
+    height: 80,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  memoryCardTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  memoryModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memoryModalCard: {
+    width: 280,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  memoryModalClose: {
+    marginTop: 20,
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
 
   fullView: { flex: 1, backgroundColor: '#000' },
   fullTopBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },

@@ -21,6 +21,7 @@ import {
   CupertinoSwipeableRow,
   useAlert,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -64,8 +65,7 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function MailScreen({ navigation, route }: { navigation: any; route?: any }) {
+export function MailScreen({ navigation, route }: { navigation: AppNavigationProp; route?: { params?: { composeTo?: string; composeSubject?: string; composeBody?: string } } }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

@@ -100,7 +100,7 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
     setScanning(false);
   }, []);
 
-  const handlePair = useCallback(async (device: DiscoveredDevice) => {
+  const doPair = useCallback(async (device: DiscoveredDevice) => {
     setPairingAddress(device.address);
     const mod = await getLauncher();
     if (!mod) { setPairingAddress(null); return; }
@@ -118,6 +118,17 @@ export function BluetoothScreen({ navigation }: { navigation: any }) {
       setPairingAddress(null);
     }
   }, [alert, refresh]);
+
+  const handlePair = useCallback((device: DiscoveredDevice) => {
+    alert(
+      `Connect to "${device.name}"?`,
+      `This will initiate pairing with the device at ${device.address}. You may be asked to confirm a passkey.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Pair', onPress: () => doPair(device) },
+      ]
+    );
+  }, [alert, doPair]);
 
   const handleUnpair = useCallback(async (address: string, name: string) => {
     const mod = await getLauncher();

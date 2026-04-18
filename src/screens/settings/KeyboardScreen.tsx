@@ -3,7 +3,6 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
-import { useSettings } from '../../store/SettingsStore';
 import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
@@ -24,7 +23,6 @@ export function KeyboardScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
 
   const [smartPunctuation, setSmartPunctuation] = useState(true);
@@ -37,9 +35,7 @@ export function KeyboardScreen({ navigation }: { navigation: any }) {
   const [predictive, setPredictive] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.multiGet(Object.values(KBD_KEYS)).then((pairs) => {
-      const map: Record<string, string | null> = {};
-      for (const [k, v] of pairs) map[k] = v;
+    AsyncStorage.getMany(Object.values(KBD_KEYS)).then((map) => {
       if (map[KBD_KEYS.autocap] !== null) setAutoCap(map[KBD_KEYS.autocap] !== 'false');
       if (map[KBD_KEYS.autocorrect] !== null) setAutoCorrect(map[KBD_KEYS.autocorrect] !== 'false');
       if (map[KBD_KEYS.clicks] !== null) setKeyClicks(map[KBD_KEYS.clicks] === 'true');

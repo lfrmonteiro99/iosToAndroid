@@ -364,7 +364,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
     // Sort groups by the most recent notification time (most recent group first)
     groups.sort((a, b) => b.notifications[0].time - a.notifications[0].time);
     return groups;
-  }, [notifications, apps]);
+  }, [notifications, apps, dismissedNotifIds]);
 
   const toggleGroup = useCallback((packageName: string) => {
     setExpandedGroups(prev => ({
