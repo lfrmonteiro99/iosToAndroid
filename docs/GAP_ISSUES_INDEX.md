@@ -71,8 +71,22 @@ Cross-reference between the gaps documented in `GAP_ANALYSIS_V2.md` (plus additi
 | 48 | [#178](https://github.com/lfrmonteiro99/iosToAndroid/issues/178) | Real ringtone picker + preview |
 | 49 | [#179](https://github.com/lfrmonteiro99/iosToAndroid/issues/179) | Focus modes wired to DND policy |
 
+## Labels
+
+Every issue in this batch carries a **`sonnet-ready`** label (= self-contained, can be picked up without further research) plus a priority label:
+
+| Label | Meaning | Issues |
+|-------|---------|--------|
+| `P0` | Critical — broken or dangerous | #135, #136, #137 |
+| `P1` | High — visible user impact / security | #138, #139, #140, #141, #142 |
+| `P2` | Medium — parity + correctness | #143, #144, #145, #146, #147, #148, #149, #157, #158, #159, #160, #161, #162 |
+| `P3` | Low — polish, extensions, tests | #150–#156, #163–#179 |
+
+Query for Sonnet to pick from: `is:issue is:open label:sonnet-ready`
+Pick highest priority first: `is:issue is:open label:sonnet-ready label:P0`
+
 ## Notes
 
 - All issues contain file + line references, concrete code snippets, acceptance criteria, and complexity estimates so they can be handed to Sonnet for implementation without further research.
-- Issues are tagged with `bug`, `enhancement`, `critical`, `security`, `performance`, `tech-debt`, `typescript`, `accessibility`, `ux`, `testing` as appropriate.
-- Existing issues that already cover a gap (e.g. #95, #96, #126, #127) are referenced rather than duplicated.
+- Type labels: `bug`, `enhancement`, `critical`, `security`, `performance`, `tech-debt`, `typescript`, `accessibility`, `ux`, `testing`.
+- Existing issues that already cover a gap (e.g. #95, #96, #126, #127) are referenced rather than duplicated and do NOT carry `sonnet-ready` yet.
