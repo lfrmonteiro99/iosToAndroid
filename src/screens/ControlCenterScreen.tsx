@@ -408,6 +408,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                       const mod = await getLauncher();
                       if (mod) {
                         try { await mod.mediaPrev(); } catch { /* no-op */ }
+                        setTimeout(refreshNowPlaying, 600);
                       }
                     }}
                     accessibilityLabel="Previous track"
@@ -423,6 +424,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                           const ok = await mod.mediaPlayPause();
                           if (ok) setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
                         } catch { /* no-op */ }
+                        setTimeout(refreshNowPlaying, 600);
                       }
                     }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
@@ -439,6 +441,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                       const mod = await getLauncher();
                       if (mod) {
                         try { await mod.mediaNext(); } catch { /* no-op */ }
+                        setTimeout(refreshNowPlaying, 600);
                       }
                     }}
                     accessibilityLabel="Next track"
