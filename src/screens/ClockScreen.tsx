@@ -22,6 +22,7 @@ import {
   CupertinoSwipeableRow,
   CupertinoPicker,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -874,7 +875,7 @@ function TimerTab() {
 // Main ClockScreen
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ClockScreen({ navigation }: { navigation: any }) {
+export function ClockScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

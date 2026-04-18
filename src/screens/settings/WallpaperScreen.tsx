@@ -13,11 +13,12 @@ import {
   CupertinoListTile,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const CUSTOM_WALLPAPER_KEY = '@iostoandroid/custom_wallpaper';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function WallpaperScreen({ navigation }: { navigation: any }) {
+export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

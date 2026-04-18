@@ -21,6 +21,7 @@ import {
   CupertinoSwipeableRow,
   CupertinoEmptyState,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -317,7 +318,7 @@ const SmartListCard = React.memo(function SmartListCard({
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function RemindersScreen({ navigation }: { navigation: any }) {
+export function RemindersScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

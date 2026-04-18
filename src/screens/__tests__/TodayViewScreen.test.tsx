@@ -1,8 +1,9 @@
 import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { TodayViewScreen } from '../TodayViewScreen';
+import type { AppNavigationProp } from '../../navigation/types';
 
-const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
+const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
 
 
 describe('TodayViewScreen', () => {

@@ -22,6 +22,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 
 import { useApps, InstalledApp, RecentApp } from '../store/AppsStore';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -181,7 +182,7 @@ interface RecentEntry {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function MultitaskScreen({ navigation }: { navigation: any }) {
+export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
   const { apps, recentApps, removeFromRecents, clearRecents } = useApps();
 

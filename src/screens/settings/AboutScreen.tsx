@@ -9,6 +9,7 @@ import {
   useAlert,
 } from '../../components';
 import appJson from '../../../app.json';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const APP_VERSION: string = appJson.expo.version;
 const EXPO_SDK: string = String((appJson.expo as { sdkVersion?: string }).sdkVersion ?? '');
@@ -19,7 +20,7 @@ const RN_VERSION: string = (() => {
 })();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function AboutScreen({ navigation }: { navigation: any }) {
+export function AboutScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

@@ -11,6 +11,7 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 function getBatteryColor(level: number): string {
   if (level > 20) return '#34C759';
@@ -26,7 +27,7 @@ function getBatteryIcon(level: number, isCharging: boolean): 'battery-full' | 'b
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function BatteryScreen({ navigation }: { navigation: any }) {
+export function BatteryScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

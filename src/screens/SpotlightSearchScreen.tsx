@@ -18,6 +18,7 @@ import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Fuzzy matching
@@ -45,7 +46,7 @@ function fuzzyMatch(text: string, query: string): { match: boolean; score: numbe
 // Settings search index
 // ---------------------------------------------------------------------------
 
-const SETTINGS_INDEX = [
+const SETTINGS_INDEX: { name: string; screen: keyof RootStackParamList; keywords: string[] }[] = [
   { name: 'Wi-Fi', screen: 'WiFi', keywords: ['wifi', 'internet', 'network', 'wireless'] },
   { name: 'Bluetooth', screen: 'Bluetooth', keywords: ['bluetooth', 'pair', 'connect'] },
   { name: 'Display & Brightness', screen: 'DisplayBrightness', keywords: ['brightness', 'display', 'screen', 'dark mode'] },
@@ -122,7 +123,7 @@ interface ContactResult {
 interface SettingResult {
   type: 'setting';
   name: string;
-  screen: string;
+  screen: keyof RootStackParamList;
   score: number;
 }
 
@@ -194,7 +195,7 @@ function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
+export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, isDark } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -361,7 +362,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
         navigation.navigate('ContactDetail', { contactId: item.contactId });
         break;
       case 'setting':
-        navigation.navigate(item.screen);
+        navigation.navigate(item.screen as never);
         break;
       case 'webSearch':
         // Navigate to browser or open external URL in future; for now no-op

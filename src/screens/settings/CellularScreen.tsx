@@ -11,6 +11,7 @@ import {
   CupertinoSwitch,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const CELLULAR_DATA_KEY = '@iostoandroid/cellular_data';
 const DATA_ROAMING_KEY = '@iostoandroid/data_roaming';
@@ -69,7 +70,7 @@ const signalStyles = StyleSheet.create({
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function CellularScreen({ navigation }: { navigation: any }) {
+export function CellularScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

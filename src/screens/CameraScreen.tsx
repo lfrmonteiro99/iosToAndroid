@@ -14,6 +14,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
+import type { AppNavigationProp } from '../navigation/types';
 
 // Attempt to import expo-camera; gracefully handle if unavailable
 let CameraViewComponent: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -37,7 +38,7 @@ const useCamPerms = useCameraPermissionsHook ?? useStubPermissions;
 type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function CameraScreen({ navigation }: { navigation: any }) {
+export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const { textScale } = useTheme();

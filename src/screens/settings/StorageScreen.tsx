@@ -11,6 +11,7 @@ import {
   CupertinoListTile,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const CACHE_KEYS = [
   'calculator_history',
@@ -48,7 +49,7 @@ function formatBytes(bytes: number): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function StorageScreen({ navigation }: { navigation: any }) {
+export function StorageScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

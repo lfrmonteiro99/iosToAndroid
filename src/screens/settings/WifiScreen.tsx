@@ -13,6 +13,7 @@ import {
   CupertinoActivityIndicator,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 interface ScannedNetwork {
   ssid: string;
@@ -53,7 +54,7 @@ function getRssiLabel(rssi: number): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function WifiScreen({ navigation }: { navigation: any }) {
+export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

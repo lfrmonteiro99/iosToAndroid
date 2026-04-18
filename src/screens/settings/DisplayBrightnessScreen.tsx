@@ -15,11 +15,12 @@ import {
   CupertinoActionSheet,
   CupertinoSlider,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const NIGHT_SHIFT_KEY = '@iostoandroid/night_shift';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
+export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

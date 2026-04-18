@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useProfile } from '../../store/ProfileStore';
+import type { AppNavigationProp } from '../../navigation/types';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -17,7 +18,7 @@ function isValidEmail(e: string): boolean {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function EditProfileScreen({ navigation }: { navigation: any; route: any }) {
+export function EditProfileScreen({ navigation }: { navigation: AppNavigationProp; route: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const { profile, updateProfile } = useProfile();

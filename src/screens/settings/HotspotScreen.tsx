@@ -11,6 +11,7 @@ import {
   CupertinoSwitch,
   CupertinoButton,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 function generatePassword(): string {
   // Generate a readable 12-char password
@@ -23,7 +24,7 @@ function generatePassword(): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function HotspotScreen({ navigation }: { navigation: any }) {
+export function HotspotScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

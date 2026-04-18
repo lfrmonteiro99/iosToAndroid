@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useAlert } from '../components';
 import { CupertinoNavigationBar } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 const EVENTS_STORAGE_KEY = '@iostoandroid/calendar_events';
 
@@ -60,7 +61,7 @@ function formatEventTime(timestamp: number): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function CalendarScreen({ navigation }: { navigation: any }) {
+export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

@@ -10,6 +10,7 @@ import {
   CupertinoListTile,
   CupertinoActionSheet,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const LANGUAGES: { code: string; name: string; native: string }[] = [
   { code: 'en-US', name: 'English (US)', native: 'English (US)' },
@@ -40,7 +41,7 @@ const LANG_STORAGE_KEY = '@iostoandroid/language';
 const REGION_STORAGE_KEY = '@iostoandroid/region';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function LanguageRegionScreen({ navigation }: { navigation: any }) {
+export function LanguageRegionScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

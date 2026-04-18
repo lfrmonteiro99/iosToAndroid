@@ -12,6 +12,7 @@ import {
   CupertinoSegmentedControl,
   CupertinoSlider,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const TEXT_SIZE_LABELS = ['Small', 'Default', 'Large', 'XL'];
 
@@ -23,7 +24,7 @@ const A11Y_KEYS = {
 } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function AccessibilityScreen({ navigation }: { navigation: any }) {
+export function AccessibilityScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Category detection
@@ -301,7 +302,7 @@ function SectionHeader({ title, colors }: { title: string; colors: any }) {
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function AppLibraryScreen({ navigation }: { navigation: any }) {
+export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, isDark } = useTheme();
   const { colors } = theme;
   const { apps, launchApp, recentApps } = useApps();
