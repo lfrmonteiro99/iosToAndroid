@@ -20,6 +20,7 @@ import {
   CupertinoNavigationBar,
   CupertinoSwipeableRow,
   useAlert,
+  CupertinoSkeleton,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 
@@ -73,7 +74,14 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
 
   const [emails, setEmails] = useState(DEMO_EMAILS);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
+
+  // Simulate initial load for 800ms then show email list
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(DEMO_BANNER_KEY).then((val) => {
@@ -213,7 +221,24 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
         }
       />
 
-      <FlatList
+      {/* Skeleton loading rows */}
+      {isLoading && (
+        <View style={{ flex: 1 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={[styles.emailRow, { backgroundColor: colors.systemBackground }]}>
+              {/* Avatar skeleton */}
+              <CupertinoSkeleton width={44} height={44} borderRadius={22} />
+              {/* Lines skeleton */}
+              <View style={[styles.emailContent]}>
+                <CupertinoSkeleton width="65%" height={14} borderRadius={7} style={{ marginBottom: 8 }} />
+                <CupertinoSkeleton width="45%" height={12} borderRadius={6} />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {!isLoading && <FlatList
         data={emails}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
@@ -269,7 +294,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
             </Pressable>
           </CupertinoSwipeableRow>
         )}
-      />
+      />}
 
       {/* Compose Modal */}
       <Modal visible={showCompose} animationType="slide" onRequestClose={() => setShowCompose(false)}>
