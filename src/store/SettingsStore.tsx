@@ -123,6 +123,10 @@ interface SettingsContextValue {
   reset: () => void;
   syncFromDevice: () => Promise<void>;
   isReady: boolean;
+  /** The currently active focus mode, or null if no focus is active. */
+  activeFocusMode: string | null;
+  /** Activate or deactivate a focus mode. Pass null to disable all focus. */
+  setFocusMode: (mode: string | null) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -205,7 +209,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  const value = useMemo(() => ({ settings, update, updateMany, reset, syncFromDevice, isReady }), [settings, update, updateMany, reset, syncFromDevice, isReady]);
+  /** setFocusMode: convenience wrapper that updates the focusMode setting.
+   *  Pass null or 'off' to disable focus mode. */
+  const setFocusMode = useCallback((mode: string | null) => {
+    const resolved = (mode === null ? 'off' : mode) as SettingsState['focusMode'];
+    setSettings((prev) => ({ ...prev, focusMode: resolved }));
+  }, []);
+
+  /** activeFocusMode: null when focus is off, otherwise the current mode string. */
+  const activeFocusMode = settings.focusMode === 'off' ? null : settings.focusMode;
+
+  const value = useMemo(
+    () => ({ settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode }),
+    [settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
+  );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }
