@@ -309,7 +309,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const [authFailed, setAuthFailed] = useState(false);
   const [showPasscode, setShowPasscode] = useState(false);
   const [passcode, setPasscode] = useState('');
-  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [, setFailedAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState(0);
   const passcodeShake = useSharedValue(0);
   const [flashlightOn, setFlashlightOn] = useState(false);

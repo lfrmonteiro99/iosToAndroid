@@ -44,7 +44,7 @@ export function LanguageRegionScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
+  const { update } = useSettings();
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showRegionPicker, setShowRegionPicker] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);

@@ -85,7 +85,7 @@ async function scheduleReminderNotification(reminder: Reminder): Promise<string 
     if (!hasPermission) return undefined;
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: { title: 'Reminder', body: reminder.title },
-      trigger: { date: dueDate },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dueDate },
     });
     return notificationId;
   } catch {

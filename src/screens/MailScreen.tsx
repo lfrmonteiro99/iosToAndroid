@@ -83,6 +83,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
     return () => clearTimeout(timer);
   }, []);
 
+
   useEffect(() => {
     AsyncStorage.getItem(DEMO_BANNER_KEY).then((val) => {
       if (val !== 'true') setDemoBannerDismissed(false);

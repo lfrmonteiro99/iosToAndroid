@@ -3,7 +3,7 @@ import { render, fireEvent } from '../../test-utils';
 import { TodayViewScreen } from '../TodayViewScreen';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
-const mockRoute = { params: {} };
+
 
 describe('TodayViewScreen', () => {
   it('renders without crashing', () => {

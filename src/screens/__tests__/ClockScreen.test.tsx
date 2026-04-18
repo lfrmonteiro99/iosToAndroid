@@ -3,7 +3,7 @@ import { render, fireEvent } from '../../test-utils';
 import { ClockScreen } from '../ClockScreen';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
-const mockRoute = { params: {} };
+
 
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
