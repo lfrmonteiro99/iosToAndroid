@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,15 @@ import {
   Pressable,
   StyleSheet,
   Image,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -80,6 +84,10 @@ export function NotificationCenterScreen() {
   const [hasAccess, setHasAccess] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [expandedNotifKey, setExpandedNotifKey] = useState<string | null>(null);
+  const [replyingKey, setReplyingKey] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const replyInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -172,6 +180,29 @@ export function NotificationCenterScreen() {
     });
   }, []);
 
+  const handleNotifCardTap = useCallback((notif: DeviceNotification) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setExpandedNotifKey(prev => prev === notif.key ? null : notif.key);
+    // Also mark as read
+    setReadIds(prev => new Set(prev).add(notif.key));
+  }, []);
+
+  const handleStartReply = useCallback((notif: DeviceNotification) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setReplyingKey(notif.key);
+    setReplyText('');
+    setTimeout(() => replyInputRef.current?.focus(), 100);
+  }, []);
+
+  const handleSendReply = useCallback((notif: DeviceNotification) => {
+    if (!replyText.trim()) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // In real impl this would send via notification reply; here we just dismiss
+    setReplyingKey(null);
+    setReplyText('');
+    handleDismissNotification(notif);
+  }, [replyText, handleDismissNotification]);
+
   // Group notifications by packageName
   const groups: NotificationGroup[] = React.useMemo(() => {
     const map = new Map<string, NotificationGroup>();
@@ -225,6 +256,10 @@ export function NotificationCenterScreen() {
 
         {/* Notification list */}
         {hasAccess && (
+          <KeyboardAvoidingView
+            style={styles.flex1}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
           <ScrollView
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
@@ -262,6 +297,9 @@ export function NotificationCenterScreen() {
                     {/* Notification cards */}
                     {visibleNotifs.map(notif => {
                       const isRead = readIds.has(notif.key);
+                      const isExpanded = expandedNotifKey === notif.key;
+                      const isReplying = replyingKey === notif.key;
+                      const isMessageApp = notif.packageName.includes('message') || notif.packageName.includes('sms') || notif.packageName.includes('whatsapp') || notif.packageName.includes('telegram') || notif.packageName.includes('signal');
                       return (
                         <CupertinoSwipeableRow
                           key={notif.key}
@@ -271,10 +309,15 @@ export function NotificationCenterScreen() {
                               color: '#FF3B30',
                               onPress: () => handleDismissNotification(notif),
                             },
+                            {
+                              label: 'Mark Read',
+                              color: '#636366',
+                              onPress: () => handleMarkAsRead(notif),
+                            },
                           ]}
                         >
                           <Pressable
-                            onPress={() => handleNotificationTap(notif)}
+                            onPress={() => handleNotifCardTap(notif)}
                             onLongPress={() => handleLongPress(notif)}
                             style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                             accessibilityLabel={`${notif.title || group.appName} notification from ${group.appName}`}
@@ -307,10 +350,71 @@ export function NotificationCenterScreen() {
                                     typography.footnote,
                                     isRead && styles.notifBodyRead,
                                   ]}
-                                  numberOfLines={2}
+                                  numberOfLines={isExpanded ? undefined : 2}
                                 >
                                   {notif.text}
                                 </Text>
+                              )}
+                              {/* Expanded action buttons */}
+                              {isExpanded && !isReplying && (
+                                <View style={styles.notifActions}>
+                                  <Pressable
+                                    style={styles.notifActionBtn}
+                                    onPress={() => { handleNotificationTap(notif); }}
+                                    accessibilityLabel="Open app"
+                                    accessibilityRole="button"
+                                  >
+                                    <Text style={styles.notifActionText}>Open</Text>
+                                  </Pressable>
+                                  {isMessageApp && (
+                                    <Pressable
+                                      style={[styles.notifActionBtn, styles.notifActionBtnPrimary]}
+                                      onPress={() => handleStartReply(notif)}
+                                      accessibilityLabel="Reply"
+                                      accessibilityRole="button"
+                                    >
+                                      <Text style={[styles.notifActionText, { color: '#0A84FF' }]}>Reply</Text>
+                                    </Pressable>
+                                  )}
+                                  <Pressable
+                                    style={[styles.notifActionBtn, styles.notifActionBtnDestructive]}
+                                    onPress={() => { handleDismissNotification(notif); }}
+                                    accessibilityLabel="Dismiss"
+                                    accessibilityRole="button"
+                                  >
+                                    <Text style={[styles.notifActionText, { color: '#FF453A' }]}>Dismiss</Text>
+                                  </Pressable>
+                                </View>
+                              )}
+                              {/* Inline reply input */}
+                              {isReplying && (
+                                <View style={styles.replyContainer}>
+                                  <TextInput
+                                    ref={replyInputRef}
+                                    style={styles.replyInput}
+                                    placeholder="Reply..."
+                                    placeholderTextColor="rgba(255,255,255,0.35)"
+                                    value={replyText}
+                                    onChangeText={setReplyText}
+                                    returnKeyType="send"
+                                    onSubmitEditing={() => handleSendReply(notif)}
+                                    multiline
+                                  />
+                                  <View style={styles.replyButtonRow}>
+                                    <Pressable
+                                      style={styles.replyCancelBtn}
+                                      onPress={() => { setReplyingKey(null); setReplyText(''); }}
+                                    >
+                                      <Text style={styles.replyCancelText}>Cancel</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      style={styles.replySendBtn}
+                                      onPress={() => handleSendReply(notif)}
+                                    >
+                                      <Ionicons name="arrow-up-circle" size={28} color="#0A84FF" />
+                                    </Pressable>
+                                  </View>
+                                </View>
                               )}
                             </BlurView>
                           </Pressable>
@@ -337,6 +441,7 @@ export function NotificationCenterScreen() {
               })
             )}
           </ScrollView>
+          </KeyboardAvoidingView>
         )}
       </View>
     </View>
@@ -367,6 +472,9 @@ const styles = StyleSheet.create({
   clearAllText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  flex1: {
+    flex: 1,
   },
   scroll: {
     flex: 1,
@@ -505,5 +613,68 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
+  },
+  // Per-notification action buttons (shown on tap-expand)
+  notifActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  notifActionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  notifActionBtnPrimary: {
+    backgroundColor: 'rgba(10,132,255,0.15)',
+  },
+  notifActionBtnDestructive: {
+    backgroundColor: 'rgba(255,69,58,0.12)',
+  },
+  notifActionText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // Inline reply
+  replyContainer: {
+    marginTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    paddingTop: 8,
+  },
+  replyInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: '#FFFFFF',
+    fontSize: 14,
+    minHeight: 36,
+    maxHeight: 80,
+  },
+  replyButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 12,
+  },
+  replyCancelBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  replyCancelText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  replySendBtn: {
+    padding: 2,
   },
 });

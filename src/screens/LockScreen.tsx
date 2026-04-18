@@ -143,10 +143,16 @@ function NotificationGroupCard({
   group,
   expanded,
   onToggle,
+  onDismissNotif,
+  onDismissGroup,
+  onOpenNotif,
 }: {
   group: NotificationGroupData;
   expanded: boolean;
   onToggle: () => void;
+  onDismissNotif: (id: string) => void;
+  onDismissGroup: (packageName: string) => void;
+  onOpenNotif: (notif: RealNotification) => void;
 }) {
   const { textScale } = useTheme();
   const color = appIconColor(group.packageName);
@@ -188,6 +194,16 @@ function NotificationGroupCard({
         <Text style={[styles.notifTime, { fontSize: 12 * textScale, marginLeft: 'auto' }]}>
           {formatNotifTime(latest.time)}
         </Text>
+        {/* Clear all for this app's notifications */}
+        <Pressable
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDismissGroup(group.packageName); }}
+          hitSlop={8}
+          style={styles.groupClearBtn}
+          accessibilityLabel={`Clear all ${group.appName} notifications`}
+          accessibilityRole="button"
+        >
+          <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.45)" />
+        </Pressable>
       </Pressable>
 
       {/* Collapsed: show only latest notification */}
@@ -198,16 +214,32 @@ function NotificationGroupCard({
           experimentalBlurMethod="dimezisBlurView"
           style={styles.groupNotifCard}
         >
-          {!!latest.title && (
-            <Text style={[styles.notifTitle, { fontSize: 15 * textScale }]} numberOfLines={1}>
-              {latest.title}
-            </Text>
-          )}
-          {!!latest.text && (
-            <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
-              {latest.text}
-            </Text>
-          )}
+          <Pressable
+            onPress={() => onOpenNotif(latest)}
+            style={{ flex: 1 }}
+            accessibilityLabel={`Open ${latest.title || group.appName}`}
+            accessibilityRole="button"
+          >
+            {!!latest.title && (
+              <Text style={[styles.notifTitle, { fontSize: 15 * textScale }]} numberOfLines={1}>
+                {latest.title}
+              </Text>
+            )}
+            {!!latest.text && (
+              <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
+                {latest.text}
+              </Text>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDismissNotif(latest.id); }}
+            hitSlop={8}
+            style={styles.notifDismissBtn}
+            accessibilityLabel="Dismiss notification"
+            accessibilityRole="button"
+          >
+            <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
+          </Pressable>
         </BlurView>
       )}
 
@@ -221,24 +253,40 @@ function NotificationGroupCard({
             experimentalBlurMethod="dimezisBlurView"
             style={styles.groupNotifCard}
           >
-            <View style={styles.expandedNotifHeader}>
-              {!!item.title && (
-                <Text
-                  style={[styles.notifTitle, { fontSize: 15 * textScale, flex: 1 }]}
-                  numberOfLines={1}
-                >
-                  {item.title}
+            <Pressable
+              onPress={() => onOpenNotif(item)}
+              style={{ flex: 1 }}
+              accessibilityLabel={`Open ${item.title || group.appName}`}
+              accessibilityRole="button"
+            >
+              <View style={styles.expandedNotifHeader}>
+                {!!item.title && (
+                  <Text
+                    style={[styles.notifTitle, { fontSize: 15 * textScale, flex: 1 }]}
+                    numberOfLines={1}
+                  >
+                    {item.title}
+                  </Text>
+                )}
+                <Text style={[styles.notifTime, { fontSize: 11 * textScale }]}>
+                  {formatNotifTime(item.time)}
+                </Text>
+              </View>
+              {!!item.text && (
+                <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
+                  {item.text}
                 </Text>
               )}
-              <Text style={[styles.notifTime, { fontSize: 11 * textScale }]}>
-                {formatNotifTime(item.time)}
-              </Text>
-            </View>
-            {!!item.text && (
-              <Text style={[styles.notifPreview, { fontSize: 14 * textScale }]} numberOfLines={2}>
-                {item.text}
-              </Text>
-            )}
+            </Pressable>
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDismissNotif(item.id); }}
+              hitSlop={8}
+              style={styles.notifDismissBtn}
+              accessibilityLabel="Dismiss notification"
+              accessibilityRole="button"
+            >
+              <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
+            </Pressable>
           </BlurView>
         ))}
     </View>
@@ -261,14 +309,39 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const [authFailed, setAuthFailed] = useState(false);
   const [showPasscode, setShowPasscode] = useState(false);
   const [passcode, setPasscode] = useState('');
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState(0);
   const passcodeShake = useSharedValue(0);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [notifications, setNotifications] = useState<RealNotification[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
+
+  const handleDismissNotif = useCallback((id: string) => {
+    setDismissedNotifIds(prev => new Set(prev).add(id));
+  }, []);
+
+  const handleDismissGroup = useCallback((packageName: string) => {
+    setDismissedNotifIds(prev => {
+      const next = new Set(prev);
+      notifications
+        .filter(n => n.packageName === packageName)
+        .forEach(n => next.add(n.id));
+      return next;
+    });
+  }, [notifications]);
+
+  const handleOpenNotif = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Cannot open apps from lock screen without authentication
+    // Trigger biometric/passcode flow
+    setShowPasscode(true);
+  }, []);
 
   const groupedNotifications = useMemo((): NotificationGroupData[] => {
+    const activeNotifications = notifications.filter(n => !dismissedNotifIds.has(n.id));
     const groupMap = new Map<string, RealNotification[]>();
-    for (const n of notifications) {
+    for (const n of activeNotifications) {
       const existing = groupMap.get(n.packageName);
       if (existing) {
         existing.push(n);
@@ -291,7 +364,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
     // Sort groups by the most recent notification time (most recent group first)
     groups.sort((a, b) => b.notifications[0].time - a.notifications[0].time);
     return groups;
-  }, [notifications, apps]);
+  }, [notifications, apps, dismissedNotifIds]);
 
   const toggleGroup = useCallback((packageName: string) => {
     setExpandedGroups(prev => ({
@@ -382,6 +455,11 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   }));
 
   const handlePasscodeDigit = useCallback((digit: string) => {
+    // Rate limiting: block input during lockout period
+    if (Date.now() < lockoutUntil) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
     setPasscode((prev) => {
       if (prev.length >= 4) return prev;
       const next = prev + digit;
@@ -403,6 +481,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           }
           // If no PIN is set anywhere, allow unlock (first-time user)
           if (!pin || next === pin) {
+            setFailedAttempts(0);
             handleUnlock();
           } else {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -413,6 +492,16 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               withTiming(12, { duration: 50 }),
               withTiming(0, { duration: 50 }),
             );
+            // Increment failed attempts and apply lockout if threshold reached
+            setFailedAttempts(prev => {
+              const next = prev + 1;
+              if (next >= 10) {
+                setLockoutUntil(Date.now() + 300000); // 5 min lockout after 10 failures
+              } else if (next >= 5) {
+                setLockoutUntil(Date.now() + 30000); // 30 sec lockout after 5 failures
+              }
+              return next;
+            });
             // Clear after shake animation completes (250ms)
             setTimeout(() => setPasscode(''), 350);
           }
@@ -421,7 +510,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
       return next;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [lockoutUntil]);
 
   const handlePasscodeDelete = useCallback(() => {
     setPasscode((prev) => prev.slice(0, -1));
@@ -455,6 +544,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
       }
     } catch {
       // Expected: biometrics not available — fall back to passcode
+      setAuthFailed(true);
       setShowPasscode(true);
     }
   };
@@ -578,6 +668,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
               group={group}
               expanded={!!expandedGroups[group.packageName]}
               onToggle={() => toggleGroup(group.packageName)}
+              onDismissNotif={handleDismissNotif}
+              onDismissGroup={handleDismissGroup}
+              onOpenNotif={handleOpenNotif}
             />
           ))}
         </View>
@@ -588,6 +681,11 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         {showPasscode && (
           <View style={styles.passcodeOverlay}>
             <Text style={[styles.passcodeTitle, { fontSize: 18 * textScale }]}>Enter Passcode</Text>
+            {Date.now() < lockoutUntil ? (
+              <Text style={[styles.passcodeLockout, { fontSize: 14 * textScale }]}>
+                Try again in {Math.ceil((lockoutUntil - Date.now()) / 1000)}s
+              </Text>
+            ) : null}
             <Animated.View style={[styles.passcodeDots, passcodeShakeStyle]}>
               {[0, 1, 2, 3].map((i) => (
                 <View
@@ -672,7 +770,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             {authFailed && (
               <View style={styles.authFailedWrap}>
                 <Text style={[styles.authFailedText, { fontSize: 13 * textScale }]}>
-                  Authentication failed
+                  Face ID / Fingerprint not recognized
                 </Text>
                 <View style={styles.authFailedButtons}>
                   <Pressable
@@ -881,12 +979,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.1)',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   expandedNotifHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 2,
+  },
+  notifDismissBtn: {
+    padding: 4,
+    marginLeft: 6,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  groupClearBtn: {
+    marginLeft: 8,
+    padding: 2,
   },
 
   // Bottom
@@ -973,6 +1083,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '500',
     marginBottom: 20,
+  },
+  passcodeLockout: {
+    color: '#FF9500',
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   passcodeDots: {
     flexDirection: 'row',

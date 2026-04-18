@@ -10,6 +10,8 @@ import { CupertinoNavigationBar } from '../components';
 
 const EVENTS_STORAGE_KEY = '@iostoandroid/calendar_events';
 
+type RepeatOption = 'never' | 'daily' | 'weekly' | 'monthly';
+
 interface CalEvent {
   id: string;
   title: string;
@@ -17,6 +19,8 @@ interface CalEvent {
   end: number;
   allDay: boolean;
   location: string;
+  notes?: string;
+  repeat?: RepeatOption;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -57,14 +61,51 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newLocation, setNewLocation] = useState('');
+  const [newNotes, setNewNotes] = useState('');
   const [newAllDay, setNewAllDay] = useState(false);
+  const [newRepeat, setNewRepeat] = useState<RepeatOption>('never');
   const [startHour, setStartHour] = useState(9);
   const [startMinute, setStartMinute] = useState(0);
   const [endHour, setEndHour] = useState(10);
   const [endMinute, setEndMinute] = useState(0);
   const alert = useAlert();
+
+  const REPEAT_OPTIONS: RepeatOption[] = ['never', 'daily', 'weekly', 'monthly'];
+  const REPEAT_LABELS: Record<RepeatOption, string> = { never: 'Never', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+
+  const openAddModal = useCallback(() => {
+    setEditingEvent(null);
+    setNewTitle('');
+    setNewLocation('');
+    setNewNotes('');
+    setNewAllDay(false);
+    setNewRepeat('never');
+    setStartHour(9);
+    setStartMinute(0);
+    setEndHour(10);
+    setEndMinute(0);
+    setShowAddEvent(true);
+  }, []);
+
+  const openEditModal = useCallback((evt: CalEvent) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setEditingEvent(evt);
+    setNewTitle(evt.title);
+    setNewLocation(evt.location || '');
+    setNewNotes(evt.notes || '');
+    setNewAllDay(evt.allDay);
+    setNewRepeat(evt.repeat || 'never');
+    const startDate = new Date(evt.start);
+    setStartHour(startDate.getHours());
+    setStartMinute(startDate.getMinutes());
+    const endDate = new Date(evt.end);
+    setEndHour(endDate.getHours());
+    setEndMinute(endDate.getMinutes());
+    setShowAddEvent(true);
+  }, []);
 
   // Persist user-created events to AsyncStorage
   const persistEvents = useCallback(async (evts: CalEvent[]) => {
@@ -90,36 +131,47 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const start = new Date(selectedDate);
+    const baseDate = editingEvent ? new Date(editingEvent.start) : selectedDate;
+    const start = new Date(baseDate);
     start.setHours(startHour, startMinute, 0, 0);
-    const end = new Date(selectedDate);
+    const end = new Date(baseDate);
     end.setHours(endHour, endMinute, 0, 0);
     // Ensure end is after start
     if (end.getTime() <= start.getTime() && !newAllDay) {
       end.setHours(startHour + 1, startMinute, 0, 0);
     }
-    const newEvent: CalEvent = {
-      id: `user_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-      title: newTitle.trim(),
-      start: start.getTime(),
-      end: end.getTime(),
-      allDay: newAllDay,
-      location: newLocation.trim(),
-    };
-    setEvents((prev) => {
-      const next = [...prev, newEvent];
-      persistEvents(next);
-      return next;
-    });
-    setNewTitle('');
-    setNewLocation('');
-    setNewAllDay(false);
-    setStartHour(9);
-    setStartMinute(0);
-    setEndHour(10);
-    setEndMinute(0);
+
+    if (editingEvent) {
+      // Update existing event
+      setEvents((prev) => {
+        const next = prev.map((e) =>
+          e.id === editingEvent.id
+            ? { ...e, title: newTitle.trim(), start: start.getTime(), end: end.getTime(), allDay: newAllDay, location: newLocation.trim(), notes: newNotes.trim(), repeat: newRepeat }
+            : e
+        );
+        persistEvents(next);
+        return next;
+      });
+    } else {
+      const newEvent: CalEvent = {
+        id: `user_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        title: newTitle.trim(),
+        start: start.getTime(),
+        end: end.getTime(),
+        allDay: newAllDay,
+        location: newLocation.trim(),
+        notes: newNotes.trim(),
+        repeat: newRepeat,
+      };
+      setEvents((prev) => {
+        const next = [...prev, newEvent];
+        persistEvents(next);
+        return next;
+      });
+    }
     setShowAddEvent(false);
-  }, [newTitle, newLocation, newAllDay, selectedDate, startHour, startMinute, endHour, endMinute, alert, persistEvents]);
+    setEditingEvent(null);
+  }, [newTitle, newLocation, newNotes, newAllDay, newRepeat, selectedDate, editingEvent, startHour, startMinute, endHour, endMinute, alert, persistEvents]);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +242,7 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
             <Pressable onPress={() => { setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDate(today); }}>
               <Text style={[typography.body, { color: colors.systemRed }]}>Today</Text>
             </Pressable>
-            <Pressable onPress={() => setShowAddEvent(true)} hitSlop={8}>
+            <Pressable onPress={openAddModal} hitSlop={8}>
               <Ionicons name="add" size={28} color={colors.systemRed} />
             </Pressable>
           </View>
@@ -268,7 +320,13 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
             </Text>
           ) : (
             selectedEvents.map((evt) => (
-              <View key={evt.id} style={[styles.eventCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+              <Pressable
+                key={evt.id}
+                style={[styles.eventCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+                onPress={() => evt.id.startsWith('user_') ? openEditModal(evt) : undefined}
+                accessibilityLabel={evt.id.startsWith('user_') ? `Edit event ${evt.title}` : evt.title}
+                accessibilityRole={evt.id.startsWith('user_') ? 'button' : 'text'}
+              >
                 <View style={[styles.eventBar, { backgroundColor: colors.systemRed }]} />
                 <View style={styles.eventContent}>
                   <Text style={[typography.headline, { color: colors.label }]}>{evt.title}</Text>
@@ -280,33 +338,47 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
                       <Ionicons name="location-outline" size={12} color={colors.secondaryLabel} /> {evt.location}
                     </Text>
                   ) : null}
+                  {evt.repeat && evt.repeat !== 'never' ? (
+                    <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
+                      <Ionicons name="repeat" size={12} color={colors.secondaryLabel} /> Repeats {evt.repeat}
+                    </Text>
+                  ) : null}
+                  {evt.notes ? (
+                    <Text style={[typography.caption1, { color: colors.secondaryLabel }]} numberOfLines={1}>{evt.notes}</Text>
+                  ) : null}
                 </View>
                 {evt.id.startsWith('user_') && (
-                  <Pressable onPress={() => handleDeleteEvent(evt.id)} hitSlop={8} style={{ justifyContent: 'center', paddingRight: 12 }}>
-                    <Ionicons name="trash-outline" size={18} color={colors.systemRed} />
-                  </Pressable>
+                  <View style={{ justifyContent: 'center', paddingRight: 12, gap: 12 }}>
+                    <Pressable onPress={() => openEditModal(evt)} hitSlop={8}>
+                      <Ionicons name="pencil-outline" size={16} color={colors.systemBlue} />
+                    </Pressable>
+                    <Pressable onPress={() => handleDeleteEvent(evt.id)} hitSlop={8}>
+                      <Ionicons name="trash-outline" size={16} color={colors.systemRed} />
+                    </Pressable>
+                  </View>
                 )}
-              </View>
+              </Pressable>
             ))
           )}
         </View>
       </ScrollView>
 
-      {/* Add Event Modal */}
-      <Modal visible={showAddEvent} transparent animationType="slide" onRequestClose={() => setShowAddEvent(false)}>
+      {/* Add / Edit Event Modal */}
+      <Modal visible={showAddEvent} transparent animationType="slide" onRequestClose={() => { setShowAddEvent(false); setEditingEvent(null); }}>
         <View style={styles.modalOverlay}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ justifyContent: 'flex-end', flexGrow: 1 }}>
           <View style={[styles.modalContent, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
             <View style={styles.modalHeader}>
-              <Pressable onPress={() => setShowAddEvent(false)}>
+              <Pressable onPress={() => { setShowAddEvent(false); setEditingEvent(null); }}>
                 <Text style={[typography.body, { color: colors.systemRed }]}>Cancel</Text>
               </Pressable>
-              <Text style={[typography.headline, { color: colors.label }]}>New Event</Text>
+              <Text style={[typography.headline, { color: colors.label }]}>{editingEvent ? 'Edit Event' : 'New Event'}</Text>
               <Pressable onPress={handleAddEvent}>
-                <Text style={[typography.body, { color: colors.systemRed, fontWeight: '600' }]}>Add</Text>
+                <Text style={[typography.body, { color: colors.systemRed, fontWeight: '600' }]}>{editingEvent ? 'Save' : 'Add'}</Text>
               </Pressable>
             </View>
             <Text style={[typography.caption1, { color: colors.secondaryLabel, marginBottom: 8, paddingHorizontal: 16 }]}>
-              {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              {(editingEvent ? new Date(editingEvent.start) : selectedDate).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
             </Text>
             <TextInput
               style={[styles.modalInput, { backgroundColor: colors.systemBackground, color: colors.label, borderColor: colors.separator }]}
@@ -314,7 +386,7 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
               placeholderTextColor={colors.secondaryLabel}
               value={newTitle}
               onChangeText={setNewTitle}
-              autoFocus
+              autoFocus={!editingEvent}
             />
             <TextInput
               style={[styles.modalInput, { backgroundColor: colors.systemBackground, color: colors.label, borderColor: colors.separator }]}
@@ -322,6 +394,14 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
               placeholderTextColor={colors.secondaryLabel}
               value={newLocation}
               onChangeText={setNewLocation}
+            />
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.systemBackground, color: colors.label, borderColor: colors.separator }]}
+              placeholder="Notes (optional)"
+              placeholderTextColor={colors.secondaryLabel}
+              value={newNotes}
+              onChangeText={setNewNotes}
+              multiline
             />
             <Pressable
               style={[styles.allDayRow, { borderColor: colors.separator }]}
@@ -368,7 +448,40 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
                 </View>
               </View>
             )}
+            {/* Repeat selector */}
+            <View style={[styles.allDayRow, { borderColor: colors.separator, flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
+              <Text style={[typography.body, { color: colors.label }]}>Repeat</Text>
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                {REPEAT_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setNewRepeat(opt); }}
+                    style={[styles.repeatChip, newRepeat === opt && { backgroundColor: colors.systemRed }]}
+                  >
+                    <Text style={[typography.caption1, { color: newRepeat === opt ? '#fff' : colors.label, fontWeight: '600' }]}>
+                      {REPEAT_LABELS[opt]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            {/* Delete button (edit mode only) */}
+            {editingEvent && (
+              <Pressable
+                style={[styles.deleteEventBtn, { borderColor: colors.systemRed }]}
+                onPress={() => {
+                  alert('Delete Event', 'Are you sure you want to delete this event?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => { handleDeleteEvent(editingEvent.id); setShowAddEvent(false); setEditingEvent(null); } },
+                  ]);
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.systemRed} />
+                <Text style={[typography.body, { color: colors.systemRed, fontWeight: '600' }]}>Delete Event</Text>
+              </Pressable>
+            )}
           </View>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -400,4 +513,6 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   timePicker: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   timeBtn: { backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  repeatChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.06)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  deleteEventBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 16, marginTop: 16, marginBottom: 8, paddingVertical: 12, borderRadius: 10, borderWidth: 1 },
 });

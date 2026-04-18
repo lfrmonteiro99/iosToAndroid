@@ -1,20 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, StyleSheet, Platform, ActivityIndicator, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import { useDevice } from '../../store/DeviceStore';
+import LauncherModule from '../../../modules/launcher-module/src';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  useAlert,
 } from '../../components';
-
-const getLauncher = async () => {
-  try { return (await import('../../../modules/launcher-module/src')).default; }
-  catch { return null; }
-};
 
 const PERMISSION_CATEGORIES = [
   { key: 'location', title: 'Location Services', icon: 'location', bg: '#007AFF' },
@@ -31,22 +27,42 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { openSystemPanel } = useDevice();
+
+  const alert = useAlert();
 
   const [allowTracking, setAllowTracking] = useState(false);
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [requestingPermissions, setRequestingPermissions] = useState(false);
+
+  const checkPermissions = useCallback(async () => {
+    if (Platform.OS !== 'android') return;
+    setLoadingPermissions(true);
+    try {
+      const perms = await LauncherModule.checkPermissions();
+      setPermissions(perms);
+    } catch { /* ignore */ } finally {
+      setLoadingPermissions(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    (async () => {
-      try {
-        const mod = await getLauncher();
-        if (!mod) return;
-        const perms = await mod.checkPermissions();
-        setPermissions(perms);
-      } catch { /* ignore */ }
-    })();
-  }, []);
+    checkPermissions();
+  }, [checkPermissions]);
+
+  const handleRequestPermissions = useCallback(async () => {
+    setRequestingPermissions(true);
+    try {
+      await LauncherModule.requestAllPermissions();
+      // Re-check after requesting
+      await checkPermissions();
+      alert('Permissions Updated', 'Permission status has been refreshed.');
+    } catch {
+      alert('Error', 'Could not request permissions. Please try again.');
+    } finally {
+      setRequestingPermissions(false);
+    }
+  }, [checkPermissions, alert]);
 
   const totalPermissions = PERMISSION_CATEGORIES.length;
   const grantedCount = PERMISSION_CATEGORIES.filter(
@@ -136,7 +152,19 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
 
         {/* App Privacy with real permission status */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="App Privacy">
+          <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16, paddingBottom: 6, paddingTop: 22 }]}>
+            <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase' }]}>
+              App Privacy
+            </Text>
+            <Pressable onPress={checkPermissions} disabled={loadingPermissions} hitSlop={8}>
+              {loadingPermissions ? (
+                <ActivityIndicator size="small" color={colors.systemBlue} />
+              ) : (
+                <Text style={[typography.footnote, { color: colors.systemBlue }]}>Refresh</Text>
+              )}
+            </Pressable>
+          </View>
+          <CupertinoListSection>
             {PERMISSION_CATEGORIES.map((item) => {
               const isGranted = permissions[item.key] === true;
               const hasData = item.key in permissions;
@@ -173,18 +201,32 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
                               },
                             ]}
                           >
-                            {isGranted ? 'Granted' : 'Not Granted'}
+                            {isGranted ? 'Granted' : 'Denied'}
                           </Text>
+                          {!isGranted && (
+                            <Pressable
+                              onPress={handleRequestPermissions}
+                              disabled={requestingPermissions}
+                              style={[styles.requestBtn, { backgroundColor: colors.systemBlue }]}
+                            >
+                              {requestingPermissions ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Text style={[typography.caption2, { color: '#fff', fontWeight: '600' }]}>
+                                  Request
+                                </Text>
+                              )}
+                            </Pressable>
+                          )}
                         </>
                       ) : (
                         <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                          Manage
+                          Checking…
                         </Text>
                       )}
                     </View>
                   }
-                  showChevron
-                  onPress={() => openSystemPanel('privacy')}
+                  showChevron={false}
                 />
               );
             })}
@@ -219,7 +261,7 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
 
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          Tap a permission above to grant or revoke it. Only the grant dialog is shown by the system for security.
+          Tap "Request" to prompt the system for any denied permissions. Use "Refresh" to re-check current status.
         </Text>
       </ScrollView>
     </View>
@@ -248,6 +290,20 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginRight: 6,
+  },
+  requestBtn: {
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   footer: {
     marginHorizontal: 32,

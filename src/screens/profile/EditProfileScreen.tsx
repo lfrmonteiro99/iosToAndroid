@@ -9,7 +9,12 @@ import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoTextField,
+  useAlert,
 } from '../../components';
+
+function isValidEmail(e: string): boolean {
+  return !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function EditProfileScreen({ navigation }: { navigation: any; route: any }) {
@@ -17,13 +22,22 @@ export function EditProfileScreen({ navigation }: { navigation: any; route: any 
   const { colors } = theme;
   const { profile, updateProfile } = useProfile();
   const insets = useSafeAreaInsets();
+  const alert = useAlert();
 
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
   const [bio, setBio] = useState(profile.bio);
+  const [emailError, setEmailError] = useState(false);
 
   function handleSave() {
-    updateProfile({ name: name.trim(), email: email.trim(), bio: bio.trim() });
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !isValidEmail(trimmedEmail)) {
+      setEmailError(true);
+      alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+    setEmailError(false);
+    updateProfile({ name: name.trim(), email: trimmedEmail, bio: bio.trim() });
     navigation.goBack();
   }
 
@@ -71,7 +85,7 @@ export function EditProfileScreen({ navigation }: { navigation: any; route: any 
         <CupertinoListSection header="Email">
           <CupertinoTextField
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => { setEmail(v); if (emailError) setEmailError(false); }}
             placeholder="Email"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -80,6 +94,9 @@ export function EditProfileScreen({ navigation }: { navigation: any; route: any 
             returnKeyType="next"
           />
         </CupertinoListSection>
+        {emailError && (
+          <Text style={styles.emailError}>Invalid email format</Text>
+        )}
 
         <CupertinoListSection header="Bio">
           <CupertinoTextField
@@ -110,5 +127,11 @@ const styles = StyleSheet.create({
     minHeight: 120,
     alignItems: 'flex-start',
     paddingTop: 10,
+  },
+  emailError: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: 4,
+    marginHorizontal: 20,
   },
 });

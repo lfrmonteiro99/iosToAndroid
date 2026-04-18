@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../theme/ThemeContext';
 import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  useAlert,
 } from '../../components';
+
+const CACHE_KEYS = [
+  'calculator_history',
+  '@iostoandroid/maps_recents',
+  '@iostoandroid/recent_apps',
+];
 
 const getLauncher = async () => {
   try { return (await import('../../../modules/launcher-module/src')).default; }
@@ -46,6 +55,7 @@ export function StorageScreen({ navigation }: { navigation: any }) {
   const { storage } = useDevice();
 
   const [appStats, setAppStats] = useState<AppStorageStat[]>([]);
+  const alert = useAlert();
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -188,6 +198,46 @@ export function StorageScreen({ navigation }: { navigation: any }) {
           </View>
         )}
 
+        {/* Clear App Cache */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Manage Storage"
+            footer="Clears app history and recents. Your personal data is not affected."
+          >
+            <CupertinoListTile
+              title="Clear App Cache"
+              leading={{
+                name: 'trash-outline',
+                color: '#FFFFFF',
+                backgroundColor: colors.systemRed,
+              }}
+              showChevron
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                alert(
+                  'Clear App Cache',
+                  'Clear app cache? This will reset app preferences but not your personal data.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Clear',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await AsyncStorage.removeMany(CACHE_KEYS);
+                          alert('Cache Cleared', 'App cache has been cleared successfully.');
+                        } catch {
+                          alert('Error', 'Could not clear cache. Please try again.');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Offload Unused Apps */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Recommendations">
@@ -200,6 +250,7 @@ export function StorageScreen({ navigation }: { navigation: any }) {
                 backgroundColor: colors.systemGreen,
               }}
               showChevron={false}
+              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
             />
           </CupertinoListSection>
         </View>

@@ -10,9 +10,11 @@ import {
   Platform,
   Dimensions,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
@@ -31,6 +33,18 @@ import { useDevice, DeviceSms } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
+
+// ─── Local message type extension ────────────────────────────────────────────
+
+interface LocalImageMessage {
+  id: string;
+  address: string;
+  body: string;
+  dateFormatted: string;
+  type: number;
+  isRead: boolean;
+  imageUri: string;
+}
 
 // ─── Native module helper ─────────────────────────────────────────────────────
 
@@ -213,16 +227,25 @@ const MessageBubble = React.memo(function MessageBubble({
           style={[
             styles.bubble,
             {
-              backgroundColor: bubbleBackground,
+              backgroundColor: (message as any).imageUri ? 'transparent' : bubbleBackground, // eslint-disable-line @typescript-eslint/no-explicit-any
               maxWidth: BUBBLE_MAX_WIDTH,
               elevation: isSent ? 1 : 0,
             },
             isSent ? styles.bubbleSent : styles.bubbleReceived,
           ]}
         >
-          <Text style={[typography.callout, { color: textColor }]}>
-            {message.body}
-          </Text>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          {(message as any).imageUri ? (
+            <Image
+              source={{ uri: (message as any).imageUri }} // eslint-disable-line @typescript-eslint/no-explicit-any
+              style={styles.imageBubble}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={[typography.callout, { color: textColor }]}>
+              {message.body}
+            </Text>
+          )}
           {/* Reaction badges */}
           {reactions && reactions.length > 0 && (
             <View style={[styles.reactionBadge, { backgroundColor: isDark ? '#3A3A3C' : '#E8E8ED', borderColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
@@ -308,6 +331,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
   const [showTyping, setShowTyping] = useState(false);
   const [deliveryStatuses, setDeliveryStatuses] = useState<Record<string, string>>({});
+  const [localImageMessages, setLocalImageMessages] = useState<LocalImageMessage[]>([]);
   const listRef = useRef<FlatList>(null);
   const draftKey = `@draft_${address}`;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -392,21 +416,65 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     ? `${contact.firstName} ${contact.lastName}`.trim()
     : address;
 
-  // Filter messages for this address
+  // Filter messages for this address (including local image messages)
   const rawMessages = useMemo(() => {
-    return device.messages
+    const deviceMsgs = device.messages
       .filter((m) => m.address === address)
       .sort((a, b) => {
         const aTime = (a as DeviceSms & { date?: number }).date ?? 0;
         const bTime = (b as DeviceSms & { date?: number }).date ?? 0;
         return bTime - aTime;
       });
-  }, [device.messages, address]);
+    // Merge local image messages (already newest-first)
+    const allMsgs = [...localImageMessages, ...deviceMsgs] as DeviceSms[];
+    return allMsgs;
+  }, [device.messages, address, localImageMessages]);
 
   const messages = useMemo(
     () => insertDateSeparators(rawMessages),
     [rawMessages],
   );
+
+  const addImageMessage = useCallback((uri: string) => {
+    const newMsg: LocalImageMessage = {
+      id: `img_${Date.now()}`,
+      address,
+      body: '',
+      dateFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: 2, // sent
+      isRead: true,
+      imageUri: uri,
+    };
+    setLocalImageMessages((prev) => [newMsg, ...prev]);
+  }, [address]);
+
+  const handleCameraButton = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Permission Denied', 'Camera access is required to take photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      addImageMessage(result.assets[0].uri);
+    }
+  }, [alert, addImageMessage]);
+
+  const handlePhotoLibraryButton = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Permission Denied', 'Photo library access is required to select photos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      addImageMessage(result.assets[0].uri);
+    }
+  }, [alert, addImageMessage]);
 
   const handleCall = useCallback(async () => {
     const mod = await getLauncher();
@@ -591,6 +659,26 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
           },
         ]}
       >
+        {/* Camera button */}
+        <Pressable
+          onPress={handleCameraButton}
+          hitSlop={8}
+          style={styles.plusButton}
+          accessibilityRole="button"
+          accessibilityLabel="Take photo"
+        >
+          <Ionicons name="camera-outline" size={24} color={colors.systemBlue} />
+        </Pressable>
+        {/* Photo library button */}
+        <Pressable
+          onPress={handlePhotoLibraryButton}
+          hitSlop={8}
+          style={styles.plusButton}
+          accessibilityRole="button"
+          accessibilityLabel="Choose photo from library"
+        >
+          <Ionicons name="image-outline" size={24} color={colors.systemBlue} />
+        </Pressable>
         <CupertinoTextField
           value={inputText}
           onChangeText={handleInputChange}
@@ -709,6 +797,11 @@ const styles = StyleSheet.create({
   },
   plusButton: {
     paddingBottom: 6,
+  },
+  imageBubble: {
+    width: 200,
+    height: 150,
+    borderRadius: 14,
   },
   sendButton: {
     paddingBottom: 10,

@@ -34,7 +34,25 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
   const [company, setCompany] = useState(existing?.company ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
 
-  const canSave = firstName.trim().length > 0 && lastName.trim().length > 0 && phone.trim().length > 0;
+  function isValidPhone(p: string): boolean {
+    const digits = p.replace(/\D/g, '');
+    return digits.length >= 7;
+  }
+
+  function isValidEmail(e: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  }
+
+  const phoneInvalid = phone.trim().length > 0 && !isValidPhone(phone);
+  const emailInvalid = email.trim().length > 0 && !isValidEmail(email);
+  const firstNameEmpty = firstName.trim().length === 0;
+
+  const canSave =
+    !firstNameEmpty &&
+    lastName.trim().length > 0 &&
+    phone.trim().length > 0 &&
+    isValidPhone(phone) &&
+    !emailInvalid;
 
   function handleDone() {
     if (!canSave) return;
@@ -120,6 +138,9 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
             containerStyle={styles.fieldContainer}
           />
         </CupertinoListSection>
+        {firstNameEmpty && lastName.length > 0 && (
+          <Text style={styles.validationError}>First name is required</Text>
+        )}
 
         {/* Phone section */}
         <CupertinoListSection>
@@ -133,6 +154,9 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
             containerStyle={styles.fieldContainer}
           />
         </CupertinoListSection>
+        {phoneInvalid && (
+          <Text style={styles.validationError}>Enter a valid phone number (at least 7 digits)</Text>
+        )}
 
         {/* Email section */}
         <CupertinoListSection>
@@ -148,6 +172,9 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
             containerStyle={styles.fieldContainer}
           />
         </CupertinoListSection>
+        {emailInvalid && (
+          <Text style={styles.validationError}>Invalid email address</Text>
+        )}
 
         {/* Company section */}
         <CupertinoListSection>
@@ -195,5 +222,12 @@ const styles = StyleSheet.create({
     minHeight: 100,
     alignItems: 'flex-start',
     paddingTop: 10,
+  },
+  validationError: {
+    color: '#FF3B30',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 4,
+    marginHorizontal: 4,
   },
 });

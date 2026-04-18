@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -14,8 +15,12 @@ import {
   CupertinoActionSheet,
 } from '../../components';
 
-const RINGTONES = ['Opening (Default)', 'Apex', 'Beacon', 'Bulletin', 'By the Seaside', 'Chimes', 'Circuit', 'Constellation', 'Cosmic', 'Crystals', 'Hillside', 'Illuminate', 'Night Owl', 'Presto', 'Radar', 'Radiate', 'Ripples', 'Sencha', 'Signal', 'Silk', 'Slow Rise', 'Stargaze', 'Summit', 'Twinkle', 'Uplift', 'Waves'];
+const RINGTONES = ['Opening', 'Chimes', 'Marimba', 'Reflection', 'Ripple', 'Silk', 'By the Seaside', 'Night Owl'];
 const TEXT_TONES = ['Note (Default)', 'Aurora', 'Bamboo', 'Chord', 'Circles', 'Complete', 'Hello', 'Input', 'Keys', 'Popcorn', 'Pulse', 'Synth', 'Tri-tone'];
+
+const RINGTONE_STORAGE_KEY = '@iostoandroid/ringtone';
+const TEXT_TONE_STORAGE_KEY = '@iostoandroid/text_tone';
+const SYSTEM_HAPTICS_STORAGE_KEY = '@iostoandroid/system_haptics';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
@@ -25,6 +30,43 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
   const { settings, update } = useSettings();
   const [showRingtonePicker, setShowRingtonePicker] = useState(false);
   const [showTextTonePicker, setShowTextTonePicker] = useState(false);
+  const [systemHaptics, setSystemHaptics] = useState(true);
+  // Local ringtone/text tone state (backed by AsyncStorage)
+  const [ringtone, setRingtone] = useState(settings.ringtone || 'Reflection');
+  const [textTone, setTextTone] = useState(settings.textTone || 'Note');
+
+  // Load persisted values on mount
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem(RINGTONE_STORAGE_KEY),
+      AsyncStorage.getItem(TEXT_TONE_STORAGE_KEY),
+      AsyncStorage.getItem(SYSTEM_HAPTICS_STORAGE_KEY),
+    ]).then(([rt, tt, haptics]) => {
+      if (rt) { setRingtone(rt); update('ringtone', rt); }
+      if (tt) { setTextTone(tt); update('textTone', tt); }
+      if (haptics !== null) setSystemHaptics(haptics !== 'false');
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSelectRingtone = (r: string) => {
+    setRingtone(r);
+    update('ringtone', r);
+    AsyncStorage.setItem(RINGTONE_STORAGE_KEY, r).catch(() => {});
+    setShowRingtonePicker(false);
+  };
+
+  const handleSelectTextTone = (t: string) => {
+    setTextTone(t);
+    update('textTone', t);
+    AsyncStorage.setItem(TEXT_TONE_STORAGE_KEY, t).catch(() => {});
+    setShowTextTonePicker(false);
+  };
+
+  const handleSystemHapticsToggle = (val: boolean) => {
+    setSystemHaptics(val);
+    AsyncStorage.setItem(SYSTEM_HAPTICS_STORAGE_KEY, val ? 'true' : 'false').catch(() => {});
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -63,7 +105,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
               title="Ringtone"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {settings.ringtone}
+                  {ringtone}
                 </Text>
               }
               onPress={() => setShowRingtonePicker(true)}
@@ -72,7 +114,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
               title="Text Tone"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {settings.textTone}
+                  {textTone}
                 </Text>
               }
               onPress={() => setShowTextTonePicker(true)}
@@ -83,6 +125,16 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
         {/* Haptics section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Haptics">
+            <CupertinoListTile
+              title="System Haptics"
+              trailing={
+                <CupertinoSwitch
+                  value={systemHaptics}
+                  onValueChange={handleSystemHapticsToggle}
+                />
+              }
+              showChevron={false}
+            />
             <CupertinoListTile
               title="Vibration"
               trailing={
@@ -122,8 +174,8 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
         onClose={() => setShowRingtonePicker(false)}
         title="Ringtone"
         options={RINGTONES.map((r) => ({
-          label: r,
-          onPress: () => { update('ringtone', r); setShowRingtonePicker(false); },
+          label: r === ringtone ? `${r} ✓` : r,
+          onPress: () => handleSelectRingtone(r),
         }))}
         cancelLabel="Cancel"
       />
@@ -133,8 +185,8 @@ export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
         onClose={() => setShowTextTonePicker(false)}
         title="Text Tone"
         options={TEXT_TONES.map((t) => ({
-          label: t,
-          onPress: () => { update('textTone', t); setShowTextTonePicker(false); },
+          label: t === textTone ? `${t} ✓` : t,
+          onPress: () => handleSelectTextTone(t),
         }))}
         cancelLabel="Cancel"
       />

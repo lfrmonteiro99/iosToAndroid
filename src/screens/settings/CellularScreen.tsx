@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
-import { useSettings } from '../../store/SettingsStore';
 import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  useAlert,
 } from '../../components';
+
+const CELLULAR_DATA_KEY = '@iostoandroid/cellular_data';
+const DATA_ROAMING_KEY = '@iostoandroid/data_roaming';
 
 const getLauncher = async () => {
   try { return (await import('../../../modules/launcher-module/src')).default; }
@@ -69,11 +73,12 @@ export function CellularScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
   const { openSystemPanel } = useDevice();
+  const alert = useAlert();
 
   const [lowDataMode, setLowDataMode] = useState(false);
-  const [dataRoaming, setDataRoaming] = useState(false);
+  const [cellularDataLocal, setCellularDataLocal] = useState(true);
+  const [dataRoamingLocal, setDataRoamingLocal] = useState(false);
   const [carrier, setCarrier] = useState<CarrierData | null>(null);
   const [network, setNetwork] = useState<NetworkData | null>(null);
 
@@ -92,6 +97,40 @@ export function CellularScreen({ navigation }: { navigation: any }) {
       } catch { /* ignore */ }
     })();
   }, []);
+
+  useEffect(() => {
+    AsyncStorage.getMany([CELLULAR_DATA_KEY, DATA_ROAMING_KEY]).then((map) => {
+      if (map[CELLULAR_DATA_KEY] !== null) setCellularDataLocal(map[CELLULAR_DATA_KEY] !== 'false');
+      if (map[DATA_ROAMING_KEY] !== null) setDataRoamingLocal(map[DATA_ROAMING_KEY] === 'true');
+    });
+  }, []);
+
+  const handleCellularDataToggle = useCallback((v: boolean) => {
+    setCellularDataLocal(v);
+    AsyncStorage.setItem(CELLULAR_DATA_KEY, String(v));
+  }, []);
+
+  const handleDataRoamingToggle = useCallback((v: boolean) => {
+    if (v) {
+      alert(
+        'Data Roaming',
+        'Enabling data roaming may incur additional charges from your carrier.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: () => {
+              setDataRoamingLocal(true);
+              AsyncStorage.setItem(DATA_ROAMING_KEY, 'true');
+            },
+          },
+        ]
+      );
+    } else {
+      setDataRoamingLocal(false);
+      AsyncStorage.setItem(DATA_ROAMING_KEY, 'false');
+    }
+  }, [alert]);
 
   const connectionStatus = network
     ? network.isCellular
@@ -132,8 +171,8 @@ export function CellularScreen({ navigation }: { navigation: any }) {
               title="Cellular Data"
               trailing={
                 <CupertinoSwitch
-                  value={settings.cellularDataEnabled}
-                  onValueChange={(v) => update('cellularDataEnabled', v)}
+                  value={cellularDataLocal}
+                  onValueChange={handleCellularDataToggle}
                 />
               }
               showChevron={false}
@@ -234,7 +273,7 @@ export function CellularScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Data Roaming"
               trailing={
-                <CupertinoSwitch value={dataRoaming} onValueChange={setDataRoaming} />
+                <CupertinoSwitch value={dataRoamingLocal} onValueChange={handleDataRoamingToggle} />
               }
               showChevron={false}
             />
@@ -248,11 +287,11 @@ export function CellularScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* SIM PIN — truly OS-only by security design */}
+        {/* SIM PIN + APN — truly OS-only by security design */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection footer="Changing SIM PIN requires Android system settings by security design.">
+          <CupertinoListSection footer="SIM PIN and APN settings require Android system settings by security design.">
             <CupertinoListTile
-              title="SIM PIN"
+              title="SIM PIN (System Settings)"
               leading={{
                 name: 'lock-closed-outline',
                 color: '#FFFFFF',
@@ -260,6 +299,16 @@ export function CellularScreen({ navigation }: { navigation: any }) {
               }}
               showChevron
               onPress={() => openSystemPanel('security')}
+            />
+            <CupertinoListTile
+              title="APN Settings (System Settings)"
+              leading={{
+                name: 'globe-outline',
+                color: '#FFFFFF',
+                backgroundColor: colors.systemGray,
+              }}
+              showChevron
+              onPress={() => openSystemPanel('apn')}
             />
           </CupertinoListSection>
         </View>

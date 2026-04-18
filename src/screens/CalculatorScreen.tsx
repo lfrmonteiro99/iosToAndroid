@@ -66,6 +66,8 @@ const ACCESSIBILITY_LABELS: Record<string, string> = {
   e: "euler's number",
   '1/x': 'reciprocal',
   '|x|': 'absolute value',
+  '(': 'open parenthesis',
+  ')': 'close parenthesis',
 };
 
 function getAccessibilityLabel(def: ButtonDef): string {
@@ -117,8 +119,8 @@ const ROWS: ButtonDef[][] = [
 
 const SCIENTIFIC_ROWS: ButtonDef[][] = [
   [
-    { label: '1/x', type: 'scientific', accessibilityLabel: 'reciprocal' },
-    { label: '|x|', type: 'scientific', accessibilityLabel: 'absolute value' },
+    { label: '(', type: 'scientific', accessibilityLabel: 'open parenthesis' },
+    { label: ')', type: 'scientific', accessibilityLabel: 'close parenthesis' },
     { label: 'x²', type: 'scientific' },
   ],
   [
@@ -273,6 +275,10 @@ export function CalculatorScreen() {
   // Scientific state
   const [isDeg, setIsDeg] = useState(true);
 
+  // Parentheses state
+  const [parenStack, setParenStack] = useState<Array<{ prev: number | null; op: string | null }>>([]);
+  const [parenDepth, setParenDepth] = useState(0);
+
   // History state
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -400,6 +406,8 @@ export function CalculatorScreen() {
     setPreviousValue(null);
     setOperation(null);
     setResetOnNext(false);
+    setParenStack([]);
+    setParenDepth(0);
   };
 
   const handlePercent = () => {
@@ -467,6 +475,41 @@ export function CalculatorScreen() {
 
   const handleScientific = (label: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (label === '(') {
+      setParenStack(prev => [...prev, { prev: previousValue, op: operation }]);
+      setPreviousValue(null);
+      setOperation(null);
+      setResetOnNext(false);
+      setParenDepth(d => d + 1);
+      return;
+    }
+
+    if (label === ')') {
+      if (parenStack.length === 0) return;
+      const current = parseFloat(display);
+      const top = parenStack[parenStack.length - 1];
+      let result = current;
+      if (previousValue !== null && operation) {
+        result = compute(previousValue, operation, current);
+      }
+      const newStack = parenStack.slice(0, -1);
+      setParenStack(newStack);
+      setParenDepth(d => Math.max(0, d - 1));
+      if (top.prev !== null && top.op) {
+        setPreviousValue(top.prev);
+        setOperation(top.op);
+        setDisplay(formatNumber(result));
+        setResetOnNext(true);
+      } else {
+        setDisplay(formatNumber(result));
+        setPreviousValue(null);
+        setOperation(null);
+        setResetOnNext(true);
+      }
+      return;
+    }
+
     if (resetIfError()) return;
     const current = parseFloat(display);
     let result: number;
@@ -663,6 +706,11 @@ export function CalculatorScreen() {
 
       {/* Display */}
       <View style={[styles.displayArea, isLandscape && { paddingBottom: 8 }]}>
+        {parenDepth > 0 && (
+          <Text style={styles.parenIndicator}>
+            {'('.repeat(parenDepth)}
+          </Text>
+        )}
         <Text
           style={[styles.displayText, { fontSize: displayFontSize }]}
           numberOfLines={1}
@@ -803,6 +851,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '200',
     letterSpacing: -2,
+  },
+
+  parenIndicator: {
+    color: '#FF9F0A',
+    fontSize: 18,
+    fontWeight: '400',
+    alignSelf: 'flex-end',
+    marginBottom: 2,
   },
 
   memoryRow: {
