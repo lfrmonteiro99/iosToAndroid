@@ -30,6 +30,7 @@ interface RecentLocation {
   name: string;
   address: string;
   timestamp: number;
+  isFavorite?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -109,6 +110,7 @@ interface RecentRowProps {
   item: RecentLocation;
   onPress: () => void;
   onDelete: () => void;
+  onToggleFavorite: () => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,17 +121,25 @@ const RecentRow = React.memo(function RecentRow({
   item,
   onPress,
   onDelete,
+  onToggleFavorite,
   colors,
   typography,
 }: RecentRowProps) {
   return (
     <CupertinoSwipeableRow
       trailingActions={[
+        {
+          label: item.isFavorite ? 'Unfav' : 'Favorite',
+          color: '#FF9500',
+          onPress: onToggleFavorite,
+        },
         { label: 'Delete', color: colors.systemRed, onPress: onDelete },
       ]}
     >
       <Pressable
         onPress={onPress}
+        onLongPress={onToggleFavorite}
+        delayLongPress={400}
         style={({ pressed }) => [
           styles.recentRow,
           {
@@ -139,8 +149,12 @@ const RecentRow = React.memo(function RecentRow({
           },
         ]}
       >
-        <View style={[styles.recentIcon, { backgroundColor: colors.systemGray5 }]}>
-          <Ionicons name="time-outline" size={18} color={colors.secondaryLabel} />
+        <View style={[styles.recentIcon, { backgroundColor: item.isFavorite ? 'rgba(255,149,0,0.15)' : colors.systemGray5 }]}>
+          <Ionicons
+            name={item.isFavorite ? 'heart' : 'time-outline'}
+            size={18}
+            color={item.isFavorite ? '#FF9500' : colors.secondaryLabel}
+          />
         </View>
         <View style={[styles.recentContent, { borderBottomColor: colors.separator }]}>
           <View style={styles.recentTextContainer}>
@@ -180,6 +194,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<RecentLocation | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   // ── Persistence ─────────────────────────────────────────────
 
@@ -259,17 +274,31 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
     [recents, persistRecents],
   );
 
+  const toggleFavorite = useCallback(
+    (id: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const updated = recents.map((r) =>
+        r.id === id ? { ...r, isFavorite: !r.isFavorite } : r,
+      );
+      setRecents(updated);
+      persistRecents(updated);
+    },
+    [recents, persistRecents],
+  );
+
   // ── Filtered Recents ────────────────────────────────────────
 
   const filteredRecents = useMemo(() => {
-    if (!searchQuery.trim()) return recents;
+    let base = recents;
+    if (showFavoritesOnly) base = recents.filter((r) => r.isFavorite);
+    if (!searchQuery.trim()) return base;
     const q = searchQuery.toLowerCase();
-    return recents.filter(
+    return base.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.address.toLowerCase().includes(q),
     );
-  }, [recents, searchQuery]);
+  }, [recents, searchQuery, showFavoritesOnly]);
 
   // ── Quick Actions ───────────────────────────────────────────
 
@@ -284,8 +313,9 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   }, [alert]);
 
   const handleFavorites = useCallback(() => {
-    alert('Favorites', 'Long-press a recent search to mark as favorite (coming soon).');
-  }, [alert]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowFavoritesOnly((v) => !v);
+  }, []);
 
   // ── Render ──────────────────────────────────────────────────
 
@@ -294,6 +324,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
       item={item}
       onPress={() => openRecentInMaps(item)}
       onDelete={() => deleteRecent(item.id)}
+      onToggleFavorite={() => toggleFavorite(item.id)}
       colors={colors}
       typography={typography}
     />
@@ -387,7 +418,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
           typography={typography}
         />
         <QuickAction
-          icon="heart-outline"
+          icon={showFavoritesOnly ? 'heart' : 'heart-outline'}
           label="Favorites"
           onPress={handleFavorites}
           colors={colors}
