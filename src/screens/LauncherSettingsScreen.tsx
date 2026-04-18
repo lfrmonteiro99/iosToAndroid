@@ -17,6 +17,7 @@ import {
   CupertinoButton,
   useAlert,
 } from '../components';
+import { logger } from '../utils/logger';
 
 // Default dock package names — mirrors AppsStore constant
 const DEFAULT_DOCK = [
@@ -110,7 +111,7 @@ export function LauncherSettingsScreen() {
           AsyncStorage.getItem('@iostoandroid/apps_layout').then((raw) => {
             let homeApps: unknown[] = [];
             if (raw) {
-              try { homeApps = JSON.parse(raw).homeApps || []; } catch (e) { console.warn('LauncherSettings: failed to parse layout:', e); }
+              try { homeApps = JSON.parse(raw).homeApps || []; } catch (e) { logger.warn('LauncherSettings', 'failed to parse layout', e); }
             }
             AsyncStorage.setItem('@iostoandroid/apps_layout', JSON.stringify({
               dockApps: DEFAULT_DOCK,
@@ -133,7 +134,7 @@ export function LauncherSettingsScreen() {
           AsyncStorage.getItem('@iostoandroid/apps_layout').then((raw) => {
             let dockPkgs: unknown[] = DEFAULT_DOCK;
             if (raw) {
-              try { dockPkgs = JSON.parse(raw).dockApps || DEFAULT_DOCK; } catch (e) { console.warn('LauncherSettings: failed to parse layout:', e); }
+              try { dockPkgs = JSON.parse(raw).dockApps || DEFAULT_DOCK; } catch (e) { logger.warn('LauncherSettings', 'failed to parse layout', e); }
             }
             AsyncStorage.setItem('@iostoandroid/apps_layout', JSON.stringify({
               dockApps: dockPkgs,

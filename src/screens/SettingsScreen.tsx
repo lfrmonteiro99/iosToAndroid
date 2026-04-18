@@ -43,7 +43,7 @@ export function SettingsScreen() {
     {
       section: 'profile',
       items: [
-        { key: 'profile', title: profile.name, subtitle: profile.email || 'Apple ID, iCloud+, Media & Purchases', icon: 'person-circle', iconBg: '#8E8E93', type: 'navigate', route: 'ProfileMain' },
+        { key: 'profile', title: profile.name, subtitle: profile.email || 'Google Account & Cloud Settings', icon: 'person-circle', iconBg: '#8E8E93', type: 'navigate', route: 'ProfileMain' },
       ],
     },
     {

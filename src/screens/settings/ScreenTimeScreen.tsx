@@ -10,6 +10,7 @@ import {
   CupertinoSwitch,
   useAlert,
 } from '../../components';
+import { logger } from '../../utils/logger';
 
 import type { DailyScreenTime, ScreenTimeApp, ScreenTimeStat } from '../../../modules/launcher-module/src';
 
@@ -80,7 +81,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
         }
       }
     } catch (e) {
-      console.warn('Failed to load screen time data:', e);
+      logger.warn('ScreenTimeScreen', 'failed to load screen time data', e);
     } finally {
       setLoading(false);
     }

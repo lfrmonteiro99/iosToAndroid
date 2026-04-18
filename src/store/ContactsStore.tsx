@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../utils/logger';
 
 const STORAGE_KEY = '@iostoandroid/contacts';
 const DEVICE_FAV_KEY = '@iostoandroid/device_favorites';
@@ -72,7 +73,7 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
     ]).then(([stored, deviceFavs]) => {
       let parsedContacts = SEED_CONTACTS;
       if (stored) {
-        try { parsedContacts = JSON.parse(stored); } catch (e) { console.warn('ContactsStore: failed to parse stored contacts:', e); }
+        try { parsedContacts = JSON.parse(stored); } catch (e) { logger.warn('ContactsStore', 'failed to parse stored contacts', e); }
       }
       setContacts(parsedContacts);
       if (deviceFavs) {
