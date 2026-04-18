@@ -261,7 +261,7 @@ export function PrivacyScreen({ navigation }: { navigation: any }) {
 
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          Tap "Request" to prompt the system for any denied permissions. Use "Refresh" to re-check current status.
+          Tap &quot;Request&quot; to prompt the system for any denied permissions. Use &quot;Refresh&quot; to re-check current status.
         </Text>
       </ScrollView>
     </View>

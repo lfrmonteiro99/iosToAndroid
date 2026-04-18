@@ -1,9 +1,9 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render } from '../../test-utils';
 import { PhotosScreen } from '../PhotosScreen';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
-const mockRoute = { params: {} };
+
 
 jest.mock('expo-media-library', () => ({
   requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'denied' })),

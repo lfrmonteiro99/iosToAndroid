@@ -77,6 +77,8 @@ const DEFAULT_DOCK = [
 
 export function AppsProvider({ children }: { children: React.ReactNode }) {
   const alert = useAlert();
+  const alertRef = React.useRef(alert);
+  alertRef.current = alert;
   const [state, setState] = useState<AppsState>({
     allApps: [],
     homeApps: [],
@@ -183,7 +185,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         isLoading: false,
       });
     } catch {
-      alert('Error', 'Could not load apps. Please try again later.');
+      alertRef.current('Error', 'Could not load apps. Please try again later.');
       setState(prev => ({ ...prev, isLoading: false }));
     }
   }, []);
@@ -203,7 +205,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       await LauncherModule.launchApp(packageName);
       addToRecents(packageName);
     } catch {
-      alert('Error', 'Could not launch app. Please try again.');
+      alertRef.current('Error', 'Could not launch app. Please try again.');
     }
   }, [addToRecents]);
 
@@ -249,7 +251,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       const LauncherModule = (await import('../../modules/launcher-module/src')).default;
       await LauncherModule.openLauncherSettings();
     } catch {
-      alert('Error', 'Could not open launcher settings.');
+      alertRef.current('Error', 'Could not open launcher settings.');
     }
   }, []);
 

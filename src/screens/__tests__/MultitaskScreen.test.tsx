@@ -3,7 +3,7 @@ import { render } from '../../test-utils';
 import { MultitaskScreen } from '../MultitaskScreen';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
-const mockRoute = { params: {} };
+
 
 describe('MultitaskScreen', () => {
   it('renders without crashing', () => {
