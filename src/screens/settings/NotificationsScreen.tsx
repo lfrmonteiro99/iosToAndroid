@@ -23,7 +23,7 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const [summaryIdx, setSummaryIdx] = useState(0);
+  const [summaryIdx, setSummaryIdx] = useState(settings.scheduledSummaryIdx ?? 0);
   const [showSummaryPicker, setShowSummaryPicker] = useState(false);
 
   const previewIndex = PREVIEW_VALUES.indexOf(settings.notificationPreviews);
@@ -121,7 +121,7 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
         title="Scheduled Summary"
         options={SUMMARY_OPTIONS.map((label, i) => ({
           label,
-          onPress: () => { setSummaryIdx(i); setShowSummaryPicker(false); },
+          onPress: () => { setSummaryIdx(i); update('scheduledSummaryIdx', i); setShowSummaryPicker(false); },
         }))}
         cancelLabel="Cancel"
       />
