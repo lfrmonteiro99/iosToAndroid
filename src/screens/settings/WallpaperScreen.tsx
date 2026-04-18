@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { NAMED_WALLPAPERS } from '../../utils/wallpapers';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -14,15 +15,6 @@ import {
 } from '../../components';
 
 const CUSTOM_WALLPAPER_KEY = '@iostoandroid/custom_wallpaper';
-
-const WALLPAPERS = [
-  { color: '#667eea', name: 'Lavender' },
-  { color: '#f093fb', name: 'Pink' },
-  { color: '#4facfe', name: 'Sky' },
-  { color: '#43e97b', name: 'Green' },
-  { color: '#fa709a', name: 'Coral' },
-  { color: '#1C1C1E', name: 'Dark' },
-];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function WallpaperScreen({ navigation }: { navigation: any }) {
@@ -43,7 +35,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
   const isCustomSelected = selectedIndex === 6;
   const selectedWallpaper = isCustomSelected
     ? { color: '', name: 'Custom' }
-    : (WALLPAPERS[selectedIndex] ?? WALLPAPERS[0]);
+    : (NAMED_WALLPAPERS[selectedIndex] ?? NAMED_WALLPAPERS[0]);
 
   const pickImage = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -113,7 +105,7 @@ export function WallpaperScreen({ navigation }: { navigation: any }) {
         {/* Wallpaper grid */}
         <View style={[styles.gridContainer, { paddingHorizontal: spacing.md, marginTop: spacing.md }]}>
           <View style={styles.grid}>
-            {WALLPAPERS.map((wp, index) => {
+            {NAMED_WALLPAPERS.map((wp, index) => {
               const isSelected = index === selectedIndex;
               return (
                 <Pressable
