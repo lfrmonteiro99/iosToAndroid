@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Image, Share } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
   CupertinoListTile,
   CupertinoAlertDialog,
   CupertinoActionSheet,
+  CupertinoShareSheet,
   useAlert,
 } from '../components';
 
@@ -32,6 +33,7 @@ export function ProfileScreen() {
 
   const alert = useAlert();
   const [showSignOut, setShowSignOut] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
 
   const handleTakePhoto = async () => {
@@ -68,16 +70,7 @@ export function ProfileScreen() {
     }
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `${profile.name} — ${profile.email}`,
-        title: 'Share Profile',
-      });
-    } catch {
-      // User dismissed share sheet — no action needed
-    }
-  };
+  const handleShare = () => setShowShareSheet(true);
 
   const stats = [
     { label: 'Contacts', value: String(contacts.length) },
@@ -205,6 +198,13 @@ export function ProfileScreen() {
           { label: 'Sign Out', style: 'destructive', onPress: handleSignOut },
         ]}
         onClose={() => setShowSignOut(false)}
+      />
+
+      <CupertinoShareSheet
+        visible={showShareSheet}
+        onClose={() => setShowShareSheet(false)}
+        title={profile.name || 'Profile'}
+        text={`${profile.name} — ${profile.email}`}
       />
 
       <CupertinoActionSheet
