@@ -3,7 +3,7 @@ import { render, fireEvent } from '../../test-utils';
 import { SpotlightSearchScreen } from '../SpotlightSearchScreen';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
-const mockRoute = { params: {} };
+
 
 describe('SpotlightSearchScreen', () => {
   it('renders without crashing', () => {

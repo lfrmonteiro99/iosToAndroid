@@ -8,21 +8,21 @@ const mockRoute = { params: { address: '+15551234567' } };
 describe('ConversationScreen', () => {
   it('renders without crashing', () => {
     const { toJSON } = render(
-      <ConversationScreen navigation={mockNavigation as any} route={mockRoute as any} />
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
     );
     expect(toJSON()).toBeTruthy();
   });
 
   it('renders message input area', () => {
     const { toJSON } = render(
-      <ConversationScreen navigation={mockNavigation as any} route={mockRoute as any} />
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
     );
     expect(toJSON()).toBeTruthy();
   });
 
   it('renders the send button area', () => {
     const { toJSON } = render(
-      <ConversationScreen navigation={mockNavigation as any} route={mockRoute as any} />
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
     );
     const tree = toJSON();
     expect(tree).toBeTruthy();
@@ -30,7 +30,7 @@ describe('ConversationScreen', () => {
 
   it('renders back button', () => {
     const { getByLabelText } = render(
-      <ConversationScreen navigation={mockNavigation as any} route={mockRoute as any} />
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
     );
     expect(getByLabelText('Back to Messages')).toBeTruthy();
   });
