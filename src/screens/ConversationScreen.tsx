@@ -10,9 +10,11 @@ import {
   Platform,
   Dimensions,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
@@ -31,6 +33,18 @@ import { useDevice, DeviceSms } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
+
+// ─── Local message type extension ────────────────────────────────────────────
+
+interface LocalImageMessage {
+  id: string;
+  address: string;
+  body: string;
+  dateFormatted: string;
+  type: number;
+  isRead: boolean;
+  imageUri: string;
+}
 
 // ─── Native module helper ─────────────────────────────────────────────────────
 
@@ -308,6 +322,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
   const [showTyping, setShowTyping] = useState(false);
   const [deliveryStatuses, setDeliveryStatuses] = useState<Record<string, string>>({});
+  const [localImageMessages, setLocalImageMessages] = useState<LocalImageMessage[]>([]);
   const listRef = useRef<FlatList>(null);
   const draftKey = `@draft_${address}`;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -407,6 +422,47 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     () => insertDateSeparators(rawMessages),
     [rawMessages],
   );
+
+  const addImageMessage = useCallback((uri: string) => {
+    const newMsg: LocalImageMessage = {
+      id: `img_${Date.now()}`,
+      address,
+      body: '',
+      dateFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: 2, // sent
+      isRead: true,
+      imageUri: uri,
+    };
+    setLocalImageMessages((prev) => [newMsg, ...prev]);
+  }, [address]);
+
+  const handleCameraButton = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Permission Denied', 'Camera access is required to take photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      addImageMessage(result.assets[0].uri);
+    }
+  }, [alert, addImageMessage]);
+
+  const handlePhotoLibraryButton = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Permission Denied', 'Photo library access is required to select photos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      addImageMessage(result.assets[0].uri);
+    }
+  }, [alert, addImageMessage]);
 
   const handleCall = useCallback(async () => {
     const mod = await getLauncher();

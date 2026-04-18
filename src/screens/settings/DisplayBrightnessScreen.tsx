@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import { useDevice } from '../../store/DeviceStore';
@@ -15,6 +16,8 @@ import {
   CupertinoSlider,
 } from '../../components';
 
+const NIGHT_SHIFT_KEY = '@iostoandroid/night_shift';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
   const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
@@ -23,6 +26,33 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
   const { settings, update } = useSettings();
   const { brightness, setBrightness } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
+  const [nightShiftEnabled, setNightShiftEnabled] = useState(false);
+  const [nightShiftIntensity, setNightShiftIntensity] = useState(0.5);
+
+  useEffect(() => {
+    AsyncStorage.getItem(NIGHT_SHIFT_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.enabled === 'boolean') setNightShiftEnabled(parsed.enabled);
+        if (typeof parsed.intensity === 'number') setNightShiftIntensity(parsed.intensity);
+      } catch { /* ignore */ }
+    });
+  }, []);
+
+  const saveNightShift = (enabled: boolean, intensity: number) => {
+    AsyncStorage.setItem(NIGHT_SHIFT_KEY, JSON.stringify({ enabled, intensity }));
+  };
+
+  const handleNightShiftToggle = (v: boolean) => {
+    setNightShiftEnabled(v);
+    saveNightShift(v, nightShiftIntensity);
+  };
+
+  const handleNightShiftIntensity = (v: number) => {
+    setNightShiftIntensity(v);
+    saveNightShift(nightShiftEnabled, v);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -146,30 +176,36 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: any }) {
           </CupertinoListSection>
         </View>
 
-        {/* Night Shift (in-app scheduling) */}
+        {/* Night Shift (in-app) */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Night Shift"
-            footer="Night Shift automatically adjusts the display to warmer colors after dark. The theme switches to dark mode between 7 PM and 7 AM when enabled."
+          <CupertinoListSection
+            header="Night Shift"
+            footer="Night Shift schedule and intensity are saved. Blue light filter requires system support."
           >
             <CupertinoListTile
-              title="Scheduled"
+              title="Night Shift"
               trailing={
                 <CupertinoSwitch
-                  value={isDark}
-                  onValueChange={toggleTheme}
+                  value={nightShiftEnabled}
+                  onValueChange={handleNightShiftToggle}
                 />
               }
               showChevron={false}
             />
-            <CupertinoListTile
-              title="Schedule"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  Sunset to Sunrise
-                </Text>
-              }
-              showChevron={false}
-            />
+            {nightShiftEnabled && (
+              <View style={styles.sliderRow}>
+                <Ionicons name="sunny-outline" size={18} color={colors.systemOrange} />
+                <View style={styles.sliderTrack}>
+                  <CupertinoSlider
+                    value={nightShiftIntensity}
+                    onValueChange={handleNightShiftIntensity}
+                    minimumValue={0}
+                    maximumValue={1}
+                  />
+                </View>
+                <Ionicons name="sunny" size={18} color={colors.systemOrange} />
+              </View>
+            )}
           </CupertinoListSection>
         </View>
       </ScrollView>

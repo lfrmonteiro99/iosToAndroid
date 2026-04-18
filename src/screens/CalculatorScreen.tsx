@@ -66,6 +66,8 @@ const ACCESSIBILITY_LABELS: Record<string, string> = {
   e: "euler's number",
   '1/x': 'reciprocal',
   '|x|': 'absolute value',
+  '(': 'open parenthesis',
+  ')': 'close parenthesis',
 };
 
 function getAccessibilityLabel(def: ButtonDef): string {
@@ -117,8 +119,8 @@ const ROWS: ButtonDef[][] = [
 
 const SCIENTIFIC_ROWS: ButtonDef[][] = [
   [
-    { label: '1/x', type: 'scientific', accessibilityLabel: 'reciprocal' },
-    { label: '|x|', type: 'scientific', accessibilityLabel: 'absolute value' },
+    { label: '(', type: 'scientific', accessibilityLabel: 'open parenthesis' },
+    { label: ')', type: 'scientific', accessibilityLabel: 'close parenthesis' },
     { label: 'x²', type: 'scientific' },
   ],
   [
@@ -273,6 +275,10 @@ export function CalculatorScreen() {
   // Scientific state
   const [isDeg, setIsDeg] = useState(true);
 
+  // Parentheses state
+  const [parenStack, setParenStack] = useState<Array<{ prev: number | null; op: string | null }>>([]);
+  const [parenDepth, setParenDepth] = useState(0);
+
   // History state
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -400,6 +406,8 @@ export function CalculatorScreen() {
     setPreviousValue(null);
     setOperation(null);
     setResetOnNext(false);
+    setParenStack([]);
+    setParenDepth(0);
   };
 
   const handlePercent = () => {

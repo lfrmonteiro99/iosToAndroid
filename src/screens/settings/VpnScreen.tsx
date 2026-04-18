@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../theme/ThemeContext';
 import { useDevice } from '../../store/DeviceStore';
 import {
@@ -34,6 +36,14 @@ export function VpnScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Disclaimer banner */}
+        <View style={{ backgroundColor: '#FFF3CD', borderRadius: 10, marginHorizontal: 16, marginTop: 16, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Ionicons name="warning-outline" size={20} color="#856404" />
+          <Text style={[typography.footnote, { color: '#856404', flex: 1 }]}>
+            This screen provides a shortcut to Android VPN settings. No VPN traffic is routed through this app.
+          </Text>
+        </View>
+
         {/* VPN info */}
         <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
           <CupertinoListSection
@@ -57,7 +67,7 @@ export function VpnScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Add VPN Configuration..."
               leading={{ name: 'add-circle-outline', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('vpn')}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openSystemPanel('vpn'); }}
             />
           </CupertinoListSection>
         </View>
@@ -68,7 +78,7 @@ export function VpnScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Open VPN Settings"
               leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => openSystemPanel('vpn')}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openSystemPanel('vpn'); }}
             />
           </CupertinoListSection>
         </View>

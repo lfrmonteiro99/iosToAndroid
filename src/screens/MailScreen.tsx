@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -50,6 +50,7 @@ const DEMO_EMAILS: Email[] = [
 ];
 
 const SENT_STORAGE_KEY = '@iostoandroid/mail_sent';
+const DEMO_BANNER_KEY = '@iostoandroid/mail_demo_dismissed';
 
 function getInitials(name: string): string {
   const parts = name.split(' ');
@@ -72,6 +73,18 @@ export function MailScreen({ navigation, route }: { navigation: any; route?: any
 
   const [emails, setEmails] = useState(DEMO_EMAILS);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DEMO_BANNER_KEY).then((val) => {
+      if (val !== 'true') setDemoBannerDismissed(false);
+    });
+  }, []);
+
+  const dismissDemoBanner = useCallback(() => {
+    setDemoBannerDismissed(true);
+    AsyncStorage.setItem(DEMO_BANNER_KEY, 'true');
+  }, []);
   // Initialize compose state from route params if navigated here to compose
   const initialCompose = route?.params?.composeTo;
   const [showCompose, setShowCompose] = useState(!!initialCompose);
@@ -204,6 +217,19 @@ export function MailScreen({ navigation, route }: { navigation: any; route?: any
         data={emails}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        ListHeaderComponent={
+          !demoBannerDismissed ? (
+            <View style={[styles.demoBanner]}>
+              <Ionicons name="information-circle-outline" size={20} color="#92400e" style={{ marginRight: 8 }} />
+              <Text style={styles.demoBannerText}>
+                Demo Mode — These are sample emails. This app does not send or receive real mail.
+              </Text>
+              <Pressable onPress={dismissDemoBanner} hitSlop={8} style={{ marginLeft: 8 }}>
+                <Ionicons name="close" size={18} color="#92400e" />
+              </Pressable>
+            </View>
+          ) : null
+        }
         ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 76 }]} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -295,6 +321,23 @@ export function MailScreen({ navigation, route }: { navigation: any; route?: any
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  demoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    margin: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+  },
+  demoBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400e',
+    lineHeight: 18,
+  },
   emailRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', left: 4, top: '50%' },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },

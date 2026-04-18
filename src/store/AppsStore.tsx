@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAlert } from '../components';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
@@ -75,6 +76,7 @@ const DEFAULT_DOCK = [
 ];
 
 export function AppsProvider({ children }: { children: React.ReactNode }) {
+  const alert = useAlert();
   const [state, setState] = useState<AppsState>({
     allApps: [],
     homeApps: [],
@@ -181,7 +183,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         isLoading: false,
       });
     } catch {
-      Alert.alert('Error', 'Could not load apps. Please try again later.');
+      alert('Error', 'Could not load apps. Please try again later.');
       setState(prev => ({ ...prev, isLoading: false }));
     }
   }, []);
@@ -201,7 +203,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       await LauncherModule.launchApp(packageName);
       addToRecents(packageName);
     } catch {
-      Alert.alert('Error', 'Could not launch app. Please try again.');
+      alert('Error', 'Could not launch app. Please try again.');
     }
   }, [addToRecents]);
 
@@ -247,7 +249,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       const LauncherModule = (await import('../../modules/launcher-module/src')).default;
       await LauncherModule.openLauncherSettings();
     } catch {
-      Alert.alert('Error', 'Could not open launcher settings.');
+      alert('Error', 'Could not open launcher settings.');
     }
   }, []);
 

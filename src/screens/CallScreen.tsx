@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   StatusBar,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -115,18 +116,33 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
     elevation: pulseGlow.value * 12,
   }));
 
-  // Initiate the native call on mount, then go back after a short delay
-  // (the system dialer takes over, so this screen is just a transition)
+  // Initiate the native call on mount, then go back when the user returns from the system dialer
   useEffect(() => {
+    let didReturn = false;
     (async () => {
       const mod = await getLauncher();
       if (mod && number) {
         try {
           await mod.makeCall(number);
-        } catch (e) { console.warn('CallScreen: native call failed:', e); }
+        } catch (e) { console.error('CallScreen: native call failed:', e); }
       }
-      // Go back after the system dialer opens (slight delay for UX)
-      setTimeout(() => { try { navigation.goBack(); } catch { /* ignore */ } }, 1500);
+      // Return once user comes back from the system dialer
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active' && !didReturn) {
+          didReturn = true;
+          sub.remove();
+          try { navigation.goBack(); } catch { /* ignore */ }
+        }
+      });
+      // Fallback: auto-dismiss after 10s if AppState event never fires
+      const fallback = setTimeout(() => {
+        if (!didReturn) {
+          didReturn = true;
+          sub.remove();
+          try { navigation.goBack(); } catch { /* ignore */ }
+        }
+      }, 10000);
+      return () => { sub.remove(); clearTimeout(fallback); };
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
