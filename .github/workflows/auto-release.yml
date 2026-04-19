@@ -15,6 +15,9 @@ jobs:
     name: Create Release
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      next: ${{ steps.version.outputs.next }}
 
     steps:
       - name: Checkout repository
@@ -190,6 +193,8 @@ jobs:
             }
 
             lines.push(`**Full Changelog**: https://github.com/${context.repo.owner}/${context.repo.repo}/compare/v${{ steps.version.outputs.current }}...${tag}`);
+            lines.push('');
+            lines.push('> APK is being built and will be attached to this release shortly.');
 
             // Create the release (which also creates the tag)
             const release = await github.rest.repos.createRelease({
@@ -204,3 +209,55 @@ jobs:
             });
 
             console.log(`Created release: ${release.data.html_url}`);
+
+  build-apk:
+    name: Build and Upload APK
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean
+
+      - name: Make Gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iosToAndroid-${{ needs.release.outputs.tag }}
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 90
+
+      - name: Attach APK to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          files: android/app/build/outputs/apk/release/*.apk
