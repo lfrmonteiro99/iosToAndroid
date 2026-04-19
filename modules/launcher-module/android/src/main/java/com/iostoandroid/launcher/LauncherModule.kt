@@ -115,6 +115,18 @@ class LauncherModule : Module() {
             true
         }
 
+        AsyncFunction("goHome") {
+            // Fires the system HOME intent, which brings the default launcher
+            // (this app, when set as default) to the foreground. Used to emulate
+            // the iOS swipe-up-home gesture when our app is in the foreground.
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            context.startActivity(intent)
+            true
+        }
+
         // ── Wi-Fi ────────────────────────────────────────────────────────
 
         AsyncFunction("getWifiInfo") {

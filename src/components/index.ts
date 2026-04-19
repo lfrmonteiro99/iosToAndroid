@@ -21,3 +21,4 @@ export { CupertinoSkeleton, SkeletonListRow, SkeletonCard } from './CupertinoSke
 export { CupertinoShareSheet } from './CupertinoShareSheet';
 export { NotificationBanner } from './NotificationBanner';
 export type { BannerNotification } from './NotificationBanner';
+export { HomeIndicator } from './HomeIndicator';

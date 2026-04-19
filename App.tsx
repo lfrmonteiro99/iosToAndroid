@@ -17,6 +17,7 @@ import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
+import { HomeIndicator } from './src/components/HomeIndicator';
 import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
@@ -170,6 +171,10 @@ function AppContent() {
       <NavigationContainer ref={navigationRef}>
         <TabNavigator />
       </NavigationContainer>
+
+      {/* iOS-style home indicator — floats above every screen and owns the
+          swipe-up-to-home / swipe-up-and-hold-for-switcher gesture. */}
+      <HomeIndicator navigationRef={navigationRef} />
 
       {/* iOS-style notification banner — renders ABOVE everything */}
       <NotificationBanner

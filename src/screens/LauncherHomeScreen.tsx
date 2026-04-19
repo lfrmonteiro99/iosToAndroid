@@ -1153,12 +1153,7 @@ export function LauncherHomeScreen() {
         options={actionSheetOptions}
       />
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Home indicator bar (iOS-style)                                     */}
-      {/* ---------------------------------------------------------------- */}
-      <View style={[styles.homeIndicator, { bottom: insets.bottom + 2 }]}>
-        <View style={styles.homeIndicatorBar} />
-      </View>
+      {/* Home indicator is rendered globally from App.tsx (HomeIndicator). */}
 
       {/* ---------------------------------------------------------------- */}
       {/* Incoming notification banner                                       */}
@@ -1488,17 +1483,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Home indicator bar (iOS-style)
-  homeIndicator: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  homeIndicatorBar: {
-    width: 134,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
 });
