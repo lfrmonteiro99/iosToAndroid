@@ -57,6 +57,7 @@ function AppContent() {
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('hidden');
       NavigationBar.setBehaviorAsync('overlay-swipe');
+      RNStatusBar.setHidden(true, 'slide');
       RNStatusBar.setTranslucent(true);
       RNStatusBar.setBackgroundColor('transparent');
     }
@@ -72,6 +73,10 @@ function AppContent() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
         setIsLocked(true);
+      } else if (state === 'active' && Platform.OS === 'android') {
+        // Re-assert immersive mode — Android can restore system bars on resume
+        NavigationBar.setVisibilityAsync('hidden');
+        RNStatusBar.setHidden(true, 'slide');
       }
     });
     return () => sub.remove();
@@ -161,7 +166,7 @@ function AppContent() {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <StatusBar style={isDark ? 'light' : 'dark'} hidden />
       <NavigationContainer ref={navigationRef}>
         <TabNavigator />
       </NavigationContainer>
