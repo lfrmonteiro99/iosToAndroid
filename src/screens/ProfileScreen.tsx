@@ -113,11 +113,11 @@ export function ProfileScreen() {
                 },
               ]}
             >
-              <Ionicons name="person" size={60} color={colors.systemGray} />
+              <Ionicons name="person-outline" size={60} color={colors.systemGray} />
             </View>
           )}
           <View style={[styles.cameraBadge, { backgroundColor: colors.systemBlue }]}>
-            <Ionicons name="camera" size={14} color="#FFFFFF" />
+            <Ionicons name="camera-outline" size={14} color="#FFFFFF" />
           </View>
         </Pressable>
 

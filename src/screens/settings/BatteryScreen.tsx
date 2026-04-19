@@ -19,11 +19,11 @@ function getBatteryColor(level: number): string {
   return '#FF3B30';
 }
 
-function getBatteryIcon(level: number, isCharging: boolean): 'battery-full' | 'battery-half' | 'battery-dead' | 'battery-charging' {
-  if (isCharging) return 'battery-charging';
-  if (level > 50) return 'battery-full';
-  if (level > 20) return 'battery-half';
-  return 'battery-dead';
+function getBatteryIcon(level: number, isCharging: boolean): 'battery-full-outline' | 'battery-half-outline' | 'battery-dead-outline' | 'battery-charging-outline' {
+  if (isCharging) return 'battery-charging-outline';
+  if (level > 50) return 'battery-full-outline';
+  if (level > 20) return 'battery-half-outline';
+  return 'battery-dead-outline';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

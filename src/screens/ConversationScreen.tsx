@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -126,6 +127,7 @@ interface BubbleProps {
   onLongPress?: () => void;
   showReactionPicker?: boolean;
   onReaction?: (emoji: string) => void;
+  onCopy?: () => void;
 }
 
 const MessageBubble = React.memo(function MessageBubble({
@@ -137,6 +139,7 @@ const MessageBubble = React.memo(function MessageBubble({
   onLongPress,
   showReactionPicker,
   onReaction,
+  onCopy,
 }: BubbleProps) {
   const isSent = message.type === 2;
   const pickerScale = useSharedValue(showReactionPicker ? 1 : 0);
@@ -165,18 +168,30 @@ const MessageBubble = React.memo(function MessageBubble({
         isSent ? styles.bubbleRowRight : styles.bubbleRowLeft,
       ]}
     >
-      {/* Reaction picker */}
+      {/* Reaction picker + action buttons */}
       {showReactionPicker && (
         <Animated.View style={[styles.reactionPicker, isSent ? styles.reactionPickerRight : styles.reactionPickerLeft, { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }, pickerStyle]}>
-          {REACTIONS.map((emoji) => (
-            <Pressable
-              key={emoji}
-              onPress={() => onReaction?.(emoji)}
-              style={({ pressed }) => [styles.reactionBtn, pressed && { transform: [{ scale: 1.3 }] }]}
-            >
-              <Text style={{ fontSize: 24 }}>{emoji}</Text>
-            </Pressable>
-          ))}
+          <View style={styles.reactionEmojiRow}>
+            {REACTIONS.map((emoji) => (
+              <Pressable
+                key={emoji}
+                onPress={() => onReaction?.(emoji)}
+                style={({ pressed }) => [styles.reactionBtn, pressed && { transform: [{ scale: 1.3 }] }]}
+              >
+                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={[styles.reactionActionDivider, { backgroundColor: isDark ? '#48484A' : '#E5E5EA' }]} />
+          <Pressable
+            onPress={onCopy}
+            style={({ pressed }) => [styles.reactionActionBtn, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Ionicons name="copy-outline" size={16} color={isDark ? '#EBEBF5' : '#3C3C43'} />
+            <Text style={[typography.subhead, { color: isDark ? '#EBEBF5' : '#3C3C43', marginLeft: 6 }]}>
+              Copy
+            </Text>
+          </Pressable>
         </Animated.View>
       )}
       <Pressable onLongPress={onLongPress} delayLongPress={400}>
@@ -482,6 +497,10 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             onLongPress={() => handleLongPress(item.id)}
             showReactionPicker={selectedMsgId === item.id}
             onReaction={(emoji) => handleReaction(item.id, emoji)}
+            onCopy={() => {
+              Clipboard.setStringAsync(item.body).catch(() => {});
+              setSelectedMsgId(null);
+            }}
           />
         </Pressable>
       );
@@ -539,13 +558,18 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             <Text style={[typography.callout, { color: colors.systemBlue }]}>Messages</Text>
           </Pressable>
 
-          {/* Title */}
-          <Text
-            style={[typography.headline, styles.navTitle, { color: colors.label }]}
-            numberOfLines={1}
+          {/* Title — tap to view contact details */}
+          <Pressable
+            onPress={contact ? () => navigation.navigate('ContactDetail', { contactId: contact.id }) : undefined}
+            hitSlop={8}
           >
-            {displayName}
-          </Text>
+            <Text
+              style={[typography.headline, styles.navTitle, { color: colors.label }]}
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+          </Pressable>
 
           {/* Call button */}
           <View style={styles.navActionSlot}>
@@ -615,15 +639,22 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         >
           <Ionicons name="image-outline" size={24} color={colors.systemBlue} />
         </Pressable>
-        <CupertinoTextField
-          value={inputText}
-          onChangeText={handleInputChange}
-          placeholder="Message"
-          multiline
-          clearButton={false}
-          containerStyle={styles.textFieldContainer}
-          returnKeyType="default"
-        />
+        <View style={styles.textFieldWrapper}>
+          <CupertinoTextField
+            value={inputText}
+            onChangeText={handleInputChange}
+            placeholder="Message"
+            multiline
+            clearButton={false}
+            containerStyle={styles.textFieldContainer}
+            returnKeyType="default"
+          />
+          {inputText.length > 0 && (
+            <Text style={[typography.caption2, styles.charCounter, { color: colors.secondaryLabel }]}>
+              {inputText.length}
+            </Text>
+          )}
+        </View>
         <Pressable
           onPress={handleSend}
           hitSlop={8}
@@ -728,8 +759,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 8,
   },
+  textFieldWrapper: {
+    flex: 1,
+    position: 'relative',
+  },
   textFieldContainer: {
     flex: 1,
+  },
+  charCounter: {
+    position: 'absolute',
+    bottom: -16,
+    right: 4,
+    fontSize: 10,
   },
   plusButton: {
     paddingBottom: 6,
@@ -757,17 +798,33 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   reactionPicker: {
-    flexDirection: 'row',
-    borderRadius: 24,
-    paddingHorizontal: 8,
+    flexDirection: 'column',
+    borderRadius: 16,
     paddingVertical: 4,
     marginBottom: 4,
-    gap: 2,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
+    minWidth: 200,
+  },
+  reactionEmojiRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 2,
+  },
+  reactionActionDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 8,
+    marginVertical: 4,
+  },
+  reactionActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   reactionPickerLeft: {
     alignSelf: 'flex-start',

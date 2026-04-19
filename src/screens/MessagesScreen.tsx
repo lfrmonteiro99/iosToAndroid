@@ -87,7 +87,14 @@ interface ConversationRowProps {
   typography: any;
   onPress: () => void;
   onDelete: () => void;
+  onMarkRead: () => void;
   draft?: string;
+  isOpen: boolean;
+  onOpen: () => void;
+  editMode: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  hasUnread: boolean;
 }
 
 const ConversationRow = React.memo(function ConversationRow({
@@ -97,68 +104,93 @@ const ConversationRow = React.memo(function ConversationRow({
   typography,
   onPress,
   onDelete,
+  onMarkRead,
   draft,
+  isOpen,
+  onOpen,
+  editMode,
+  isSelected,
+  onSelect,
+  hasUnread,
 }: ConversationRowProps) {
   const contact = findContactByPhone(conversation.address, contacts);
   const displayName = contact
     ? `${contact.firstName} ${contact.lastName}`.trim()
     : conversation.address;
-  const hasUnread = conversation.unreadCount > 0;
   const bgColor = contact ? avatarColor(contact.id) : avatarColor(conversation.address);
 
-  const trailingActions = [
+  const trailingActions = editMode ? [] : [
+    { label: 'Delete', color: '#FF3B30', onPress: onDelete },
+  ];
+  const leadingActions = editMode ? [] : [
     {
-      label: 'Delete',
-      color: '#FF3B30',
-      onPress: onDelete,
+      label: hasUnread ? 'Read' : 'Unread',
+      color: '#007AFF',
+      onPress: onMarkRead,
     },
   ];
 
-  return (
-    <CupertinoSwipeableRow trailingActions={trailingActions}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.row,
-          { backgroundColor: pressed ? colors.systemGray5 : 'transparent' },
-        ]}
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={`Conversation with ${displayName}`}
-      >
-        {/* Unread indicator */}
+  const rowContent = (
+    <Pressable
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? colors.systemGray5 : 'transparent' },
+      ]}
+      onPress={editMode ? onSelect : onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Conversation with ${displayName}`}
+    >
+      {/* Edit mode checkbox */}
+      {editMode ? (
+        <View style={styles.checkboxSlot}>
+          <View
+            style={[
+              styles.checkbox,
+              isSelected
+                ? { backgroundColor: colors.systemBlue, borderColor: colors.systemBlue }
+                : { borderColor: colors.systemGray3, backgroundColor: 'transparent' },
+            ]}
+          >
+            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+          </View>
+        </View>
+      ) : (
+        /* Unread indicator */
         <View style={styles.unreadIndicatorSlot}>
           {hasUnread && (
             <View style={[styles.unreadIndicator, { backgroundColor: colors.systemBlue }]} />
           )}
         </View>
+      )}
 
-        {/* Avatar */}
-        <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-          {contact ? (
-            <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
-          ) : (
-            <Ionicons name="person" size={22} color="#FFFFFF" />
-          )}
-        </View>
+      {/* Avatar */}
+      <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+        {contact ? (
+          <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
+        ) : (
+          <Ionicons name="person-outline" size={22} color="#FFFFFF" />
+        )}
+      </View>
 
-        {/* Content */}
-        <View
-          style={[
-            styles.rowContent,
-            { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
-          ]}
-        >
-          <View style={styles.rowTop}>
-            <Text
-              style={[
-                typography.body,
-                styles.nameText,
-                { color: colors.label, fontWeight: hasUnread ? '700' : '400' },
-              ]}
-              numberOfLines={1}
-            >
-              {displayName}
-            </Text>
+      {/* Content */}
+      <View
+        style={[
+          styles.rowContent,
+          { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+        ]}
+      >
+        <View style={styles.rowTop}>
+          <Text
+            style={[
+              typography.body,
+              styles.nameText,
+              { color: colors.label, fontWeight: hasUnread ? '700' : '400' },
+            ]}
+            numberOfLines={1}
+          >
+            {displayName}
+          </Text>
+          {!editMode && (
             <View style={styles.dateChevronRow}>
               <Text style={[typography.subhead, { color: colors.secondaryLabel, fontSize: 15 }]}>
                 {conversation.lastMessage.dateFormatted}
@@ -170,27 +202,42 @@ const ConversationRow = React.memo(function ConversationRow({
                 style={{ marginLeft: 4 }}
               />
             </View>
-          </View>
-
-          <Text
-            style={[
-              typography.subhead,
-              styles.previewText,
-              { color: colors.secondaryLabel },
-            ]}
-            numberOfLines={2}
-          >
-            {draft ? (
-              <>
-                <Text style={{ color: colors.systemGray, fontStyle: 'italic' }}>Draft: </Text>
-                {draft}
-              </>
-            ) : (
-              conversation.lastMessage.body
-            )}
-          </Text>
+          )}
         </View>
-      </Pressable>
+
+        <Text
+          style={[
+            typography.subhead,
+            styles.previewText,
+            { color: colors.secondaryLabel },
+          ]}
+          numberOfLines={2}
+        >
+          {draft ? (
+            <>
+              <Text style={{ color: colors.systemGray, fontStyle: 'italic' }}>Draft: </Text>
+              {draft}
+            </>
+          ) : (
+            conversation.lastMessage.body
+          )}
+        </Text>
+      </View>
+    </Pressable>
+  );
+
+  if (editMode) {
+    return <View style={{ backgroundColor: colors.systemBackground }}>{rowContent}</View>;
+  }
+
+  return (
+    <CupertinoSwipeableRow
+      trailingActions={trailingActions}
+      leadingActions={leadingActions}
+      isOpen={isOpen}
+      onOpen={onOpen}
+    >
+      {rowContent}
     </CupertinoSwipeableRow>
   );
 });
@@ -212,14 +259,33 @@ export function MessagesScreen() {
   const [, setIsSearchFocused] = useState(false);
   const [hasSmsPermission, setHasSmsPermission] = useState<boolean | null>(null);
 
-  // Load persisted deleted addresses on mount
+  // Swipe row coordination — only one row open at a time
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+
+  // Edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [selectedAddresses, setSelectedAddresses] = useState<Set<string>>(new Set());
+
+  // Read/unread overrides: address → true means manually marked read, false means manually marked unread
+  const [readOverrides, setReadOverrides] = useState<Record<string, boolean>>({});
+
+  // Load persisted state on mount
   useEffect(() => {
     AsyncStorage.getItem('@iostoandroid/deleted_sms').then((raw) => {
       if (raw) {
         try {
           const arr = JSON.parse(raw);
           if (Array.isArray(arr)) setDeletedAddresses(new Set(arr));
-        } catch { /* ignore parse errors */ }
+        } catch { /* ignore */ }
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem('@iostoandroid/read_overrides').then((raw) => {
+      if (raw) {
+        try {
+          const obj = JSON.parse(raw);
+          if (obj && typeof obj === 'object') setReadOverrides(obj);
+        } catch { /* ignore */ }
       }
     }).catch(() => {});
   }, []);
@@ -265,6 +331,17 @@ export function MessagesScreen() {
     loadDrafts();
   }, [device.messages]);
 
+  const persistReadOverrides = useCallback((overrides: Record<string, boolean>) => {
+    AsyncStorage.setItem('@iostoandroid/read_overrides', JSON.stringify(overrides)).catch(() => {});
+  }, []);
+
+  const effectiveHasUnread = useCallback((conv: Conversation): boolean => {
+    if (conv.address in readOverrides) return !readOverrides[conv.address];
+    return conv.unreadCount > 0;
+  }, [readOverrides]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
   const handleDeleteConversation = useCallback((address: string) => {
     alert(
       'Delete Conversation',
@@ -280,11 +357,74 @@ export function MessagesScreen() {
               AsyncStorage.setItem('@iostoandroid/deleted_sms', JSON.stringify([...next])).catch(() => {});
               return next;
             });
+            setOpenRowId(null);
           },
         },
       ],
     );
   }, [alert]);
+
+  const handleMarkReadUnread = useCallback((address: string, markAsRead: boolean) => {
+    setReadOverrides((prev) => {
+      const next = { ...prev, [address]: markAsRead };
+      persistReadOverrides(next);
+      return next;
+    });
+    setOpenRowId(null);
+  }, [persistReadOverrides]);
+
+  const toggleEditMode = useCallback(() => {
+    setEditMode((prev) => !prev);
+    setSelectedAddresses(new Set());
+    setOpenRowId(null);
+  }, []);
+
+  const toggleSelection = useCallback((address: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedAddresses((prev) => {
+      const next = new Set(prev);
+      if (next.has(address)) next.delete(address);
+      else next.add(address);
+      return next;
+    });
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    if (selectedAddresses.size === 0) return;
+    alert(
+      'Delete Conversations',
+      `Delete ${selectedAddresses.size} conversation${selectedAddresses.size > 1 ? 's' : ''}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDeletedAddresses((prev) => {
+              const next = new Set(prev);
+              for (const addr of selectedAddresses) next.add(addr);
+              AsyncStorage.setItem('@iostoandroid/deleted_sms', JSON.stringify([...next])).catch(() => {});
+              return next;
+            });
+            setSelectedAddresses(new Set());
+            setEditMode(false);
+          },
+        },
+      ],
+    );
+  }, [selectedAddresses, alert]);
+
+  const handleBulkMarkRead = useCallback(() => {
+    if (selectedAddresses.size === 0) return;
+    setReadOverrides((prev) => {
+      const next = { ...prev };
+      for (const addr of selectedAddresses) next[addr] = true;
+      persistReadOverrides(next);
+      return next;
+    });
+    setSelectedAddresses(new Set());
+    setEditMode(false);
+  }, [selectedAddresses, persistReadOverrides]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
@@ -305,24 +445,45 @@ export function MessagesScreen() {
   const handleConversationPress = useCallback(
     (address: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Mark as read when opening a conversation
+      setReadOverrides((prev) => {
+        const next = { ...prev, [address]: true };
+        persistReadOverrides(next);
+        return next;
+      });
       navigation.navigate('Conversation', { address });
     },
-    [navigation],
+    [navigation, persistReadOverrides],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: Conversation }) => (
-      <ConversationRow
-        conversation={item}
-        contacts={device.contacts}
-        colors={colors}
-        typography={typography}
-        onPress={() => handleConversationPress(item.address)}
-        onDelete={() => handleDeleteConversation(item.address)}
-        draft={drafts[item.address]}
-      />
-    ),
-    [device.contacts, colors, typography, handleConversationPress, handleDeleteConversation, drafts],
+    ({ item }: { item: Conversation }) => {
+      const hasUnread = effectiveHasUnread(item);
+      return (
+        <ConversationRow
+          conversation={item}
+          contacts={device.contacts}
+          colors={colors}
+          typography={typography}
+          onPress={() => handleConversationPress(item.address)}
+          onDelete={() => handleDeleteConversation(item.address)}
+          onMarkRead={() => handleMarkReadUnread(item.address, hasUnread)}
+          draft={drafts[item.address]}
+          isOpen={openRowId === item.address}
+          onOpen={() => setOpenRowId(item.address)}
+          editMode={editMode}
+          isSelected={selectedAddresses.has(item.address)}
+          onSelect={() => toggleSelection(item.address)}
+          hasUnread={hasUnread}
+        />
+      );
+    },
+    [
+      device.contacts, colors, typography,
+      handleConversationPress, handleDeleteConversation, handleMarkReadUnread,
+      drafts, openRowId, editMode, selectedAddresses, toggleSelection, effectiveHasUnread,
+      setOpenRowId,
+    ],
   );
 
   const keyExtractor = useCallback((item: Conversation) => item.address, []);
@@ -363,6 +524,14 @@ export function MessagesScreen() {
     </View>
   );
 
+  const hasSelectedUnread = useMemo(
+    () => [...selectedAddresses].some((addr) => {
+      const conv = conversations.find((c) => c.address === addr);
+      return conv ? effectiveHasUnread(conv) : false;
+    }),
+    [selectedAddresses, conversations, effectiveHasUnread],
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
@@ -370,23 +539,50 @@ export function MessagesScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerTopRow}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            hitSlop={8}
-            style={styles.backButton}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
-          </Pressable>
-          <Pressable
-            onPress={handleComposePress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Compose new message"
-          >
-            <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
-          </Pressable>
+          {editMode ? (
+            <Pressable
+              onPress={toggleEditMode}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel edit mode"
+            >
+              <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
+            </Pressable>
+          )}
+
+          <View style={styles.headerRight}>
+            {!editMode && (
+              <>
+                <Pressable
+                  onPress={toggleEditMode}
+                  hitSlop={8}
+                  style={{ marginRight: 16 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit conversations"
+                >
+                  <Text style={[typography.body, { color: colors.systemBlue }]}>Edit</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleComposePress}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Compose new message"
+                >
+                  <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
+                </Pressable>
+              </>
+            )}
+          </View>
         </View>
 
         {/* Large title */}
@@ -395,24 +591,26 @@ export function MessagesScreen() {
         </Text>
 
         {/* Search bar */}
-        <View style={[styles.searchBar, { backgroundColor: colors.systemGray5 }]}>
-          <Ionicons name="search" size={16} color={colors.systemGray} style={{ marginRight: 6 }} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.label }]}
-            placeholder="Search"
-            placeholderTextColor={colors.systemGray}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setIsSearchFocused(false)}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={colors.systemGray} />
-            </Pressable>
-          )}
-        </View>
+        {!editMode && (
+          <View style={[styles.searchBar, { backgroundColor: colors.systemGray5 }]}>
+            <Ionicons name="search" size={16} color={colors.systemGray} style={{ marginRight: 6 }} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.label }]}
+              placeholder="Search"
+              placeholderTextColor={colors.systemGray}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={colors.systemGray} />
+              </Pressable>
+            )}
+          </View>
+        )}
       </View>
 
       {/* List or loading */}
@@ -431,9 +629,40 @@ export function MessagesScreen() {
           showsVerticalScrollIndicator={false}
           decelerationRate={0.998}
           contentContainerStyle={
-            filtered.length === 0 ? styles.emptyList : { paddingBottom: 20 }
+            filtered.length === 0
+              ? styles.emptyList
+              : { paddingBottom: editMode ? insets.bottom + 60 : 20 }
           }
         />
+      )}
+
+      {/* Edit mode bottom toolbar */}
+      {editMode && (
+        <View
+          style={[
+            styles.editToolbar,
+            {
+              paddingBottom: insets.bottom + 8,
+              backgroundColor: colors.systemBackground,
+              borderTopColor: colors.separator,
+            },
+          ]}
+        >
+          <Pressable
+            onPress={handleBulkMarkRead}
+            disabled={selectedAddresses.size === 0 || !hasSelectedUnread}
+            style={[styles.editToolbarAction, { opacity: (selectedAddresses.size === 0 || !hasSelectedUnread) ? 0.4 : 1 }]}
+          >
+            <Text style={[typography.body, { color: colors.systemBlue }]}>Mark as Read</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleBulkDelete}
+            disabled={selectedAddresses.size === 0}
+            style={[styles.editToolbarAction, { opacity: selectedAddresses.size === 0 ? 0.4 : 1 }]}
+          >
+            <Text style={[typography.body, { color: colors.systemRed }]}>Delete</Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -452,6 +681,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     height: 44,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   backButton: {
     flexDirection: 'row',
@@ -494,6 +727,20 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
+  checkboxSlot: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatar: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
@@ -531,6 +778,22 @@ const styles = StyleSheet.create({
   },
   previewText: {
     lineHeight: 20,
+  },
+
+  // Edit toolbar
+  editToolbar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  editToolbarAction: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
   },
 
   // Empty

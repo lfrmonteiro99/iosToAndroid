@@ -1,10 +1,7 @@
 name: Build Android APK
 
 on:
-  release:
-    types: [published]
-
-  # Allow manual trigger for testing
+  # Manual trigger only — APK is built automatically by auto-release.yml on PR merge
   workflow_dispatch:
 
 permissions:

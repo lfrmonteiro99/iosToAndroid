@@ -239,7 +239,21 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
   const loadWeather = useCallback(async (): Promise<DeviceWeather> => {
     try {
-      const res = await fetch('https://wttr.in/?format=j1');
+      let locationQuery = '';
+      try {
+        const { status } = await import('expo-location').then((m) => m.requestForegroundPermissionsAsync());
+        if (status === 'granted') {
+          const loc = await import('expo-location').then((m) =>
+            m.getCurrentPositionAsync({ accuracy: 3 }),
+          );
+          locationQuery = `${loc.coords.latitude.toFixed(4)},${loc.coords.longitude.toFixed(4)}`;
+        }
+      } catch { /* fall back to IP geolocation */ }
+
+      const url = locationQuery
+        ? `https://wttr.in/${locationQuery}?format=j1`
+        : 'https://wttr.in/?format=j1';
+      const res = await fetch(url);
       const data = await res.json();
       const current = data.current_condition[0];
       const area = data.nearest_area[0];

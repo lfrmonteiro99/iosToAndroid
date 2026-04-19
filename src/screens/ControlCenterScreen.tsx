@@ -355,7 +355,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 }}
               />
               <ToggleButton
-                iconName="wifi"
+                iconName="wifi-outline"
                 label="Wi-Fi"
                 sublabel={device.wifi.enabled ? (device.wifi.ssid || 'On') : 'Off'}
                 active={device.wifi.enabled}
@@ -364,7 +364,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleWifi(); }}
               />
               <ToggleButton
-                iconName="bluetooth"
+                iconName="bluetooth-outline"
                 label="Bluetooth"
                 sublabel={device.bluetooth.enabled ? 'On' : 'Off'}
                 active={device.bluetooth.enabled}
@@ -373,7 +373,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleBluetooth(); }}
               />
               <ToggleButton
-                iconName="moon"
+                iconName="moon-outline"
                 label="Focus"
                 sublabel={settings.focusMode !== 'off' ? 'Do Not Disturb' : 'Off'}
                 active={settings.focusMode !== 'off'}
@@ -392,7 +392,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
               <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
               <View style={styles.musicInner}>
                 <View style={styles.musicAlbumArt}>
-                  <Ionicons name="musical-notes" size={28} color="rgba(255,255,255,0.4)" />
+                  <Ionicons name="musical-notes-outline" size={28} color="rgba(255,255,255,0.4)" />
                 </View>
                 <View style={styles.musicMeta}>
                   <Text style={[styles.musicTitle, { fontSize: 14 * textScale }]} numberOfLines={1}>
@@ -461,7 +461,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
             <View style={styles.verticalSlidersRow}>
               {/* Brightness */}
               <View style={styles.verticalSliderWrap}>
-                <Ionicons name="sunny" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
+                <Ionicons name="sunny-outline" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
                 <GestureDetector gesture={brightnessGesture}>
                   <Animated.View
                     style={styles.verticalSliderTrack}
@@ -472,7 +472,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                       style={[styles.verticalSliderFill, brightnessFillStyle]}
                     />
                     <Ionicons
-                      name="sunny"
+                      name="sunny-outline"
                       size={16}
                       color="rgba(255,255,255,0.8)"
                       style={styles.verticalSliderIconBottom}
@@ -484,7 +484,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
 
               {/* Volume */}
               <View style={styles.verticalSliderWrap}>
-                <Ionicons name="volume-high" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
+                <Ionicons name="volume-high-outline" size={14} color="rgba(255,255,255,0.6)" style={{ marginBottom: 6 }} />
                 <GestureDetector gesture={volumeGesture}>
                   <Animated.View
                     style={styles.verticalSliderTrack}
@@ -495,7 +495,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                       style={[styles.verticalSliderFill, volumeFillStyle]}
                     />
                     <Ionicons
-                      name="volume-low"
+                      name="volume-low-outline"
                       size={16}
                       color="rgba(255,255,255,0.8)"
                       style={styles.verticalSliderIconBottom}
@@ -606,7 +606,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
           {/* Battery info row */}
           <View style={[styles.section, styles.batteryInfoRow]}>
             <Ionicons
-              name={device.battery.isCharging ? 'battery-charging' : 'battery-half-outline'}
+              name={device.battery.isCharging ? 'battery-charging-outline' : 'battery-half-outline'}
               size={16}
               color="rgba(255,255,255,0.6)"
             />

@@ -268,7 +268,7 @@ export function NotificationCenterScreen() {
           >
             {groups.length === 0 ? (
               <View style={styles.emptyState}>
-                <Ionicons name="notifications" size={48} color="rgba(255,255,255,0.4)" />
+                <Ionicons name="notifications-outline" size={48} color="rgba(255,255,255,0.4)" />
                 <Text style={[styles.emptyText, typography.subhead, { fontWeight: '500' }]}>No Notifications</Text>
               </View>
             ) : (

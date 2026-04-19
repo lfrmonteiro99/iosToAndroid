@@ -172,7 +172,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
           </View>
           {permissionError && (
             <View style={styles.errorContainer}>
-              <Ionicons name="warning" size={18} color="#FF453A" />
+              <Ionicons name="warning-outline" size={18} color="#FF453A" />
               <Text style={styles.errorText}>{permissionError}</Text>
             </View>
           )}

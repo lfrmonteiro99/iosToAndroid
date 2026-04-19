@@ -9,6 +9,8 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +37,7 @@ interface Reminder {
   notificationId?: string;
   listName: string;
   createdAt: number;
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly';
 }
 
 type FilterMode = 'home' | 'list';
@@ -48,7 +51,9 @@ interface ListMeta {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = '@iostoandroid/reminders';
+const LISTS_STORAGE_KEY = '@iostoandroid/reminder_lists';
 const REMINDERS_ACCENT = '#FF9500';
+const LIST_COLOR_OPTIONS = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#5856D6', '#AF52DE', '#FF2D55', '#00C7BE'];
 
 const DEFAULT_LISTS: ListMeta[] = [
   { name: 'Reminders', color: '#007AFF', icon: 'list-circle-outline' },
@@ -80,15 +85,43 @@ async function requestNotificationPermissions(): Promise<boolean> {
 async function scheduleReminderNotification(reminder: Reminder): Promise<string | undefined> {
   if (!reminder.dueDate) return undefined;
   const dueDate = new Date(reminder.dueDate);
-  if (dueDate <= new Date()) return undefined;
   try {
     const hasPermission = await requestNotificationPermissions();
     if (!hasPermission) return undefined;
-    const notificationId = await Notifications.scheduleNotificationAsync({
+
+    let trigger: Notifications.NotificationTriggerInput;
+    if (reminder.recurrence === 'daily') {
+      trigger = {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        hour: dueDate.getHours(),
+        minute: dueDate.getMinutes(),
+        repeats: true,
+      };
+    } else if (reminder.recurrence === 'weekly') {
+      trigger = {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        weekday: dueDate.getDay() + 1,
+        hour: dueDate.getHours(),
+        minute: dueDate.getMinutes(),
+        repeats: true,
+      };
+    } else if (reminder.recurrence === 'monthly') {
+      trigger = {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        day: dueDate.getDate(),
+        hour: dueDate.getHours(),
+        minute: dueDate.getMinutes(),
+        repeats: true,
+      };
+    } else {
+      if (dueDate <= new Date()) return undefined;
+      trigger = { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dueDate };
+    }
+
+    return await Notifications.scheduleNotificationAsync({
       content: { title: 'Reminder', body: reminder.title },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dueDate },
+      trigger,
     });
-    return notificationId;
   } catch {
     return undefined;
   }
@@ -179,10 +212,13 @@ interface ReminderRowProps {
   onToggle: () => void;
   onDelete: () => void;
   onFlag: () => void;
+  onEdit: () => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   colors: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typography: any;
+  isOpen: boolean;
+  onOpen: () => void;
 }
 
 const ReminderRow = React.memo(function ReminderRow({
@@ -192,11 +228,16 @@ const ReminderRow = React.memo(function ReminderRow({
   onToggle,
   onDelete,
   onFlag,
+  onEdit,
   colors,
   typography,
+  isOpen,
+  onOpen,
 }: ReminderRowProps) {
   return (
     <CupertinoSwipeableRow
+      isOpen={isOpen}
+      onOpen={onOpen}
       trailingActions={[
         { label: 'Delete', color: colors.systemRed, onPress: onDelete },
         {
@@ -206,7 +247,8 @@ const ReminderRow = React.memo(function ReminderRow({
         },
       ]}
     >
-      <View
+      <Pressable
+        onPress={onEdit}
         style={[
           styles.reminderRow,
           { backgroundColor: colors.secondarySystemGroupedBackground },
@@ -255,7 +297,7 @@ const ReminderRow = React.memo(function ReminderRow({
             <Ionicons name="flag-outline" size={16} color="#FF9500" />
           )}
         </View>
-      </View>
+      </Pressable>
     </CupertinoSwipeableRow>
   );
 });
@@ -333,6 +375,28 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
   const [newDueDate, setNewDueDate] = useState<number | undefined>(undefined);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const addInputRef = useRef<TextInput>(null);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+
+  // Custom lists
+  const [customLists, setCustomLists] = useState<ListMeta[]>([]);
+  const [showCreateListModal, setShowCreateListModal] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [newListColor, setNewListColor] = useState(LIST_COLOR_OPTIONS[0]);
+
+  // Edit reminder
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editDueDate, setEditDueDate] = useState<number | undefined>(undefined);
+  const [editRecurrence, setEditRecurrence] = useState<Reminder['recurrence']>('none');
+  const [showEditDuePicker, setShowEditDuePicker] = useState(false);
+  const [editCustomHour, setEditCustomHour] = useState('9');
+  const [editCustomMinute, setEditCustomMinute] = useState('00');
+
+  // Custom date picker for new reminders
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [customHour, setCustomHour] = useState('9');
+  const [customMinute, setCustomMinute] = useState('00');
 
   // ── Persistence ─────────────────────────────────────────────
 
@@ -344,13 +408,19 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
     }
   }, []);
 
-  // Load reminders on mount
+  // Load reminders and custom lists on mount
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(LISTS_STORAGE_KEY),
+    ]).then(([rawReminders, rawLists]) => {
       if (cancelled) return;
-      if (raw) {
-        try { setReminders(JSON.parse(raw)); } catch { /* ignore */ }
+      if (rawReminders) {
+        try { setReminders(JSON.parse(rawReminders)); } catch { /* ignore */ }
+      }
+      if (rawLists) {
+        try { setCustomLists(JSON.parse(rawLists)); } catch { /* ignore */ }
       }
       setLoaded(true);
     }).catch(() => { if (!cancelled) setLoaded(true); });
@@ -413,14 +483,17 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
     });
   }, [reminders, viewMode, activeFilter]);
 
+  // ── All lists (default + custom) — must be before activeListColor ──────
+  const allLists = useMemo(() => [...DEFAULT_LISTS, ...customLists], [customLists]);
+
   // ── Active list color ───────────────────────────────────────
 
   const activeListColor = useMemo(() => {
     const smart = SMART_LISTS.find((s) => s.key === activeFilter);
     if (smart) return smart.color;
-    const userList = DEFAULT_LISTS.find((l) => l.name === activeFilter);
+    const userList = allLists.find((l) => l.name === activeFilter);
     return userList?.color ?? REMINDERS_ACCENT;
-  }, [activeFilter]);
+  }, [activeFilter, allLists]);
 
   // ── Actions ─────────────────────────────────────────────────
 
@@ -504,6 +577,53 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
     setShowDatePicker(false);
   }, [newTitle, newDueDate, reminders, persistReminders, activeFilter]);
 
+  const handleCreateList = useCallback(() => {
+    if (!newListName.trim()) return;
+    const list: ListMeta = {
+      name: newListName.trim(),
+      color: newListColor,
+      icon: 'list-outline' as keyof typeof Ionicons.glyphMap,
+    };
+    const updated = [...customLists, list];
+    setCustomLists(updated);
+    AsyncStorage.setItem(LISTS_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+    setNewListName('');
+    setNewListColor(LIST_COLOR_OPTIONS[0]);
+    setShowCreateListModal(false);
+  }, [newListName, newListColor, customLists]);
+
+  const openEditReminder = useCallback((reminder: Reminder) => {
+    setEditingReminder(reminder);
+    setEditTitle(reminder.title);
+    setEditNotes(reminder.notes);
+    setEditDueDate(reminder.dueDate);
+    setEditRecurrence(reminder.recurrence ?? 'none');
+    setShowEditDuePicker(false);
+  }, []);
+
+  const saveEditReminder = useCallback(async () => {
+    if (!editingReminder || !editTitle.trim()) return;
+    if (editingReminder.notificationId) {
+      await cancelReminderNotification(editingReminder.notificationId);
+    }
+    const updated: Reminder = {
+      ...editingReminder,
+      title: editTitle.trim(),
+      notes: editNotes,
+      dueDate: editDueDate,
+      recurrence: editRecurrence,
+      notificationId: undefined,
+    };
+    if (updated.dueDate) {
+      const notificationId = await scheduleReminderNotification(updated);
+      if (notificationId) updated.notificationId = notificationId;
+    }
+    const updatedList = reminders.map((r) => (r.id === updated.id ? updated : r));
+    setReminders(updatedList);
+    persistReminders(updatedList);
+    setEditingReminder(null);
+  }, [editingReminder, editTitle, editNotes, editDueDate, editRecurrence, reminders, persistReminders]);
+
   const openList = useCallback((filter: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveFilter(filter);
@@ -523,13 +643,13 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
   // ── List counts (must be above early returns to satisfy hooks rules) ────
   const listCounts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const l of DEFAULT_LISTS) {
+    for (const l of allLists) {
       c[l.name] = reminders.filter(
         (r) => !r.completed && r.listName === l.name,
       ).length;
     }
     return c;
-  }, [reminders]);
+  }, [reminders, allLists]);
 
   // ── Render: List View ──────────────────────────────────────
 
@@ -545,8 +665,11 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
         onToggle={() => toggleReminder(item.id)}
         onDelete={() => deleteReminder(item.id)}
         onFlag={() => toggleFlag(item.id)}
+        onEdit={() => openEditReminder(item)}
         colors={colors}
         typography={typography}
+        isOpen={openRowId === item.id}
+        onOpen={() => setOpenRowId(item.id)}
       />
     );
 
@@ -649,37 +772,78 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
               </View>
 
               {showDatePicker && (
-                <View style={styles.dateChipsRow}>
-                  {[
-                    { label: 'Today', value: todayAt9() },
-                    { label: 'Tomorrow', value: startOfTomorrow() },
-                    { label: 'Next Week', value: startOfNextWeek() },
-                  ].map((chip) => {
-                    const selected = newDueDate === chip.value;
-                    return (
-                      <Pressable
-                        key={chip.label}
-                        onPress={() => setNewDueDate(selected ? undefined : chip.value)}
-                        style={[
-                          styles.dateChip,
-                          {
-                            backgroundColor: selected
-                              ? REMINDERS_ACCENT
-                              : colors.systemGray5,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            typography.caption1,
-                            { color: selected ? '#fff' : colors.label, fontWeight: '600' },
-                          ]}
+                <View>
+                  <View style={styles.dateChipsRow}>
+                    {[
+                      { label: 'Today', value: todayAt9() },
+                      { label: 'Tomorrow', value: startOfTomorrow() },
+                      { label: 'Next Week', value: startOfNextWeek() },
+                    ].map((chip) => {
+                      const selected = newDueDate === chip.value;
+                      return (
+                        <Pressable
+                          key={chip.label}
+                          onPress={() => { setNewDueDate(selected ? undefined : chip.value); setShowCustomDatePicker(false); }}
+                          style={[styles.dateChip, { backgroundColor: selected ? REMINDERS_ACCENT : colors.systemGray5 }]}
                         >
-                          {chip.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                          <Text style={[typography.caption1, { color: selected ? '#fff' : colors.label, fontWeight: '600' }]}>
+                            {chip.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                    <Pressable
+                      onPress={() => setShowCustomDatePicker((v) => !v)}
+                      style={[styles.dateChip, { backgroundColor: showCustomDatePicker ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                    >
+                      <Text style={[typography.caption1, { color: showCustomDatePicker ? '#fff' : colors.label, fontWeight: '600' }]}>
+                        Custom…
+                      </Text>
+                    </Pressable>
+                  </View>
+                  {showCustomDatePicker && (
+                    <View style={{ paddingLeft: 32 }}>
+                      <View style={styles.customPickerRow}>
+                        {Array.from({ length: 7 }, (_, i) => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + i + 1);
+                          d.setHours(parseInt(customHour, 10) || 9, parseInt(customMinute, 10) || 0, 0, 0);
+                          const label = i === 0 ? 'Tmrw' : d.toLocaleDateString([], { weekday: 'short' });
+                          const ts = d.getTime();
+                          return (
+                            <Pressable
+                              key={i}
+                              onPress={() => setNewDueDate(ts)}
+                              style={[styles.customDayChip, { backgroundColor: newDueDate === ts ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                            >
+                              <Text style={[typography.caption2, { color: newDueDate === ts ? '#fff' : colors.label }]}>{label}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <View style={styles.customTimeRow}>
+                        <TextInput
+                          style={[typography.body, styles.timeInput, { color: colors.label, borderColor: colors.separator }]}
+                          value={customHour}
+                          onChangeText={setCustomHour}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                          placeholder="HH"
+                          placeholderTextColor={colors.tertiaryLabel}
+                        />
+                        <Text style={[typography.body, { color: colors.label }]}>:</Text>
+                        <TextInput
+                          style={[typography.body, styles.timeInput, { color: colors.label, borderColor: colors.separator }]}
+                          value={customMinute}
+                          onChangeText={setCustomMinute}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                          placeholder="MM"
+                          placeholderTextColor={colors.tertiaryLabel}
+                        />
+                      </View>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -758,16 +922,23 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
             </View>
 
             {/* My Lists section */}
-            <Text
-              style={[
-                typography.title3,
-                { color: colors.label, fontWeight: '700', paddingHorizontal: 16, marginTop: 24, marginBottom: 12 },
-              ]}
-            >
-              My Lists
-            </Text>
+            <View style={styles.myListsHeader}>
+              <Text
+                style={[
+                  typography.title3,
+                  { color: colors.label, fontWeight: '700' },
+                ]}
+              >
+                My Lists
+              </Text>
+              <Pressable onPress={() => setShowCreateListModal(true)} hitSlop={8}>
+                <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600' }]}>
+                  Add List
+                </Text>
+              </Pressable>
+            </View>
 
-            {DEFAULT_LISTS.map((list) => (
+            {allLists.map((list) => (
               <Pressable
                 key={list.name}
                 onPress={() => openList(list.name)}
@@ -797,6 +968,178 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Create List Modal */}
+      <Modal visible={showCreateListModal} animationType="slide" presentationStyle="pageSheet">
+        <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => { setShowCreateListModal(false); setNewListName(''); }}>
+              <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Cancel</Text>
+            </Pressable>
+            <Text style={[typography.headline, { color: colors.label }]}>New List</Text>
+            <Pressable onPress={handleCreateList} disabled={!newListName.trim()}>
+              <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600', opacity: newListName.trim() ? 1 : 0.4 }]}>
+                Done
+              </Text>
+            </Pressable>
+          </View>
+          <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
+            <TextInput
+              style={[typography.body, styles.modalInput, { color: colors.label, borderColor: colors.separator }]}
+              placeholder="List Name"
+              placeholderTextColor={colors.tertiaryLabel}
+              value={newListName}
+              onChangeText={setNewListName}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreateList}
+            />
+            <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 20, marginBottom: 10 }]}>
+              Color
+            </Text>
+            <View style={styles.colorSwatches}>
+              {LIST_COLOR_OPTIONS.map((color) => (
+                <Pressable
+                  key={color}
+                  onPress={() => setNewListColor(color)}
+                  style={[styles.colorSwatch, { backgroundColor: color, borderWidth: newListColor === color ? 3 : 0, borderColor: colors.label }]}
+                />
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Reminder Modal */}
+      <Modal visible={editingReminder !== null} animationType="slide" presentationStyle="pageSheet">
+        <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setEditingReminder(null)}>
+              <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Cancel</Text>
+            </Pressable>
+            <Text style={[typography.headline, { color: colors.label }]}>Edit Reminder</Text>
+            <Pressable onPress={saveEditReminder} disabled={!editTitle.trim()}>
+              <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600', opacity: editTitle.trim() ? 1 : 0.4 }]}>
+                Done
+              </Text>
+            </Pressable>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+            <TextInput
+              style={[typography.body, styles.modalInput, { color: colors.label, borderColor: colors.separator }]}
+              placeholder="Title"
+              placeholderTextColor={colors.tertiaryLabel}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              returnKeyType="next"
+            />
+            <TextInput
+              style={[typography.body, styles.modalInput, { color: colors.label, borderColor: colors.separator, marginTop: 12 }]}
+              placeholder="Notes"
+              placeholderTextColor={colors.tertiaryLabel}
+              value={editNotes}
+              onChangeText={setEditNotes}
+              multiline
+              returnKeyType="done"
+            />
+
+            {/* Due date */}
+            <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 20, marginBottom: 8 }]}>
+              Due Date
+            </Text>
+            <View style={styles.dateChipsRow}>
+              {[
+                { label: 'None', value: undefined },
+                { label: 'Today', value: todayAt9() },
+                { label: 'Tomorrow', value: startOfTomorrow() },
+                { label: 'Next Week', value: startOfNextWeek() },
+              ].map((chip) => {
+                const selected = chip.value === undefined ? editDueDate === undefined : editDueDate === chip.value;
+                return (
+                  <Pressable
+                    key={chip.label}
+                    onPress={() => { setEditDueDate(chip.value); setShowEditDuePicker(false); }}
+                    style={[styles.dateChip, { backgroundColor: selected ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                  >
+                    <Text style={[typography.caption1, { color: selected ? '#fff' : colors.label, fontWeight: '600' }]}>
+                      {chip.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                onPress={() => setShowEditDuePicker((v) => !v)}
+                style={[styles.dateChip, { backgroundColor: showEditDuePicker ? REMINDERS_ACCENT : colors.systemGray5 }]}
+              >
+                <Text style={[typography.caption1, { color: showEditDuePicker ? '#fff' : colors.label, fontWeight: '600' }]}>
+                  Custom…
+                </Text>
+              </Pressable>
+            </View>
+            {showEditDuePicker && (
+              <View style={styles.customPickerRow}>
+                {Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + i + 1);
+                  d.setHours(parseInt(editCustomHour, 10) || 9, parseInt(editCustomMinute, 10) || 0, 0, 0);
+                  const label = i === 0 ? 'Tmrw' : d.toLocaleDateString([], { weekday: 'short' });
+                  const ts = d.getTime();
+                  return (
+                    <Pressable
+                      key={i}
+                      onPress={() => setEditDueDate(ts)}
+                      style={[styles.customDayChip, { backgroundColor: editDueDate === ts ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                    >
+                      <Text style={[typography.caption2, { color: editDueDate === ts ? '#fff' : colors.label }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            {showEditDuePicker && (
+              <View style={styles.customTimeRow}>
+                <TextInput
+                  style={[typography.body, styles.timeInput, { color: colors.label, borderColor: colors.separator }]}
+                  value={editCustomHour}
+                  onChangeText={setEditCustomHour}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  placeholder="HH"
+                  placeholderTextColor={colors.tertiaryLabel}
+                />
+                <Text style={[typography.body, { color: colors.label }]}>:</Text>
+                <TextInput
+                  style={[typography.body, styles.timeInput, { color: colors.label, borderColor: colors.separator }]}
+                  value={editCustomMinute}
+                  onChangeText={setEditCustomMinute}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  placeholder="MM"
+                  placeholderTextColor={colors.tertiaryLabel}
+                />
+              </View>
+            )}
+
+            {/* Recurrence */}
+            <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 20, marginBottom: 8 }]}>
+              Repeat
+            </Text>
+            <View style={styles.dateChipsRow}>
+              {(['none', 'daily', 'weekly', 'monthly'] as const).map((r) => (
+                <Pressable
+                  key={r}
+                  onPress={() => setEditRecurrence(r)}
+                  style={[styles.dateChip, { backgroundColor: editRecurrence === r ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                >
+                  <Text style={[typography.caption1, { color: editRecurrence === r ? '#fff' : colors.label, fontWeight: '600' }]}>
+                    {r === 'none' ? 'Never' : r.charAt(0).toUpperCase() + r.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -934,6 +1277,71 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+
+  // Home my-lists header
+  myListsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+
+  // Modal
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#C6C6C8',
+  },
+  modalInput: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+  },
+
+  // Color swatches
+  colorSwatches: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  colorSwatch: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+
+  // Custom date picker
+  customPickerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  customDayChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  customTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  timeInput: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    width: 50,
+    textAlign: 'center',
+    paddingVertical: 4,
   },
 
   // Empty

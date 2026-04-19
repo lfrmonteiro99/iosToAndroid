@@ -599,12 +599,12 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const batteryLevel = Math.round(device.battery.level * 100);
   const batteryIconName: keyof typeof Ionicons.glyphMap =
     device.battery.isCharging
-      ? 'battery-charging'
+      ? 'battery-charging-outline'
       : batteryLevel > 70
-      ? 'battery-full'
+      ? 'battery-full-outline'
       : batteryLevel > 35
-      ? 'battery-half'
-      : 'battery-dead';
+      ? 'battery-half-outline'
+      : 'battery-dead-outline';
 
   return (
     <GestureDetector gesture={swipeGesture}>
@@ -811,7 +811,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             accessibilityLabel="Camera"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
-              <Ionicons name="camera" size={22} color="#fff" />
+              <Ionicons name="camera-outline" size={22} color="#fff" />
             </BlurView>
           </Pressable>
         </View>
