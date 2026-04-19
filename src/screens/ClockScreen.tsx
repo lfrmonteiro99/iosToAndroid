@@ -254,6 +254,7 @@ async function scheduleAlarmNotifications(alarm: Alarm): Promise<string[]> {
         title: 'Alarm',
         body: alarm.label || 'Alarm',
         sound: true,
+        categoryIdentifier: 'ALARM',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -270,6 +271,7 @@ async function scheduleAlarmNotifications(alarm: Alarm): Promise<string[]> {
           title: 'Alarm',
           body: alarm.label || 'Alarm',
           sound: true,
+          categoryIdentifier: 'ALARM',
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
@@ -473,6 +475,7 @@ function AlarmTab() {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const [alarms, setAlarms] = useState<Alarm[]>([]);
+  const [alarmsLoaded, setAlarmsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editHour, setEditHour] = useState(7);
   const [editMinute, setEditMinute] = useState(0);
@@ -481,8 +484,61 @@ function AlarmTab() {
 
   // Load alarms from storage on mount
   useEffect(() => {
-    loadAlarms().then(setAlarms);
+    loadAlarms().then((loaded) => {
+      setAlarms(loaded);
+      setAlarmsLoaded(true);
+    });
   }, []);
+
+  // Fix 1a: Register notification category with Snooze/Dismiss actions on mount
+  useEffect(() => {
+    Notifications.setNotificationCategoryAsync('ALARM', [
+      {
+        identifier: 'SNOOZE',
+        buttonTitle: 'Snooze 9m',
+        options: { isDestructive: false, isAuthenticationRequired: false },
+      },
+      {
+        identifier: 'DISMISS',
+        buttonTitle: 'Dismiss',
+        options: { isDestructive: true, isAuthenticationRequired: false },
+      },
+    ]).catch(() => {});
+  }, []);
+
+  // Fix 1b: Listen for notification action responses (snooze)
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (response.actionIdentifier === 'SNOOZE') {
+        const snoozeTime = new Date(Date.now() + 9 * 60 * 1000);
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Snoozed Alarm',
+            body: response.notification.request.content.body ?? 'Alarm',
+            categoryIdentifier: 'ALARM',
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: snoozeTime,
+          },
+        }).catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Fix 2: Recover alarms whose notifications were lost on app restart
+  useEffect(() => {
+    if (!alarmsLoaded) return;
+    alarms.forEach(async (alarm) => {
+      if (alarm.enabled && alarm.notificationIds.length === 0) {
+        const ids = await scheduleAlarmNotifications(alarm);
+        setAlarms((prev) =>
+          prev.map((a) => (a.id === alarm.id ? { ...a, notificationIds: ids } : a)),
+        );
+      }
+    });
+  }, [alarmsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const persistAlarms = useCallback((next: Alarm[]) => {
     setAlarms(next);
@@ -527,6 +583,22 @@ function AlarmTab() {
     },
     [alarms, persistAlarms],
   );
+
+  const snoozeAlarm = useCallback(async (alarm: Alarm) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const snoozeTime = new Date(Date.now() + 9 * 60 * 1000);
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Snoozed Alarm',
+        body: alarm.label || 'Alarm',
+        categoryIdentifier: 'ALARM',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: snoozeTime,
+      },
+    }).catch(() => {});
+  }, []);
 
   const openAddModal = useCallback(() => {
     setEditHour(7);
@@ -579,6 +651,13 @@ function AlarmTab() {
         {alarms.map((alarm) => (
           <CupertinoSwipeableRow
             key={alarm.id}
+            leadingActions={[
+              {
+                label: 'Snooze 9m',
+                color: colors.systemOrange,
+                onPress: () => snoozeAlarm(alarm),
+              },
+            ]}
             trailingActions={[
               {
                 label: 'Delete',
