@@ -8,6 +8,7 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  PermissionsAndroid,
   Dimensions,
   ActivityIndicator,
   Image,
@@ -454,6 +455,45 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text || isSending) return;
+
+    // Ensure SEND_SMS permission is granted BEFORE hitting the native module
+    // so the user gets a system prompt instead of a silent failure.
+    if (Platform.OS === 'android') {
+      try {
+        const already = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.SEND_SMS,
+        );
+        if (!already) {
+          const result = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.SEND_SMS,
+            {
+              title: 'Send Messages',
+              message: 'Allow this app to send SMS messages on your behalf?',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Deny',
+            },
+          );
+          if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+            alert(
+              'Permission Needed',
+              result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+                ? 'SMS permission is disabled. Enable it in system settings to send messages.'
+                : 'SMS permission was denied. Messages can\u2019t be sent without it.',
+              [
+                ...(result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+                  ? [{ text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } }]
+                  : []),
+                { text: 'OK' },
+              ],
+            );
+            return;
+          }
+        }
+      } catch {
+        // Fall through — native module call below will surface the real failure.
+      }
+    }
+
     const mod = await getLauncher();
     if (mod) {
       setIsSending(true);

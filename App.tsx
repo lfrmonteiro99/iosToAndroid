@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, AppState, Platform, StatusBar as RNStatusBar } from 'react-native';
+import { View, AppState, Platform, Pressable, StatusBar as RNStatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -17,6 +17,9 @@ import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
+import { HomeIndicator } from './src/components/HomeIndicator';
+import { AssistiveTouch } from './src/components/AssistiveTouch';
+import { AssistiveTouchProvider, useAssistiveTouch } from './src/store/AssistiveTouchStore';
 import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
@@ -57,6 +60,7 @@ function AppContent() {
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('hidden');
       NavigationBar.setBehaviorAsync('overlay-swipe');
+      RNStatusBar.setHidden(true, 'slide');
       RNStatusBar.setTranslucent(true);
       RNStatusBar.setBackgroundColor('transparent');
     }
@@ -72,6 +76,10 @@ function AppContent() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
         setIsLocked(true);
+      } else if (state === 'active' && Platform.OS === 'android') {
+        // Re-assert immersive mode — Android can restore system bars on resume
+        NavigationBar.setVisibilityAsync('hidden');
+        RNStatusBar.setHidden(true, 'slide');
       }
     });
     return () => sub.remove();
@@ -161,16 +169,42 @@ function AppContent() {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <NavigationContainer ref={navigationRef}>
-        <TabNavigator />
-      </NavigationContainer>
+      <StatusBar style={isDark ? 'light' : 'dark'} hidden />
+      <ReachabilityShifter>
+        <NavigationContainer ref={navigationRef}>
+          <TabNavigator />
+        </NavigationContainer>
+      </ReachabilityShifter>
+
+      {/* iOS-style home indicator — floats above every screen and owns the
+          swipe-up-to-home / swipe-up-and-hold-for-switcher gesture. */}
+      <HomeIndicator navigationRef={navigationRef} />
+
+      {/* iOS-style AssistiveTouch — draggable floating shortcut button. */}
+      <AssistiveTouch navigationRef={navigationRef} />
 
       {/* iOS-style notification banner — renders ABOVE everything */}
       <NotificationBanner
         notification={banner}
         onDismiss={() => setBanner(null)}
       />
+    </View>
+  );
+}
+
+/** Slides the navigator down when AssistiveTouch Reachability is active. */
+function ReachabilityShifter({ children }: { children: React.ReactNode }) {
+  const { reachabilityActive, setReachabilityActive } = useAssistiveTouch();
+  return (
+    <View style={{ flex: 1, transform: [{ translateY: reachabilityActive ? 260 : 0 }] }}>
+      {children}
+      {reachabilityActive && (
+        <Pressable
+          style={{ position: 'absolute', top: -260, left: 0, right: 0, height: 260 }}
+          onPress={() => setReachabilityActive(false)}
+          accessibilityLabel="Exit reachability"
+        />
+      )}
     </View>
   );
 }
@@ -186,11 +220,13 @@ export default function App() {
                 <AppsProvider>
                 <DeviceProvider>
                 <FoldersProvider>
+                <AssistiveTouchProvider>
                 <ErrorBoundary>
                   <AlertProvider>
                     <AppContent />
                   </AlertProvider>
                 </ErrorBoundary>
+                </AssistiveTouchProvider>
                 </FoldersProvider>
                 </DeviceProvider>
                 </AppsProvider>

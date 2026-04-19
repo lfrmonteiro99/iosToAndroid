@@ -613,7 +613,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         accessibilityLabel="Swipe up to unlock"
         accessibilityRole="button"
       >
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        <StatusBar hidden translucent backgroundColor="transparent" barStyle="light-content" />
         <LinearGradient
           colors={[wallpaperColor, wallpaperDark, '#000000']}
           locations={[0, 0.6, 1]}

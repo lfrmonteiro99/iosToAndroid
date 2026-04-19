@@ -55,6 +55,13 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
   const [currentCity, setCurrentCity] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+    // Hard timeout so the loading spinner can never hang forever if the
+    // permission dialog or network request stalls.
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 10000);
+
     (async () => {
       try {
         // Request location permission here (non-blocking for the rest of the app)
@@ -70,7 +77,10 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
         const url = locationQuery
           ? `https://wttr.in/${locationQuery}?format=j1`
           : 'https://wttr.in/?format=j1';
-        const res = await fetch(url);
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(fetchTimeout);
         const data = await res.json();
         const current = data.current_condition[0];
         const area = data.nearest_area?.[0];
@@ -125,14 +135,28 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
         });
         setForecast(days);
       } catch { /* use device weather fallback */ }
-      setLoading(false);
+      clearTimeout(timeoutId);
+      if (!cancelled) setLoading(false);
     })();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   if (loading && currentTemp === null) {
     return (
-      <LinearGradient colors={['#2C5F8A', '#1B3A5C']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#fff" />
+      <LinearGradient colors={['#2C5F8A', '#1B3A5C']} style={[styles.root, { paddingTop: insets.top }]}>
+        <CupertinoNavigationBar
+          title=""
+          leftButton={
+            <Ionicons name="chevron-back" size={28} color="#fff" onPress={() => navigation.goBack()} />
+          }
+        />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
       </LinearGradient>
     );
   }

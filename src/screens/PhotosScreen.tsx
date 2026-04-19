@@ -12,6 +12,7 @@ import {
   Platform,
   TextInput,
   Modal,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,6 +77,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   // ---- shared state ----
   const [tabIndex, setTabIndex] = useState(0);
   const [permissionStatus, setPermissionStatus] = useState<'undetermined' | 'granted' | 'denied'>('undetermined');
+  const [canAskAgain, setCanAskAgain] = useState(true);
   const [loading, setLoading] = useState(true);
   const [skeletonLoading, setSkeletonLoading] = useState(true);
   const [selectedMemory, setSelectedMemory] = useState<{ title: string } | null>(null);
@@ -124,33 +126,49 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   // ------------------------------------------------------------------
   // Permissions
   // ------------------------------------------------------------------
+  const requestMediaPermission = useCallback(async () => {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+      setPermissionStatus('denied');
+      setCanAskAgain(false);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      // Check first so we know whether we can still prompt.
+      const existing = await MediaLibrary.getPermissionsAsync();
+      if (existing.status === 'granted') {
+        setPermissionStatus('granted');
+        setCanAskAgain(true);
+        setLoading(false);
+        return;
+      }
+      if (!existing.canAskAgain) {
+        setPermissionStatus('denied');
+        setCanAskAgain(false);
+        setLoading(false);
+        return;
+      }
+      const result = await MediaLibrary.requestPermissionsAsync();
+      setPermissionStatus(result.status === 'granted' ? 'granted' : 'denied');
+      setCanAskAgain(result.canAskAgain);
+    } catch {
+      setPermissionStatus('denied');
+      setCanAskAgain(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
-        if (!cancelled) {
-          setPermissionStatus('denied');
-          setLoading(false);
-        }
-        return;
-      }
-      try {
-        const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (!cancelled) {
-          setPermissionStatus(status === 'granted' ? 'granted' : 'denied');
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setPermissionStatus('denied');
-          setLoading(false);
-        }
-      }
+      if (!cancelled) await requestMediaPermission();
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [requestMediaPermission]);
 
   // ------------------------------------------------------------------
   // Library: load initial page of photos
@@ -471,8 +489,24 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
               { color: colors.secondaryLabel, textAlign: 'center', marginTop: 8, marginHorizontal: 32 },
             ]}
           >
-            Grant photo library access to browse your photos.
+            {canAskAgain
+              ? 'Grant photo library access to browse your photos.'
+              : 'Photo access was denied. Enable it for this app in system settings.'}
           </Text>
+          <Pressable
+            style={[styles.browseBtn, { backgroundColor: colors.systemBlue }]}
+            onPress={() => {
+              if (canAskAgain) {
+                requestMediaPermission();
+              } else {
+                Linking.openSettings().catch(() => {});
+              }
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>
+              {canAskAgain ? 'Grant Access' : 'Open Settings'}
+            </Text>
+          </Pressable>
         </View>
       ) : tabIndex === 0 ? (
         // ============================================================

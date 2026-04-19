@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Pressable,
   Modal,
+  Linking,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +23,7 @@ import {
   CupertinoTextField,
   CupertinoSwipeableRow,
   CupertinoPicker,
+  useAlert,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 
@@ -227,16 +230,24 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function requestNotificationPermissions(): Promise<boolean> {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  if (existingStatus === 'granted') return true;
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
+async function requestNotificationPermissions(): Promise<{
+  granted: boolean;
+  canAskAgain: boolean;
+}> {
+  try {
+    const existing = await Notifications.getPermissionsAsync();
+    if (existing.status === 'granted') return { granted: true, canAskAgain: true };
+    if (!existing.canAskAgain) return { granted: false, canAskAgain: false };
+    const result = await Notifications.requestPermissionsAsync();
+    return { granted: result.status === 'granted', canAskAgain: result.canAskAgain };
+  } catch {
+    return { granted: false, canAskAgain: false };
+  }
 }
 
 async function scheduleAlarmNotifications(alarm: Alarm): Promise<string[]> {
-  const hasPermission = await requestNotificationPermissions();
-  if (!hasPermission) return [];
+  const perm = await requestNotificationPermissions();
+  if (!perm.granted) return [];
 
   const ids: string[] = [];
 
@@ -328,6 +339,7 @@ async function saveWorldClocks(clocks: WorldClock[]): Promise<void> {
 function WorldClockTab() {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
   const [, setTick] = useState(0);
   const [cities, setCities] = useState<WorldClock[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -423,7 +435,7 @@ function WorldClockTab() {
 
       {/* Add City Modal */}
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
           <View style={styles.modalHeader}>
             <Pressable
               onPress={() => { setShowAddModal(false); setSearchQuery(''); }}
@@ -481,6 +493,8 @@ function WorldClockTab() {
 function AlarmTab() {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
+  const alert = useAlert();
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [alarmsLoaded, setAlarmsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -629,6 +643,26 @@ function AlarmTab() {
   }, []);
 
   const handleSaveAlarm = useCallback(async () => {
+    // Request notification permission up front so the system dialog appears
+    // before we try to schedule. If denied, save the alarm in a disabled state
+    // and tell the user why it won't ring.
+    const perm = await requestNotificationPermissions();
+    if (!perm.granted) {
+      alert(
+        'Notifications Disabled',
+        perm.canAskAgain
+          ? 'Alarms need notification permission to ring. Please allow notifications and try again.'
+          : 'Alarms need notification permission to ring. Enable notifications for this app in system settings.',
+        [
+          ...(perm.canAskAgain
+            ? []
+            : [{ text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } }]),
+          { text: 'OK' },
+        ],
+      );
+      return;
+    }
+
     if (editingAlarmId) {
       // Edit existing alarm
       const existing = alarms.find((a) => a.id === editingAlarmId);
@@ -663,7 +697,7 @@ function AlarmTab() {
     }
     setShowAddModal(false);
     setEditingAlarmId(null);
-  }, [editingAlarmId, editHour, editMinute, editLabel, editDays, alarms, persistAlarms]);
+  }, [editingAlarmId, editHour, editMinute, editLabel, editDays, alarms, persistAlarms, alert]);
 
   const toggleDay = useCallback(
     (day: number) => {
@@ -746,7 +780,7 @@ function AlarmTab() {
 
       {/* Add Alarm Modal */}
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
+        <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
           <View style={styles.modalHeader}>
             <Pressable
               onPress={() => { setShowAddModal(false); setEditingAlarmId(null); }}

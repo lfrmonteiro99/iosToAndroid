@@ -12,6 +12,7 @@ import {
   CupertinoSegmentedControl,
   CupertinoSlider,
 } from '../../components';
+import { useAssistiveTouch } from '../../store/AssistiveTouchStore';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const TEXT_SIZE_LABELS = ['Small', 'Default', 'Large', 'XL'];
@@ -29,6 +30,7 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const assistive = useAssistiveTouch();
   const [reduceTransparency, setReduceTransparency] = useState(false);
   const [smartInvert, setSmartInvert] = useState(false);
   const [colorFilters, setColorFilters] = useState(false);
@@ -210,6 +212,20 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
                 Current scale: {Math.round(textScale * 100)}%
               </Text>
             </View>
+          </CupertinoListSection>
+        </View>
+
+        {/* Physical and Motor */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Physical and Motor"
+            footer="AssistiveTouch lets you replace the home swipe with a customisable floating button."
+          >
+            <CupertinoListTile
+              title="AssistiveTouch"
+              subtitle={assistive.enabled ? 'On' : 'Off'}
+              onPress={() => navigation.navigate('AssistiveTouchSettings')}
+            />
           </CupertinoListSection>
         </View>
 

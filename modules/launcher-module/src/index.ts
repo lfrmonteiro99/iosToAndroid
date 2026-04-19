@@ -144,6 +144,7 @@ interface LauncherModuleType {
   getAppIcon(packageName: string): Promise<string>;
   isDefaultLauncher(): Promise<boolean>;
   openLauncherSettings(): Promise<boolean>;
+  goHome(): Promise<boolean>;
   uninstallApp(packageName: string): Promise<boolean>;
   // Wi-Fi
   getWifiInfo(): Promise<WifiInfo>;
@@ -215,6 +216,7 @@ const stub: LauncherModuleType = {
   getAppIcon: async () => '',
   isDefaultLauncher: async () => false,
   openLauncherSettings: async () => false,
+  goHome: async () => false,
   uninstallApp: async () => false,
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
@@ -282,6 +284,10 @@ function createBridgedModule(): LauncherModuleType {
     openLauncherSettings: async () => {
       try { return await nativeModule.openLauncherSettings(); }
       catch (e) { console.error('LauncherModule.openLauncherSettings failed:', e); return false; }
+    },
+    goHome: async () => {
+      try { return await nativeModule.goHome(); }
+      catch (e) { console.error('LauncherModule.goHome failed:', e); return false; }
     },
     uninstallApp: async (packageName: string) => {
       try { return await nativeModule.uninstallApp(packageName); }
