@@ -41,18 +41,19 @@ interface Email {
 // ─── Demo Data ──────────────────────────────────────────────────────────────
 
 const DEMO_EMAILS: Email[] = [
-  { id: '1', from: 'Tim Cook', fromEmail: 'tim@apple.com', to: 'me@icloud.com', subject: 'Welcome to the Team', body: 'We are thrilled to have you join us. Your first day will be an exciting one with orientation, team introductions, and a tour of the campus. Please arrive by 9 AM at the main lobby.\n\nLooking forward to working with you!', date: 'Today', isRead: false, isFlagged: false },
-  { id: '2', from: 'App Store Connect', fromEmail: 'no-reply@apple.com', to: 'me@icloud.com', subject: 'Your app has been approved', body: 'Congratulations! Your app "iosToAndroid" has been reviewed and approved for the App Store. It will be available for download within 24 hours.\n\nThank you for your submission.', date: 'Today', isRead: false, isFlagged: true },
-  { id: '3', from: 'GitHub', fromEmail: 'notifications@github.com', to: 'me@icloud.com', subject: 'New pull request: feat/camera-fix', body: 'A new pull request has been opened on your repository iosToAndroid.\n\nTitle: feat: fix camera screen with expo-camera\nAuthor: developer\nFiles changed: 3\n\nPlease review at your earliest convenience.', date: 'Yesterday', isRead: true, isFlagged: false },
-  { id: '4', from: 'Jane Smith', fromEmail: 'jane@example.com', to: 'me@icloud.com', subject: 'Lunch tomorrow?', body: 'Hey! Are you free for lunch tomorrow? I was thinking we could try that new place downtown. Let me know!\n\nBest,\nJane', date: 'Yesterday', isRead: true, isFlagged: false },
-  { id: '5', from: 'Netflix', fromEmail: 'info@netflix.com', to: 'me@icloud.com', subject: 'New arrivals this week', body: 'Check out what\'s new on Netflix this week:\n\n• The latest season of your favorite show\n• A critically acclaimed documentary\n• New comedy specials\n\nStart watching now!', date: 'Mon', isRead: true, isFlagged: false },
-  { id: '6', from: 'John Doe', fromEmail: 'john@company.com', to: 'me@icloud.com', subject: 'Project update - Q4 goals', body: 'Hi team,\n\nHere\'s our progress update for Q4:\n\n1. Feature development: 85% complete\n2. Bug fixes: On track\n3. Performance improvements: Testing phase\n\nLet\'s discuss in our standup tomorrow.', date: 'Mon', isRead: true, isFlagged: false },
-  { id: '7', from: 'Apple', fromEmail: 'noreply@apple.com', to: 'me@icloud.com', subject: 'Your receipt from Apple', body: 'Thank you for your purchase.\n\nItem: iCloud+ 200GB\nPrice: $2.99/month\nDate: April 10, 2026\n\nThis charge will appear on your next billing statement.', date: 'Sun', isRead: true, isFlagged: false },
-  { id: '8', from: 'Security Alert', fromEmail: 'security@bank.com', to: 'me@icloud.com', subject: 'New sign-in to your account', body: 'We noticed a new sign-in to your account from a new device.\n\nDevice: iPhone 16 Pro\nLocation: San Francisco, CA\nTime: April 9, 2026 at 3:42 PM\n\nIf this was you, no action is needed.', date: 'Sat', isRead: true, isFlagged: false },
+  { id: '1', from: 'Sundar Pichai', fromEmail: 'sundar@google.com', to: 'me@gmail.com', subject: 'Welcome to the Team', body: 'We are thrilled to have you join us. Your first day will be an exciting one with orientation, team introductions, and a tour of the campus. Please arrive by 9 AM at the main lobby.\n\nLooking forward to working with you!', date: 'Today', isRead: false, isFlagged: false },
+  { id: '2', from: 'Play Console', fromEmail: 'no-reply@google.com', to: 'me@gmail.com', subject: 'Your app has been approved', body: 'Congratulations! Your app "iosToAndroid" has been reviewed and approved for Google Play. It will be available for download within 24 hours.\n\nThank you for your submission.', date: 'Today', isRead: false, isFlagged: true },
+  { id: '3', from: 'GitHub', fromEmail: 'notifications@github.com', to: 'me@gmail.com', subject: 'New pull request: feat/camera-fix', body: 'A new pull request has been opened on your repository iosToAndroid.\n\nTitle: feat: fix camera screen with expo-camera\nAuthor: developer\nFiles changed: 3\n\nPlease review at your earliest convenience.', date: 'Yesterday', isRead: true, isFlagged: false },
+  { id: '4', from: 'Jane Smith', fromEmail: 'jane@example.com', to: 'me@gmail.com', subject: 'Lunch tomorrow?', body: 'Hey! Are you free for lunch tomorrow? I was thinking we could try that new place downtown. Let me know!\n\nBest,\nJane', date: 'Yesterday', isRead: true, isFlagged: false },
+  { id: '5', from: 'Netflix', fromEmail: 'info@netflix.com', to: 'me@gmail.com', subject: 'New arrivals this week', body: 'Check out what\'s new on Netflix this week:\n\n• The latest season of your favorite show\n• A critically acclaimed documentary\n• New comedy specials\n\nStart watching now!', date: 'Mon', isRead: true, isFlagged: false },
+  { id: '6', from: 'John Doe', fromEmail: 'john@company.com', to: 'me@gmail.com', subject: 'Project update - Q4 goals', body: 'Hi team,\n\nHere\'s our progress update for Q4:\n\n1. Feature development: 85% complete\n2. Bug fixes: On track\n3. Performance improvements: Testing phase\n\nLet\'s discuss in our standup tomorrow.', date: 'Mon', isRead: true, isFlagged: false },
+  { id: '7', from: 'Google One', fromEmail: 'noreply@google.com', to: 'me@gmail.com', subject: 'Your Google One storage summary', body: 'Your Google One storage summary for April:\n\nUsed: 12.4 GB of 100 GB\nGoogle Drive: 8.2 GB\nGmail: 3.1 GB\nGoogle Photos: 1.1 GB\n\nYou have plenty of space remaining.', date: 'Sun', isRead: true, isFlagged: false },
+  { id: '8', from: 'Security Alert', fromEmail: 'security@bank.com', to: 'me@gmail.com', subject: 'New sign-in to your account', body: 'We noticed a new sign-in to your account from a new device.\n\nDevice: Pixel 9 Pro\nLocation: San Francisco, CA\nTime: April 9, 2026 at 3:42 PM\n\nIf this was you, no action is needed.', date: 'Sat', isRead: true, isFlagged: false },
 ];
 
 const SENT_STORAGE_KEY = '@iostoandroid/mail_sent';
 const DEMO_BANNER_KEY = '@iostoandroid/mail_demo_dismissed';
+const INBOX_KEY = '@iostoandroid/mail_inbox';
 
 function getInitials(name: string): string {
   const parts = name.split(' ');
@@ -77,22 +78,27 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   const [isLoading, setIsLoading] = useState(true);
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
 
-  // Simulate initial load for 800ms then show email list
+  // Load persisted inbox state on mount; seed with DEMO_EMAILS on first run
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-
-  useEffect(() => {
-    AsyncStorage.getItem(DEMO_BANNER_KEY).then((val) => {
-      if (val !== 'true') setDemoBannerDismissed(false);
-    });
+    Promise.all([
+      AsyncStorage.getItem(INBOX_KEY),
+      AsyncStorage.getItem(DEMO_BANNER_KEY),
+    ]).then(([inboxRaw, bannerRaw]) => {
+      if (inboxRaw) {
+        try { setEmails(JSON.parse(inboxRaw)); } catch { /* keep default */ }
+      }
+      if (bannerRaw !== 'true') setDemoBannerDismissed(false);
+      setIsLoading(false);
+    }).catch(() => setIsLoading(false));
   }, []);
 
   const dismissDemoBanner = useCallback(() => {
     setDemoBannerDismissed(true);
     AsyncStorage.setItem(DEMO_BANNER_KEY, 'true');
+  }, []);
+
+  const persistEmails = useCallback((updated: Email[]) => {
+    AsyncStorage.setItem(INBOX_KEY, JSON.stringify(updated)).catch(() => { /* ignore */ });
   }, []);
   // Initialize compose state from route params if navigated here to compose
   const initialCompose = route?.params?.composeTo;
@@ -105,24 +111,40 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
 
   const handleOpenEmail = useCallback((email: Email) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: true } : e));
+    setEmails(prev => {
+      const updated = prev.map(e => e.id === email.id ? { ...e, isRead: true } : e);
+      persistEmails(updated);
+      return updated;
+    });
     setSelectedEmail(email);
-  }, []);
+  }, [persistEmails]);
 
   const handleArchive = useCallback((id: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setEmails(prev => prev.filter(e => e.id !== id));
-  }, []);
+    setEmails(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      persistEmails(updated);
+      return updated;
+    });
+  }, [persistEmails]);
 
   const handleDelete = useCallback((id: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    setEmails(prev => prev.filter(e => e.id !== id));
-  }, []);
+    setEmails(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      persistEmails(updated);
+      return updated;
+    });
+  }, [persistEmails]);
 
   const handleFlag = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setEmails(prev => prev.map(e => e.id === id ? { ...e, isFlagged: !e.isFlagged } : e));
-  }, []);
+    setEmails(prev => {
+      const updated = prev.map(e => e.id === id ? { ...e, isFlagged: !e.isFlagged } : e);
+      persistEmails(updated);
+      return updated;
+    });
+  }, [persistEmails]);
 
   const handleSend = useCallback(async () => {
     if (!composeTo.trim() || !composeSubject.trim()) {

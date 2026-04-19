@@ -12,6 +12,7 @@ import {
   CupertinoSwitch,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 type FocusMode = 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
 
@@ -31,7 +32,7 @@ const FOCUS_MODES: FocusModeOption[] = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function FocusScreen({ navigation }: { navigation: any }) {
+export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

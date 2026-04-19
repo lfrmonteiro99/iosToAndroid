@@ -8,9 +8,19 @@ import {
   CupertinoListTile,
   useAlert,
 } from '../../components';
+import appJson from '../../../app.json';
+import type { AppNavigationProp } from '../../navigation/types';
+
+const APP_VERSION: string = appJson.expo.version;
+const EXPO_SDK: string = String((appJson.expo as { sdkVersion?: string }).sdkVersion ?? '');
+const RN_VERSION: string = (() => {
+  const v = Platform.constants?.reactNativeVersion;
+  if (v) return `${v.major}.${v.minor}.${v.patch}`;
+  return '';
+})();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function AboutScreen({ navigation }: { navigation: any }) {
+export function AboutScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -48,7 +58,7 @@ export function AboutScreen({ navigation }: { navigation: any }) {
             <CupertinoListTile
               title="Software Version"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>1.0.0</Text>
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>{APP_VERSION}</Text>
               }
               showChevron={false}
             />
@@ -75,20 +85,24 @@ export function AboutScreen({ navigation }: { navigation: any }) {
               }
               showChevron={false}
             />
-            <CupertinoListTile
-              title="React Native"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>0.81.5</Text>
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Expo SDK"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>54</Text>
-              }
-              showChevron={false}
-            />
+            {!!RN_VERSION && (
+              <CupertinoListTile
+                title="React Native"
+                trailing={
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>{RN_VERSION}</Text>
+                }
+                showChevron={false}
+              />
+            )}
+            {!!EXPO_SDK && (
+              <CupertinoListTile
+                title="Expo SDK"
+                trailing={
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>{EXPO_SDK}</Text>
+                }
+                showChevron={false}
+              />
+            )}
           </CupertinoListSection>
         </View>
 
@@ -96,7 +110,7 @@ export function AboutScreen({ navigation }: { navigation: any }) {
           <CupertinoListSection footer="This app demonstrates iOS Cupertino-style UI components running natively on Android using React Native and Expo.">
             <CupertinoListTile
               title="Legal & Regulatory"
-              onPress={() => alert('Legal', 'iOS Theme Launcher v1.0\n\nThis app is not affiliated with Apple Inc.')}
+              onPress={() => alert('Legal', `iosToAndroid v${APP_VERSION}\n\nThis app is not affiliated with Apple Inc.`)}
             />
           </CupertinoListSection>
         </View>

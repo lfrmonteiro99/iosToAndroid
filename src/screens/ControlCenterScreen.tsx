@@ -33,6 +33,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { SystemColors } from '../theme/CupertinoTheme';
 import { useAlert } from '../components';
 import * as Haptics from 'expo-haptics';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -125,7 +126,7 @@ function ShortcutButton({ iconName, label, active = false, onPress, textScale = 
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ControlCenterScreen({ navigation }: { navigation: any; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+export function ControlCenterScreen({ navigation }: { navigation: AppNavigationProp; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
@@ -195,9 +196,8 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
 
   const launchCamera = () => {
     // Navigate to in-app Camera screen (no Android system apps)
-    const nav = navigation.getParent() || navigation;
     navigation.goBack();
-    setTimeout(() => nav.navigate('Camera'), 300);
+    setTimeout(() => navigation.navigate('Camera'), 300);
   };
 
   // Swipe-down gesture to close
@@ -408,6 +408,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                       const mod = await getLauncher();
                       if (mod) {
                         try { await mod.mediaPrev(); } catch { /* no-op */ }
+                        setTimeout(refreshNowPlaying, 600);
                       }
                     }}
                     accessibilityLabel="Previous track"
@@ -423,6 +424,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                           const ok = await mod.mediaPlayPause();
                           if (ok) setNowPlaying((p) => ({ ...p, isPlaying: !p.isPlaying }));
                         } catch { /* no-op */ }
+                        setTimeout(refreshNowPlaying, 600);
                       }
                     }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
@@ -439,6 +441,7 @@ export function ControlCenterScreen({ navigation }: { navigation: any; route: an
                       const mod = await getLauncher();
                       if (mod) {
                         try { await mod.mediaNext(); } catch { /* no-op */ }
+                        setTimeout(refreshNowPlaying, 600);
                       }
                     }}
                     accessibilityLabel="Next track"

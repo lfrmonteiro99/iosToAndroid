@@ -12,18 +12,19 @@ import {
   CupertinoSegmentedControl,
   CupertinoActionSheet,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const PREVIEW_VALUES = ['always', 'whenUnlocked', 'never'] as const;
 const PREVIEW_LABELS = ['Always', 'When Unlocked', 'Never'];
 const SUMMARY_OPTIONS = ['Off', 'Morning (8:00 AM)', 'Evening (6:00 PM)', 'Both'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function NotificationsScreen({ navigation }: { navigation: any }) {
+export function NotificationsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const [summaryIdx, setSummaryIdx] = useState(0);
+  const [summaryIdx, setSummaryIdx] = useState(settings.scheduledSummaryIdx ?? 0);
   const [showSummaryPicker, setShowSummaryPicker] = useState(false);
 
   const previewIndex = PREVIEW_VALUES.indexOf(settings.notificationPreviews);
@@ -121,7 +122,7 @@ export function NotificationsScreen({ navigation }: { navigation: any }) {
         title="Scheduled Summary"
         options={SUMMARY_OPTIONS.map((label, i) => ({
           label,
-          onPress: () => { setSummaryIdx(i); setShowSummaryPicker(false); },
+          onPress: () => { setSummaryIdx(i); update('scheduledSummaryIdx', i); setShowSummaryPicker(false); },
         }))}
         cancelLabel="Cancel"
       />

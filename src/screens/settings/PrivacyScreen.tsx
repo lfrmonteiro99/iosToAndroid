@@ -11,6 +11,7 @@ import {
   CupertinoSwitch,
   useAlert,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const PERMISSION_CATEGORIES = [
   { key: 'location', title: 'Location Services', icon: 'location', bg: '#007AFF' },
@@ -22,7 +23,7 @@ const PERMISSION_CATEGORIES = [
 ] as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function PrivacyScreen({ navigation }: { navigation: any }) {
+export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

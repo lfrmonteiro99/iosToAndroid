@@ -19,6 +19,7 @@ import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { SkeletonListRow } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 const getLauncher = async () => {
   try {
@@ -552,7 +553,7 @@ function VoicemailTab({ onCall }: { onCall: (phone: string, name?: string) => vo
 
 const TABS = ['Favorites', 'Recents', 'Contacts', 'Keypad', 'Voicemail'];
 
-export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+export function PhoneScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -564,7 +565,7 @@ export function PhoneScreen({ navigation }: { navigation: any }) { // eslint-dis
   }, []);
 
   const handleCall = useCallback((phone: string, name?: string) => {
-    navigation.navigate('CallScreen', { number: phone, name });
+    navigation.navigate('CallScreen', { number: phone, name: name ?? '' });
   }, [navigation]);
 
   const renderContent = () => {

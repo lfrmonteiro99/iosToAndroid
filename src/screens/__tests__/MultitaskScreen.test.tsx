@@ -1,8 +1,9 @@
 import React from 'react';
 import { render } from '../../test-utils';
 import { MultitaskScreen } from '../MultitaskScreen';
+import type { AppNavigationProp } from '../../navigation/types';
 
-const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
+const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
 
 
 describe('MultitaskScreen', () => {

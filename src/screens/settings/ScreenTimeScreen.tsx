@@ -10,6 +10,8 @@ import {
   CupertinoSwitch,
   useAlert,
 } from '../../components';
+import { logger } from '../../utils/logger';
+import type { AppNavigationProp } from '../../navigation/types';
 
 import type { DailyScreenTime, ScreenTimeApp, ScreenTimeStat } from '../../../modules/launcher-module/src';
 
@@ -40,7 +42,7 @@ const APP_BAR_COLORS = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ScreenTimeScreen({ navigation }: { navigation: any }) {
+export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -80,7 +82,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: any }) {
         }
       }
     } catch (e) {
-      console.warn('Failed to load screen time data:', e);
+      logger.warn('ScreenTimeScreen', 'failed to load screen time data', e);
     } finally {
       setLoading(false);
     }

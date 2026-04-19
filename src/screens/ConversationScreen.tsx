@@ -22,10 +22,6 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  withRepeat,
-  withTiming,
-  withSequence,
-  withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
@@ -116,43 +112,6 @@ function insertDateSeparators(messages: DeviceSms[]): ListItem[] {
 const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
 
-// ─── Typing Indicator ────────────────────────────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function TypingIndicator({ visible, colors }: { visible: boolean; colors: any }) {
-  const dot1 = useSharedValue(0.3);
-  const dot2 = useSharedValue(0.3);
-  const dot3 = useSharedValue(0.3);
-
-  useEffect(() => {
-    if (visible) {
-      dot1.value = withRepeat(withSequence(withTiming(1, { duration: 400 }), withTiming(0.3, { duration: 400 })), -1);
-      dot2.value = withRepeat(withSequence(withDelay(150, withTiming(1, { duration: 400 })), withTiming(0.3, { duration: 400 })), -1);
-      dot3.value = withRepeat(withSequence(withDelay(300, withTiming(1, { duration: 400 })), withTiming(0.3, { duration: 400 })), -1);
-    } else {
-      dot1.value = 0.3;
-      dot2.value = 0.3;
-      dot3.value = 0.3;
-    }
-  }, [visible, dot1, dot2, dot3]);
-
-  const s1 = useAnimatedStyle(() => ({ opacity: dot1.value }));
-  const s2 = useAnimatedStyle(() => ({ opacity: dot2.value }));
-  const s3 = useAnimatedStyle(() => ({ opacity: dot3.value }));
-
-  if (!visible) return null;
-
-  return (
-    <View style={[styles.bubbleRow, styles.bubbleRowLeft, { marginVertical: 4 }]}>
-      <View style={[styles.bubble, styles.bubbleReceived, { backgroundColor: colors.systemGray5, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', gap: 4 }]}>
-        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s1]} />
-        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s2]} />
-        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s3]} />
-      </View>
-    </View>
-  );
-}
-
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -164,7 +123,6 @@ interface BubbleProps {
   colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   reactions?: string[];
-  deliveryStatus?: string;
   onLongPress?: () => void;
   showReactionPicker?: boolean;
   onReaction?: (emoji: string) => void;
@@ -176,7 +134,6 @@ const MessageBubble = React.memo(function MessageBubble({
   colors,
   typography,
   reactions,
-  deliveryStatus,
   onLongPress,
   showReactionPicker,
   onReaction,
@@ -298,9 +255,9 @@ const MessageBubble = React.memo(function MessageBubble({
         </Text>
         {isSent && (
           <View style={styles.sentIndicator}>
-            <Ionicons name="checkmark-done" size={12} color={deliveryStatus === 'Read' ? colors.systemBlue : colors.secondaryLabel} />
-            <Text style={[typography.caption2, { color: deliveryStatus === 'Read' ? colors.systemBlue : colors.secondaryLabel, marginLeft: 2 }]}>
-              {deliveryStatus || 'Sent'}
+            <Ionicons name="checkmark" size={12} color={colors.secondaryLabel} />
+            <Text style={[typography.caption2, { color: colors.secondaryLabel, marginLeft: 2 }]}>
+              Sent
             </Text>
           </View>
         )}
@@ -329,8 +286,6 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const [isSending, setIsSending] = useState(false);
   const [reactions, setReactions] = useState<Record<string, string[]>>({});
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
-  const [showTyping, setShowTyping] = useState(false);
-  const [deliveryStatuses, setDeliveryStatuses] = useState<Record<string, string>>({});
   const [localImageMessages, setLocalImageMessages] = useState<LocalImageMessage[]>([]);
   const listRef = useRef<FlatList>(null);
   const draftKey = `@draft_${address}`;
@@ -367,13 +322,6 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const handleLongPress = useCallback((msgId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedMsgId((prev) => (prev === msgId ? null : msgId));
-  }, []);
-
-  // Simulate delivery status for sent messages
-  const simulateDelivery = useCallback((msgId: string) => {
-    setDeliveryStatuses((prev) => ({ ...prev, [msgId]: 'Sent' }));
-    setTimeout(() => setDeliveryStatuses((prev) => ({ ...prev, [msgId]: 'Delivered' })), 1500);
-    setTimeout(() => setDeliveryStatuses((prev) => ({ ...prev, [msgId]: 'Read' })), 4000);
   }, []);
 
   // Load draft on mount
@@ -501,17 +449,6 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
           AsyncStorage.removeItem(draftKey).catch(() => {});
           await device.refresh();
           listRef.current?.scrollToIndex({ index: 0, animated: true });
-          // Simulate delivery status — find the newest sent message for this address
-          const newestSent = device.messages
-            .filter((m) => m.address === address && m.type === 2)
-            .sort((a, b) => ((b as any).date ?? 0) - ((a as any).date ?? 0))[0]; // eslint-disable-line @typescript-eslint/no-explicit-any
-          if (newestSent) {
-            simulateDelivery(newestSent.id);
-          }
-          // Show typing indicator briefly (simulated)
-          const typingDelay = 2000 + Math.random() * 2000;
-          setShowTyping(true);
-          setTimeout(() => setShowTyping(false), typingDelay);
         } else {
           alert('Failed', 'Could not send message. Check permissions and try again.');
         }
@@ -521,7 +458,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         setIsSending(false);
       }
     }
-  }, [inputText, isSending, address, device, draftKey, alert, simulateDelivery]);
+  }, [inputText, isSending, address, device, draftKey, alert]);
 
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => {
@@ -542,7 +479,6 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             colors={colors}
             typography={typography}
             reactions={reactions[item.id]}
-            deliveryStatus={item.type === 2 ? (deliveryStatuses[item.id] || 'Sent') : undefined}
             onLongPress={() => handleLongPress(item.id)}
             showReactionPicker={selectedMsgId === item.id}
             onReaction={(emoji) => handleReaction(item.id, emoji)}
@@ -550,7 +486,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         </Pressable>
       );
     },
-    [dark, colors, typography, reactions, selectedMsgId, deliveryStatuses, handleLongPress, handleReaction],
+    [dark, colors, typography, reactions, selectedMsgId, handleLongPress, handleReaction],
   );
 
   const keyExtractor = useCallback((item: ListItem) => isSeparator(item) ? item.id : item.id, []);
@@ -638,7 +574,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         renderItem={renderItem}
         inverted={rawMessages.length > 0}
         ListEmptyComponent={ListEmpty}
-        ListHeaderComponent={<TypingIndicator visible={showTyping} colors={colors} />}
+
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
           rawMessages.length === 0

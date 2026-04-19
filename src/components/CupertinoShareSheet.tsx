@@ -6,12 +6,14 @@ import {
   Pressable,
   StyleSheet,
   ScrollView,
+  Share,
+  Linking,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { useAlert } from './AlertProvider';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +22,7 @@ interface CupertinoShareSheetProps {
   onClose: () => void;
   title?: string;
   url?: string;
+  text?: string;
 }
 
 // ─── Share Options ───────────────────────────────────────────────────────────
@@ -32,7 +35,7 @@ interface ShareOption {
 }
 
 const SHARE_OPTIONS: ShareOption[] = [
-  { id: 'copy', label: 'Copy Link', icon: 'link-outline', iconBg: '#636366' },
+  { id: 'copy', label: 'Copy', icon: 'copy-outline', iconBg: '#636366' },
   { id: 'messages', label: 'Messages', icon: 'chatbubble-outline', iconBg: '#34C759' },
   { id: 'mail', label: 'Mail', icon: 'mail-outline', iconBg: '#007AFF' },
   { id: 'more', label: 'More', icon: 'ellipsis-horizontal', iconBg: '#8E8E93' },
@@ -40,28 +43,45 @@ const SHARE_OPTIONS: ShareOption[] = [
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CupertinoShareSheet({ visible, onClose, title, url }: CupertinoShareSheetProps) {
+export function CupertinoShareSheet({ visible, onClose, title, url, text }: CupertinoShareSheetProps) {
   const { theme, typography } = useTheme();
   const { colors, dark } = theme;
   const insets = useSafeAreaInsets();
-  const alert = useAlert();
 
-  const handleOption = (option: ShareOption) => {
+  const sharePayload = text || url || title || '';
+
+  const handleOption = async (option: ShareOption) => {
+    onClose();
+    // Give the modal time to close before launching system sheets
+    await new Promise((r) => setTimeout(r, 150));
     switch (option.id) {
       case 'copy':
-        alert('Copied', url ? `Link copied: ${url}` : 'Link copied to clipboard.');
+        await Clipboard.setStringAsync(sharePayload);
         break;
-      case 'messages':
-        alert('Messages', 'Opening Messages to share…');
+      case 'messages': {
+        const smsUrl = `sms:?body=${encodeURIComponent(sharePayload)}`;
+        if (await Linking.canOpenURL(smsUrl)) {
+          Linking.openURL(smsUrl);
+        } else {
+          Share.share({ message: sharePayload });
+        }
         break;
-      case 'mail':
-        alert('Mail', 'Opening Mail to share…');
+      }
+      case 'mail': {
+        const subject = encodeURIComponent(title || 'Shared from iosToAndroid');
+        const body = encodeURIComponent(sharePayload);
+        const mailUrl = `mailto:?subject=${subject}&body=${body}`;
+        if (await Linking.canOpenURL(mailUrl)) {
+          Linking.openURL(mailUrl);
+        } else {
+          Share.share({ message: sharePayload });
+        }
         break;
+      }
       case 'more':
-        alert('More', 'Additional share options are available in the system share sheet.');
+        Share.share({ message: sharePayload, title: title });
         break;
     }
-    onClose();
   };
 
   return (

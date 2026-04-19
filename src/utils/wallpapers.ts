@@ -1,11 +1,18 @@
-export const WALLPAPERS: readonly string[] = [
-  '#667eea',
-  '#f093fb',
-  '#4facfe',
-  '#43e97b',
-  '#fa709a',
-  '#1C1C1E',
+export interface NamedWallpaper {
+  color: string;
+  name: string;
+}
+
+export const NAMED_WALLPAPERS: readonly NamedWallpaper[] = [
+  { color: '#667eea', name: 'Lavender' },
+  { color: '#f093fb', name: 'Pink' },
+  { color: '#4facfe', name: 'Sky' },
+  { color: '#43e97b', name: 'Green' },
+  { color: '#fa709a', name: 'Coral' },
+  { color: '#1C1C1E', name: 'Dark' },
 ];
+
+export const WALLPAPERS: readonly string[] = NAMED_WALLPAPERS.map((w) => w.color);
 
 /** Darken a hex colour by `amount` (0–1) to build a gradient end stop. */
 export function darkenHex(hex: string, amount: number): string {

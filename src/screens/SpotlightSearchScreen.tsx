@@ -18,6 +18,7 @@ import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Fuzzy matching
@@ -45,7 +46,7 @@ function fuzzyMatch(text: string, query: string): { match: boolean; score: numbe
 // Settings search index
 // ---------------------------------------------------------------------------
 
-const SETTINGS_INDEX = [
+const SETTINGS_INDEX: { name: string; screen: keyof RootStackParamList; keywords: string[] }[] = [
   { name: 'Wi-Fi', screen: 'WiFi', keywords: ['wifi', 'internet', 'network', 'wireless'] },
   { name: 'Bluetooth', screen: 'Bluetooth', keywords: ['bluetooth', 'pair', 'connect'] },
   { name: 'Display & Brightness', screen: 'DisplayBrightness', keywords: ['brightness', 'display', 'screen', 'dark mode'] },
@@ -93,10 +94,12 @@ async function clearHistory(): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Notes storage key
+// Storage keys
 // ---------------------------------------------------------------------------
 
 const NOTES_STORAGE_KEY = '@iostoandroid/notes';
+const MAIL_STORAGE_KEY = '@iostoandroid/mail_inbox';
+const REMINDERS_STORAGE_KEY = '@iostoandroid/reminders';
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -120,7 +123,7 @@ interface ContactResult {
 interface SettingResult {
   type: 'setting';
   name: string;
-  screen: string;
+  screen: keyof RootStackParamList;
   score: number;
 }
 
@@ -135,7 +138,20 @@ interface NoteResult {
   id: string;
 }
 
-type SearchResult = AppResult | ContactResult | SettingResult | WebSearchResult | NoteResult;
+interface MailResult {
+  type: 'mail';
+  id: string;
+  subject: string;
+  sender: string;
+}
+
+interface ReminderResult {
+  type: 'reminder';
+  id: string;
+  title: string;
+}
+
+type SearchResult = AppResult | ContactResult | SettingResult | WebSearchResult | NoteResult | MailResult | ReminderResult;
 
 // ---------------------------------------------------------------------------
 // App Icon (reused pattern from AppLibraryScreen)
@@ -179,7 +195,7 @@ function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
+export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, isDark } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -191,6 +207,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
   const [isFocused, setIsFocused] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [notes, setNotes] = useState<Array<{ id: string; title: string }>>([]);
+  const [mails, setMails] = useState<Array<{ id: string; subject: string; sender: string }>>([]);
+  const [reminders, setReminders] = useState<Array<{ id: string; title: string }>>([]);
   const historyLoaded = useRef(false);
 
   // Load history on mount
@@ -201,16 +219,37 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
     }
   }, []);
 
-  // Load notes on mount
+  // Load notes, mail, and reminders on mount
   useEffect(() => {
-    AsyncStorage.getItem(NOTES_STORAGE_KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setNotes(parsed.map((n: any) => ({ id: n.id ?? String(n.title), title: n.title ?? '' })));
-        }
-      } catch { /* ignore */ }
+    Promise.all([
+      AsyncStorage.getItem(NOTES_STORAGE_KEY),
+      AsyncStorage.getItem(MAIL_STORAGE_KEY),
+      AsyncStorage.getItem(REMINDERS_STORAGE_KEY),
+    ]).then(([notesRaw, mailRaw, remindersRaw]) => {
+      if (notesRaw) {
+        try {
+          const parsed = JSON.parse(notesRaw);
+          if (Array.isArray(parsed)) {
+            setNotes(parsed.map((n: any) => ({ id: n.id ?? String(n.title), title: n.title ?? '' })));
+          }
+        } catch { /* ignore */ }
+      }
+      if (mailRaw) {
+        try {
+          const parsed = JSON.parse(mailRaw);
+          if (Array.isArray(parsed)) {
+            setMails(parsed.map((m: any) => ({ id: m.id ?? '', subject: m.subject ?? '', sender: m.sender ?? '' })));
+          }
+        } catch { /* ignore */ }
+      }
+      if (remindersRaw) {
+        try {
+          const parsed = JSON.parse(remindersRaw);
+          if (Array.isArray(parsed)) {
+            setReminders(parsed.filter((r: any) => !r.completed).map((r: any) => ({ id: r.id ?? '', title: r.title ?? '' })));
+          }
+        } catch { /* ignore */ }
+      }
     });
   }, []);
 
@@ -271,6 +310,16 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
       .filter((n) => fuzzyMatch(n.title, q).match)
       .map((n) => ({ type: 'note' as const, title: n.title, id: n.id }));
 
+    // Mail
+    const mailResults: MailResult[] = mails
+      .filter((m) => fuzzyMatch(m.subject, q).match || fuzzyMatch(m.sender, q).match)
+      .map((m) => ({ type: 'mail' as const, id: m.id, subject: m.subject, sender: m.sender }));
+
+    // Reminders
+    const reminderResults: ReminderResult[] = reminders
+      .filter((r) => fuzzyMatch(r.title, q).match)
+      .map((r) => ({ type: 'reminder' as const, id: r.id, title: r.title }));
+
     // Settings
     const settingResults: SettingResult[] = [];
     for (const setting of SETTINGS_INDEX) {
@@ -294,10 +343,12 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
     result.push({ title: 'Web', data: webSearchResults });
     if (appResults.length > 0) result.push({ title: 'Apps', data: appResults });
     if (contactResults.length > 0) result.push({ title: 'Contacts', data: contactResults });
+    if (mailResults.length > 0) result.push({ title: 'Mail', data: mailResults });
     if (noteResults.length > 0) result.push({ title: 'Notes', data: noteResults });
+    if (reminderResults.length > 0) result.push({ title: 'Reminders', data: reminderResults });
     if (settingResults.length > 0) result.push({ title: 'Settings', data: settingResults });
     return result;
-  }, [query, apps, allContacts, notes]);
+  }, [query, apps, allContacts, notes, mails, reminders]);
 
   const handleResultPress = useCallback(async (item: SearchResult) => {
     const updatedHistory = await addToHistory(query, history);
@@ -311,13 +362,19 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
         navigation.navigate('ContactDetail', { contactId: item.contactId });
         break;
       case 'setting':
-        navigation.navigate(item.screen);
+        navigation.navigate(item.screen as never);
         break;
       case 'webSearch':
         // Navigate to browser or open external URL in future; for now no-op
         break;
       case 'note':
         navigation.navigate('Notes');
+        break;
+      case 'mail':
+        navigation.navigate('Mail');
+        break;
+      case 'reminder':
+        navigation.navigate('Reminders');
         break;
     }
   }, [query, history, launchApp, navigation]);
@@ -393,6 +450,36 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
             <View style={styles.resultTextWrap}>
               <Text style={[styles.resultTitle, { color: colors.label }]}>{item.title}</Text>
               <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Notes</Text>
+            </View>
+          </Pressable>
+        );
+      case 'mail':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: '#007AFF' }]}>
+              <Ionicons name="mail" size={22} color="#fff" />
+            </View>
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.subject}</Text>
+              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Mail · {item.sender}</Text>
+            </View>
+          </Pressable>
+        );
+      case 'reminder':
+        return (
+          <Pressable
+            onPress={() => handleResultPress(item)}
+            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: '#FF9500' }]}>
+              <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
+            </View>
+            <View style={styles.resultTextWrap}>
+              <Text style={[styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Reminders</Text>
             </View>
           </Pressable>
         );
@@ -491,6 +578,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: any }) {
             if (item.type === 'setting') return `setting-${item.screen}`;
             if (item.type === 'webSearch') return `web-${item.query}`;
             if (item.type === 'note') return `note-${item.id}`;
+            if (item.type === 'mail') return `mail-${item.id}`;
+            if (item.type === 'reminder') return `reminder-${item.id}`;
             return `item-${index}`;
           }}
           renderItem={renderItem}

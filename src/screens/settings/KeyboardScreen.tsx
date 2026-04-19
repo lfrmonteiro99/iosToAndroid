@@ -10,6 +10,7 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const KBD_KEYS = {
   autocap: '@iostoandroid/kbd_autocap',
@@ -19,7 +20,7 @@ const KBD_KEYS = {
 } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function KeyboardScreen({ navigation }: { navigation: any }) {
+export function KeyboardScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

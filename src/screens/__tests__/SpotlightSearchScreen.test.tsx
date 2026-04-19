@@ -1,8 +1,9 @@
 import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { SpotlightSearchScreen } from '../SpotlightSearchScreen';
+import type { AppNavigationProp } from '../../navigation/types';
 
-const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
+const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
 
 
 describe('SpotlightSearchScreen', () => {
@@ -27,7 +28,7 @@ describe('SpotlightSearchScreen', () => {
   });
 
   it('pressing Back calls navigation.goBack', () => {
-    const nav = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
+    const nav = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
     const { getByLabelText } = render(<SpotlightSearchScreen navigation={nav} />);
     fireEvent.press(getByLabelText('Back'));
     expect(nav.goBack).toHaveBeenCalled();

@@ -20,6 +20,7 @@ import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoNavigationBar, CupertinoSegmentedControl, useAlert, CupertinoSkeleton } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 2;
@@ -65,7 +66,7 @@ function groupByDateRange(assets: MediaLibrary.Asset[]) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function PhotosScreen({ navigation }: { navigation: any }) {
+export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

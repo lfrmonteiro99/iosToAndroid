@@ -1,8 +1,9 @@
 import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { CameraScreen } from '../CameraScreen';
+import type { AppNavigationProp } from '../../navigation/types';
 
-const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
+const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
 
 
 jest.mock('expo-media-library', () => ({
@@ -35,7 +36,7 @@ describe('CameraScreen', () => {
   });
 
   it('pressing close calls navigation.goBack', () => {
-    const nav = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
+    const nav = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
     const { getAllByRole } = render(<CameraScreen navigation={nav} />);
     // The close (X) pressable is the first pressable in the top bar
     const pressables = getAllByRole('button');

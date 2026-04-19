@@ -15,9 +15,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
+import * as Haptics from 'expo-haptics';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } from '../components';
 import { findContactByPhone } from '../utils/contacts';
+import { logger } from '../utils/logger';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -257,7 +259,7 @@ export function MessagesScreen() {
         );
         setDrafts(loaded);
       } catch (e) {
-        console.warn('MessagesScreen: failed to load drafts:', e);
+        logger.warn('MessagesScreen', 'failed to load drafts', e);
       }
     };
     loadDrafts();
@@ -302,6 +304,7 @@ export function MessagesScreen() {
 
   const handleConversationPress = useCallback(
     (address: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       navigation.navigate('Conversation', { address });
     },
     [navigation],

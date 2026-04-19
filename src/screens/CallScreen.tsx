@@ -20,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
+import { logger } from '../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -124,7 +125,7 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
       if (mod && number) {
         try {
           await mod.makeCall(number);
-        } catch (e) { console.error('CallScreen: native call failed:', e); }
+        } catch (e) { logger.error('CallScreen', 'native call failed', e); }
       }
       // Return once user comes back from the system dialer
       const sub = AppState.addEventListener('change', (state) => {
@@ -207,6 +208,7 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
             active={isSpeaker}
           />
         </View>
+        <Text style={styles.audioHint}>Audio controlled by system dialer</Text>
       </View>
 
       {/* ------------------------------------------------------------------ */}
@@ -302,6 +304,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     marginTop: 2,
+  },
+  audioHint: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 12,
   },
 
   // End call

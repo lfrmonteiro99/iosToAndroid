@@ -42,7 +42,10 @@ import { useFolders, AppFolder } from '../store/FoldersStore';
 import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
+  NotificationBanner,
+  useAlert,
 } from '../components';
+import type { BannerNotification } from '../components';
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 
 // ---------------------------------------------------------------------------
@@ -509,9 +512,31 @@ export function LauncherHomeScreen() {
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
   const { theme: launcherTheme, textScale } = useTheme();
   const colors = launcherTheme.colors;
+  const alert = useAlert();
 
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
+
+  // Notification banner
+  const [activeBanner, setActiveBanner] = useState<BannerNotification | null>(null);
+  const seenMessageIds = useRef(new Set<string>());
+  useEffect(() => {
+    const unread = device.messages.filter((m) => !m.isRead);
+    const newMessages = unread.filter((m) => !seenMessageIds.current.has(m.id));
+    if (newMessages.length > 0) {
+      const newest = newMessages[newMessages.length - 1];
+      newMessages.forEach((m) => seenMessageIds.current.add(m.id));
+      setActiveBanner({
+        id: newest.id,
+        appName: 'Messages',
+        iconName: 'chatbubble',
+        iconColor: '#34C759',
+        title: newest.address,
+        body: newest.body,
+        onPress: () => navigation.navigate('Messages'),
+      });
+    }
+  }, [device.messages, navigation]);
 
   // Unified app press handler — routes built-in apps to internal screens
   const handleAppPress = useCallback((app: InstalledApp) => {
@@ -789,13 +814,10 @@ export function LauncherHomeScreen() {
 
   // App Info alert helper (shows package name)
   const showAppInfo = (app: InstalledApp) => {
-    import('react-native').then(({ Alert }) => {
-      Alert.alert(
-        app.name,
-        `Package: ${app.packageName}\nSystem App: ${app.isSystem ? 'Yes' : 'No'}`,
-        [{ text: 'OK', style: 'default' }],
-      );
-    });
+    alert(
+      app.name,
+      `Package: ${app.packageName}\nSystem App: ${app.isSystem ? 'Yes' : 'No'}`,
+    );
   };
 
   // Helper to call native module lazily
@@ -1137,6 +1159,14 @@ export function LauncherHomeScreen() {
       <View style={[styles.homeIndicator, { bottom: insets.bottom + 2 }]}>
         <View style={styles.homeIndicatorBar} />
       </View>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Incoming notification banner                                       */}
+      {/* ---------------------------------------------------------------- */}
+      <NotificationBanner
+        notification={activeBanner}
+        onDismiss={() => setActiveBanner(null)}
+      />
       </Animated.View>
     </GestureDetector>
   );

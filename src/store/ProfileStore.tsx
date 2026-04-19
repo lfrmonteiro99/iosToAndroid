@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../utils/logger';
 
 const STORAGE_KEY = '@iostoandroid/profile';
 
@@ -33,7 +34,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setProfile((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch (e) { console.warn('ProfileStore: failed to parse stored profile:', e); }
+        try { setProfile((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch (e) { logger.warn('ProfileStore', 'failed to parse stored profile', e); }
       }
       setIsReady(true);
     });

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../components';
+import { logger } from '../utils/logger';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
@@ -107,7 +108,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
               setRecentApps(parsed as RecentApp[]);
             }
           }
-        } catch (e) { console.warn('AppsStore: failed to parse recent apps:', e); }
+        } catch (e) { logger.warn('AppsStore', 'failed to parse recent apps', e); }
       }
     });
   }, []);

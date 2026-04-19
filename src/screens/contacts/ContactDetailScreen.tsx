@@ -11,7 +11,6 @@ import {
   CupertinoListTile,
   CupertinoButton,
   CupertinoAlertDialog,
-  useAlert,
 } from '../../components';
 import type { AppNavigationProp, AppRouteProp } from '../../navigation/types';
 
@@ -39,7 +38,6 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
   const { getContact, toggleFavorite, deleteContact, deviceFavoriteIds } = useContacts();
   const { contacts: deviceContacts } = useDevice();
   const insets = useSafeAreaInsets();
-  const alert = useAlert();
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
 
   const contact = useMemo(() => {
@@ -113,9 +111,6 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
   const actionButtons = [
     { icon: 'call' as const, label: 'call', onPress: handleCall },
     { icon: 'chatbubble' as const, label: 'message', onPress: handleMessage },
-    { icon: 'videocam' as const, label: 'Video Call', onPress: () => {
-      alert('Video Call', 'Video calling is not available on Android. Use a third-party app to video call this contact.');
-    }},
     { icon: 'mail' as const, label: 'mail', onPress: handleMail },
   ];
 

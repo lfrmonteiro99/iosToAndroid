@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useAlert } from '../components';
 import { CupertinoNavigationBar } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 const EVENTS_STORAGE_KEY = '@iostoandroid/calendar_events';
 
@@ -43,13 +44,24 @@ function isSameDay(d1: Date, d2: Date): boolean {
   return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 }
 
+function isEventOnDate(event: CalEvent, date: Date): boolean {
+  const origin = new Date(event.start);
+  if (isSameDay(origin, date)) return true;
+  if (!event.repeat || event.repeat === 'never') return false;
+  if (date < origin) return false;
+  if (event.repeat === 'daily') return true;
+  if (event.repeat === 'weekly') return origin.getDay() === date.getDay();
+  if (event.repeat === 'monthly') return origin.getDate() === date.getDate();
+  return false;
+}
+
 function formatEventTime(timestamp: number): string {
   const d = new Date(timestamp);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function CalendarScreen({ navigation }: { navigation: any }) {
+export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -218,15 +230,19 @@ export function CalendarScreen({ navigation }: { navigation: any }) {
     else setViewMonth((m) => m + 1);
   };
 
-  const selectedEvents = events.filter((e) => {
-    const eventDate = new Date(e.start);
-    return isSameDay(eventDate, selectedDate);
-  });
+  const selectedEvents = events.filter((e) => isEventOnDate(e, selectedDate));
 
-  const eventDates = new Set(events.map((e) => {
-    const d = new Date(e.start);
-    return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }));
+  // Build set of day keys that have events in the current view month (including recurrences)
+  const eventDates = new Set<string>();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(viewYear, viewMonth, day);
+    for (const e of events) {
+      if (isEventOnDate(e, d)) {
+        eventDates.add(`${viewYear}-${String(viewMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+        break;
+      }
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>

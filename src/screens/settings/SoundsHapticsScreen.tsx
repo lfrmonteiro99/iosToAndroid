@@ -14,6 +14,7 @@ import {
   CupertinoSlider,
   CupertinoActionSheet,
 } from '../../components';
+import type { AppNavigationProp } from '../../navigation/types';
 
 const RINGTONES = ['Opening', 'Chimes', 'Marimba', 'Reflection', 'Ripple', 'Silk', 'By the Seaside', 'Night Owl'];
 const TEXT_TONES = ['Note (Default)', 'Aurora', 'Bamboo', 'Chord', 'Circles', 'Complete', 'Hello', 'Input', 'Keys', 'Popcorn', 'Pulse', 'Synth', 'Tri-tone'];
@@ -23,7 +24,7 @@ const TEXT_TONE_STORAGE_KEY = '@iostoandroid/text_tone';
 const SYSTEM_HAPTICS_STORAGE_KEY = '@iostoandroid/system_haptics';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function SoundsHapticsScreen({ navigation }: { navigation: any }) {
+export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();

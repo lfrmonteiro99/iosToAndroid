@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
 // Widget configuration types & storage
@@ -477,7 +478,7 @@ function EditWidgetsPanel({
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function TodayViewScreen({ navigation }: { navigation: any }) {
+export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { textScale } = useTheme();

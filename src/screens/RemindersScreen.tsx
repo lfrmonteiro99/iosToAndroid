@@ -21,6 +21,7 @@ import {
   CupertinoSwipeableRow,
   CupertinoEmptyState,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,27 @@ async function cancelReminderNotification(notificationId: string | undefined): P
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
+
+function startOfTomorrow(): number {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
+}
+
+function startOfNextWeek(): number {
+  const d = new Date();
+  const daysUntilMonday = ((8 - d.getDay()) % 7) || 7;
+  d.setDate(d.getDate() + daysUntilMonday);
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
+}
+
+function todayAt9(): number {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
 }
 
 function isToday(timestamp: number): boolean {
@@ -296,7 +318,7 @@ const SmartListCard = React.memo(function SmartListCard({
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function RemindersScreen({ navigation }: { navigation: any }) {
+export function RemindersScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -308,6 +330,8 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
   const [activeFilter, setActiveFilter] = useState<string>(''); // smart list key or list name
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newDueDate, setNewDueDate] = useState<number | undefined>(undefined);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const addInputRef = useRef<TextInput>(null);
 
   // ── Persistence ─────────────────────────────────────────────
@@ -459,6 +483,7 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
       notes: '',
       completed: false,
       flagged: false,
+      dueDate: newDueDate,
       listName,
       createdAt: Date.now(),
     };
@@ -475,7 +500,9 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
     setReminders(updated);
     persistReminders(updated);
     setNewTitle('');
-  }, [newTitle, reminders, persistReminders, activeFilter]);
+    setNewDueDate(undefined);
+    setShowDatePicker(false);
+  }, [newTitle, newDueDate, reminders, persistReminders, activeFilter]);
 
   const openList = useCallback((filter: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -487,6 +514,8 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
     Keyboard.dismiss();
     setShowAddReminder(false);
     setNewTitle('');
+    setNewDueDate(undefined);
+    setShowDatePicker(false);
     setViewMode('home');
     setActiveFilter('');
   }, []);
@@ -601,12 +630,58 @@ export function RemindersScreen({ navigation }: { navigation: any }) {
                   onSubmitEditing={addReminder}
                   returnKeyType="done"
                 />
-                <Pressable onPress={addReminder} hitSlop={8} style={{ marginLeft: 8 }}>
+                <Pressable
+                  onPress={() => setShowDatePicker((v) => !v)}
+                  hitSlop={8}
+                  style={{ marginLeft: 8 }}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color={newDueDate ? REMINDERS_ACCENT : colors.secondaryLabel}
+                  />
+                </Pressable>
+                <Pressable onPress={addReminder} hitSlop={8} style={{ marginLeft: 12 }}>
                   <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600' }]}>
                     Add
                   </Text>
                 </Pressable>
               </View>
+
+              {showDatePicker && (
+                <View style={styles.dateChipsRow}>
+                  {[
+                    { label: 'Today', value: todayAt9() },
+                    { label: 'Tomorrow', value: startOfTomorrow() },
+                    { label: 'Next Week', value: startOfNextWeek() },
+                  ].map((chip) => {
+                    const selected = newDueDate === chip.value;
+                    return (
+                      <Pressable
+                        key={chip.label}
+                        onPress={() => setNewDueDate(selected ? undefined : chip.value)}
+                        style={[
+                          styles.dateChip,
+                          {
+                            backgroundColor: selected
+                              ? REMINDERS_ACCENT
+                              : colors.systemGray5,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            typography.caption1,
+                            { color: selected ? '#fff' : colors.label, fontWeight: '600' },
+                          ]}
+                        >
+                          {chip.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           )}
         </KeyboardAvoidingView>
@@ -833,6 +908,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     paddingVertical: 4,
+  },
+  dateChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 10,
+    paddingLeft: 32,
+  },
+  dateChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
 
   // Bottom toolbar

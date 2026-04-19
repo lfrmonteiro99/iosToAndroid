@@ -90,7 +90,7 @@ export function ContactsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { contacts: storeContacts, toggleFavorite } = useContacts();
+  const { toggleFavorite } = useContacts();
   const { contacts: deviceContacts, requestContactsPermission, isReady: deviceReady } = useDevice();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -249,10 +249,7 @@ export function ContactsScreen() {
           {
             label: 'Add to Favorites',
             onPress: () => {
-              const match = storeContacts.find(c => c.phone === contextContact.phone);
-              if (match) {
-                toggleFavorite(match.id);
-              }
+              toggleFavorite(contextContact.id);
               setContextContact(null);
             },
           },
