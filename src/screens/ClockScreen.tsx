@@ -332,6 +332,7 @@ function WorldClockTab() {
   const [cities, setCities] = useState<WorldClock[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [openCityId, setOpenCityId] = useState<string | null>(null);
 
   useEffect(() => {
     loadWorldClocks().then(setCities);
@@ -382,6 +383,8 @@ function WorldClockTab() {
         {cities.map((wc) => (
           <CupertinoSwipeableRow
             key={wc.timezone}
+            isOpen={openCityId === wc.timezone}
+            onOpen={() => setOpenCityId(wc.timezone)}
             trailingActions={[
               {
                 label: 'Delete',
@@ -477,10 +480,12 @@ function AlarmTab() {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [alarmsLoaded, setAlarmsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingAlarmId, setEditingAlarmId] = useState<string | null>(null);
   const [editHour, setEditHour] = useState(7);
   const [editMinute, setEditMinute] = useState(0);
   const [editLabel, setEditLabel] = useState('');
   const [editDays, setEditDays] = useState<number[]>([]);
+  const [openAlarmId, setOpenAlarmId] = useState<string | null>(null);
 
   // Load alarms from storage on mount
   useEffect(() => {
@@ -601,6 +606,7 @@ function AlarmTab() {
   }, []);
 
   const openAddModal = useCallback(() => {
+    setEditingAlarmId(null);
     setEditHour(7);
     setEditMinute(0);
     setEditLabel('');
@@ -608,23 +614,52 @@ function AlarmTab() {
     setShowAddModal(true);
   }, []);
 
+  const openEditModal = useCallback((alarm: Alarm) => {
+    setEditingAlarmId(alarm.id);
+    setEditHour(alarm.hour);
+    setEditMinute(alarm.minute);
+    setEditLabel(alarm.label === 'Alarm' ? '' : alarm.label);
+    setEditDays(alarm.days);
+    setShowAddModal(true);
+    setOpenAlarmId(null);
+  }, []);
+
   const handleSaveAlarm = useCallback(async () => {
-    const newAlarm: Alarm = {
-      id: Date.now().toString(),
-      hour: editHour,
-      minute: editMinute,
-      label: editLabel.trim() || 'Alarm',
-      days: editDays,
-      enabled: true,
-      notificationIds: [],
-    };
-
-    const notificationIds = await scheduleAlarmNotifications(newAlarm);
-    newAlarm.notificationIds = notificationIds;
-
-    persistAlarms([...alarms, newAlarm]);
+    if (editingAlarmId) {
+      // Edit existing alarm
+      const existing = alarms.find((a) => a.id === editingAlarmId);
+      if (!existing) return;
+      await cancelAlarmNotifications(existing.notificationIds);
+      const updatedAlarm: Alarm = {
+        ...existing,
+        hour: editHour,
+        minute: editMinute,
+        label: editLabel.trim() || 'Alarm',
+        days: editDays,
+        enabled: true,
+        notificationIds: [],
+      };
+      const notificationIds = await scheduleAlarmNotifications(updatedAlarm);
+      updatedAlarm.notificationIds = notificationIds;
+      persistAlarms(alarms.map((a) => (a.id === editingAlarmId ? updatedAlarm : a)));
+    } else {
+      // Add new alarm
+      const newAlarm: Alarm = {
+        id: Date.now().toString(),
+        hour: editHour,
+        minute: editMinute,
+        label: editLabel.trim() || 'Alarm',
+        days: editDays,
+        enabled: true,
+        notificationIds: [],
+      };
+      const notificationIds = await scheduleAlarmNotifications(newAlarm);
+      newAlarm.notificationIds = notificationIds;
+      persistAlarms([...alarms, newAlarm]);
+    }
     setShowAddModal(false);
-  }, [editHour, editMinute, editLabel, editDays, alarms, persistAlarms]);
+    setEditingAlarmId(null);
+  }, [editingAlarmId, editHour, editMinute, editLabel, editDays, alarms, persistAlarms]);
 
   const toggleDay = useCallback(
     (day: number) => {
@@ -651,6 +686,8 @@ function AlarmTab() {
         {alarms.map((alarm) => (
           <CupertinoSwipeableRow
             key={alarm.id}
+            isOpen={openAlarmId === alarm.id}
+            onOpen={() => setOpenAlarmId(alarm.id)}
             leadingActions={[
               {
                 label: 'Snooze 9m',
@@ -666,11 +703,12 @@ function AlarmTab() {
               },
             ]}
           >
-            <View
+            <Pressable
               style={[
                 styles.alarmRow,
                 { borderBottomColor: colors.separator, backgroundColor: colors.systemBackground },
               ]}
+              onPress={() => openEditModal(alarm)}
             >
               <View style={{ flex: 1 }}>
                 <Text
@@ -689,7 +727,7 @@ function AlarmTab() {
                 value={alarm.enabled}
                 onValueChange={() => toggleAlarm(alarm.id)}
               />
-            </View>
+            </Pressable>
           </CupertinoSwipeableRow>
         ))}
       </ScrollView>
@@ -706,10 +744,12 @@ function AlarmTab() {
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={() => setShowAddModal(false)}>
+            <Pressable onPress={() => { setShowAddModal(false); setEditingAlarmId(null); }}>
               <Text style={[typography.body, { color: colors.systemOrange }]}>Cancel</Text>
             </Pressable>
-            <Text style={[typography.headline, { color: colors.label }]}>Add Alarm</Text>
+            <Text style={[typography.headline, { color: colors.label }]}>
+              {editingAlarmId ? 'Edit Alarm' : 'Add Alarm'}
+            </Text>
             <Pressable onPress={handleSaveAlarm}>
               <Text style={[typography.body, { color: colors.systemOrange, fontWeight: '600' }]}>
                 Save

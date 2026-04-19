@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -20,6 +20,8 @@ interface CupertinoSwipeableRowProps {
   children: React.ReactNode;
   trailingActions?: SwipeAction[];
   leadingActions?: SwipeAction[];
+  isOpen?: boolean;
+  onOpen?: () => void;
 }
 
 const ACTION_WIDTH = 74;
@@ -29,9 +31,22 @@ export function CupertinoSwipeableRow({
   children,
   trailingActions = [],
   leadingActions = [],
+  isOpen,
+  onOpen,
 }: CupertinoSwipeableRowProps) {
   const translateX = useSharedValue(0);
   const contextX = useSharedValue(0);
+
+  // Always hold the latest onOpen so gesture doesn't capture a stale ref
+  const onOpenRef = useRef(onOpen);
+  useEffect(() => { onOpenRef.current = onOpen; }, [onOpen]);
+
+  // Close this row when parent signals another row is now open
+  useEffect(() => {
+    if (isOpen === false) {
+      translateX.value = withSpring(0, SPRING_CONFIG);
+    }
+  }, [isOpen, translateX]);
 
   const maxTrailing = trailingActions.length * ACTION_WIDTH;
   const maxLeading = leadingActions.length * ACTION_WIDTH;
@@ -40,10 +55,13 @@ export function CupertinoSwipeableRow({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const notifyOpen = () => { onOpenRef.current?.(); };
+
   const pan = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onStart(() => {
       contextX.value = translateX.value;
+      runOnJS(notifyOpen)();
     })
     .onUpdate((e) => {
       const newX = contextX.value + e.translationX;
