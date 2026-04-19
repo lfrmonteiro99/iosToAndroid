@@ -290,18 +290,26 @@ export function MessagesScreen() {
     }).catch(() => {});
   }, []);
 
+  // Auto-request SMS permission on mount
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'android') {
         setHasSmsPermission(false);
         return;
       }
-      const granted = await PermissionsAndroid.check(
+      const alreadyGranted = await PermissionsAndroid.check(
         PermissionsAndroid.PERMISSIONS.READ_SMS,
       );
-      setHasSmsPermission(granted);
+      if (alreadyGranted) {
+        setHasSmsPermission(true);
+        return;
+      }
+      // Ask immediately — iOS Messages does this on first open
+      const result = await device.requestSmsPermission();
+      setHasSmsPermission(result);
     })();
-  }, [device.messages]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const conversations = useMemo(
     () => groupConversations(device.messages).filter(

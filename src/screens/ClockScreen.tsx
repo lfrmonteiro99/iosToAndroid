@@ -425,7 +425,11 @@ function WorldClockTab() {
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={() => { setShowAddModal(false); setSearchQuery(''); }}>
+            <Pressable
+              onPress={() => { setShowAddModal(false); setSearchQuery(''); }}
+              hitSlop={12}
+              style={{ padding: 4 }}
+            >
               <Text style={[typography.body, { color: colors.systemOrange }]}>Cancel</Text>
             </Pressable>
             <Text style={[typography.headline, { color: colors.label }]}>Choose a City</Text>
@@ -744,13 +748,21 @@ function AlarmTab() {
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
           <View style={styles.modalHeader}>
-            <Pressable onPress={() => { setShowAddModal(false); setEditingAlarmId(null); }}>
+            <Pressable
+              onPress={() => { setShowAddModal(false); setEditingAlarmId(null); }}
+              hitSlop={12}
+              style={{ padding: 4 }}
+            >
               <Text style={[typography.body, { color: colors.systemOrange }]}>Cancel</Text>
             </Pressable>
             <Text style={[typography.headline, { color: colors.label }]}>
               {editingAlarmId ? 'Edit Alarm' : 'Add Alarm'}
             </Text>
-            <Pressable onPress={handleSaveAlarm}>
+            <Pressable
+              onPress={handleSaveAlarm}
+              hitSlop={12}
+              style={{ padding: 4 }}
+            >
               <Text style={[typography.body, { color: colors.systemOrange, fontWeight: '600' }]}>
                 Save
               </Text>

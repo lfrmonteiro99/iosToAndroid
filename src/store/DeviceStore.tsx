@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, PermissionsAndroid } from 'react-native';
 import * as Battery from 'expo-battery';
 import * as Brightness from 'expo-brightness';
 import * as Network from 'expo-network';
 import * as Contacts from 'expo-contacts';
+import * as Location from 'expo-location';
 
 export interface DeviceWifi {
   enabled: boolean;
@@ -241,11 +242,9 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     try {
       let locationQuery = '';
       try {
-        const { status } = await import('expo-location').then((m) => m.requestForegroundPermissionsAsync());
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          const loc = await import('expo-location').then((m) =>
-            m.getCurrentPositionAsync({ accuracy: 3 }),
-          );
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           locationQuery = `${loc.coords.latitude.toFixed(4)},${loc.coords.longitude.toFixed(4)}`;
         }
       } catch { /* fall back to IP geolocation */ }
@@ -368,7 +367,20 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [loadContacts]);
 
   const requestSmsPermission = useCallback(async () => {
-    // SMS permission is requested at runtime by the system when the native module accesses it
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_SMS,
+          {
+            title: 'SMS Access',
+            message: 'Allow this app to read your SMS messages?',
+            buttonPositive: 'Allow',
+            buttonNegative: 'Deny',
+          },
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
+      } catch { return false; }
+    }
     const messages = await loadMessages();
     setState(prev => ({ ...prev, messages }));
     return messages.length > 0;
