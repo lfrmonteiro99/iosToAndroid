@@ -56,6 +56,7 @@ export function CupertinoSegmentedControl({
       onLayout={handleLayout}
     >
       <Animated.View
+        pointerEvents="none"
         style={[
           styles.slider,
           shadows.small,
