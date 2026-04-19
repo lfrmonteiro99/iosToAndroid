@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, Image, SectionList, StyleSheet, Pressable, RefreshControl, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -110,6 +110,14 @@ export function ContactsScreen() {
   const sections = useMemo(() => groupByLetter(filteredContacts), [filteredContacts]);
 
   const sectionLetters = useMemo(() => sections.map((s) => s.title), [sections]);
+
+  // Auto-request contacts permission on first open, like iOS Contacts app
+  useEffect(() => {
+    if (deviceReady && deviceContacts.length === 0) {
+      requestContactsPermission();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceReady]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
