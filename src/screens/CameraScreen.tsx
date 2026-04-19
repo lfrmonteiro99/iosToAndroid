@@ -99,22 +99,12 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
         setLastPhoto(photo.uri);
         await saveToLibrary(photo.uri);
       }
-    } catch {
-      // Fallback: use ImagePicker system camera picker (shows iOS-styled result picker overlay)
-      try {
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.9,
-          allowsEditing: false,
-        });
-        if (!result.canceled && result.assets[0]) {
-          setLastPhoto(result.assets[0].uri);
-          await saveToLibrary(result.assets[0].uri);
-        }
-      } catch {
-        // No further fallback — keep user in-app
-        alert('Camera Error', 'Unable to capture photo. Please check camera permissions.');
-      }
+    } catch (e) {
+      // Stay in-app and surface the actual failure. Do NOT fall back to
+      // ImagePicker.launchCameraAsync — that launches the system camera app
+      // on Android and defeats the purpose of the in-app preview.
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      alert('Couldn\u2019t Capture Photo', msg);
     }
   }, [cameraReady, alert, saveToLibrary]);
 
@@ -238,8 +228,10 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
         flash={flashOn ? 'on' : 'off'}
         mode={cameraMode}
         onCameraReady={onCameraReady}
-        onMountError={() => {
-          alert('Camera Error', 'Could not start camera preview.');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onMountError={(event: any) => {
+          const msg = event?.nativeEvent?.message ?? 'Could not start camera preview.';
+          alert('Camera Error', msg);
         }}
       />
     );
@@ -295,8 +287,17 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
           )}
         </Pressable>
 
-        {/* Shutter button */}
-        <Pressable onPress={handleShutter} style={styles.shutterOuter}>
+        {/* Shutter button — disabled when the preview isn't live so taps
+            don't trigger the fallback path. */}
+        <Pressable
+          onPress={handleShutter}
+          disabled={cameraUnavailable || permissionDenied || permissionLoading || !cameraReady}
+          style={({ pressed }) => [
+            styles.shutterOuter,
+            (cameraUnavailable || permissionDenied || permissionLoading || !cameraReady) && styles.shutterDisabled,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
           {mode === 'VIDEO' && isRecording ? (
             <View style={styles.shutterStop} />
           ) : mode === 'VIDEO' ? (
@@ -391,6 +392,9 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  shutterDisabled: {
+    opacity: 0.35,
   },
   shutterInner: {
     width: 60,
