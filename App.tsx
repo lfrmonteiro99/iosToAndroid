@@ -36,6 +36,18 @@ function AppContent() {
   // Track last known message count to detect new messages
   const lastMsgCount = useRef(0);
 
+  // IDs of native notifications we've already surfaced as banners — prevents
+  // re-showing the same notification on every poll cycle.
+  const seenNotifIds = useRef<Set<string>>(new Set());
+
+  // Pending auto-lock timer. We don't lock the instant the app goes to
+  // background — a permission dialog, the system HOME intent fired by our
+  // own AssistiveTouch/HomeIndicator, or any other transient focus loss all
+  // background the activity for a fraction of a second. Only lock if we're
+  // still backgrounded after a short grace period.
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const AUTO_LOCK_GRACE_MS = 5000;
+
   // Surface native bridge errors as notification banners
   useEffect(() => {
     const unsub = onBridgeError((method, error) => {
@@ -75,14 +87,28 @@ function AppContent() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
-        setIsLocked(true);
-      } else if (state === 'active' && Platform.OS === 'android') {
-        // Re-assert immersive mode — Android can restore system bars on resume
-        NavigationBar.setVisibilityAsync('hidden');
-        RNStatusBar.setHidden(true, 'slide');
+        if (lockTimer.current) clearTimeout(lockTimer.current);
+        lockTimer.current = setTimeout(() => {
+          setIsLocked(true);
+          lockTimer.current = null;
+        }, AUTO_LOCK_GRACE_MS);
+      } else if (state === 'active') {
+        // Returning within the grace period — cancel pending lock.
+        if (lockTimer.current) {
+          clearTimeout(lockTimer.current);
+          lockTimer.current = null;
+        }
+        if (Platform.OS === 'android') {
+          // Re-assert immersive mode — Android can restore system bars on resume
+          NavigationBar.setVisibilityAsync('hidden');
+          RNStatusBar.setHidden(true, 'slide');
+        }
       }
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      if (lockTimer.current) clearTimeout(lockTimer.current);
+    };
   }, []);
 
   // Monitor for new messages and show banner
@@ -129,26 +155,29 @@ function AppContent() {
         const access = await mod.isNotificationAccessGranted();
         if (!access) return;
         const notifs = await mod.getNotifications();
-        if (notifs.length > 0) {
-          const latest = notifs[0];
-          // Don't re-show if same notification
-          if (banner?.id === `notif-${latest.id}`) return;
-          if (latest.title || latest.text) {
-            setBanner({
-              id: `notif-${latest.id}`,
-              appName: latest.packageName.split('.').pop() || 'App',
-              iconName: 'notifications',
-              iconColor: '#5856D6',
-              title: latest.title,
-              body: latest.text,
-            });
-          }
+        // Only surface the newest notification we haven't banner'd before.
+        // Otherwise every poll would re-notify the same list.
+        const unseen = notifs.find(
+          (n) => !seenNotifIds.current.has(n.id) && (n.title || n.text),
+        );
+        // Mark every currently-present id as seen so dismissals don't cause
+        // the same notification to re-fire on the next poll.
+        for (const n of notifs) seenNotifIds.current.add(n.id);
+        if (unseen) {
+          setBanner({
+            id: `notif-${unseen.id}`,
+            appName: unseen.packageName.split('.').pop() || 'App',
+            iconName: 'notifications',
+            iconColor: '#5856D6',
+            title: unseen.title,
+            body: unseen.text,
+          });
         }
       } catch { /* ignore */ }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [device.isReady, isLocked, banner?.id]);
+  }, [device.isReady, isLocked]);
 
   if (showOnboarding === null) return null;
 
