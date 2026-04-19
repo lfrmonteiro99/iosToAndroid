@@ -428,7 +428,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
           >
             <View style={[styles.iconCircle, { backgroundColor: colors.systemGray4 }]}>
-              <Ionicons name="person-circle" size={36} color={colors.systemGray} />
+              <Ionicons name="person-circle-outline" size={36} color={colors.systemGray} />
             </View>
             <View style={styles.resultTextWrap}>
               <Text style={[styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
@@ -445,7 +445,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
           >
             <View style={[styles.iconCircle, { backgroundColor: '#FFD60A' }]}>
-              <Ionicons name="document-text" size={22} color="#000" />
+              <Ionicons name="document-text-outline" size={22} color="#000" />
             </View>
             <View style={styles.resultTextWrap}>
               <Text style={[styles.resultTitle, { color: colors.label }]}>{item.title}</Text>
@@ -460,7 +460,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
           >
             <View style={[styles.iconCircle, { backgroundColor: '#007AFF' }]}>
-              <Ionicons name="mail" size={22} color="#fff" />
+              <Ionicons name="mail-outline" size={22} color="#fff" />
             </View>
             <View style={styles.resultTextWrap}>
               <Text style={[styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.subject}</Text>
@@ -490,7 +490,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
           >
             <View style={[styles.iconCircle, { backgroundColor: colors.systemGray4 }]}>
-              <Ionicons name="settings" size={24} color={colors.systemGray} />
+              <Ionicons name="settings-outline" size={24} color={colors.systemGray} />
             </View>
             <View style={styles.resultTextWrap}>
               <Text style={[styles.resultTitle, { color: colors.label }]}>{item.name}</Text>

@@ -452,7 +452,7 @@ function NonAndroidFallback() {
         ]}
       >
         <View style={styles.widgetRow}>
-          <Ionicons name="battery-half" size={24} color={colors.systemGreen} />
+          <Ionicons name="battery-half-outline" size={24} color={colors.systemGreen} />
           <Text style={[typography.body, { color: colors.label, marginLeft: 8 }]}>
             Battery
           </Text>

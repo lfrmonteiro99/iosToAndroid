@@ -109,9 +109,9 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
   };
 
   const actionButtons = [
-    { icon: 'call' as const, label: 'call', onPress: handleCall },
-    { icon: 'chatbubble' as const, label: 'message', onPress: handleMessage },
-    { icon: 'mail' as const, label: 'mail', onPress: handleMail },
+    { icon: 'call-outline' as const, label: 'call', onPress: handleCall },
+    { icon: 'chatbubble-outline' as const, label: 'message', onPress: handleMessage },
+    { icon: 'mail-outline' as const, label: 'mail', onPress: handleMail },
   ];
 
   return (

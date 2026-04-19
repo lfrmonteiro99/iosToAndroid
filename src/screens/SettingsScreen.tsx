@@ -133,7 +133,7 @@ export function SettingsScreen() {
           accessibilityLabel={item.title}
         >
           <View style={[styles.profileAvatar, { backgroundColor: colors.systemGray4 }]}>
-            <Ionicons name="person" size={28} color={colors.secondaryLabel} />
+            <Ionicons name="person-outline" size={28} color={colors.secondaryLabel} />
           </View>
           <View style={styles.profileMeta}>
             <Text style={[typography.headline, { color: colors.label }]}>{item.title}</Text>

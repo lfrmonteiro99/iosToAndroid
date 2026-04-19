@@ -356,7 +356,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                   ) : null}
                   {evt.repeat && evt.repeat !== 'never' ? (
                     <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
-                      <Ionicons name="repeat" size={12} color={colors.secondaryLabel} /> Repeats {evt.repeat}
+                      <Ionicons name="repeat-outline" size={12} color={colors.secondaryLabel} /> Repeats {evt.repeat}
                     </Text>
                   ) : null}
                   {evt.notes ? (

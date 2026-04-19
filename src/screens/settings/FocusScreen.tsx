@@ -78,7 +78,7 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
       {/* Active focus mode banner */}
       {isFocusActive && (
         <View style={[styles.banner, { backgroundColor: colors.systemPurple ?? '#5856D6' }]}>
-          <Ionicons name="moon" size={16} color="#fff" style={{ marginRight: 8 }} />
+          <Ionicons name="moon-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
           <Text style={[typography.footnote, { color: '#fff', flex: 1 }]}>
             Focus mode active – notifications are filtered
           </Text>

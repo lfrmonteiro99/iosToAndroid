@@ -168,7 +168,7 @@ const ConversationRow = React.memo(function ConversationRow({
         {contact ? (
           <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
         ) : (
-          <Ionicons name="person" size={22} color="#FFFFFF" />
+          <Ionicons name="person-outline" size={22} color="#FFFFFF" />
         )}
       </View>
 

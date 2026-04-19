@@ -91,7 +91,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationP
           <CupertinoListSection header="Ringtone & Vibration">
             {/* Volume slider */}
             <View style={styles.sliderRow}>
-              <Ionicons name="volume-low" size={20} color={colors.secondaryLabel} />
+              <Ionicons name="volume-low-outline" size={20} color={colors.secondaryLabel} />
               <View style={styles.sliderTrack}>
                 <CupertinoSlider
                   value={settings.volume}
@@ -100,7 +100,7 @@ export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationP
                   maximumValue={1}
                 />
               </View>
-              <Ionicons name="volume-high" size={20} color={colors.secondaryLabel} />
+              <Ionicons name="volume-high-outline" size={20} color={colors.secondaryLabel} />
             </View>
             <CupertinoListTile
               title="Ringtone"
