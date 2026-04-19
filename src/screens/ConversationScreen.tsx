@@ -22,10 +22,6 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  withRepeat,
-  withTiming,
-  withSequence,
-  withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
@@ -115,43 +111,6 @@ function insertDateSeparators(messages: DeviceSms[]): ListItem[] {
 
 const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
-
-// ─── Typing Indicator ────────────────────────────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function TypingIndicator({ visible, colors }: { visible: boolean; colors: any }) {
-  const dot1 = useSharedValue(0.3);
-  const dot2 = useSharedValue(0.3);
-  const dot3 = useSharedValue(0.3);
-
-  useEffect(() => {
-    if (visible) {
-      dot1.value = withRepeat(withSequence(withTiming(1, { duration: 400 }), withTiming(0.3, { duration: 400 })), -1);
-      dot2.value = withRepeat(withSequence(withDelay(150, withTiming(1, { duration: 400 })), withTiming(0.3, { duration: 400 })), -1);
-      dot3.value = withRepeat(withSequence(withDelay(300, withTiming(1, { duration: 400 })), withTiming(0.3, { duration: 400 })), -1);
-    } else {
-      dot1.value = 0.3;
-      dot2.value = 0.3;
-      dot3.value = 0.3;
-    }
-  }, [visible, dot1, dot2, dot3]);
-
-  const s1 = useAnimatedStyle(() => ({ opacity: dot1.value }));
-  const s2 = useAnimatedStyle(() => ({ opacity: dot2.value }));
-  const s3 = useAnimatedStyle(() => ({ opacity: dot3.value }));
-
-  if (!visible) return null;
-
-  return (
-    <View style={[styles.bubbleRow, styles.bubbleRowLeft, { marginVertical: 4 }]}>
-      <View style={[styles.bubble, styles.bubbleReceived, { backgroundColor: colors.systemGray5, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', gap: 4 }]}>
-        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s1]} />
-        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s2]} />
-        <Animated.View style={[styles.typingDot, { backgroundColor: colors.secondaryLabel }, s3]} />
-      </View>
-    </View>
-  );
-}
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
