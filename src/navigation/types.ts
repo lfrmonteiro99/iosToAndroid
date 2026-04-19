@@ -43,6 +43,7 @@ export type RootStackParamList = {
   DisplayBrightness: undefined;
   Wallpaper: undefined;
   Accessibility: undefined;
+  AssistiveTouchSettings: undefined;
   Battery: undefined;
   Privacy: undefined;
   Storage: undefined;
