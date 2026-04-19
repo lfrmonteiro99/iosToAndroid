@@ -953,9 +953,13 @@ export function LauncherHomeScreen() {
         style={[
           styles.statusRow,
           {
-            marginTop: isDefaultLauncher
-              ? insets.top + 4
-              : 4,
+            // Android hides the system status bar in immersive mode, so
+            // useSafeAreaInsets() returns 0 on top. Use StatusBar.currentHeight
+            // as a fallback so the row clears the notch/camera cutout. The
+            // default-launcher banner (above) already absorbs insets.top when
+            // visible, so we only pad when the banner isn't shown.
+            marginTop:
+              (!isDefaultLauncher ? 0 : Math.max(insets.top, StatusBar.currentHeight ?? 0, 24)) + 4,
           },
         ]}
       >
