@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { useDevice } from '../store/DeviceStore';
 import { CupertinoNavigationBar } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
@@ -50,13 +51,31 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
   const [wind, setWind] = useState('—');
   const [feelsLike, setFeelsLike] = useState('—');
   const [uv, setUv] = useState('—');
+  const [currentTemp, setCurrentTemp] = useState<number | null>(null);
+  const [currentCity, setCurrentCity] = useState('');
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('https://wttr.in/?format=j1');
+        // Request location permission here (non-blocking for the rest of the app)
+        let locationQuery = '';
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            locationQuery = `${loc.coords.latitude.toFixed(4)},${loc.coords.longitude.toFixed(4)}`;
+          }
+        } catch { /* fall back to IP geolocation */ }
+
+        const url = locationQuery
+          ? `https://wttr.in/${locationQuery}?format=j1`
+          : 'https://wttr.in/?format=j1';
+        const res = await fetch(url);
         const data = await res.json();
         const current = data.current_condition[0];
+        const area = data.nearest_area?.[0];
+        setCurrentTemp(parseInt(current.temp_C, 10));
+        setCurrentCity(area?.areaName?.[0]?.value ?? '');
         setHumidity(`${current.humidity}%`);
         setWind(`${current.windspeedKmph} km/h`);
         setFeelsLike(`${current.FeelsLikeC}°`);
@@ -110,7 +129,7 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
     })();
   }, []);
 
-  if (loading && !weather.city) {
+  if (loading && currentTemp === null) {
     return (
       <LinearGradient colors={['#2C5F8A', '#1B3A5C']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#fff" />
@@ -133,8 +152,8 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 90 }]} showsVerticalScrollIndicator={false}>
         {/* City & current temp */}
         <View style={styles.hero}>
-          <Text style={styles.cityName}>{weather.city || 'My Location'}</Text>
-          <Text style={styles.bigTemp}>{weather.temp}°</Text>
+          <Text style={styles.cityName}>{currentCity || weather.city || 'My Location'}</Text>
+          <Text style={styles.bigTemp}>{currentTemp ?? weather.temp}°</Text>
           <Text style={styles.condition}>{weather.condition}</Text>
           {forecast.length > 0 && (
             <Text style={styles.highLow}>
