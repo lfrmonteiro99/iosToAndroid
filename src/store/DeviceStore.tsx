@@ -77,6 +77,7 @@ interface DeviceState {
   messages: DeviceSms[];
   contacts: DeviceContact[];
   weather: DeviceWeather;
+  notificationAccessGranted: boolean | null;
   isReady: boolean;
 }
 
@@ -104,6 +105,7 @@ const DEFAULT_STATE: DeviceState = {
   messages: [],
   contacts: [],
   weather: { temp: 0, condition: '', icon: 'cloud', city: '' },
+  notificationAccessGranted: null,
   isReady: false,
 };
 
@@ -267,15 +269,23 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const loadNotificationAccess = useCallback(async (): Promise<boolean | null> => {
+    const mod = await getLauncherModule();
+    if (!mod) return null;
+    try {
+      return await mod.isNotificationAccessGranted();
+    } catch { return null; }
+  }, [getLauncherModule]);
+
   const refresh = useCallback(async () => {
-    const [battery, brightness, volume, network, wifi, bluetooth, storage, messages, contacts, weather] = await Promise.all([
+    const [battery, brightness, volume, network, wifi, bluetooth, storage, messages, contacts, weather, notificationAccessGranted] = await Promise.all([
       loadBattery(), loadBrightness(), loadVolume(), loadNetwork(), loadWifi(),
-      loadBluetooth(), loadStorage(), loadMessages(), loadContacts(), loadWeather(),
+      loadBluetooth(), loadStorage(), loadMessages(), loadContacts(), loadWeather(), loadNotificationAccess(),
     ]);
     setState({
-      battery, brightness, volume, wifi, bluetooth, storage, network, messages, contacts, weather, isReady: true,
+      battery, brightness, volume, wifi, bluetooth, storage, network, messages, contacts, weather, notificationAccessGranted, isReady: true,
     });
-  }, [loadBattery, loadBrightness, loadVolume, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts, loadWeather]);
+  }, [loadBattery, loadBrightness, loadVolume, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts, loadWeather, loadNotificationAccess]);
 
   // Initial load
   useEffect(() => { refresh(); }, [refresh]);

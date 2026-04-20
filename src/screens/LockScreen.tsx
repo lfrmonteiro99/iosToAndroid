@@ -662,17 +662,37 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         {/* Notification cards (grouped by app, iOS-style)                   */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.notifArea}>
-          {groupedNotifications.map((group) => (
-            <NotificationGroupCard
-              key={group.packageName}
-              group={group}
-              expanded={!!expandedGroups[group.packageName]}
-              onToggle={() => toggleGroup(group.packageName)}
-              onDismissNotif={handleDismissNotif}
-              onDismissGroup={handleDismissGroup}
-              onOpenNotif={handleOpenNotif}
-            />
-          ))}
+          {device.notificationAccessGranted === false ? (
+            <View style={styles.notifPermissionCta}>
+              <Text style={styles.notifPermissionTitle}>Notifications are off</Text>
+              <Text style={styles.notifPermissionBody}>Grant access to see them on the lock screen.</Text>
+              <Pressable
+                style={styles.notifPermissionButton}
+                onPress={async () => {
+                  try {
+                    const mod = (await import('../../modules/launcher-module/src')).default;
+                    await mod.openNotificationAccessSettings();
+                  } catch {}
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Open notification access settings"
+              >
+                <Text style={styles.notifPermissionButtonText}>Open Settings</Text>
+              </Pressable>
+            </View>
+          ) : (
+            groupedNotifications.map((group) => (
+              <NotificationGroupCard
+                key={group.packageName}
+                group={group}
+                expanded={!!expandedGroups[group.packageName]}
+                onToggle={() => toggleGroup(group.packageName)}
+                onDismissNotif={handleDismissNotif}
+                onDismissGroup={handleDismissGroup}
+                onOpenNotif={handleOpenNotif}
+              />
+            ))
+          )}
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -1138,4 +1158,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
+
+  // Notification permission CTA
+  notifPermissionCta: {
+    marginTop: 40,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  notifPermissionTitle: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  notifPermissionBody: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  notifPermissionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  notifPermissionButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
 });
