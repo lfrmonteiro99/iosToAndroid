@@ -53,8 +53,8 @@ describe('gestureVelocity', () => {
       for (let t = 0; t <= 180; t += 30) {
         pushSample(buf, t, 0, t);
       }
-      // 2*WINDOW = 120; cutoff from last push (t=180) is 180 - 120 = 60
-      expect(buf[0].t).toBeGreaterThanOrEqual(60);
+      // cutoff from last push (t=180) is 180 - 2*WINDOW
+      expect(buf[0].t).toBeGreaterThanOrEqual(180 - 2 * WINDOW);
     });
 
     it('uses oldest sample within the WINDOW, not outside', () => {

@@ -6,22 +6,20 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  useFrameCallback,
   withSpring,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-// iOS-matched thresholds (from reverse-engineered gesture behavior):
-// - Home:         short upward swipe OR high upward velocity
-// - App switcher: deeper upward swipe with a hold/pause near mid-screen
-// - Lateral drift cancels the gesture
-const HOME_DISTANCE = 60;          // pt — short swipe triggers home
-const SWITCHER_DISTANCE = 180;     // pt — deeper swipe with pause triggers app switcher
-const HOME_VELOCITY = 500;         // pt/s — flick velocity alternative to distance
-const SWITCHER_HOLD_MS = 400;      // ms — hold near mid-swipe to summon switcher
-const LATERAL_CANCEL = 80;         // pt — sideways drift cancels the gesture
-const IDLE_DIM_MS = 2500;          // ms — pill fades after inactivity (AssistiveTouch-inspired)
+import { gestureConfig } from '../utils/gestureConfig';
+import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
+import { useGestureMachine, commitForHome, commitForSwitcher } from '../utils/gestureMachine';
+import { hapticImpact, hapticSelection } from '../utils/haptics';
+
+// Keep idle-dim constants local (not gesture thresholds — these are UI-only)
+const IDLE_DIM_MS = 2500; // ms — pill fades after inactivity
 const IDLE_OPACITY = 0.35;
 
 interface HomeIndicatorProps {
@@ -43,6 +41,20 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
   const opacity = useSharedValue(1);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Frame-callback timestamp — updated every frame on the UI thread, safe to
+  // read from inside Pan worklets without JS round-trips.
+  const currentT = useSharedValue(0);
+  useFrameCallback(({ timestamp }) => {
+    'worklet';
+    currentT.value = timestamp;
+  });
+
+  // Multi-sample velocity buffer
+  const buf = useVelocityBuffer();
+
+  // Shared state machine (home commit predicate)
+  const machine = useGestureMachine({ shouldCommit: commitForHome });
+
   const wake = useCallback(() => {
     opacity.value = withTiming(1, { duration: 150 });
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -59,7 +71,7 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
   }, [wake]);
 
   const doHome = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
     if (onHome) return onHome();
     if (Platform.OS === 'android') {
       try {
@@ -78,7 +90,7 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
   }, [onHome, navigationRef]);
 
   const doSwitcher = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
     if (onSwitcher) return onSwitcher();
     try {
       navigationRef?.current?.navigate('Multitask' as never);
@@ -87,13 +99,12 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
     }
   }, [onSwitcher, navigationRef]);
 
-  // Track whether a mid-swipe hold triggered "switcher mode" already
-  const heldForSwitcher = useSharedValue(0);
-  const holdScheduled = useSharedValue(0);
-  const thresholdHapticFired = useSharedValue(0);
+  const fireHapticThreshold = useCallback(() => {
+    hapticSelection();
+  }, []);
 
-  const fireLightHaptic = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
+  const fireHapticHoldConfirm = useCallback(() => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
   const pan = Gesture.Pan()
@@ -101,67 +112,79 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
     .minDistance(8)
     .onBegin(() => {
       'worklet';
-      heldForSwitcher.value = 0;
-      holdScheduled.value = 0;
-      thresholdHapticFired.value = 0;
+      machine.reset();
+      machine.startT.value = currentT.value;
+      machine.phase.value = 'possible';
+      buf.value = [];
       runOnJS(wake)();
     })
     .onUpdate((e) => {
       'worklet';
+      machine.phase.value = 'tracking';
+
       const dy = Math.min(0, e.translationY); // only track upward
       translateY.value = dy;
 
-      // Haptic tick the first time we cross the "home" threshold
-      if (!thresholdHapticFired.value && Math.abs(dy) >= HOME_DISTANCE) {
-        thresholdHapticFired.value = 1;
-        runOnJS(fireLightHaptic)();
+      // Clamp progress [0,1] based on upward travel vs full homeTravelDp
+      const progress = Math.max(0, Math.min(1, -dy / gestureConfig.homeTravelDp));
+      machine.progress.value = progress;
+
+      // Push sample into velocity buffer
+      pushSample(buf.value, e.translationX, e.translationY, currentT.value);
+      const { vy } = sampledVelocity(buf.value, currentT.value);
+
+      // Axis-lock: cancel if lateral drift exceeds threshold
+      if (Math.abs(e.translationX) > gestureConfig.axisLockDp * 8) {
+        translateY.value = withSpring(0, gestureConfig.spring.homeSettle);
+        machine.phase.value = 'cancelled';
+        return;
       }
 
-      // Lateral drift cancels — match iOS's lock-to-axis behavior
-      if (Math.abs(e.translationX) > LATERAL_CANCEL) {
-        translateY.value = withSpring(0, { damping: 15, stiffness: 180 });
-        thresholdHapticFired.value = 0;
+      // Haptic tick at hybrid-progress threshold crossing
+      if (!machine.thresholdFired.value && progress >= gestureConfig.homeHybridProgress) {
+        machine.thresholdFired.value = true;
+        runOnJS(fireHapticThreshold)();
+      }
+
+      // Switcher hold predicate check (in-worklet — no setInterval)
+      if (!machine.holdFired.value) {
+        const holdMs = currentT.value - machine.startT.value;
+        const switcherResult = commitForSwitcher({ progress, velocity: vy, holdMs });
+        if (switcherResult === 'hold') {
+          machine.holdFired.value = true;
+          runOnJS(fireHapticHoldConfirm)();
+        }
       }
     })
     .onEnd((e) => {
       'worklet';
-      const dy = Math.min(0, e.translationY);
-      const vy = e.velocityY;
-      translateY.value = withSpring(0, { damping: 20, stiffness: 220 });
+      translateY.value = withSpring(0, gestureConfig.spring.homeSettle);
 
-      // Deep swipe OR held mid-swipe → app switcher
-      if (Math.abs(dy) >= SWITCHER_DISTANCE || heldForSwitcher.value === 1) {
+      const dy = Math.min(0, e.translationY);
+      const progress = Math.max(0, Math.min(1, -dy / gestureConfig.homeTravelDp));
+
+      // Final velocity from multi-sample buffer
+      pushSample(buf.value, e.translationX, e.translationY, currentT.value);
+      const { vy } = sampledVelocity(buf.value, currentT.value);
+
+      const holdMs = currentT.value - machine.startT.value;
+
+      if (machine.phase.value === 'cancelled') {
+        return;
+      }
+
+      // Switcher: hold was confirmed during drag
+      if (machine.holdFired.value) {
         runOnJS(doSwitcher)();
         return;
       }
-      // Short swipe OR flick → home
-      if (Math.abs(dy) >= HOME_DISTANCE || vy <= -HOME_VELOCITY) {
+
+      // Home: evaluate three-path commit predicate
+      const homeResult = commitForHome({ progress, velocity: vy, holdMs });
+      if (homeResult !== 'none') {
         runOnJS(doHome)();
       }
     });
-
-  // Separate detector for the "hold at midpoint" behavior, used alongside pan.
-  // When the user pauses their finger past the home threshold but below
-  // switcher-distance, we summon the switcher after SWITCHER_HOLD_MS.
-  useEffect(() => {
-    const id = setInterval(() => {
-      const dy = Math.abs(translateY.value);
-      if (dy >= HOME_DISTANCE && dy < SWITCHER_DISTANCE) {
-        if (!holdScheduled.value) {
-          holdScheduled.value = 1;
-          setTimeout(() => {
-            if (Math.abs(translateY.value) >= HOME_DISTANCE && Math.abs(translateY.value) < SWITCHER_DISTANCE) {
-              heldForSwitcher.value = 1;
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            }
-          }, SWITCHER_HOLD_MS);
-        }
-      } else {
-        holdScheduled.value = 0;
-      }
-    }, 80);
-    return () => clearInterval(id);
-  }, [translateY, holdScheduled, heldForSwitcher]);
 
   // AssistiveTouch-inspired convenience: double-tap the pill as a shortcut
   // to the app switcher for users who find the precise swipe awkward.
@@ -176,7 +199,8 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
 
   const pillStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ translateY: translateY.value * 0.15 }], // subtle follow while swiping
+    // Pill rises ~10dp at full progress (machine.progress.value = 1)
+    transform: [{ translateY: machine.progress.value * -10 }],
   }));
 
   const pillColor = variant === 'dark' ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.5)';

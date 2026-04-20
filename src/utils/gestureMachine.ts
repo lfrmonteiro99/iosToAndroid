@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 import { gestureConfig } from './gestureConfig';
@@ -47,11 +47,13 @@ export function useGestureMachine(cfg: MachineConfig): GestureMachine {
   // Store callbacks in refs so consumers can runOnJS(ref.current) without
   // stale closures forcing hook re-runs and machine recreation.
   const onPhaseChangeRef = useRef(cfg.onPhaseChange);
-  onPhaseChangeRef.current = cfg.onPhaseChange;
   const onHapticRef = useRef(cfg.onHaptic);
-  onHapticRef.current = cfg.onHaptic;
   const shouldCommitRef = useRef(cfg.shouldCommit);
-  shouldCommitRef.current = cfg.shouldCommit;
+  useEffect(() => {
+    onPhaseChangeRef.current = cfg.onPhaseChange;
+    onHapticRef.current = cfg.onHaptic;
+    shouldCommitRef.current = cfg.shouldCommit;
+  });
 
   function reset() {
     'worklet';
