@@ -109,18 +109,15 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleFavorite = useCallback((id: string) => {
-    setContacts((prev) => {
-      const inStore = prev.some(c => c.id === id);
-      if (inStore) {
-        return prev.map((c) => c.id === id ? { ...c, isFavorite: !c.isFavorite } : c);
-      }
-      // Device contact not in store — toggle in deviceFavoriteIds
+    const inStore = contacts.some(c => c.id === id);
+    if (inStore) {
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, isFavorite: !c.isFavorite } : c));
+    } else {
       setDeviceFavoriteIds(ids =>
         ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]
       );
-      return prev;
-    });
-  }, []);
+    }
+  }, [contacts]);
 
   const getContact = useCallback((id: string) => contacts.find((c) => c.id === id), [contacts]);
 
