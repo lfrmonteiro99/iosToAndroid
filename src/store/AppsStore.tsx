@@ -3,9 +3,11 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../components';
 import { logger } from '../utils/logger';
+import { migrateAsyncStorageKey } from './storage';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
+const RECENTS_LEGACY_KEY = '@recent_apps';
 const MAX_RECENTS = 8;
 
 export interface InstalledApp {
@@ -91,7 +93,9 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
 
   // Load recent apps from storage — supports legacy string[] format
   useEffect(() => {
-    AsyncStorage.getItem(RECENTS_KEY).then(raw => {
+    (async () => {
+      await migrateAsyncStorageKey(RECENTS_LEGACY_KEY, RECENTS_KEY);
+      const raw = await AsyncStorage.getItem(RECENTS_KEY);
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
@@ -110,7 +114,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) { logger.warn('AppsStore', 'failed to parse recent apps', e); }
       }
-    });
+    })();
   }, []);
 
   const addToRecents = useCallback(async (packageName: string) => {
