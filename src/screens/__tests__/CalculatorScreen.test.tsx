@@ -77,4 +77,17 @@ describe('CalculatorScreen', () => {
     fireEvent.press(getByText('%'));
     expect(getByText('0.5')).toBeTruthy();
   });
+
+  it('0.1 + 0.2 equals 0.3 without float artifacts', () => {
+    const { getByText } = render(<CalculatorScreen />);
+    fireEvent.press(getByText('0'));
+    fireEvent.press(getByText('.'));
+    fireEvent.press(getByText('1'));
+    fireEvent.press(getByText('+'));
+    fireEvent.press(getByText('0'));
+    fireEvent.press(getByText('.'));
+    fireEvent.press(getByText('2'));
+    fireEvent.press(getByText('='));
+    expect(getByText('0.3')).toBeTruthy();
+  });
 });

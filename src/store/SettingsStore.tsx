@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setHapticsEnabled } from '../utils/haptics';
@@ -137,6 +137,11 @@ const SettingsContext = createContext<SettingsContextValue | null>(null);
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [isReady, setIsReady] = useState(false);
+  const [firstSyncDone, setFirstSyncDone] = useState(false);
+
+  // mountedRef — guard all async setState calls against post-unmount updates
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
@@ -183,12 +188,30 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* native module unavailable on non-Android */ }
 
+    if (!mountedRef.current) return;
     setSettings((prev) => ({ ...prev, ...partial }));
   }, []);
 
-  // Initial device sync after AsyncStorage load
+  // Initial device sync after AsyncStorage load — gate first render on completion
   useEffect(() => {
-    if (isReady) { syncFromDevice(); }
+    if (!isReady) return;
+    let cancelled = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    (async () => {
+      // safety fallback: never block UI more than 500ms
+      fallbackTimer = setTimeout(() => { if (!cancelled) setFirstSyncDone(true); }, 500);
+      try {
+        await syncFromDevice();
+      } catch { /* swallow */ }
+      if (!cancelled) {
+        if (fallbackTimer) clearTimeout(fallbackTimer);
+        setFirstSyncDone(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+    };
   }, [isReady, syncFromDevice]);
 
   // Re-sync when app comes to foreground (user may have changed settings in system UI)
@@ -231,6 +254,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     () => ({ settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode }),
     [settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
   );
+
+  if (!firstSyncDone) return null;
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

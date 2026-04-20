@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';

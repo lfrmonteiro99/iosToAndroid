@@ -23,6 +23,7 @@ import { AssistiveTouchProvider, useAssistiveTouch } from './src/store/Assistive
 import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
+import { suppressAutoLock } from './src/utils/permissions';
 import { onBridgeError } from './modules/launcher-module/src';
 
 function AppContent() {
@@ -87,6 +88,7 @@ function AppContent() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
+        if (suppressAutoLock()) return; // a permission dialog is showing — ignore background
         if (lockTimer.current) clearTimeout(lockTimer.current);
         lockTimer.current = setTimeout(() => {
           setIsLocked(true);

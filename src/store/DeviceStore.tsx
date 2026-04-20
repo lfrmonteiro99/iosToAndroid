@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { Platform, AppState, PermissionsAndroid } from 'react-native';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Battery from 'expo-battery';
 import * as Brightness from 'expo-brightness';
 import * as Network from 'expo-network';

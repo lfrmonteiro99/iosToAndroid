@@ -12,6 +12,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
+import Decimal from 'decimal.js';
+
+Decimal.set({ precision: 20 });
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -144,11 +147,32 @@ const SCIENTIFIC_ROWS: ButtonDef[][] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-const formatNumber = (n: number): string => {
-  if (!isFinite(n) || isNaN(n)) return 'Error';
-  if (Number.isInteger(n) && Math.abs(n) < 1e15) return n.toString();
-  return parseFloat(n.toPrecision(10)).toString();
-};
+function formatNumber(n: number): string {
+  if (!Number.isFinite(n)) return 'Error';
+  const d = new Decimal(n);
+  const abs = d.abs();
+  if (abs.gte('1e16') || (abs.gt(0) && abs.lt('1e-9'))) {
+    return d.toExponential(9).replace(/\.?0+e/, 'e');
+  }
+  // up to 10 significant digits, trim trailing zeros
+  const s = d.toPrecision(10);
+  return parseFloat(s).toString();
+}
+
+function performOp(a: number, b: number, op: string): number {
+  const A = new Decimal(a), B = new Decimal(b);
+  let R: Decimal;
+  switch (op) {
+    case '+': R = A.plus(B); break;
+    case '-': R = A.minus(B); break;
+    case '×':
+    case '*': R = A.times(B); break;
+    case '÷':
+    case '/': R = B.isZero() ? new Decimal(NaN) : A.div(B); break;
+    default:  R = new Decimal(NaN);
+  }
+  return R.toNumber();
+}
 
 const isError = (val: string): boolean => val === 'Error';
 
@@ -329,18 +353,7 @@ export function CalculatorScreen() {
   };
 
   const compute = (prev: number, op: string, current: number): number => {
-    switch (op) {
-      case '+':
-        return prev + current;
-      case '-':
-        return prev - current;
-      case '×':
-        return prev * current;
-      case '÷':
-        return current !== 0 ? prev / current : NaN;
-      default:
-        return current;
-    }
+    return performOp(prev, current, op);
   };
 
   const addToHistory = useCallback(
