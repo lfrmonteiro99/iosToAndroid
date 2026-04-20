@@ -42,6 +42,8 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
 
   const wake = useCallback(() => {
     opacity.value = withTiming(1, { duration: 150 });
@@ -57,6 +59,12 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
   }, [wake]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const doHome = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -96,6 +104,41 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
     Haptics.selectionAsync().catch(() => {});
   }, []);
 
+  const startTick = useCallback(() => {
+    if (tickIntervalRef.current !== null) {
+      return; // Already running
+    }
+    tickIntervalRef.current = setInterval(() => {
+      if (!mountedRef.current) return;
+      const dy = Math.abs(translateY.value);
+      if (dy >= HOME_DISTANCE && dy < SWITCHER_DISTANCE) {
+        if (!holdScheduled.value) {
+          holdScheduled.value = 1;
+          setTimeout(() => {
+            if (!mountedRef.current) return;
+            if (Math.abs(translateY.value) >= HOME_DISTANCE && Math.abs(translateY.value) < SWITCHER_DISTANCE) {
+              heldForSwitcher.value = 1;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            }
+          }, SWITCHER_HOLD_MS);
+        }
+      } else {
+        holdScheduled.value = 0;
+      }
+    }, 80);
+  }, [translateY, holdScheduled, heldForSwitcher]);
+
+  const stopTick = useCallback(() => {
+    if (tickIntervalRef.current !== null) {
+      clearInterval(tickIntervalRef.current);
+      tickIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => stopTick();
+  }, [stopTick]);
+
   const pan = Gesture.Pan()
     .activeOffsetY([-10, 10])
     .minDistance(8)
@@ -105,6 +148,7 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       holdScheduled.value = 0;
       thresholdHapticFired.value = 0;
       runOnJS(wake)();
+      runOnJS(startTick)();
     })
     .onUpdate((e) => {
       'worklet';
@@ -128,6 +172,7 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       const dy = Math.min(0, e.translationY);
       const vy = e.velocityY;
       translateY.value = withSpring(0, { damping: 20, stiffness: 220 });
+      runOnJS(stopTick)();
 
       // Deep swipe OR held mid-swipe → app switcher
       if (Math.abs(dy) >= SWITCHER_DISTANCE || heldForSwitcher.value === 1) {
@@ -138,30 +183,16 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       if (Math.abs(dy) >= HOME_DISTANCE || vy <= -HOME_VELOCITY) {
         runOnJS(doHome)();
       }
+    })
+    .onFinalize(() => {
+      'worklet';
+      runOnJS(stopTick)();
+    })
+    .onCancel(() => {
+      'worklet';
+      runOnJS(stopTick)();
     });
 
-  // Separate detector for the "hold at midpoint" behavior, used alongside pan.
-  // When the user pauses their finger past the home threshold but below
-  // switcher-distance, we summon the switcher after SWITCHER_HOLD_MS.
-  useEffect(() => {
-    const id = setInterval(() => {
-      const dy = Math.abs(translateY.value);
-      if (dy >= HOME_DISTANCE && dy < SWITCHER_DISTANCE) {
-        if (!holdScheduled.value) {
-          holdScheduled.value = 1;
-          setTimeout(() => {
-            if (Math.abs(translateY.value) >= HOME_DISTANCE && Math.abs(translateY.value) < SWITCHER_DISTANCE) {
-              heldForSwitcher.value = 1;
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            }
-          }, SWITCHER_HOLD_MS);
-        }
-      } else {
-        holdScheduled.value = 0;
-      }
-    }, 80);
-    return () => clearInterval(id);
-  }, [translateY, holdScheduled, heldForSwitcher]);
 
   // AssistiveTouch-inspired convenience: double-tap the pill as a shortcut
   // to the app switcher for users who find the precise swipe awkward.
