@@ -646,9 +646,11 @@ export function LauncherHomeScreen() {
   // Custom wallpaper URI (loaded from AsyncStorage when wallpaperIndex === 6)
   const [customWallpaperUri, setCustomWallpaperUri] = useState<string | null>(null);
   useEffect(() => {
+    let mounted = true;
     AsyncStorage.getItem('@iostoandroid/custom_wallpaper').then(uri => {
-      if (uri) setCustomWallpaperUri(uri);
+      if (mounted && uri) setCustomWallpaperUri(uri);
     });
+    return () => { mounted = false; };
   }, []);
 
   // Badge counts computed from device data
