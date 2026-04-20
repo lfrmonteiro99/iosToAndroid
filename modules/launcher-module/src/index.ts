@@ -483,3 +483,34 @@ export function reportBridgeError(method: string, error: unknown): void {
 
 export { LauncherModuleType };
 export default LauncherModule;
+
+// ─── Event-driven notification listeners ────────────────────────────────────
+// Subscribe to real-time notification events emitted by NotificationService
+// (via RCTDeviceEventEmitter on the native side) instead of polling.
+
+import { DeviceEventEmitter } from 'react-native';
+
+/**
+ * Subscribe to new notifications as they arrive.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addNotificationListener(
+  listener: (n: DeviceNotification) => void,
+): () => void {
+  const sub = DeviceEventEmitter.addListener('onNotificationPosted', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to notification removals.
+ * The callback receives the notification key (string id).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addNotificationRemovedListener(
+  listener: (id: string) => void,
+): () => void {
+  const sub = DeviceEventEmitter.addListener('onNotificationRemoved', (n: { id: string }) => {
+    listener(n.id);
+  });
+  return () => sub.remove();
+}

@@ -2,6 +2,8 @@ package com.iostoandroid.launcher
 
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 data class NotificationData(
     val id: String,
@@ -59,6 +61,22 @@ class NotificationService : NotificationListenerService() {
         instance = this
     }
 
+    private fun emitToJS(eventName: String, sbn: StatusBarNotification) {
+        try {
+            val extras = sbn.notification.extras
+            val map = Arguments.createMap().apply {
+                putString("id", sbn.key)
+                putString("packageName", sbn.packageName)
+                putString("title", extras.getCharSequence("android.title")?.toString() ?: "")
+                putString("text", extras.getCharSequence("android.text")?.toString() ?: "")
+                putDouble("postedAt", sbn.postTime.toDouble())
+            }
+            LauncherModule.emitEvent(eventName, map)
+        } catch (e: Exception) {
+            // Silently ignore — JS bridge may not be ready yet
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val extras = sbn.notification.extras
         val data = NotificationData(
@@ -86,6 +104,8 @@ class NotificationService : NotificationListenerService() {
         while (notifications.size > 50) {
             notifications.removeAt(notifications.size - 1)
         }
+
+        emitToJS("onNotificationPosted", sbn)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
@@ -98,6 +118,8 @@ class NotificationService : NotificationListenerService() {
                 notifications.remove(existing)
             }
         }
+
+        emitToJS("onNotificationRemoved", sbn)
     }
 
     override fun onDestroy() {

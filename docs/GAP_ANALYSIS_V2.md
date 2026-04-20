@@ -119,10 +119,10 @@ Estes ecrãs mostram UI estilo iOS mas abrem painéis nativos Android para qualq
   - Permissão de Bluetooth scanning não explícita
 - **Fix**: Adicionar permissões em falta ao array de permissions.
 
-### N2. Notification Polling a 10s — Impacto na Bateria
-- **Ficheiro**: `App.tsx`
-- **Problema**: Notificações são verificadas a cada 10 segundos via polling. Pode causar consumo excessivo de bateria.
-- **Fix**: Aumentar intervalo ou migrar para NotificationListenerService baseado em eventos.
+### N2. Notification Polling — Resolvido com event-driven listener
+- **Ficheiro**: `App.tsx`, `NotificationService.kt`, `modules/launcher-module/src/index.ts`
+- **Problema**: Notificações eram verificadas a cada 30s via polling. Causava latência e consumo desnecessário de bateria.
+- **Fix**: `NotificationService` agora emite eventos `onNotificationPosted`/`onNotificationRemoved` via `RCTDeviceEventEmitter`. `App.tsx` subscreve via `addNotificationListener()` (event-driven listener, was 30s polling). Lista inicial hidratada com `getNotifications()` para evitar banners duplicados.
 
 ### N3. ScreenTime Widget no TodayView é Placeholder
 - **Ficheiro**: `src/screens/TodayViewScreen.tsx`
@@ -270,7 +270,7 @@ Estes ecrãs mostram UI estilo iOS mas abrem painéis nativos Android para qualq
 
 ### P2 — Médio (melhorias de qualidade)
 9. **Adicionar permissões Android em falta**: READ_PHONE_NUMBERS, ACCESS_NETWORK_STATE, ACCESS_COARSE_LOCATION
-10. **Fix notification polling**: Aumentar intervalo ou usar listener
+10. ~~**Fix notification polling**~~ **Resolvido**: migrado para event-driven listener (was 30s polling)
 11. **Fix ScreenTime widget no TodayView**: Ligar a dados reais
 12. **Adicionar validação de email** no EditProfileScreen
 13. **Fix navigation types**: Remover `navigation: any` em 14 ecrãs
