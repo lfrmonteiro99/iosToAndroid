@@ -49,6 +49,7 @@ import type { BannerNotification } from '../components';
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
+import { SpotlightReveal } from '../components/SpotlightReveal';
 import { zones } from '../utils/gestureConfig';
 
 // ---------------------------------------------------------------------------
@@ -558,18 +559,17 @@ export function LauncherHomeScreen() {
     navigation.navigate(screen);
   }, [navigation]);
 
-  // Vertical swipe gesture: up → App Drawer, down-mid → Spotlight
+  // Vertical swipe gesture: up → App Drawer only.
+  // Downward → Spotlight is handled by SpotlightReveal below.
   // CC and NC top-zone swipes are handled by ControlCenterOverlay / NotificationCenterOverlay.
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
     .onEnd((event) => {
       'worklet';
-      const { translationY, absoluteY, velocityY } = event;
+      const { translationY, velocityY } = event;
 
       if (translationY < -60 && velocityY < -200) {
         runOnJS(navigateTo)('AppLibrary');
-      } else if (translationY > 60 && velocityY > 200 && absoluteY >= 350) {
-        runOnJS(navigateTo)('SpotlightSearch');
       }
     });
 
@@ -740,6 +740,9 @@ export function LauncherHomeScreen() {
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
+
+  // Spotlight reveal is suppressed when jiggling, folder is open, or action sheet is up
+  const canSpotlight = !isJiggling && !actionSheet.visible && openFolder === null;
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -1157,6 +1160,14 @@ export function LauncherHomeScreen() {
       />
 
       {/* Home indicator is rendered globally from App.tsx (HomeIndicator). */}
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Spotlight progressive reveal (downward swipe on home)             */}
+      {/* ---------------------------------------------------------------- */}
+      <SpotlightReveal
+        enabled={canSpotlight}
+        onCommit={() => navigation.navigate('SpotlightSearch')}
+      />
 
       {/* ---------------------------------------------------------------- */}
       {/* Top-zone progressive reveal overlays (CC + NC)                    */}

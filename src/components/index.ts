@@ -25,3 +25,4 @@ export { HomeIndicator } from './HomeIndicator';
 export { GestureHost, useGestureHost, useOptionalGestureHost } from './GestureHost';
 export type { GestureHostMode } from './GestureHost';
 export { BackEdgeSwipe } from './BackEdgeSwipe';
+export { QuickSwitchHomeBar } from './QuickSwitchHomeBar';
