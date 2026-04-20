@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { View, Text, Image, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,8 +38,13 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
   const translateY = useSharedValue(-150);
   const scale = useSharedValue(0.95);
   const opacity = useSharedValue(1);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismiss = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     translateY.value = withTiming(-150, { duration: 200 });
     scale.value = withTiming(0.95, { duration: 200 });
     opacity.value = withTiming(0, { duration: 200 });
@@ -55,8 +60,13 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
       scale.value = withSpring(1, { damping: 22, stiffness: 350 });
 
       // Auto-dismiss after 5s (iOS style)
-      const timer = setTimeout(dismiss, 5000);
-      return () => clearTimeout(timer);
+      timerRef.current = setTimeout(dismiss, 5000);
+      return () => {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      };
     }
   }, [notification, translateY, scale, opacity, dismiss]);
 
@@ -72,10 +82,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
     .onEnd((e) => {
       if (e.translationY < -40 || e.velocityY < -300) {
         // Dismiss
-        translateY.value = withTiming(-150, { duration: 200 });
-        scale.value = withTiming(0.95, { duration: 200 });
-        opacity.value = withTiming(0, { duration: 200 });
-        runOnJS(onDismiss)();
+        runOnJS(dismiss)();
       } else {
         // Snap back
         translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
