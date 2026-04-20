@@ -98,6 +98,9 @@ async function scheduleReminderNotification(reminder: Reminder): Promise<string 
         repeats: true,
       };
     } else if (reminder.recurrence === 'weekly') {
+      // Expo WeeklyTriggerInput.weekday is 1..7 with 1 = Sunday.
+      // Date.getDay() is 0..6 with 0 = Sunday. Hence +1.
+      // See https://docs.expo.dev/versions/latest/sdk/notifications/#weeklytriggerinput
       trigger = {
         type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         weekday: dueDate.getDay() + 1,
