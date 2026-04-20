@@ -14,6 +14,7 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoSearchBar,
+  BackEdgeSwipe,
 } from '../components';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
 
@@ -202,6 +203,7 @@ export function SettingsScreen() {
   };
 
   return (
+    <BackEdgeSwipe>
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <CupertinoNavigationBar
@@ -249,6 +251,7 @@ export function SettingsScreen() {
         )}
       </CupertinoNavigationBar>
     </View>
+    </BackEdgeSwipe>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   CupertinoListTile,
   CupertinoActionSheet,
   useAlert,
+  BackEdgeSwipe,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 
@@ -26,6 +27,7 @@ export function GeneralScreen({ navigation }: { navigation: AppNavigationProp })
   const bgRefreshLabel = settings.backgroundAppRefresh === 'off' ? 'Off' : settings.backgroundAppRefresh === 'wifi' ? 'Wi-Fi' : 'Wi-Fi & Cellular';
 
   return (
+    <BackEdgeSwipe>
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
       <CupertinoNavigationBar
         title="General"
@@ -143,6 +145,7 @@ export function GeneralScreen({ navigation }: { navigation: AppNavigationProp })
         cancelLabel="Cancel"
       />
     </View>
+    </BackEdgeSwipe>
   );
 }
 

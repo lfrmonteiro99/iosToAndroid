@@ -17,6 +17,7 @@ import { gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { useGestureMachine, commitForHome, commitForSwitcher } from '../utils/gestureMachine';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
+import { useOptionalGestureHost } from './GestureHost';
 
 // Keep idle-dim constants local (not gesture thresholds — these are UI-only)
 const IDLE_DIM_MS = 2500; // ms — pill fades after inactivity
@@ -36,6 +37,7 @@ interface HomeIndicatorProps {
 
 export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'light' }: HomeIndicatorProps) {
   const insets = useSafeAreaInsets();
+  const host = useOptionalGestureHost();
 
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -117,6 +119,13 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       machine.phase.value = 'possible';
       buf.value = [];
       runOnJS(wake)();
+      if (host) {
+        host.scale.value = 1;
+        host.radius.value = 0;
+        host.shadow.value = 0;
+        host.wallpaperDim.value = 0;
+        host.mode.value = 'none';
+      }
     })
     .onUpdate((e) => {
       'worklet';
@@ -128,6 +137,27 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       // Clamp progress [0,1] based on upward travel vs full homeTravelDp
       const progress = Math.max(0, Math.min(1, -dy / gestureConfig.homeTravelDp));
       machine.progress.value = progress;
+
+      if (host) {
+        if (machine.holdFired.value) {
+          host.mode.value = 'switcher';
+          host.scale.value = 1 - progress * 0.14; // 1.0 -> 0.86
+        } else {
+          host.mode.value = 'home';
+          host.scale.value = 1 - progress * 0.08; // 1.0 -> 0.92
+        }
+        host.radius.value = progress * 22;
+        // Shadow ramps quickly then levels off
+        host.shadow.value =
+          progress < 0.15
+            ? (progress / 0.15) * 0.35
+            : 0.35 + (progress - 0.15) * (0.65 / 0.85);
+        // Wallpaper dim only in switcher mode and only after progress > 0.22
+        host.wallpaperDim.value =
+          machine.holdFired.value && progress >= 0.22
+            ? Math.min(1, (progress - 0.22) / 0.4) * 0.2
+            : 0;
+      }
 
       // Push sample into velocity buffer
       pushSample(buf.value, e.translationX, e.translationY, currentT.value);
@@ -170,11 +200,23 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       const holdMs = currentT.value - machine.startT.value;
 
       if (machine.phase.value === 'cancelled') {
+        if (host) {
+          host.scale.value = withSpring(1, gestureConfig.spring.homeSettle);
+          host.radius.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.shadow.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.mode.value = 'none';
+        }
         return;
       }
 
       // Switcher: hold was confirmed during drag
       if (machine.holdFired.value) {
+        if (host) {
+          host.scale.value = withSpring(1, gestureConfig.spring.switcherSettle);
+          host.radius.value = withSpring(0, gestureConfig.spring.switcherSettle);
+          host.shadow.value = withSpring(0, gestureConfig.spring.switcherSettle);
+          host.mode.value = 'none';
+        }
         runOnJS(doSwitcher)();
         return;
       }
@@ -182,7 +224,21 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       // Home: evaluate three-path commit predicate
       const homeResult = commitForHome({ progress, velocity: vy, holdMs });
       if (homeResult !== 'none') {
+        if (host) {
+          host.scale.value = withSpring(1, gestureConfig.spring.homeSettle);
+          host.radius.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.shadow.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.mode.value = 'none';
+        }
         runOnJS(doHome)();
+      } else {
+        // Cancelled by insufficient gesture — spring back to identity
+        if (host) {
+          host.scale.value = withSpring(1, gestureConfig.spring.homeSettle);
+          host.radius.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.shadow.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.mode.value = 'none';
+        }
       }
     });
 

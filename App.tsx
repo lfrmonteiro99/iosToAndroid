@@ -18,6 +18,7 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
 import { HomeIndicator } from './src/components/HomeIndicator';
+import { GestureHost } from './src/components/GestureHost';
 import { AssistiveTouch } from './src/components/AssistiveTouch';
 import { AssistiveTouchProvider, useAssistiveTouch } from './src/store/AssistiveTouchStore';
 import { LockScreen } from './src/screens/LockScreen';
@@ -200,9 +201,11 @@ function AppContent() {
     <View style={{ flex: 1 }}>
       <StatusBar style={isDark ? 'light' : 'dark'} hidden />
       <ReachabilityShifter>
-        <NavigationContainer ref={navigationRef}>
-          <TabNavigator />
-        </NavigationContainer>
+        <GestureHost>
+          <NavigationContainer ref={navigationRef}>
+            <TabNavigator />
+          </NavigationContainer>
+        </GestureHost>
       </ReachabilityShifter>
 
       {/* iOS-style home indicator — floats above every screen and owns the

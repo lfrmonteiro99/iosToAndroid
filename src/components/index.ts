@@ -22,3 +22,6 @@ export { CupertinoShareSheet } from './CupertinoShareSheet';
 export { NotificationBanner } from './NotificationBanner';
 export type { BannerNotification } from './NotificationBanner';
 export { HomeIndicator } from './HomeIndicator';
+export { GestureHost, useGestureHost, useOptionalGestureHost } from './GestureHost';
+export type { GestureHostMode } from './GestureHost';
+export { BackEdgeSwipe } from './BackEdgeSwipe';

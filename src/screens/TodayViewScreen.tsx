@@ -16,11 +16,16 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useFrameCallback,
+  withSpring,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { gestureConfig } from '../utils/gestureConfig';
+import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
+import { GestureHaptics } from '../utils/gestureHaptics';
 
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -568,21 +573,49 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
   const translateX = useSharedValue(0);
   const opacity = useSharedValue(1);
 
+  // Frame-callback timestamp for velocity sampling
+  const todayCurrentT = useSharedValue(0);
+  useFrameCallback(({ timestamp }) => {
+    'worklet';
+    todayCurrentT.value = timestamp;
+  });
+
+  // Multi-sample velocity buffer
+  const todayBuf = useVelocityBuffer();
+
   const handleClose = () => navigation.goBack();
 
   const swipeLeftGesture = Gesture.Pan()
+    .onBegin(() => {
+      'worklet';
+      todayBuf.value = [];
+    })
     .onUpdate((e) => {
+      'worklet';
       if (e.translationX < 0) {
         translateX.value = e.translationX;
         opacity.value = Math.max(0, 1 + e.translationX / 300);
+        pushSample(todayBuf.value, e.translationX, e.translationY, todayCurrentT.value);
       }
     })
     .onEnd((e) => {
-      if (e.translationX < -80 || e.velocityX < -600) {
-        translateX.value = withTiming(-400, { duration: 250 });
+      'worklet';
+      pushSample(todayBuf.value, e.translationX, e.translationY, todayCurrentT.value);
+      const { vx } = sampledVelocity(todayBuf.value, todayCurrentT.value);
+      const absX = Math.abs(e.translationX);
+      const absVx = Math.abs(vx);
+      const shouldCommit =
+        absX >= gestureConfig.quickSwitchDistanceDp ||
+        absVx >= gestureConfig.quickSwitchVelocity ||
+        (absX >= gestureConfig.quickSwitchHybridDistanceDp &&
+          absVx >= gestureConfig.quickSwitchHybridVelocity);
+
+      if (shouldCommit && e.translationX < 0) {
+        runOnJS(GestureHaptics.commit)('light');
+        translateX.value = withSpring(-400, gestureConfig.spring.mediumSettle);
         opacity.value = withTiming(0, { duration: 250 }, () => runOnJS(handleClose)());
       } else {
-        translateX.value = withTiming(0, { duration: 200 });
+        translateX.value = withSpring(0, gestureConfig.spring.fastSettle);
         opacity.value = withTiming(1, { duration: 200 });
       }
     });
