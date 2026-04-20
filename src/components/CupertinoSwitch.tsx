@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,6 +7,7 @@ import Animated, {
   interpolateColor,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticSelection } from '../utils/haptics';
 
 interface CupertinoSwitchProps {
   value: boolean;
@@ -61,7 +61,7 @@ export function CupertinoSwitch({
 
   const handlePress = () => {
     if (!disabled) {
-      Haptics.selectionAsync();
+      hapticSelection();
       onValueChange?.(!value);
     }
   };
