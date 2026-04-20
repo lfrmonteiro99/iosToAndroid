@@ -340,6 +340,17 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     setSelectedMsgId((prev) => (prev === msgId ? null : msgId));
   }, []);
 
+  const handleCopy = useCallback((msgBody: string) => {
+    Clipboard.setStringAsync(msgBody).catch(() => {});
+    setSelectedMsgId(null);
+  }, []);
+
+  const handleBubblePress = useCallback((msgId: string) => {
+    if (selectedMsgId === msgId) {
+      setSelectedMsgId(null);
+    }
+  }, [selectedMsgId]);
+
   // Load draft on mount
   useEffect(() => {
     AsyncStorage.getItem(draftKey).then((value) => {
@@ -527,7 +538,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         );
       }
       return (
-        <Pressable onPress={() => selectedMsgId ? setSelectedMsgId(null) : undefined}>
+        <Pressable onPress={() => handleBubblePress(item.id)}>
           <MessageBubble
             message={item}
             isDark={dark}
@@ -537,15 +548,12 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             onLongPress={() => handleLongPress(item.id)}
             showReactionPicker={selectedMsgId === item.id}
             onReaction={(emoji) => handleReaction(item.id, emoji)}
-            onCopy={() => {
-              Clipboard.setStringAsync(item.body).catch(() => {});
-              setSelectedMsgId(null);
-            }}
+            onCopy={() => handleCopy(item.body)}
           />
         </Pressable>
       );
     },
-    [dark, colors, typography, reactions, selectedMsgId, handleLongPress, handleReaction],
+    [dark, colors, typography, reactions, selectedMsgId, handleLongPress, handleReaction, handleCopy, handleBubblePress],
   );
 
   const keyExtractor = useCallback((item: ListItem) => isSeparator(item) ? item.id : item.id, []);
