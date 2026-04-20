@@ -233,18 +233,13 @@ export function SettingsScreen() {
         {!searchQuery.trim() && (
           <View style={{ paddingHorizontal: spacing.md }}>
             <CupertinoListSection header="Appearance">
-              <CupertinoListTile
-                title="Dark Mode"
-                leading={{
-                  name: 'moon',
-                  color: '#FFFFFF',
-                  backgroundColor: '#000000',
-                }}
-                trailing={
-                  <CupertinoSwitch value={isDark} onValueChange={toggleTheme} />
-                }
-                showChevron={false}
-              />
+              <View style={{ padding: spacing.md }}>
+                <CupertinoSegmentedControl
+                  values={['Light', 'Dark', 'Automatic']}
+                  selectedIndex={mode === 'light' ? 0 : mode === 'dark' ? 1 : 2}
+                  onChange={(i) => setThemeMode(i === 0 ? 'light' : i === 1 ? 'dark' : 'system')}
+                />
+              </View>
             </CupertinoListSection>
           </View>
         )}
