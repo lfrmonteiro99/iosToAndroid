@@ -40,6 +40,7 @@ import java.util.Locale
 class LauncherModule : Module() {
     companion object {
         var flashlightState = false
+        private val PHONE_REGEX = Regex("^[+0-9*#(). -]{1,20}$")
     }
 
     private val context: Context
@@ -610,7 +611,11 @@ class LauncherModule : Module() {
 
         AsyncFunction("makeCall") { number: String ->
             try {
-                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
+                val clean = number.trim()
+                if (!PHONE_REGEX.matches(clean)) {
+                    return@AsyncFunction false
+                }
+                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(clean)}"))
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 true
