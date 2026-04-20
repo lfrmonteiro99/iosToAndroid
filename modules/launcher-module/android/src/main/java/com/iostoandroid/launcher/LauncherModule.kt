@@ -41,6 +41,7 @@ class LauncherModule : Module() {
     companion object {
         var flashlightState = false
         private val PHONE_REGEX = Regex("^[+0-9*#(). -]{1,20}$")
+        private val PKG_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+\$")
     }
 
     private val context: Context
@@ -77,12 +78,16 @@ class LauncherModule : Module() {
         }
 
         AsyncFunction("launchApp") { packageName: String ->
+            if (!PKG_REGEX.matches(packageName)) {
+                return@AsyncFunction false
+            }
             val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                true
-            } else { false }
+            if (intent == null) {
+                return@AsyncFunction false  // not installed or not launchable
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
         }
 
         AsyncFunction("getAppIcon") { packageName: String ->
