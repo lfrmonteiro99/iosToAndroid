@@ -79,7 +79,6 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   const [permissionStatus, setPermissionStatus] = useState<'undetermined' | 'granted' | 'denied'>('undetermined');
   const [canAskAgain, setCanAskAgain] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [skeletonLoading, setSkeletonLoading] = useState(true);
   const [selectedMemory, setSelectedMemory] = useState<{ title: string } | null>(null);
 
   // ---- Library tab state ----
@@ -113,14 +112,6 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
     return () => {
       mountedRef.current = false;
     };
-  }, []);
-
-  // ---- Skeleton loading timer (800ms) ----
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mountedRef.current) setSkeletonLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
   }, []);
 
   // ------------------------------------------------------------------
@@ -512,7 +503,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         // ============================================================
         // Library Tab
         // ============================================================
-        skeletonLoading ? (
+        loading ? (
           // Skeleton loading grid
           <ScrollView contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
             {/* Memories skeleton */}
