@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -38,7 +39,7 @@ export function ProfileScreen() {
 
   const handleTakePhoto = async () => {
     setShowAvatarSheet(false);
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => ImagePicker.requestCameraPermissionsAsync());
     if (status !== 'granted') {
       alert('Permission Required', 'Camera permission is needed to take a photo.');
       return;
@@ -55,7 +56,7 @@ export function ProfileScreen() {
 
   const handleChooseFromLibrary = async () => {
     setShowAvatarSheet(false);
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => ImagePicker.requestMediaLibraryPermissionsAsync());
     if (status !== 'granted') {
       alert('Permission Required', 'Photo library permission is needed to choose a photo.');
       return;

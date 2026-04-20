@@ -239,7 +239,7 @@ async function requestNotificationPermissions(): Promise<{
     const existing = await Notifications.getPermissionsAsync();
     if (existing.status === 'granted') return { granted: true, canAskAgain: true };
     if (!existing.canAskAgain) return { granted: false, canAskAgain: false };
-    const result = await Notifications.requestPermissionsAsync();
+    const result = await withAutoLockSuppressed(() => Notifications.requestPermissionsAsync());
     return { granted: result.status === 'granted', canAskAgain: result.canAskAgain };
   } catch {
     return { granted: false, canAskAgain: false };

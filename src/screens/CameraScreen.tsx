@@ -79,7 +79,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
 
   const saveToLibrary = useCallback(async (uri: string) => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await withAutoLockSuppressed(() => MediaLibrary.requestPermissionsAsync());
       if (status === 'granted') {
         await MediaLibrary.saveToLibraryAsync(uri);
       }

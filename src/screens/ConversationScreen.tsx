@@ -17,6 +17,7 @@ import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
@@ -424,7 +425,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, [address]);
 
   const handleCameraButton = useCallback(async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => ImagePicker.requestCameraPermissionsAsync());
     if (status !== 'granted') {
       alert('Permission Denied', 'Camera access is required to take photos.');
       return;
@@ -438,7 +439,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, [alert, addImageMessage]);
 
   const handlePhotoLibraryButton = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => ImagePicker.requestMediaLibraryPermissionsAsync());
     if (status !== 'granted') {
       alert('Permission Denied', 'Photo library access is required to select photos.');
       return;

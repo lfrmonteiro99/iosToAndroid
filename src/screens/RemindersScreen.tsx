@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
@@ -75,7 +76,7 @@ async function requestNotificationPermissions(): Promise<boolean> {
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === 'granted') return true;
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => Notifications.requestPermissionsAsync());
     return status === 'granted';
   } catch {
     return false;

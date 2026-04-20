@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
@@ -140,7 +141,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         setLoading(false);
         return;
       }
-      const result = await MediaLibrary.requestPermissionsAsync();
+      const result = await withAutoLockSuppressed(() => MediaLibrary.requestPermissionsAsync());
       setPermissionStatus(result.status === 'granted' ? 'granted' : 'denied');
       setCanAskAgain(result.canAskAgain);
     } catch {

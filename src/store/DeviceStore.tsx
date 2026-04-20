@@ -368,7 +368,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [getLauncherModule]);
 
   const requestContactsPermission = useCallback(async () => {
-    const { status } = await Contacts.requestPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => Contacts.requestPermissionsAsync());
     if (status === 'granted') {
       const contacts = await loadContacts();
       setState(prev => ({ ...prev, contacts }));

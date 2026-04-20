@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { useDevice } from '../store/DeviceStore';
 import { CupertinoNavigationBar } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
@@ -67,7 +68,7 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
         // Request location permission here (non-blocking for the rest of the app)
         let locationQuery = '';
         try {
-          const { status } = await Location.requestForegroundPermissionsAsync();
+          const { status } = await withAutoLockSuppressed(() => Location.requestForegroundPermissionsAsync());
           if (status === 'granted') {
             const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
             locationQuery = `${loc.coords.latitude.toFixed(4)},${loc.coords.longitude.toFixed(4)}`;
