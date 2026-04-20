@@ -73,7 +73,8 @@ export function CupertinoSlider({
       runOnJS(updateValue)(e.x);
     });
 
-  const composed = Gesture.Race(pan, tap);
+  // Exclusive(pan, tap) — pan wins on held drag; tap still registers on a single quick press.
+  const composed = Gesture.Exclusive(pan, tap);
 
   return (
     <GestureDetector gesture={composed}>
