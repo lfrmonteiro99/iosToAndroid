@@ -966,6 +966,20 @@ class LauncherModule : Module() {
             }
             perms
         }
+
+        // ── Lifecycle ────────────────────────────────────────────────────
+
+        OnDestroy {
+            // Best-effort cleanup: unregister any lingering BroadcastReceivers and
+            // clear the companion-object back-reference so NotificationService stops
+            // routing events to a stale module instance.
+            try {
+                BluetoothDiscoveryReceiver.unregister(
+                    appContext.reactContext ?: return@OnDestroy
+                )
+            } catch (_: Exception) {}
+            instance = null
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
