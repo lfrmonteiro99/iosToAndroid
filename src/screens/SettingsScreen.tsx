@@ -14,6 +14,7 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoSearchBar,
+  CupertinoSegmentedControl,
 } from '../components';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
 
@@ -29,7 +30,7 @@ interface SettingsItem {
 }
 
 export function SettingsScreen() {
-  const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
+  const { theme, typography, spacing, isDark, mode, setThemeMode } = useTheme();
   const { colors } = theme;
   const navigation = useNavigation<AppNavigationProp>();
   const insets = useSafeAreaInsets();

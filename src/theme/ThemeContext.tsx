@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from 'react-native';
 import { useSettings } from '../store/SettingsStore';
 import {
   CupertinoTheme,
@@ -16,6 +17,8 @@ import {
 const THEME_STORAGE_KEY = '@iostoandroid/theme_preference';
 const ACCENT_STORAGE_KEY = '@iostoandroid/accent_color';
 const HIGH_CONTRAST_STORAGE_KEY = '@iostoandroid/high_contrast';
+
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 const TEXT_SIZE_SCALE: Record<number, number> = { 0: 0.85, 1: 1.0, 2: 1.15, 3: 1.3 };
 
@@ -58,11 +61,13 @@ interface ThemeContextValue {
   animation: typeof AnimationConfig;
   isDark: boolean;
   isReady: boolean;
+  mode: ThemeMode;
   accentColor: AccentColorKey;
   highContrast: boolean;
   textScale: number;
   toggleTheme: () => void;
   setDark: (dark: boolean) => void;
+  setThemeMode: (m: ThemeMode) => void;
   setAccentColor: (color: AccentColorKey) => void;
   setHighContrast: (enabled: boolean) => void;
 }
@@ -70,14 +75,16 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Initial value: defaults to false, real value set after AsyncStorage hydration
-  const [isDark, setIsDark] = useState(false);
+  const [mode, setMode] = useState<ThemeMode>('system');
   const [isReady, setIsReady] = useState(false);
-  const [hasUserOverride, setHasUserOverride] = useState(false);
   const [accentColor, setAccentColorState] = useState<AccentColorKey>('blue');
   const [highContrast, setHighContrastState] = useState(false);
 
   const { settings } = useSettings();
+
+  // Derive isDark from mode + system color scheme
+  const systemScheme = useColorScheme();
+  const isDark = mode === 'system' ? systemScheme === 'dark' : mode === 'dark';
 
   // Hydrate saved preferences on mount
   useEffect(() => {
@@ -86,10 +93,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.getItem(ACCENT_STORAGE_KEY),
       AsyncStorage.getItem(HIGH_CONTRAST_STORAGE_KEY),
     ]).then(([storedTheme, storedAccent, storedHighContrast]) => {
-      if (storedTheme !== null) {
-        setHasUserOverride(true);
-        setIsDark(storedTheme === 'dark');
+      if (storedTheme === 'light' || storedTheme === 'dark') {
+        setMode(storedTheme);
+      } else if (storedTheme === 'system') {
+        setMode('system');
       }
+      // unknown/missing → keep default 'system'
       if (storedAccent !== null && storedAccent in AccentColors) {
         setAccentColorState(storedAccent as AccentColorKey);
       }
@@ -100,12 +109,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Persist theme on change
+  // Persist mode on change
   useEffect(() => {
-    if (isReady && hasUserOverride) {
-      AsyncStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
+    if (isReady) {
+      AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
     }
-  }, [isDark, isReady, hasUserOverride]);
+  }, [mode, isReady]);
 
   // Persist accent color on change
   useEffect(() => {
@@ -121,26 +130,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [highContrast, isReady]);
 
-  // Auto dark mode based on time of day (7pm–7am) when no user override
-  useEffect(() => {
-    if (hasUserOverride) return;
-    const applyTimeDark = () => {
-      const hour = new Date().getHours();
-      setIsDark(hour >= 19 || hour < 7);
-    };
-    const timer = setTimeout(applyTimeDark, 0);
-    const interval = setInterval(applyTimeDark, 60000);
-    return () => { clearTimeout(timer); clearInterval(interval); };
-  }, [hasUserOverride]);
-
+  // Toggle between 'light' and 'dark' (ignores system) — kept for back-compat
   const toggleTheme = useCallback(() => {
-    setHasUserOverride(true);
-    setIsDark((prev) => !prev);
+    setMode((m) => (m === 'dark' ? 'light' : 'dark'));
   }, []);
 
   const setDark = useCallback((dark: boolean) => {
-    setHasUserOverride(true);
-    setIsDark(dark);
+    setMode(dark ? 'dark' : 'light');
+  }, []);
+
+  const setThemeMode = useCallback((m: ThemeMode) => {
+    setMode(m);
   }, []);
 
   const setAccentColor = useCallback((color: AccentColorKey) => {
@@ -163,15 +163,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       animation: AnimationConfig,
       isDark,
       isReady,
+      mode,
       accentColor,
       highContrast,
       textScale,
       toggleTheme,
       setDark,
+      setThemeMode,
       setAccentColor,
       setHighContrast,
     }),
-    [isDark, isReady, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setAccentColor, setHighContrast]
+    [isDark, isReady, mode, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setThemeMode, setAccentColor, setHighContrast]
   );
 
   if (!isReady) return null;

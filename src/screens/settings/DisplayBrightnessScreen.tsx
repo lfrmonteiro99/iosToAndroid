@@ -21,7 +21,7 @@ const NIGHT_SHIFT_KEY = '@iostoandroid/night_shift';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, typography, spacing, isDark, toggleTheme } = useTheme();
+  const { theme, typography, spacing, isDark, mode, setThemeMode } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
@@ -117,12 +117,12 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
                   <Text style={[typography.caption1, { color: colors.label, marginTop: 8 }]}>Dark</Text>
                 </View>
               </View>
+              <CupertinoSegmentedControl
+                values={['Light', 'Dark', 'Automatic']}
+                selectedIndex={mode === 'light' ? 0 : mode === 'dark' ? 1 : 2}
+                onChange={(i) => setThemeMode(i === 0 ? 'light' : i === 1 ? 'dark' : 'system')}
+              />
             </View>
-            <CupertinoListTile
-              title="Dark Mode"
-              trailing={<CupertinoSwitch value={isDark} onValueChange={toggleTheme} />}
-              showChevron={false}
-            />
           </CupertinoListSection>
         </View>
 

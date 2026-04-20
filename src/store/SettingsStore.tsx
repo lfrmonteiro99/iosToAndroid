@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setHapticsEnabled } from '../utils/haptics';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -197,6 +198,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
     return () => sub.remove();
   }, [syncFromDevice]);
+
+  // Sync vibration setting to haptics cache
+  useEffect(() => {
+    setHapticsEnabled(settings.vibration !== false);
+  }, [settings.vibration]);
 
   const update = useCallback(<K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
