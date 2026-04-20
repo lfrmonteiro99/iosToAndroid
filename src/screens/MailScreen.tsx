@@ -100,12 +100,25 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   const persistEmails = useCallback((updated: Email[]) => {
     AsyncStorage.setItem(INBOX_KEY, JSON.stringify(updated)).catch(() => { /* ignore */ });
   }, []);
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const MAX_BODY = 100_000;
+
+  const routeParams = (route?.params ?? {}) as {
+    composeTo?: unknown; composeSubject?: unknown; composeBody?: unknown;
+  };
+  const initialCompose = typeof routeParams.composeTo === 'string' && EMAIL_RE.test(routeParams.composeTo)
+    ? routeParams.composeTo : '';
+  const initialSubject = typeof routeParams.composeSubject === 'string'
+    ? routeParams.composeSubject : '';
+  const initialBody = typeof routeParams.composeBody === 'string'
+    ? routeParams.composeBody.slice(0, MAX_BODY) : '';
+
   // Initialize compose state from route params if navigated here to compose
-  const initialCompose = route?.params?.composeTo;
   const [showCompose, setShowCompose] = useState(!!initialCompose);
-  const [composeTo, setComposeTo] = useState(initialCompose ?? '');
-  const [composeSubject, setComposeSubject] = useState(route?.params?.composeSubject ?? '');
-  const [composeBody, setComposeBody] = useState(route?.params?.composeBody ?? '');
+  const [composeTo, setComposeTo] = useState(initialCompose);
+  const [composeSubject, setComposeSubject] = useState(initialSubject);
+  const [composeBody, setComposeBody] = useState(initialBody);
 
   const unreadCount = emails.filter(e => !e.isRead).length;
 
