@@ -70,9 +70,8 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Initial value: apply time-based rule immediately
-  const initHour = new Date().getHours();
-  const [isDark, setIsDark] = useState(initHour >= 19 || initHour < 7);
+  // Initial value: defaults to false, real value set after AsyncStorage hydration
+  const [isDark, setIsDark] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [hasUserOverride, setHasUserOverride] = useState(false);
   const [accentColor, setAccentColorState] = useState<AccentColorKey>('blue');
@@ -174,6 +173,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }),
     [isDark, isReady, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setAccentColor, setHighContrast]
   );
+
+  if (!isReady) return null;
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
