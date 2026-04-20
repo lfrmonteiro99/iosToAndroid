@@ -4,7 +4,7 @@ module.exports = function (api) {
   const plugins = ['react-native-reanimated/plugin'];
 
   if (process.env.NODE_ENV === 'production') {
-    plugins.push('transform-remove-console');
+    plugins.push(['transform-remove-console', { exclude: ['error', 'warn'] }]);
   }
 
   return {
