@@ -201,7 +201,7 @@ jest.mock('react-native-gesture-handler', () => {
     GestureDetector: 'View',
     Gesture: {
       Pan: () => {
-        const g = { onUpdate: () => g, onEnd: () => g, onBegin: () => g, onFinalize: () => g, minDistance: () => g, enabled: () => g, activeOffsetX: () => g, activeOffsetY: () => g, failOffsetX: () => g, failOffsetY: () => g, simultaneousWithExternalGesture: () => g, withRef: () => g, onChange: () => g, onStart: () => g, onTouchesBegan: () => g, onTouchesMove: () => g, onTouchesUp: () => g, onTouchesCancelled: () => g };
+        const g = { onUpdate: () => g, onEnd: () => g, onBegin: () => g, onFinalize: () => g, minDistance: () => g, enabled: () => g, activeOffsetX: () => g, activeOffsetY: () => g, failOffsetX: () => g, failOffsetY: () => g, simultaneousWithExternalGesture: () => g, withRef: () => g, onChange: () => g, onStart: () => g, onTouchesBegan: () => g, onTouchesMove: () => g, onTouchesUp: () => g, onTouchesCancelled: () => g, hitSlop: () => g, maxPointers: () => g, minPointers: () => g, averageTouches: () => g };
         return g;
       },
       Tap: () => {
@@ -240,7 +240,12 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn(), getParent: () => ({ navigate: jest.fn() }) }),
+  useNavigation: () => ({
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+    canGoBack: jest.fn(() => false),
+    getParent: () => ({ navigate: jest.fn() }),
+  }),
   useRoute: () => ({ params: {} }),
   NavigationContainer: ({ children }) => children,
 }));

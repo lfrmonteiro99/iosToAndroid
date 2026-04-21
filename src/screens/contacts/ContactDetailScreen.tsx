@@ -11,6 +11,7 @@ import {
   CupertinoListTile,
   CupertinoButton,
   CupertinoAlertDialog,
+  BackEdgeSwipe,
 } from '../../components';
 import type { AppNavigationProp, AppRouteProp } from '../../navigation/types';
 
@@ -66,6 +67,7 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
 
   if (!contact) {
     return (
+      <BackEdgeSwipe>
       <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
         <CupertinoNavigationBar
           title="Contact"
@@ -81,6 +83,7 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
           <Text style={[typography.body, { color: colors.secondaryLabel }]}>Contact not found.</Text>
         </View>
       </View>
+      </BackEdgeSwipe>
     );
   }
 
@@ -115,6 +118,7 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
   ];
 
   return (
+    <BackEdgeSwipe>
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
       <CupertinoNavigationBar
         title={fullName}
@@ -270,6 +274,7 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
         ]}
       />
     </View>
+    </BackEdgeSwipe>
   );
 }
 

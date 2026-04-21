@@ -18,6 +18,8 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
 import { HomeIndicator } from './src/components/HomeIndicator';
+import { QuickSwitchHomeBar } from './src/components/QuickSwitchHomeBar';
+import { GestureHost } from './src/components/GestureHost';
 import { AssistiveTouch } from './src/components/AssistiveTouch';
 import { AssistiveTouchProvider, useAssistiveTouch } from './src/store/AssistiveTouchStore';
 import { LockScreen } from './src/screens/LockScreen';
@@ -211,10 +213,17 @@ function AppContent() {
     <View style={{ flex: 1 }}>
       <StatusBar style={isDark ? 'light' : 'dark'} hidden />
       <ReachabilityShifter>
-        <NavigationContainer ref={navigationRef}>
-          <TabNavigator />
-        </NavigationContainer>
+        <GestureHost>
+          <NavigationContainer ref={navigationRef}>
+            <TabNavigator />
+          </NavigationContainer>
+        </GestureHost>
       </ReachabilityShifter>
+
+      {/* Horizontal quick-switch strip — sits one z-level below the pill so
+          vertical gestures on the pill still win. Handles leftward/rightward
+          swipes on the home-bar zone to switch to recent apps. */}
+      <QuickSwitchHomeBar />
 
       {/* iOS-style home indicator — floats above every screen and owns the
           swipe-up-to-home / swipe-up-and-hold-for-switcher gesture. */}

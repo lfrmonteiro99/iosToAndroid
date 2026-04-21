@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useContacts } from '../store/ContactsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
-import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton, SkeletonListRow } from '../components';
+import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton, SkeletonListRow, BackEdgeSwipe } from '../components';
 
 function groupByLetter(contacts: DeviceContact[]) {
   const groups: Record<string, DeviceContact[]> = {};
@@ -161,6 +161,7 @@ export function ContactsScreen() {
   );
 
   return (
+    <BackEdgeSwipe>
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
       <CupertinoNavigationBar
@@ -265,6 +266,7 @@ export function ContactsScreen() {
         cancelLabel="Cancel"
       />
     </View>
+    </BackEdgeSwipe>
   );
 }
 

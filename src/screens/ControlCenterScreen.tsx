@@ -34,6 +34,7 @@ import { SystemColors } from '../theme/CupertinoTheme';
 import { useAlert } from '../components';
 import * as Haptics from 'expo-haptics';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticSelection } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -271,11 +272,19 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
     device.setVolume(pct);
   }, [device]);
 
+  const prevBrightnessPct = useSharedValue(device.brightness);
+  const prevVolumePct = useSharedValue(device.volume);
+
   const brightnessPanGesture = Gesture.Pan()
     .onUpdate((e) => {
       // e.y is relative to the gesture view; map to fill height
       const fill = Math.max(0, Math.min(SLIDER_HEIGHT, SLIDER_HEIGHT - e.y));
       brightnessFill.value = fill;
+      const pct = fill / SLIDER_HEIGHT;
+      if ((prevBrightnessPct.value > 0 && pct === 0) || (prevBrightnessPct.value < 1 && pct === 1)) {
+        runOnJS(hapticSelection)();
+      }
+      prevBrightnessPct.value = pct;
     })
     .onEnd(() => {
       const pct = Math.max(0, Math.min(1, brightnessFill.value / SLIDER_HEIGHT));
@@ -290,12 +299,17 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
       runOnJS(applyBrightness)(pct);
     });
 
-  const brightnessGesture = Gesture.Race(brightnessPanGesture, brightnessTapGesture);
+  const brightnessGesture = Gesture.Exclusive(brightnessTapGesture, brightnessPanGesture);
 
   const volumePanGesture = Gesture.Pan()
     .onUpdate((e) => {
       const fill = Math.max(0, Math.min(SLIDER_HEIGHT, SLIDER_HEIGHT - e.y));
       volumeFill.value = fill;
+      const pct = fill / SLIDER_HEIGHT;
+      if ((prevVolumePct.value > 0 && pct === 0) || (prevVolumePct.value < 1 && pct === 1)) {
+        runOnJS(hapticSelection)();
+      }
+      prevVolumePct.value = pct;
     })
     .onEnd(() => {
       const pct = Math.max(0, Math.min(1, volumeFill.value / SLIDER_HEIGHT));
@@ -310,7 +324,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
       runOnJS(applyVolume)(pct);
     });
 
-  const volumeGesture = Gesture.Race(volumePanGesture, volumeTapGesture);
+  const volumeGesture = Gesture.Exclusive(volumeTapGesture, volumePanGesture);
 
   const brightnessFillStyle = useAnimatedStyle(() => ({
     height: brightnessFill.value,
