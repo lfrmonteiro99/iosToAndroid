@@ -20,6 +20,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.StatFs
 import android.telephony.TelephonyManager
@@ -47,29 +48,24 @@ class LauncherModule : Module() {
 
         /**
          * Called by [NotificationService] to forward notification events to JavaScript.
-         * Thread-safe: uses the volatile instance reference and the RCTDeviceEventEmitter.
+         * Uses Expo's built-in event emitter — declared via Events(...) in the definition.
          */
-        fun emitEvent(name: String, map: com.facebook.react.bridge.WritableMap) {
-            instance?.sendEventToJS(name, map)
+        fun emitEvent(name: String, bundle: Bundle) {
+            try {
+                instance?.sendEvent(name, bundle)
+            } catch (_: Throwable) {
+                // AppContext may not be ready, or listeners may not be attached yet.
+            }
         }
     }
 
     private val context: Context
         get() = appContext.reactContext ?: throw Exception("React context is not available")
 
-    /**
-     * Emit an arbitrary event to the JS DeviceEventEmitter.
-     * Must be called on any thread — the emitter is thread-safe.
-     */
-    fun sendEventToJS(name: String, map: com.facebook.react.bridge.WritableMap) {
-        val reactContext = appContext.reactContext ?: return
-        reactContext
-            .getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            ?.emit(name, map)
-    }
-
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
+
+        Events("onNotificationPosted", "onNotificationRemoved")
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
