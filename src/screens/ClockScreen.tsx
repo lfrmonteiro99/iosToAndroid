@@ -8,6 +8,7 @@ import {
   Modal,
   Linking,
   Platform,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -346,6 +347,7 @@ function WorldClockTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [openCityId, setOpenCityId] = useState<string | null>(null);
+  const [tzTick, setTzTick] = useState(0); // forces re-render when TZ changes
 
   useEffect(() => {
     loadWorldClocks().then(setCities);
@@ -354,6 +356,14 @@ function WorldClockTab() {
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Refresh timezone when app returns to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setTzTick((t) => t + 1);
+    });
+    return () => sub.remove();
   }, []);
 
   const persistCities = useCallback((next: WorldClock[]) => {
