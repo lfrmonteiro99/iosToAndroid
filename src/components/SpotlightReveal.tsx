@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   runOnJS,
   useFrameCallback,
 } from 'react-native-reanimated';
@@ -11,6 +10,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { gestureConfig } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight } from '../utils/gestureMachine';
+import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface SpotlightRevealProps {
   enabled: boolean;   // false when folder open / jiggling / anything that should suppress
@@ -18,6 +18,12 @@ interface SpotlightRevealProps {
 }
 
 export function SpotlightReveal({ enabled, onCommit }: SpotlightRevealProps) {
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+  }, [reduceMotion, reduceMotionShared]);
+
   const progress = useSharedValue(0);   // 0..1 relative to spotlightCommitDp
   const thresholdFired = useSharedValue(false);
   const buf = useVelocityBuffer();
@@ -57,10 +63,10 @@ export function SpotlightReveal({ enabled, onCommit }: SpotlightRevealProps) {
       const p = Math.min(1, Math.max(0, progress.value));
       const reason = commitForSpotlight({ progress: p, velocity: vy, holdMs: 0 });
       if (reason !== 'none') {
-        progress.value = withSpring(1.5, gestureConfig.spring.mediumSettle);
+        progress.value = settle(1.5, 'mediumSettle', reduceMotionShared.value);
         runOnJS(onCommit)();
       } else {
-        progress.value = withSpring(0, gestureConfig.spring.fastSettle);
+        progress.value = settle(0, 'fastSettle', reduceMotionShared.value);
       }
     });
 
@@ -87,15 +93,25 @@ export function SpotlightReveal({ enabled, onCommit }: SpotlightRevealProps) {
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}
       />
-      {/* Search field affordance */}
-      <Animated.View pointerEvents="none" style={[styles.fieldHolder, fieldStyle]}>
+      {/* Search field affordance — preview only, real field is on SpotlightSearchScreen */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.fieldHolder, fieldStyle]}
+        accessibilityLabel="Spotlight Search"
+        importantForAccessibility="no-hide-descendants"
+      >
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Search</Text>
         </View>
       </Animated.View>
-      {/* Invisible activation region below the status bar, above the bottom strip */}
+      {/* Invisible activation region — hidden from TalkBack */}
       <GestureDetector gesture={pan}>
-        <View style={styles.hitArea} collapsable={false} />
+        <View
+          style={styles.hitArea}
+          collapsable={false}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        />
       </GestureDetector>
     </>
   );

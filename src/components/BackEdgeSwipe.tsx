@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -6,7 +6,6 @@ import Animated, {
   useSharedValue,
   useFrameCallback,
   runOnJS,
-  withTiming,
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 
@@ -14,6 +13,7 @@ import { gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { commitForBack } from '../utils/gestureMachine';
 import { hapticSelection } from '../utils/haptics';
+import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -27,6 +27,12 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
   const navigation = useNavigation();
   // Don't activate on screens with nothing to go back to.
   const canGo = navigation.canGoBack();
+
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+  }, [reduceMotion, reduceMotionShared]);
 
   const progress = useSharedValue(0);
   const thresholdFired = useSharedValue(false);
@@ -71,9 +77,9 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
       const reason = commitForBack({ progress: progress.value, velocity: vx, holdMs: 0 });
       // The native gesture owns navigation; we just animate our edge shadow out.
       if (reason !== 'none') {
-        progress.value = withTiming(1, { duration: 120 });
+        progress.value = settle(1, 'backSettle', reduceMotionShared.value);
       } else {
-        progress.value = withTiming(0, { duration: 160 });
+        progress.value = settle(0, 'backSettle', reduceMotionShared.value);
       }
     });
 
@@ -89,7 +95,12 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ flex: 1 }}>
       <GestureDetector gesture={pan}>
-        <View style={styles.edgeCatch} collapsable={false} />
+        <View
+          style={styles.edgeCatch}
+          collapsable={false}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        />
       </GestureDetector>
       <View style={{ flex: 1 }}>{children}</View>
       <Animated.View pointerEvents="none" style={[styles.edgeShadow, edgeShadowStyle]} />

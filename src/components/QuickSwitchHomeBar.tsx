@@ -6,7 +6,6 @@ import Animated, {
   useAnimatedStyle,
   useFrameCallback,
   useSharedValue,
-  withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +13,7 @@ import { gestureConfig } from '../utils/gestureConfig';
 import { GestureHaptics } from '../utils/gestureHaptics';
 import { commitForQuickSwitch } from '../utils/gestureMachine';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
+import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import { useApps } from '../store/AppsStore';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -25,6 +25,11 @@ export function QuickSwitchHomeBar() {
   const { recentApps, apps, launchApp } = useApps();
 
   const insets = useSafeAreaInsets();
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+  }, [reduceMotion, reduceMotionShared]);
 
   // Shared values
   const currentT = useSharedValue(0);
@@ -91,18 +96,19 @@ export function QuickSwitchHomeBar() {
 
         if (canGo) {
           runOnJS(onCommitSwitch)(direction);
-          swipeOffset.value = withSpring(
+          swipeOffset.value = settle(
             dx < 0 ? -SCREEN_W : SCREEN_W,
-            gestureConfig.spring.softCarousel,
+            'softCarousel',
+            reduceMotionShared.value,
           );
         } else {
           // No destination — snap back
-          swipeOffset.value = withSpring(0, gestureConfig.spring.fastSettle);
+          swipeOffset.value = settle(0, 'fastSettle', reduceMotionShared.value);
         }
       } else {
-        swipeOffset.value = withSpring(0, gestureConfig.spring.fastSettle);
+        swipeOffset.value = settle(0, 'fastSettle', reduceMotionShared.value);
       }
-      previewOpacity.value = withSpring(0, gestureConfig.spring.fastSettle);
+      previewOpacity.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
   // Resolve display apps: [prev (index 2), current (index 0), next (index 1)]
@@ -125,9 +131,15 @@ export function QuickSwitchHomeBar() {
       <View
         style={[styles.strip, { paddingBottom: bottomPad }]}
         pointerEvents="auto"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
       >
-        {/* Preview row — only visible during drag */}
-        <Animated.View style={[styles.previewRow, rowStyle]}>
+        {/* Preview row — only visible during drag; hidden from screen readers */}
+        <Animated.View
+          style={[styles.previewRow, rowStyle]}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        >
           {/* Previous app slot (rightward swipe target) */}
           <View style={styles.appSlot}>
             {prevApp ? (

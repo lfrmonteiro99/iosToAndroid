@@ -7,7 +7,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   useFrameCallback,
-  withSpring,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
@@ -17,6 +16,7 @@ import { gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { useGestureMachine, commitForHome, commitForSwitcher } from '../utils/gestureMachine';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
+import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 import { useOptionalGestureHost } from './GestureHost';
 
 // Keep idle-dim constants local (not gesture thresholds — these are UI-only)
@@ -38,10 +38,15 @@ interface HomeIndicatorProps {
 export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'light' }: HomeIndicatorProps) {
   const insets = useSafeAreaInsets();
   const host = useOptionalGestureHost();
+  const reduceMotion = useGestureReduceMotion();
 
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reduceMotionShared = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+  }, [reduceMotion, reduceMotionShared]);
 
   // Frame-callback timestamp — updated every frame on the UI thread, safe to
   // read from inside Pan worklets without JS round-trips.
@@ -165,7 +170,7 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
 
       // Axis-lock: cancel if lateral drift exceeds threshold
       if (Math.abs(e.translationX) > gestureConfig.axisLockDp * 8) {
-        translateY.value = withSpring(0, gestureConfig.spring.homeSettle);
+        translateY.value = settle(0, 'homeSettle', reduceMotionShared.value);
         machine.phase.value = 'cancelled';
         return;
       }
@@ -188,7 +193,7 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
     })
     .onEnd((e) => {
       'worklet';
-      translateY.value = withSpring(0, gestureConfig.spring.homeSettle);
+      translateY.value = settle(0, 'homeSettle', reduceMotionShared.value);
 
       const dy = Math.min(0, e.translationY);
       const progress = Math.max(0, Math.min(1, -dy / gestureConfig.homeTravelDp));
@@ -201,9 +206,9 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
 
       if (machine.phase.value === 'cancelled') {
         if (host) {
-          host.scale.value = withSpring(1, gestureConfig.spring.homeSettle);
-          host.radius.value = withSpring(0, gestureConfig.spring.homeSettle);
-          host.shadow.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.scale.value = settle(1, 'homeSettle', reduceMotionShared.value);
+          host.radius.value = settle(0, 'homeSettle', reduceMotionShared.value);
+          host.shadow.value = settle(0, 'homeSettle', reduceMotionShared.value);
           host.mode.value = 'none';
         }
         return;
@@ -212,9 +217,9 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       // Switcher: hold was confirmed during drag
       if (machine.holdFired.value) {
         if (host) {
-          host.scale.value = withSpring(1, gestureConfig.spring.switcherSettle);
-          host.radius.value = withSpring(0, gestureConfig.spring.switcherSettle);
-          host.shadow.value = withSpring(0, gestureConfig.spring.switcherSettle);
+          host.scale.value = settle(1, 'switcherSettle', reduceMotionShared.value);
+          host.radius.value = settle(0, 'switcherSettle', reduceMotionShared.value);
+          host.shadow.value = settle(0, 'switcherSettle', reduceMotionShared.value);
           host.mode.value = 'none';
         }
         runOnJS(doSwitcher)();
@@ -225,18 +230,18 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       const homeResult = commitForHome({ progress, velocity: vy, holdMs });
       if (homeResult !== 'none') {
         if (host) {
-          host.scale.value = withSpring(1, gestureConfig.spring.homeSettle);
-          host.radius.value = withSpring(0, gestureConfig.spring.homeSettle);
-          host.shadow.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.scale.value = settle(1, 'homeSettle', reduceMotionShared.value);
+          host.radius.value = settle(0, 'homeSettle', reduceMotionShared.value);
+          host.shadow.value = settle(0, 'homeSettle', reduceMotionShared.value);
           host.mode.value = 'none';
         }
         runOnJS(doHome)();
       } else {
         // Cancelled by insufficient gesture — spring back to identity
         if (host) {
-          host.scale.value = withSpring(1, gestureConfig.spring.homeSettle);
-          host.radius.value = withSpring(0, gestureConfig.spring.homeSettle);
-          host.shadow.value = withSpring(0, gestureConfig.spring.homeSettle);
+          host.scale.value = settle(1, 'homeSettle', reduceMotionShared.value);
+          host.radius.value = settle(0, 'homeSettle', reduceMotionShared.value);
+          host.shadow.value = settle(0, 'homeSettle', reduceMotionShared.value);
           host.mode.value = 'none';
         }
       }

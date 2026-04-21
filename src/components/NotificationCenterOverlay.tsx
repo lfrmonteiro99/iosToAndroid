@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { gestureConfig } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForNC } from '../utils/gestureMachine';
+import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -26,6 +26,12 @@ interface Props {
 }
 
 export function NotificationCenterOverlay({ zone, onCommit }: Props) {
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+  }, [reduceMotion, reduceMotionShared]);
+
   const panelProgress = useSharedValue(0);
   const buf = useVelocityBuffer();
   const startedInZone = useSharedValue(false);
@@ -53,7 +59,7 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
     .onEnd((e) => {
       'worklet';
       if (!startedInZone.value) {
-        panelProgress.value = withSpring(0, gestureConfig.spring.fastSettle);
+        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
         return;
       }
       currentT.value = Date.now();
@@ -62,10 +68,10 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
       const progress = panelProgress.value;
       const reason = commitForNC({ progress, velocity: vy, holdMs: 0 });
       if (reason !== 'none') {
-        panelProgress.value = withSpring(1, gestureConfig.spring.mediumSettle);
+        panelProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value);
         runOnJS(onCommit)();
       } else {
-        panelProgress.value = withSpring(0, gestureConfig.spring.fastSettle);
+        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
       }
     });
 
@@ -95,8 +101,13 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
         pointerEvents="none"
       />
 
-      {/* Sliding preview sheet */}
-      <Animated.View style={[styles.sheet, sheetStyle]} pointerEvents="none">
+      {/* Sliding preview sheet — visual only, hidden from screen readers */}
+      <Animated.View
+        style={[styles.sheet, sheetStyle]}
+        pointerEvents="none"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+      >
         <View style={styles.handle} />
         <Text style={styles.title}>Notification Center</Text>
         <View style={styles.notifRow}>
@@ -106,7 +117,7 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
         </View>
       </Animated.View>
 
-      {/* Activation zone — intercepts touches in the top-left strip */}
+      {/* Activation zone — intercepts touches in the top-left strip; hidden from TalkBack */}
       <View
         style={[
           styles.activationZone,
@@ -118,6 +129,8 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
           },
         ]}
         pointerEvents="auto"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
       >
         <GestureDetector gesture={pan}>
           <View style={StyleSheet.absoluteFill} />
