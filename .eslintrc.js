@@ -28,6 +28,14 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     'react/prop-types': 'off',
+    // The react-hooks@7 React Compiler rules below flag legitimate
+    // react-native-reanimated worklet patterns (mutating shared values from
+    // gesture handlers, reading ref.current in render) as errors. Disabled
+    // until the plugin understands worklets.
+    'react-hooks/immutability': 'off',
+    'react-hooks/purity': 'off',
+    'react-hooks/refs': 'off',
+    'react-hooks/set-state-in-effect': 'off',
   },
   overrides: [
     {
