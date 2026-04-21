@@ -225,8 +225,10 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
       );
     }
 
+    if (!CameraViewComponent) return null;
+    const CameraView = CameraViewComponent;
     return (
-      <CameraViewComponent
+      <CameraView
         ref={cameraRef}
         style={styles.cameraPreview}
         facing={facing}

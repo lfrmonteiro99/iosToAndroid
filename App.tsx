@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
+import type { RootStackParamList } from './src/navigation/types';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
@@ -31,7 +32,7 @@ import { onBridgeError } from './modules/launcher-module/src';
 function AppContent() {
   const { isDark } = useTheme();
   const device = useDevice();
-  const navigationRef = useNavigationContainerRef();
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [isLocked, setIsLocked] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [banner, setBanner] = useState<BannerNotification | null>(null);

@@ -703,7 +703,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
                   try {
                     const mod = (await import('../../modules/launcher-module/src')).default;
                     await mod.openNotificationAccessSettings();
-                  } catch {}
+                  } catch {
+                    /* settings intent may be unavailable on some OEM builds */
+                  }
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Open notification access settings"

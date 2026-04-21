@@ -47,7 +47,7 @@ function scaleTypography(
       ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
       : style.fontWeight;
     // TypeScript cannot narrow assignment through a mapped key; cast to the concrete entry type
-    (result as Record<keyof typeof Typography, typeof style>)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight };
+    (result as Record<keyof typeof Typography, typeof style>)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight: fontWeight as typeof style.fontWeight };
   }
   return result;
 }

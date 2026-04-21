@@ -35,11 +35,11 @@ export const CupertinoButton = React.memo(function CupertinoButton({
   const { colors } = theme;
   const lastPressRef = useRef(0);
 
-  const handlePress = useCallback((e: GestureResponderEvent) => {
+  const handlePress = useCallback((_e: GestureResponderEvent) => {
     const now = Date.now();
     if (now - lastPressRef.current < 300) return;
     lastPressRef.current = now;
-    onPress?.(e);
+    onPress?.();
   }, [onPress]);
 
   const baseColor = destructive ? colors.systemRed : colors.systemBlue;
