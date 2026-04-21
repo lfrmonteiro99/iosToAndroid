@@ -51,7 +51,10 @@ import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
-import { zones } from '../utils/gestureConfig';
+import { zones, gestureConfig } from '../utils/gestureConfig';
+import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
+import { commitForSpotlight } from '../utils/gestureMachine';
+import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 
@@ -563,18 +566,72 @@ export function LauncherHomeScreen() {
     navigation.navigate(screen as any);
   }, [navigation]);
 
-  // Vertical swipe gesture: up → App Drawer only.
-  // Downward → Spotlight is handled by SpotlightReveal below.
-  // CC and NC top-zone swipes are handled by ControlCenterOverlay / NotificationCenterOverlay.
+  // Vertical swipe gesture on the home body:
+  //   up   → App Drawer
+  //   down → Spotlight (progress tracked into spotlightProgress; navigate on commit)
+  // CC and NC top-zone swipes are handled by the respective overlays' own
+  // activation zones (44dp top strip), which win over this parent gesture
+  // because they are nested children.
+  const spotlightProgress = useSharedValue(0);
+  const spotlightBuf = useVelocityBuffer();
+  const spotlightT = useSharedValue(0);
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+  }, [reduceMotion, reduceMotionShared]);
+
+  // Mirror of `canSpotlight` (computed from React state further below) so
+  // worklets can gate the gesture without touching JS state.
+  const canSpotlightShared = useSharedValue(true);
+
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      if (!canSpotlightShared.value) return;
+      if (e.translationY <= 0) {
+        spotlightProgress.value = 0;
+        return;
+      }
+      spotlightT.value = Date.now();
+      pushSample(spotlightBuf.value, e.translationX, e.translationY, spotlightT.value);
+      const dy = e.translationY;
+      if (dy < gestureConfig.spotlightRevealDp) {
+        spotlightProgress.value = 0;
+        return;
+      }
+      spotlightProgress.value = Math.min(
+        1.5,
+        (dy - gestureConfig.spotlightRevealDp) / gestureConfig.spotlightCommitDp,
+      );
+    })
     .onEnd((event) => {
       'worklet';
       const { translationY, velocityY } = event;
 
+      // Up-swipe → App Library
       if (translationY < -60 && velocityY < -200) {
+        spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
         runOnJS(navigateTo)('AppLibrary');
+        return;
       }
+
+      // Down-swipe → Spotlight (commit check)
+      if (canSpotlightShared.value && translationY > 0) {
+        spotlightT.value = Date.now();
+        pushSample(spotlightBuf.value, event.translationX, event.translationY, spotlightT.value);
+        const { vy } = sampledVelocity(spotlightBuf.value, spotlightT.value);
+        const p = Math.min(1, Math.max(0, spotlightProgress.value));
+        const reason = commitForSpotlight({ progress: p, velocity: vy, holdMs: 0 });
+        if (reason !== 'none') {
+          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value);
+          runOnJS(navigateTo)('SpotlightSearch');
+          return;
+        }
+      }
+
+      spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
   // Request permissions on first launch
@@ -749,6 +806,9 @@ export function LauncherHomeScreen() {
 
   // Spotlight reveal is suppressed when jiggling, folder is open, or action sheet is up
   const canSpotlight = !isJiggling && !actionSheet.visible && openFolder === null;
+  useEffect(() => {
+    canSpotlightShared.value = canSpotlight;
+  }, [canSpotlight, canSpotlightShared]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -1170,10 +1230,7 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Spotlight progressive reveal (downward swipe on home)             */}
       {/* ---------------------------------------------------------------- */}
-      <SpotlightReveal
-        enabled={canSpotlight}
-        onCommit={() => navigation.navigate('SpotlightSearch')}
-      />
+      <SpotlightReveal progress={spotlightProgress} />
 
       {/* ---------------------------------------------------------------- */}
       {/* Top-zone progressive reveal overlays (CC + NC)                    */}
