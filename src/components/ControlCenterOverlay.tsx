@@ -82,15 +82,22 @@ export function ControlCenterOverlay({ zone, onCommit }: Props) {
   const sheetStyle = useAnimatedStyle(() => {
     'worklet';
     const translateY = -SCREEN_HEIGHT * (1 - panelProgress.value);
+    // When fully retracted, drop the view out of the render tree so its
+    // layout-based hit area cannot absorb taps on the home content behind it.
+    const display = panelProgress.value <= 0.001 ? 'none' : 'flex';
     return {
       transform: [{ translateY }],
+      display,
     };
   });
 
   const backdropStyle = useAnimatedStyle(() => {
     'worklet';
+    const opacity = panelProgress.value * 0.5;
+    const display = panelProgress.value <= 0.001 ? 'none' : 'flex';
     return {
-      opacity: panelProgress.value * 0.5,
+      opacity,
+      display,
     };
   });
 
