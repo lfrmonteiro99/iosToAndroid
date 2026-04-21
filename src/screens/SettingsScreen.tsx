@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
-import { useSettings } from '../store/SettingsStore';
+import { useSettings, SettingsState } from '../store/SettingsStore';
 import { useDevice } from '../store/DeviceStore';
 import { useProfile } from '../store/ProfileStore';
 import {
@@ -23,7 +23,7 @@ interface SettingsItem {
   key: string;
   title: string;
   subtitle?: string;
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   iconBg: string;
   type: 'navigate' | 'switch';
   route?: keyof RootStackParamList;
@@ -117,7 +117,8 @@ export function SettingsScreen() {
       return;
     }
     if (item.route) {
-      (navigation as AppNavigationProp).navigate(item.route as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- route is a dynamic key from config
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- navigate() overloads require param spec; all settings routes have undefined params
+      (navigation as AppNavigationProp).navigate(item.route as any);
     }
   };
 
@@ -159,7 +160,7 @@ export function SettingsScreen() {
           title={item.title}
           subtitle={item.subtitle}
           leading={{
-            name: item.icon as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+            name: item.icon,
             color: '#FFFFFF',
             backgroundColor: item.iconBg,
           }}
@@ -171,7 +172,7 @@ export function SettingsScreen() {
             ) : (
               <CupertinoSwitch
                 value={settings[key] as boolean}
-                onValueChange={(v: boolean) => update(key, v as any)} // eslint-disable-line @typescript-eslint/no-explicit-any
+                onValueChange={(v: boolean) => update(key, v as SettingsState[typeof key])}
               />
             )
           }
@@ -187,7 +188,7 @@ export function SettingsScreen() {
         title={item.title}
         subtitle={item.subtitle}
         leading={{
-          name: item.icon as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          name: item.icon,
           color: '#FFFFFF',
           backgroundColor: item.iconBg,
         }}

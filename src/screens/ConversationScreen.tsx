@@ -32,6 +32,8 @@ import { useDevice, DeviceSms } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 // ─── Local message type extension ────────────────────────────────────────────
 
@@ -120,11 +122,15 @@ const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const BUBBLE_MAX_WIDTH = SCREEN_WIDTH * 0.75;
 
+function isLocalImageMessage(m: DeviceSms | LocalImageMessage): m is LocalImageMessage {
+  return typeof (m as LocalImageMessage).imageUri === 'string';
+}
+
 interface BubbleProps {
-  message: DeviceSms;
+  message: DeviceSms | LocalImageMessage;
   isDark: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   reactions?: string[];
   onLongPress?: () => void;
   showReactionPicker?: boolean;
@@ -201,17 +207,16 @@ const MessageBubble = React.memo(function MessageBubble({
           style={[
             styles.bubble,
             {
-              backgroundColor: (message as any).imageUri ? 'transparent' : bubbleBackground, // eslint-disable-line @typescript-eslint/no-explicit-any
+              backgroundColor: isLocalImageMessage(message) ? 'transparent' : bubbleBackground,
               maxWidth: BUBBLE_MAX_WIDTH,
               elevation: isSent ? 1 : 0,
             },
             isSent ? styles.bubbleSent : styles.bubbleReceived,
           ]}
         >
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {(message as any).imageUri ? (
+          {isLocalImageMessage(message) ? (
             <Image
-              source={{ uri: (message as any).imageUri }} // eslint-disable-line @typescript-eslint/no-explicit-any
+              source={{ uri: message.imageUri }}
               style={styles.imageBubble}
               resizeMode="cover"
             />

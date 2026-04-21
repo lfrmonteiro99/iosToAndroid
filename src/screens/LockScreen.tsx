@@ -33,6 +33,7 @@ import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+import type { AppNavigationProp } from '../navigation/types';
 
 const getLauncher = async () => {
   try {
@@ -301,8 +302,7 @@ function NotificationGroupCard({
 // Main Screen
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigationProp; onUnlock?: () => void }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings } = useSettings();

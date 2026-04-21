@@ -51,6 +51,8 @@ import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
 import { zones } from '../utils/gestureConfig';
+import type { AppNavigationProp } from '../navigation/types';
+import type { SettingsState } from '../store/SettingsStore';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -67,7 +69,7 @@ const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
 // Built-in app routing: packageName → navigation screen name
-const BUILT_IN_APPS: Record<string, string> = {
+const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.phone': 'Phone',
   'com.iostoandroid.messages': 'Messages',
   'com.iostoandroid.contacts': 'Contacts',
@@ -113,8 +115,7 @@ function formatTime(date: Date): string {
 // Dynamic Island
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function DynamicIsland({ device, settings, textScale = 1 }: { device: any; settings: any; textScale?: number }) {
+function DynamicIsland({ device, settings, textScale = 1 }: { device: ReturnType<typeof useDevice>; settings: SettingsState; textScale?: number }) {
   const isCharging = device.battery.isCharging;
   const hasDND = settings.focusMode !== 'off';
 
@@ -498,7 +499,7 @@ function NonAndroidFallback() {
 
 export function LauncherHomeScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<AppNavigationProp>();
 
   const {
     apps,
@@ -548,15 +549,17 @@ export function LauncherHomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
-      navigation.navigate(internalRoute);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BUILT_IN_APPS routes all have undefined params; navigate overloads require params spec
+      navigation.navigate(internalRoute as any);
     } else {
       launchApp(app.packageName);
     }
   }, [navigation, launchApp]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
-  const navigateTo = useCallback((screen: string) => {
-    navigation.navigate(screen);
+  const navigateTo = useCallback((screen: keyof RootStackParamList) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- screen is a valid route key; params are always undefined for launcher nav targets
+    navigation.navigate(screen as any);
   }, [navigation]);
 
   // Vertical swipe gesture: up → App Drawer only.
@@ -796,7 +799,7 @@ export function LauncherHomeScreen() {
         actions.push({ label: 'New Message', onPress: () => { closeActionSheet(); navigation.navigate('Conversation', { address: '' }); } });
         break;
       case 'com.iostoandroid.contacts':
-        actions.push({ label: 'Add Contact', onPress: () => { closeActionSheet(); navigation.navigate('ContactEdit'); } });
+        actions.push({ label: 'Add Contact', onPress: () => { closeActionSheet(); navigation.navigate('ContactEdit', {}); } });
         break;
       case 'com.iostoandroid.settings':
         actions.push({ label: 'Wi-Fi', onPress: () => { closeActionSheet(); navigation.navigate('WiFi'); } });

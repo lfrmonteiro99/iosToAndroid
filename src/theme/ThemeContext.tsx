@@ -46,8 +46,8 @@ function scaleTypography(
     const fontWeight = boldText
       ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
       : style.fontWeight;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (result as any)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight };
+    // TypeScript cannot narrow assignment through a mapped key; cast to the concrete entry type
+    (result as Record<keyof typeof Typography, typeof style>)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight };
   }
   return result;
 }

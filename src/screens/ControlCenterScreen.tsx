@@ -127,10 +127,8 @@ function ShortcutButton({ iconName, label, active = false, onPress, textScale = 
 // Main Screen
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ControlCenterScreen({ navigation }: { navigation: AppNavigationProp; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nav = useNavigation<any>();
+export function ControlCenterScreen({ navigation }: { navigation: AppNavigationProp }) {
+  const nav = useNavigation<AppNavigationProp>();
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings, update } = useSettings();

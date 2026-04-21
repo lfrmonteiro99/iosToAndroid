@@ -18,7 +18,7 @@ export interface BannerNotification {
   id: string;
   appName: string;
   appIcon?: string; // base64 URI for the app icon (square, like iOS)
-  iconName?: string; // Ionicons fallback name
+  iconName?: keyof typeof Ionicons.glyphMap; // Ionicons fallback name
   iconColor?: string; // Ionicons fallback bg color
   title: string;
   body: string;
@@ -138,7 +138,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
             ) : (
               <View style={[styles.appIcon, { backgroundColor: notification.iconColor || colors.systemBlue }]}>
                 <Ionicons
-                  name={(notification.iconName || 'notifications') as any} // eslint-disable-line @typescript-eslint/no-explicit-any
+                  name={(notification.iconName ?? 'notifications')}
                   size={16}
                   color="#FFFFFF"
                 />

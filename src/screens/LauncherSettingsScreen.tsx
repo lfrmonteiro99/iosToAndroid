@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, Modal, Pressable } from 'react-nativ
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
+import type { AppNavigationProp } from '../navigation/types';
 
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
@@ -35,7 +36,7 @@ const DOCK_LABELS: Record<string, string> = {
 };
 
 export function LauncherSettingsScreen() {
-  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<AppNavigationProp>();
   const themeCtx = useTheme();
   const { theme, typography, isDark, toggleTheme } = themeCtx;
   const { colors } = theme;

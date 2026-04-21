@@ -5,6 +5,7 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { AppNavigationProp } from '../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useProfile } from '../store/ProfileStore';
@@ -26,7 +27,7 @@ export function ProfileScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<AppNavigationProp>();
   const { profile, updateProfile } = useProfile();
   const { contacts, favorites, reset: resetContacts } = useContacts();
   const { reset: resetSettings } = useSettings();

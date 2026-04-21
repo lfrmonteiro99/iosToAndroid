@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 import {
   CupertinoNavigationBar,
   CupertinoSearchBar,
@@ -92,10 +94,8 @@ interface NoteRowProps {
   note: Note;
   onPress: () => void;
   onDelete: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 const NoteRow = React.memo(function NoteRow({

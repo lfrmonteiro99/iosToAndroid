@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { Typography } from '../theme/CupertinoTheme';
 import {
   CupertinoNavigationBar,
   CupertinoButton,
@@ -21,8 +22,7 @@ import {
   useAlert,
 } from '../components';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SectionHeader({ title, typography, color }: { title: string; typography: any; color: string }) {
+function SectionHeader({ title, typography, color }: { title: string; typography: typeof Typography; color: string }) {
   return (
     <Text
       style={[

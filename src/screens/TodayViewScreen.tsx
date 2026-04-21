@@ -150,7 +150,7 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
   const barColor = color ?? theme.colors.accent;
   return (
     <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.round(value * 100)}%` as any, backgroundColor: barColor }]} />
+      <View style={[styles.progressFill, { width: `${Math.round(value * 100)}%` as `${number}%`, backgroundColor: barColor }]} />
     </View>
   );
 }
@@ -243,7 +243,7 @@ function WeatherWidget({ temp, condition, icon, city }: { temp: number; conditio
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color="#FFD60A" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
-        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as any, textTransform: 'none', fontSize: 14 * textScale }]}>{city}</Text> : null}
+        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
         <Text style={styles.weatherTemp}>{temp}°C</Text>
@@ -487,7 +487,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { textScale } = useTheme();
-  const nav = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const nav = useNavigation<AppNavigationProp>();
 
   const today = useMemo(() => formatDate(new Date()), []);
 

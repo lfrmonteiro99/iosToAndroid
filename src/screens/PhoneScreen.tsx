@@ -20,6 +20,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { SkeletonListRow } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 const getLauncher = async () => {
   try {
@@ -82,8 +84,8 @@ function ContactAvatar({ contact, size = 40 }: { contact: DeviceContact; size?: 
 interface CallLogItemProps {
   call: CallLogEntry;
   isLast: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   onPress: () => void;
 }
 

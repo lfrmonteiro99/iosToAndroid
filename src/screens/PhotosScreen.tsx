@@ -23,6 +23,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoNavigationBar, CupertinoSegmentedControl, useAlert, CupertinoSkeleton } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 2;
@@ -638,8 +640,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
 // ======================================================================
 interface MemoriesSectionProps {
   onSelectMemory: (memory: { title: string }) => void;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSectionProps) {
@@ -672,8 +674,8 @@ function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSection
 interface ForYouTabProps {
   assets: MediaLibrary.Asset[];
   loading: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   insets: { bottom: number };
   onSelectAsset: (asset: MediaLibrary.Asset) => void;
 }
@@ -757,8 +759,8 @@ function ForYouTab({ assets, loading, colors, typography, insets, onSelectAsset 
 interface MemorySectionProps {
   title: string;
   assets: MediaLibrary.Asset[];
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   onSelectAsset: (asset: MediaLibrary.Asset) => void;
 }
 
@@ -798,8 +800,8 @@ interface AlbumsTabProps {
   albums: MediaLibrary.Album[];
   albumCovers: Record<string, string>;
   loading: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   insets: { bottom: number };
   showCreateAlbum: boolean;
   newAlbumName: string;

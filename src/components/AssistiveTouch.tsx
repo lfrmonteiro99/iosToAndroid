@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
+import type { RootStackParamList } from '../navigation/types';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -67,8 +68,7 @@ const FULLSCREEN_ROUTES = new Set(['Camera', 'CallScreen']);
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface AssistiveTouchProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  navigationRef: NavigationContainerRefWithCurrent<any>;
+  navigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────

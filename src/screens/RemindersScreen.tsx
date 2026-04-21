@@ -25,6 +25,8 @@ import {
   CupertinoEmptyState,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -217,10 +219,8 @@ interface ReminderRowProps {
   onDelete: () => void;
   onFlag: () => void;
   onEdit: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: CupertinoColors;
+  typography: typeof Typography;
   isOpen: boolean;
   onOpen: () => void;
 }
@@ -314,10 +314,8 @@ interface SmartListCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   count: number;
   onPress: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  themeColors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  themeColors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 const SmartListCard = React.memo(function SmartListCard({

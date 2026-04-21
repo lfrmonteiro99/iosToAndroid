@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState } from 'react';
 import { View, ScrollView, Pressable, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,8 +16,7 @@ function isValidEmail(e: string): boolean {
   return !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function EditProfileScreen({ navigation }: { navigation: AppNavigationProp; route: any }) {
+export function EditProfileScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const { profile, updateProfile } = useProfile();

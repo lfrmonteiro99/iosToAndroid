@@ -18,8 +18,11 @@ import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
 
 // Attempt to import expo-camera; gracefully handle if unavailable
-let CameraViewComponent: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
-let useCameraPermissionsHook: (() => [any, () => Promise<any>]) | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- CameraView is a dynamic optional module; exact type not available at build time
+let CameraViewComponent: React.ComponentType<any> | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+type PermissionResult = { granted: boolean; canAskAgain: boolean } | null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- useCameraPermissions shape varies across expo-camera versions
+let useCameraPermissionsHook: (() => [PermissionResult, () => Promise<PermissionResult>]) | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('expo-camera');
@@ -38,13 +41,12 @@ const useCamPerms = useCameraPermissionsHook ?? useStubPermissions;
 
 type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const { textScale } = useTheme();
-  // cameraRef is typed any because expo-camera ref methods vary by platform; we guard with optional chaining
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // cameraRef is unknown because expo-camera ref methods vary by platform; we guard with optional chaining
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- expo-camera ref API is untyped and accessed via optional chaining
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);
@@ -231,8 +233,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
         flash={flashOn ? 'on' : 'off'}
         mode={cameraMode}
         onCameraReady={onCameraReady}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onMountError={(event: any) => {
+        onMountError={(event: { nativeEvent?: { message?: string } }) => {
           const msg = event?.nativeEvent?.message ?? 'Could not start camera preview.';
           alert('Camera Error', msg);
         }}
