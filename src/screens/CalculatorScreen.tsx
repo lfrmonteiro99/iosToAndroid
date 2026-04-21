@@ -660,7 +660,11 @@ export function CalculatorScreen() {
           <View style={styles.historyPanel}>
             <View style={styles.historyHeader}>
               <Text style={styles.historyTitle}>History</Text>
-              <Pressable onPress={() => setShowHistory(false)}>
+              <Pressable
+                onPress={() => setShowHistory(false)}
+                accessibilityLabel="Close history"
+                accessibilityRole="button"
+              >
                 <Text style={styles.historyClose}>✕</Text>
               </Pressable>
             </View>
@@ -672,6 +676,8 @@ export function CalculatorScreen() {
                   <Pressable
                     key={idx}
                     onPress={() => selectHistory(entry)}
+                    accessibilityLabel={`Use result ${entry.result}`}
+                    accessibilityRole="button"
                     style={({ pressed }) => [
                       styles.historyItem,
                       pressed && { backgroundColor: '#2C2C2E' },
@@ -686,7 +692,12 @@ export function CalculatorScreen() {
               )}
             </ScrollView>
             {history.length > 0 && (
-              <Pressable onPress={clearHistory} style={styles.clearHistoryBtn}>
+              <Pressable
+                onPress={clearHistory}
+                style={styles.clearHistoryBtn}
+                accessibilityLabel="Clear all history"
+                accessibilityRole="button"
+              >
                 <Text style={styles.clearHistoryText}>Clear History</Text>
               </Pressable>
             )}
@@ -702,6 +713,8 @@ export function CalculatorScreen() {
             <Pressable
               onPress={() => setIsDeg(!isDeg)}
               style={styles.degRadToggle}
+              accessibilityLabel={isDeg ? 'Switch to radians' : 'Switch to degrees'}
+              accessibilityRole="button"
             >
               <Text style={styles.degRadText}>{isDeg ? 'DEG' : 'RAD'}</Text>
             </Pressable>

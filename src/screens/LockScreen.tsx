@@ -733,7 +733,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                           key="del"
                           style={styles.numpadKey}
                           onPress={handlePasscodeDelete}
-                          accessibilityLabel="Delete"
+                          accessibilityLabel="Delete digit"
+                          accessibilityRole="button"
                         >
                           <Ionicons name="backspace-outline" size={24} color="#fff" />
                         </Pressable>
@@ -745,6 +746,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                         style={styles.numpadKey}
                         onPress={() => handlePasscodeDigit(key)}
                         accessibilityLabel={`Digit ${key}`}
+                        accessibilityRole="button"
                       >
                         <Text style={styles.numpadKeyText}>{key}</Text>
                       </Pressable>
@@ -772,7 +774,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           <Pressable
             style={styles.circleButton}
             onPress={toggleFlashlight}
-            accessibilityLabel="Flashlight"
+            accessibilityLabel={flashlightOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+            accessibilityRole="button"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
               <Ionicons name="flashlight" size={22} color={flashlightOn ? '#000' : '#fff'} />
@@ -783,6 +786,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); triggerBiometric(); }}
               accessibilityLabel="Biometric unlock"
+              accessibilityRole="button"
               style={styles.biometricButton}
             >
               <Ionicons name="finger-print" size={28} color="rgba(255,255,255,0.75)" />
@@ -828,7 +832,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           <Pressable
             style={styles.circleButton}
             onPress={openCamera}
-            accessibilityLabel="Camera"
+            accessibilityLabel="Open camera"
+            accessibilityRole="button"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
               <Ionicons name="camera-outline" size={22} color="#fff" />

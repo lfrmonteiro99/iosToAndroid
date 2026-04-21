@@ -293,6 +293,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
             }
           }}
           accessibilityRole="button"
+          accessibilityLabel="Grant call log permission"
         >
           <Text style={[typography.subhead, { color: '#FFFFFF', fontWeight: '600' }]}>Grant Call Log Permission</Text>
         </TouchableOpacity>
@@ -450,6 +451,7 @@ function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void 
             onLongPress={() => setNumber('')}
             style={styles.keypadDeleteDisplay}
             accessibilityLabel="Delete digit"
+            accessibilityRole="button"
           >
             <Ionicons name="backspace-outline" size={26} color={colors.secondaryLabel} />
           </TouchableOpacity>
@@ -505,7 +507,8 @@ function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void 
               onPress={handleDelete}
               onLongPress={() => setNumber('')}
               style={styles.keypadBackspace}
-              accessibilityLabel="Delete"
+              accessibilityLabel="Delete digit"
+              accessibilityRole="button"
             >
               <Ionicons name="backspace-outline" size={28} color={colors.secondaryLabel} />
             </TouchableOpacity>
