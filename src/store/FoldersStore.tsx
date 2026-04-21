@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../utils/logger';
+import { migrateAsyncStorageKey } from './storage';
 
 const STORAGE_KEY = '@iostoandroid/folders';
+const FOLDERS_LEGACY_KEY = '@folders';
 
 export interface AppFolder {
   id: string;
@@ -31,12 +33,14 @@ export function FoldersProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
+    (async () => {
+      await migrateAsyncStorageKey(FOLDERS_LEGACY_KEY, STORAGE_KEY);
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         try { setFolders(JSON.parse(stored)); } catch (e) { logger.warn('FoldersStore', 'failed to parse stored folders', e); }
       }
       setIsReady(true);
-    });
+    })();
   }, []);
 
   useEffect(() => {

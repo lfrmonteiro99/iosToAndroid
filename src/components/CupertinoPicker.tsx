@@ -1,7 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ViewStyle } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticSelection } from '../utils/haptics';
 
 interface CupertinoPickerProps {
   items: string[];
@@ -45,7 +45,7 @@ export function CupertinoPicker({
       const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
       if (clampedIndex !== lastSelectedRef.current) {
         lastSelectedRef.current = clampedIndex;
-        Haptics.selectionAsync();
+        hapticSelection();
         onIndexChange(clampedIndex);
       }
     },

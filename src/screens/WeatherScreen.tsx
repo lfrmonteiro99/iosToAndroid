@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { useDevice } from '../store/DeviceStore';
 import { CupertinoNavigationBar } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
@@ -19,6 +20,20 @@ interface HourlyEntry {
   time: string;
   temp: number;
   icon: string;
+}
+
+/** Raw shapes returned by the wttr.in API */
+interface RawHourly {
+  time: string;
+  tempC: string;
+  weatherCode: string;
+}
+
+interface RawDay {
+  date: string;
+  maxtempC: string;
+  mintempC: string;
+  hourly: RawHourly[];
 }
 
 const ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -67,7 +82,7 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
         // Request location permission here (non-blocking for the rest of the app)
         let locationQuery = '';
         try {
-          const { status } = await Location.requestForegroundPermissionsAsync();
+          const { status } = await withAutoLockSuppressed(() => Location.requestForegroundPermissionsAsync());
           if (status === 'granted') {
             const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
             locationQuery = `${loc.coords.latitude.toFixed(4)},${loc.coords.longitude.toFixed(4)}`;
@@ -93,7 +108,7 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
 
         // Hourly from today
         const todayHours = data.weather?.[0]?.hourly ?? [];
-        const hrs: HourlyEntry[] = todayHours.slice(0, 8).map((h: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+        const hrs: HourlyEntry[] = (todayHours as RawHourly[]).slice(0, 8).map((h) => {
           const hour = parseInt(h.time, 10) / 100;
           const suffix = hour >= 12 ? 'PM' : 'AM';
           const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
@@ -110,13 +125,13 @@ export function WeatherScreen({ navigation }: WeatherScreenProps) {
         setHourly(hrs);
 
         // 5-day forecast
-        const days: ForecastDay[] = (data.weather ?? []).slice(0, 5).map((d: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+        const days: ForecastDay[] = ((data.weather ?? []) as RawDay[]).slice(0, 5).map((d) => {
           const dateStr = d.date;
           const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
           const dt = new Date(dateStr + 'T00:00:00');
           // Derive icon from average weather code of hourly data
           const avgCode = d.hourly?.length
-            ? d.hourly.reduce((sum: number, h: any) => sum + parseInt(h.weatherCode, 10), 0) / d.hourly.length // eslint-disable-line @typescript-eslint/no-explicit-any
+            ? d.hourly.reduce((sum: number, h: RawHourly) => sum + parseInt(h.weatherCode, 10), 0) / d.hourly.length
             : 116;
           let dayIcon = 'cloud';
           if (avgCode <= 113) dayIcon = 'sunny';

@@ -254,7 +254,7 @@ jobs:
         with:
           name: iosToAndroid-${{ needs.release.outputs.tag }}
           path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 90
+          retention-days: 365
 
       - name: Attach APK to GitHub release
         uses: softprops/action-gh-release@v2

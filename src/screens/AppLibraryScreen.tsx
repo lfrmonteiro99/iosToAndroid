@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
@@ -20,6 +19,7 @@ import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
 
 // ---------------------------------------------------------------------------
 // Category detection
@@ -292,7 +292,7 @@ const SearchResults = React.memo(function SearchResults({
 // Section Header helper
 // ---------------------------------------------------------------------------
 
-function SectionHeader({ title, colors }: { title: string; colors: any }) {
+function SectionHeader({ title, colors }: { title: string; colors: CupertinoColors }) {
   return (
     <Text style={[styles.sectionHeader, { color: colors.label }]}>{title}</Text>
   );

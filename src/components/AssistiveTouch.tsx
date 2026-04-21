@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
+import type { RootStackParamList } from '../navigation/types';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -67,8 +68,7 @@ const FULLSCREEN_ROUTES = new Set(['Camera', 'CallScreen']);
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface AssistiveTouchProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  navigationRef: NavigationContainerRefWithCurrent<any>;
+  navigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -144,6 +144,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
 
   // ── Radial menu state ─────────────────────────────────────────────────────
   const [menuOpen, setMenuOpen] = useState(false);
+  const [fullyOpen, setFullyOpen] = useState(false);
   const menuScale = useSharedValue(0);
   const menuOpacity = useSharedValue(0);
 
@@ -160,7 +161,16 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     menuOpacity.value = withTiming(0, { duration: 150 }, (finished) => {
       if (finished) runOnJS(setMenuOpen)(false);
     });
+    setFullyOpen(false);
   }, [menuScale, menuOpacity]);
+
+  useEffect(() => {
+    if (menuOpen) {
+      const t = setTimeout(() => setFullyOpen(true), 150);
+      return () => clearTimeout(t);
+    }
+    setFullyOpen(false);
+  }, [menuOpen]);
 
   // ── Action execution ──────────────────────────────────────────────────────
   const navigate = useCallback(
@@ -331,12 +341,14 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       {/* Radial menu — backdrop + popover. Backdrop is static so tapping
           outside always closes cleanly; only the popover itself animates. */}
       {menuOpen && (
-        <>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={closeMenu}
-            accessibilityLabel="Close AssistiveTouch menu"
-          />
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {fullyOpen && (
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={closeMenu}
+              accessibilityLabel="Close AssistiveTouch menu"
+            />
+          )}
           <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, menuStyle]}>
             <RadialMenu
               items={resolvedMenu}
@@ -347,7 +359,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
               isDark={isDark}
             />
           </Animated.View>
-        </>
+        </View>
       )}
 
       {/* Floating button */}

@@ -40,13 +40,39 @@ import java.util.Locale
 class LauncherModule : Module() {
     companion object {
         var flashlightState = false
+        private val PHONE_REGEX = Regex("^[+0-9*#(). -]{1,20}$")
+        private val PKG_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+\$")
+
+        @Volatile private var instance: LauncherModule? = null
+
+        /**
+         * Called by [NotificationService] to forward notification events to JavaScript.
+         * Thread-safe: uses the volatile instance reference and the RCTDeviceEventEmitter.
+         */
+        fun emitEvent(name: String, map: com.facebook.react.bridge.WritableMap) {
+            instance?.sendEventToJS(name, map)
+        }
     }
 
     private val context: Context
         get() = appContext.reactContext ?: throw Exception("React context is not available")
 
+    /**
+     * Emit an arbitrary event to the JS DeviceEventEmitter.
+     * Must be called on any thread — the emitter is thread-safe.
+     */
+    fun sendEventToJS(name: String, map: com.facebook.react.bridge.WritableMap) {
+        val reactContext = appContext.reactContext ?: return
+        reactContext
+            .getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            ?.emit(name, map)
+    }
+
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
+
+        // Register this module instance so NotificationService can route events through it.
+        instance = this@LauncherModule
 
         // ── Apps ─────────────────────────────────────────────────────────
 
@@ -76,12 +102,16 @@ class LauncherModule : Module() {
         }
 
         AsyncFunction("launchApp") { packageName: String ->
+            if (!PKG_REGEX.matches(packageName)) {
+                return@AsyncFunction false
+            }
             val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                true
-            } else { false }
+            if (intent == null) {
+                return@AsyncFunction false  // not installed or not launchable
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
         }
 
         AsyncFunction("getAppIcon") { packageName: String ->
@@ -610,7 +640,11 @@ class LauncherModule : Module() {
 
         AsyncFunction("makeCall") { number: String ->
             try {
-                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
+                val clean = number.trim()
+                if (!PHONE_REGEX.matches(clean)) {
+                    return@AsyncFunction false
+                }
+                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(clean)}"))
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 true
@@ -931,6 +965,20 @@ class LauncherModule : Module() {
                 perms["notifications"] = hasPermission(android.Manifest.permission.POST_NOTIFICATIONS)
             }
             perms
+        }
+
+        // ── Lifecycle ────────────────────────────────────────────────────
+
+        OnDestroy {
+            // Best-effort cleanup: unregister any lingering BroadcastReceivers and
+            // clear the companion-object back-reference so NotificationService stops
+            // routing events to a stale module instance.
+            try {
+                BluetoothDiscoveryReceiver.unregister(
+                    appContext.reactContext ?: return@OnDestroy
+                )
+            } catch (_: Exception) {}
+            instance = null
         }
     }
 

@@ -71,7 +71,7 @@ function ToggleButton({
     <Pressable
       onPress={onPress}
       style={styles.toggleWrap}
-      accessibilityLabel={`${label} ${active ? 'on' : 'off'}`}
+      accessibilityLabel={`${label}, ${active ? 'on' : 'off'}. Tap to turn ${active ? 'off' : 'on'}`}
       accessibilityRole="switch"
     >
       <View
@@ -104,11 +104,12 @@ interface ShortcutButtonProps {
   active?: boolean;
   onPress: () => void;
   textScale?: number;
+  accessibilityLabel?: string;
 }
 
-function ShortcutButton({ iconName, label, active = false, onPress, textScale = 1 }: ShortcutButtonProps) {
+function ShortcutButton({ iconName, label, active = false, onPress, textScale = 1, accessibilityLabel }: ShortcutButtonProps) {
   return (
-    <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={label} accessibilityRole="button">
+    <Pressable onPress={onPress} style={styles.shortcutWrap} accessibilityLabel={accessibilityLabel ?? label} accessibilityRole="button">
       <View
         style={[
           styles.shortcutCircle,
@@ -126,10 +127,8 @@ function ShortcutButton({ iconName, label, active = false, onPress, textScale = 
 // Main Screen
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function ControlCenterScreen({ navigation }: { navigation: AppNavigationProp; route: any }) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nav = useNavigation<any>();
+export function ControlCenterScreen({ navigation }: { navigation: AppNavigationProp }) {
+  const nav = useNavigation<AppNavigationProp>();
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings, update } = useSettings();
@@ -426,6 +425,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                       }
                     }}
                     accessibilityLabel="Previous track"
+                    accessibilityRole="button"
                     style={styles.musicBtn}
                   >
                     <Ionicons name="play-skip-back" size={20} color="#ffffff" />
@@ -442,6 +442,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                       }
                     }}
                     accessibilityLabel={nowPlaying.isPlaying ? 'Pause' : 'Play'}
+                    accessibilityRole="button"
                     style={styles.musicPlayBtn}
                   >
                     <Ionicons
@@ -459,6 +460,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                       }
                     }}
                     accessibilityLabel="Next track"
+                    accessibilityRole="button"
                     style={styles.musicBtn}
                   >
                     <Ionicons name="play-skip-forward" size={20} color="#ffffff" />
@@ -532,6 +534,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 active={flashlightOn}
                 textScale={textScale}
                 onPress={toggleFlashlight}
+                accessibilityLabel={flashlightOn ? 'Turn off torch' : 'Turn on torch'}
               />
               <ShortcutButton
                 iconName="radio-button-on"
@@ -546,18 +549,21 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                     alert('Screen Recording', 'Could not open screen recorder settings.');
                   }
                 }}
+                accessibilityLabel="Open Screen Recording"
               />
               <ShortcutButton
                 iconName="calculator-outline"
                 label="Calculator"
                 textScale={textScale}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCalculator(); }}
+                accessibilityLabel="Open Calculator"
               />
               <ShortcutButton
                 iconName="camera-outline"
                 label="Camera"
                 textScale={textScale}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCamera(); }}
+                accessibilityLabel="Open Camera"
               />
               <ShortcutButton
                 iconName="share-social-outline"
@@ -581,6 +587,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                     alert('Nearby Share', 'Opening Nearby Share...');
                   }
                 }}
+                accessibilityLabel="Open Nearby Share"
               />
             </View>
           </View>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
+import type { RootStackParamList } from '../navigation/types';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -29,8 +30,7 @@ interface HomeIndicatorProps {
   /** Override the app-switcher action. Defaults to navigating to the Multitask route via navigationRef. */
   onSwitcher?: () => void;
   /** NavigationContainer ref used for the default switcher fallback. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  navigationRef?: NavigationContainerRefWithCurrent<any>;
+  navigationRef?: NavigationContainerRefWithCurrent<RootStackParamList>;
   /** Light pill (default) or dark pill for light backgrounds. */
   variant?: 'light' | 'dark';
 }

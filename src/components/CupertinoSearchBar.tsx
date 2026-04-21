@@ -25,7 +25,7 @@ export function CupertinoSearchBar({
 }: CupertinoSearchBarProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const [, setIsFocused] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const cancelWidth = useSharedValue(0);
@@ -39,6 +39,7 @@ export function CupertinoSearchBar({
   };
 
   const handleBlur = () => {
+    setIsFocused(false);
     onFocusChange?.(false);
   };
 
@@ -105,13 +106,15 @@ export function CupertinoSearchBar({
         )}
       </View>
 
-      <Animated.View style={[styles.cancelContainer, cancelStyle]}>
-        <Pressable onPress={handleCancel}>
-          <Text style={[typography.body, { color: colors.systemBlue }]}>
-            Cancel
-          </Text>
-        </Pressable>
-      </Animated.View>
+      {(isFocused || value.length > 0) && (
+        <Animated.View style={[styles.cancelContainer, cancelStyle]}>
+          <Pressable onPress={handleCancel}>
+            <Text style={[typography.body, { color: colors.systemBlue }]}>
+              Cancel
+            </Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }

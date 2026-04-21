@@ -25,6 +25,7 @@ import { AssistiveTouchProvider, useAssistiveTouch } from './src/store/Assistive
 import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
+import { suppressAutoLock } from './src/utils/permissions';
 import { onBridgeError } from './modules/launcher-module/src';
 
 function AppContent() {
@@ -89,6 +90,7 @@ function AppContent() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
+        if (suppressAutoLock()) return; // a permission dialog is showing — ignore background
         if (lockTimer.current) clearTimeout(lockTimer.current);
         lockTimer.current = setTimeout(() => {
           setIsLocked(true);
@@ -146,39 +148,48 @@ function AppContent() {
     lastMsgCount.current = currentCount;
   }, [device.messages, device.isReady, device.contacts, isLocked, navigationRef]);
 
-  // Also monitor native notifications
+  // Monitor native notifications via event-driven listener (replaces 30s polling)
   useEffect(() => {
     if (!device.isReady || isLocked) return;
     if (Platform.OS !== 'android') return;
 
-    const interval = setInterval(async () => {
+    let unsub: (() => void) | undefined;
+
+    (async () => {
       try {
         const mod = (await import('./modules/launcher-module/src')).default;
         const access = await mod.isNotificationAccessGranted();
         if (!access) return;
-        const notifs = await mod.getNotifications();
-        // Only surface the newest notification we haven't banner'd before.
-        // Otherwise every poll would re-notify the same list.
-        const unseen = notifs.find(
-          (n) => !seenNotifIds.current.has(n.id) && (n.title || n.text),
-        );
-        // Mark every currently-present id as seen so dismissals don't cause
-        // the same notification to re-fire on the next poll.
-        for (const n of notifs) seenNotifIds.current.add(n.id);
-        if (unseen) {
-          setBanner({
-            id: `notif-${unseen.id}`,
-            appName: unseen.packageName.split('.').pop() || 'App',
-            iconName: 'notifications',
-            iconColor: '#5856D6',
-            title: unseen.title,
-            body: unseen.text,
-          });
-        }
-      } catch { /* ignore */ }
-    }, 30000);
 
-    return () => clearInterval(interval);
+        // Initial paint: hydrate seenNotifIds with current list so the first
+        // event-driven banner is genuinely new.
+        const initial = await mod.getNotifications();
+        for (const n of initial) seenNotifIds.current.add(n.id);
+
+        const { addNotificationListener } = await import('./modules/launcher-module/src');
+        unsub = addNotificationListener((n) => {
+          if (!n || seenNotifIds.current.has(n.id)) return;
+          // Cap the seen set to avoid unbounded growth.
+          if (seenNotifIds.current.size > 200) {
+            const first = seenNotifIds.current.values().next().value;
+            if (first) seenNotifIds.current.delete(first);
+          }
+          seenNotifIds.current.add(n.id);
+          if (n.title || n.text) {
+            setBanner({
+              id: `notif-${n.id}`,
+              appName: (n.packageName || '').split('.').pop() || 'App',
+              iconName: 'notifications',
+              iconColor: '#5856D6',
+              title: n.title,
+              body: n.text,
+            });
+          }
+        });
+      } catch { /* ignore */ }
+    })();
+
+    return () => { if (unsub) unsub(); };
   }, [device.isReady, isLocked]);
 
   if (showOnboarding === null) return null;

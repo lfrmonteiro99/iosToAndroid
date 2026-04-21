@@ -20,6 +20,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { SkeletonListRow } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 const getLauncher = async () => {
   try {
@@ -82,8 +84,8 @@ function ContactAvatar({ contact, size = 40 }: { contact: DeviceContact; size?: 
 interface CallLogItemProps {
   call: CallLogEntry;
   isLast: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   onPress: () => void;
 }
 
@@ -293,6 +295,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
             }
           }}
           accessibilityRole="button"
+          accessibilityLabel="Grant call log permission"
         >
           <Text style={[typography.subhead, { color: '#FFFFFF', fontWeight: '600' }]}>Grant Call Log Permission</Text>
         </TouchableOpacity>
@@ -450,6 +453,7 @@ function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void 
             onLongPress={() => setNumber('')}
             style={styles.keypadDeleteDisplay}
             accessibilityLabel="Delete digit"
+            accessibilityRole="button"
           >
             <Ionicons name="backspace-outline" size={26} color={colors.secondaryLabel} />
           </TouchableOpacity>
@@ -505,7 +509,8 @@ function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void 
               onPress={handleDelete}
               onLongPress={() => setNumber('')}
               style={styles.keypadBackspace}
-              accessibilityLabel="Delete"
+              accessibilityLabel="Delete digit"
+              accessibilityRole="button"
             >
               <Ionicons name="backspace-outline" size={28} color={colors.secondaryLabel} />
             </TouchableOpacity>

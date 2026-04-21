@@ -17,6 +17,7 @@ import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
@@ -31,6 +32,8 @@ import { useDevice, DeviceSms } from '../store/DeviceStore';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 // ─── Local message type extension ────────────────────────────────────────────
 
@@ -119,11 +122,15 @@ const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const BUBBLE_MAX_WIDTH = SCREEN_WIDTH * 0.75;
 
+function isLocalImageMessage(m: DeviceSms | LocalImageMessage): m is LocalImageMessage {
+  return typeof (m as LocalImageMessage).imageUri === 'string';
+}
+
 interface BubbleProps {
-  message: DeviceSms;
+  message: DeviceSms | LocalImageMessage;
   isDark: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   reactions?: string[];
   onLongPress?: () => void;
   showReactionPicker?: boolean;
@@ -200,17 +207,16 @@ const MessageBubble = React.memo(function MessageBubble({
           style={[
             styles.bubble,
             {
-              backgroundColor: (message as any).imageUri ? 'transparent' : bubbleBackground, // eslint-disable-line @typescript-eslint/no-explicit-any
+              backgroundColor: isLocalImageMessage(message) ? 'transparent' : bubbleBackground,
               maxWidth: BUBBLE_MAX_WIDTH,
               elevation: isSent ? 1 : 0,
             },
             isSent ? styles.bubbleSent : styles.bubbleReceived,
           ]}
         >
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {(message as any).imageUri ? (
+          {isLocalImageMessage(message) ? (
             <Image
-              source={{ uri: (message as any).imageUri }} // eslint-disable-line @typescript-eslint/no-explicit-any
+              source={{ uri: message.imageUri }}
               style={styles.imageBubble}
               resizeMode="cover"
             />
@@ -340,6 +346,17 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     setSelectedMsgId((prev) => (prev === msgId ? null : msgId));
   }, []);
 
+  const handleCopy = useCallback((msgBody: string) => {
+    Clipboard.setStringAsync(msgBody).catch(() => {});
+    setSelectedMsgId(null);
+  }, []);
+
+  const handleBubblePress = useCallback((msgId: string) => {
+    if (selectedMsgId === msgId) {
+      setSelectedMsgId(null);
+    }
+  }, [selectedMsgId]);
+
   // Load draft on mount
   useEffect(() => {
     AsyncStorage.getItem(draftKey).then((value) => {
@@ -413,7 +430,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, [address]);
 
   const handleCameraButton = useCallback(async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => ImagePicker.requestCameraPermissionsAsync());
     if (status !== 'granted') {
       alert('Permission Denied', 'Camera access is required to take photos.');
       return;
@@ -427,7 +444,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, [alert, addImageMessage]);
 
   const handlePhotoLibraryButton = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => ImagePicker.requestMediaLibraryPermissionsAsync());
     if (status !== 'granted') {
       alert('Permission Denied', 'Photo library access is required to select photos.');
       return;
@@ -527,7 +544,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         );
       }
       return (
-        <Pressable onPress={() => selectedMsgId ? setSelectedMsgId(null) : undefined}>
+        <Pressable onPress={() => handleBubblePress(item.id)}>
           <MessageBubble
             message={item}
             isDark={dark}
@@ -537,15 +554,12 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             onLongPress={() => handleLongPress(item.id)}
             showReactionPicker={selectedMsgId === item.id}
             onReaction={(emoji) => handleReaction(item.id, emoji)}
-            onCopy={() => {
-              Clipboard.setStringAsync(item.body).catch(() => {});
-              setSelectedMsgId(null);
-            }}
+            onCopy={() => handleCopy(item.body)}
           />
         </Pressable>
       );
     },
-    [dark, colors, typography, reactions, selectedMsgId, handleLongPress, handleReaction],
+    [dark, colors, typography, reactions, selectedMsgId, handleLongPress, handleReaction, handleCopy, handleBubblePress],
   );
 
   const keyExtractor = useCallback((item: ListItem) => isSeparator(item) ? item.id : item.id, []);

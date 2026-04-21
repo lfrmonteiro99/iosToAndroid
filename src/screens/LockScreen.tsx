@@ -33,6 +33,7 @@ import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+import type { AppNavigationProp } from '../navigation/types';
 
 const getLauncher = async () => {
   try {
@@ -301,8 +302,7 @@ function NotificationGroupCard({
 // Main Screen
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?: any; onUnlock?: () => void }) { // eslint-disable-line @typescript-eslint/no-explicit-any
+export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigationProp; onUnlock?: () => void }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const { settings } = useSettings();
@@ -693,17 +693,37 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
         {/* Notification cards (grouped by app, iOS-style)                   */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.notifArea}>
-          {groupedNotifications.map((group) => (
-            <NotificationGroupCard
-              key={group.packageName}
-              group={group}
-              expanded={!!expandedGroups[group.packageName]}
-              onToggle={() => toggleGroup(group.packageName)}
-              onDismissNotif={handleDismissNotif}
-              onDismissGroup={handleDismissGroup}
-              onOpenNotif={handleOpenNotif}
-            />
-          ))}
+          {device.notificationAccessGranted === false ? (
+            <View style={styles.notifPermissionCta}>
+              <Text style={styles.notifPermissionTitle}>Notifications are off</Text>
+              <Text style={styles.notifPermissionBody}>Grant access to see them on the lock screen.</Text>
+              <Pressable
+                style={styles.notifPermissionButton}
+                onPress={async () => {
+                  try {
+                    const mod = (await import('../../modules/launcher-module/src')).default;
+                    await mod.openNotificationAccessSettings();
+                  } catch {}
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Open notification access settings"
+              >
+                <Text style={styles.notifPermissionButtonText}>Open Settings</Text>
+              </Pressable>
+            </View>
+          ) : (
+            groupedNotifications.map((group) => (
+              <NotificationGroupCard
+                key={group.packageName}
+                group={group}
+                expanded={!!expandedGroups[group.packageName]}
+                onToggle={() => toggleGroup(group.packageName)}
+                onDismissNotif={handleDismissNotif}
+                onDismissGroup={handleDismissGroup}
+                onOpenNotif={handleOpenNotif}
+              />
+            ))
+          )}
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -744,7 +764,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                           key="del"
                           style={styles.numpadKey}
                           onPress={handlePasscodeDelete}
-                          accessibilityLabel="Delete"
+                          accessibilityLabel="Delete digit"
+                          accessibilityRole="button"
                         >
                           <Ionicons name="backspace-outline" size={24} color="#fff" />
                         </Pressable>
@@ -756,6 +777,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
                         style={styles.numpadKey}
                         onPress={() => handlePasscodeDigit(key)}
                         accessibilityLabel={`Digit ${key}`}
+                        accessibilityRole="button"
                       >
                         <Text style={styles.numpadKeyText}>{key}</Text>
                       </Pressable>
@@ -783,7 +805,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           <Pressable
             style={styles.circleButton}
             onPress={toggleFlashlight}
-            accessibilityLabel="Flashlight"
+            accessibilityLabel={flashlightOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+            accessibilityRole="button"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
               <Ionicons name="flashlight" size={22} color={flashlightOn ? '#000' : '#fff'} />
@@ -794,6 +817,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
             <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); triggerBiometric(); }}
               accessibilityLabel="Biometric unlock"
+              accessibilityRole="button"
               style={styles.biometricButton}
             >
               <Ionicons name="finger-print" size={28} color="rgba(255,255,255,0.75)" />
@@ -839,7 +863,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
           <Pressable
             style={styles.circleButton}
             onPress={openCamera}
-            accessibilityLabel="Camera"
+            accessibilityLabel="Open camera"
+            accessibilityRole="button"
           >
             <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
               <Ionicons name="camera-outline" size={22} color="#fff" />
@@ -1169,4 +1194,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
+
+  // Notification permission CTA
+  notifPermissionCta: {
+    marginTop: 40,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  notifPermissionTitle: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  notifPermissionBody: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  notifPermissionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  notifPermissionButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
 });

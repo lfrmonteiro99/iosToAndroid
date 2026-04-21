@@ -267,123 +267,123 @@ function createBridgedModule(): LauncherModuleType {
   return {
     getInstalledApps: async () => {
       try { return await nativeModule.getInstalledApps(); }
-      catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {
       try { return await nativeModule.launchApp(packageName); }
-      catch (e) { console.error('LauncherModule.launchApp failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.launchApp failed:', e); reportBridgeError('launchApp', e); return false; }
     },
     getAppIcon: async (packageName: string) => {
       try { return await nativeModule.getAppIcon(packageName); }
-      catch (e) { console.error('LauncherModule.getAppIcon failed:', e); return ''; }
+      catch (e) { console.error('LauncherModule.getAppIcon failed:', e); reportBridgeError('getAppIcon', e); return ''; }
     },
     isDefaultLauncher: async () => {
       try { return await nativeModule.isDefaultLauncher(); }
-      catch (e) { console.error('LauncherModule.isDefaultLauncher failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.isDefaultLauncher failed:', e); reportBridgeError('isDefaultLauncher', e); return false; }
     },
     openLauncherSettings: async () => {
       try { return await nativeModule.openLauncherSettings(); }
-      catch (e) { console.error('LauncherModule.openLauncherSettings failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.openLauncherSettings failed:', e); reportBridgeError('openLauncherSettings', e); return false; }
     },
     goHome: async () => {
       try { return await nativeModule.goHome(); }
-      catch (e) { console.error('LauncherModule.goHome failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.goHome failed:', e); reportBridgeError('goHome', e); return false; }
     },
     uninstallApp: async (packageName: string) => {
       try { return await nativeModule.uninstallApp(packageName); }
-      catch (e) { console.error('LauncherModule.uninstallApp failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.uninstallApp failed:', e); reportBridgeError('uninstallApp', e); return false; }
     },
     getWifiInfo: async () => {
       try { return await nativeModule.getWifiInfo(); }
-      catch (e) { console.error('LauncherModule.getWifiInfo failed:', e); return { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }; }
+      catch (e) { console.error('LauncherModule.getWifiInfo failed:', e); reportBridgeError('getWifiInfo', e); return { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }; }
     },
     setWifiEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setWifiEnabled(enabled); }
-      catch (e) { console.error('LauncherModule.setWifiEnabled failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.setWifiEnabled failed:', e); reportBridgeError('setWifiEnabled', e); return false; }
     },
     getWifiNetworks: async () => {
       try { return await nativeModule.getWifiNetworks(); }
-      catch (e) { console.error('LauncherModule.getWifiNetworks failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getWifiNetworks failed:', e); reportBridgeError('getWifiNetworks', e); return []; }
     },
     joinWifiNetwork: async (ssid: string, password: string, security: string) => {
       try { return await nativeModule.joinWifiNetwork(ssid, password, security); }
-      catch (e) { console.error('LauncherModule.joinWifiNetwork failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.joinWifiNetwork failed:', e); reportBridgeError('joinWifiNetwork', e); return false; }
     },
     forgetWifiNetwork: async (ssid: string) => {
       try { return await nativeModule.forgetWifiNetwork(ssid); }
-      catch (e) { console.error('LauncherModule.forgetWifiNetwork failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.forgetWifiNetwork failed:', e); reportBridgeError('forgetWifiNetwork', e); return false; }
     },
     getBluetoothInfo: async () => {
       try { return await nativeModule.getBluetoothInfo(); }
-      catch (e) { console.error('LauncherModule.getBluetoothInfo failed:', e); return { enabled: false, name: '', address: '', pairedDevices: [] }; }
+      catch (e) { console.error('LauncherModule.getBluetoothInfo failed:', e); reportBridgeError('getBluetoothInfo', e); return { enabled: false, name: '', address: '', pairedDevices: [] }; }
     },
     setBluetoothEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setBluetoothEnabled(enabled); }
-      catch (e) { console.error('LauncherModule.setBluetoothEnabled failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.setBluetoothEnabled failed:', e); reportBridgeError('setBluetoothEnabled', e); return false; }
     },
     startBluetoothDiscovery: async () => {
       try { return await nativeModule.startBluetoothDiscovery(); }
-      catch (e) { console.error('LauncherModule.startBluetoothDiscovery failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.startBluetoothDiscovery failed:', e); reportBridgeError('startBluetoothDiscovery', e); return false; }
     },
     stopBluetoothDiscovery: async () => {
       try { return await nativeModule.stopBluetoothDiscovery(); }
-      catch (e) { console.error('LauncherModule.stopBluetoothDiscovery failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.stopBluetoothDiscovery failed:', e); reportBridgeError('stopBluetoothDiscovery', e); return false; }
     },
     getDiscoveredBluetoothDevices: async () => {
       try { return await nativeModule.getDiscoveredBluetoothDevices(); }
-      catch (e) { console.error('LauncherModule.getDiscoveredBluetoothDevices failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getDiscoveredBluetoothDevices failed:', e); reportBridgeError('getDiscoveredBluetoothDevices', e); return []; }
     },
     pairBluetoothDevice: async (address: string) => {
       try { return await nativeModule.pairBluetoothDevice(address); }
-      catch (e) { console.error('LauncherModule.pairBluetoothDevice failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.pairBluetoothDevice failed:', e); reportBridgeError('pairBluetoothDevice', e); return false; }
     },
     unpairBluetoothDevice: async (address: string) => {
       try { return await nativeModule.unpairBluetoothDevice(address); }
-      catch (e) { console.error('LauncherModule.unpairBluetoothDevice failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.unpairBluetoothDevice failed:', e); reportBridgeError('unpairBluetoothDevice', e); return false; }
     },
     getStorageInfo: async () => {
       try { return await nativeModule.getStorageInfo(); }
-      catch (e) { console.error('LauncherModule.getStorageInfo failed:', e); return { totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }; }
+      catch (e) { console.error('LauncherModule.getStorageInfo failed:', e); reportBridgeError('getStorageInfo', e); return { totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }; }
     },
     getRecentMessages: async (limit: number) => {
       try { return await nativeModule.getRecentMessages(limit); }
-      catch (e) { console.error('LauncherModule.getRecentMessages failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getRecentMessages failed:', e); reportBridgeError('getRecentMessages', e); return []; }
     },
     getVolume: async () => {
       try { return await nativeModule.getVolume(); }
-      catch (e) { console.error('LauncherModule.getVolume failed:', e); return 0.5; }
+      catch (e) { console.error('LauncherModule.getVolume failed:', e); reportBridgeError('getVolume', e); return 0.5; }
     },
     setVolume: async (level: number) => {
       try { return await nativeModule.setVolume(level); }
-      catch (e) { console.error('LauncherModule.setVolume failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.setVolume failed:', e); reportBridgeError('setVolume', e); return false; }
     },
     openSystemSettings: async (panel: string) => {
       try { return await nativeModule.openSystemSettings(panel); }
-      catch (e) { console.error('LauncherModule.openSystemSettings failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.openSystemSettings failed:', e); reportBridgeError('openSystemSettings', e); return false; }
     },
     getNetworkInfo: async () => {
       try { return await nativeModule.getNetworkInfo(); }
-      catch (e) { console.error('LauncherModule.getNetworkInfo failed:', e); return { isConnected: false, isWifi: false, isCellular: false, isVpn: false }; }
+      catch (e) { console.error('LauncherModule.getNetworkInfo failed:', e); reportBridgeError('getNetworkInfo', e); return { isConnected: false, isWifi: false, isCellular: false, isVpn: false }; }
     },
     getCarrierInfo: async () => {
       try { return await nativeModule.getCarrierInfo(); }
-      catch (e) { console.error('LauncherModule.getCarrierInfo failed:', e); return { carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }; }
+      catch (e) { console.error('LauncherModule.getCarrierInfo failed:', e); reportBridgeError('getCarrierInfo', e); return { carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }; }
     },
     getAppStorageStats: async () => {
       try { return await nativeModule.getAppStorageStats(); }
-      catch (e) { console.error('LauncherModule.getAppStorageStats failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getAppStorageStats failed:', e); reportBridgeError('getAppStorageStats', e); return []; }
     },
     setFlashlight: async (enabled: boolean) => {
       try { return await nativeModule.setFlashlight(enabled); }
-      catch (e) { console.error('LauncherModule.setFlashlight failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.setFlashlight failed:', e); reportBridgeError('setFlashlight', e); return false; }
     },
     isFlashlightOn: async () => {
       try { return await nativeModule.isFlashlightOn(); }
-      catch (e) { console.error('LauncherModule.isFlashlightOn failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.isFlashlightOn failed:', e); reportBridgeError('isFlashlightOn', e); return false; }
     },
     getCallLog: async (limit: number) => {
       try { return await nativeModule.getCallLog(limit); }
-      catch (e) { console.error('LauncherModule.getCallLog failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getCallLog failed:', e); reportBridgeError('getCallLog', e); return []; }
     },
     makeCall: async (number: string) => {
       try { return await nativeModule.makeCall(number); }
@@ -391,23 +391,23 @@ function createBridgedModule(): LauncherModuleType {
     },
     getNotifications: async () => {
       try { return await nativeModule.getNotifications(); }
-      catch (e) { console.error('LauncherModule.getNotifications failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getNotifications failed:', e); reportBridgeError('getNotifications', e); return []; }
     },
     clearNotification: async (key: string) => {
       try { return await nativeModule.clearNotification(key); }
-      catch (e) { console.error('LauncherModule.clearNotification failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.clearNotification failed:', e); reportBridgeError('clearNotification', e); return false; }
     },
     clearAllNotifications: async () => {
       try { return await nativeModule.clearAllNotifications(); }
-      catch (e) { console.error('LauncherModule.clearAllNotifications failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.clearAllNotifications failed:', e); reportBridgeError('clearAllNotifications', e); return false; }
     },
     isNotificationAccessGranted: async () => {
       try { return await nativeModule.isNotificationAccessGranted(); }
-      catch (e) { console.error('LauncherModule.isNotificationAccessGranted failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.isNotificationAccessGranted failed:', e); reportBridgeError('isNotificationAccessGranted', e); return false; }
     },
     openNotificationAccessSettings: async () => {
       try { return await nativeModule.openNotificationAccessSettings(); }
-      catch (e) { console.error('LauncherModule.openNotificationAccessSettings failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.openNotificationAccessSettings failed:', e); reportBridgeError('openNotificationAccessSettings', e); return false; }
     },
     sendSms: async (address: string, body: string) => {
       try { return await nativeModule.sendSms(address, body); }
@@ -419,43 +419,43 @@ function createBridgedModule(): LauncherModuleType {
     },
     checkPermissions: async () => {
       try { return await nativeModule.checkPermissions(); }
-      catch (e) { console.error('LauncherModule.checkPermissions failed:', e); return {}; }
+      catch (e) { console.error('LauncherModule.checkPermissions failed:', e); reportBridgeError('checkPermissions', e); return {}; }
     },
     getCalendarEvents: async (daysAhead: number) => {
       try { return await nativeModule.getCalendarEvents(daysAhead); }
-      catch (e) { console.error('LauncherModule.getCalendarEvents failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getCalendarEvents failed:', e); reportBridgeError('getCalendarEvents', e); return []; }
     },
     getNowPlaying: async () => {
       try { return await nativeModule.getNowPlaying(); }
-      catch (e) { console.error('LauncherModule.getNowPlaying failed:', e); return { title: '', artist: '', album: '', isPlaying: false, packageName: '' }; }
+      catch (e) { console.error('LauncherModule.getNowPlaying failed:', e); reportBridgeError('getNowPlaying', e); return { title: '', artist: '', album: '', isPlaying: false, packageName: '' }; }
     },
     mediaPrev: async () => {
       try { return await nativeModule.mediaPrev(); }
-      catch (e) { console.error('LauncherModule.mediaPrev failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.mediaPrev failed:', e); reportBridgeError('mediaPrev', e); return false; }
     },
     mediaPlayPause: async () => {
       try { return await nativeModule.mediaPlayPause(); }
-      catch (e) { console.error('LauncherModule.mediaPlayPause failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.mediaPlayPause failed:', e); reportBridgeError('mediaPlayPause', e); return false; }
     },
     mediaNext: async () => {
       try { return await nativeModule.mediaNext(); }
-      catch (e) { console.error('LauncherModule.mediaNext failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.mediaNext failed:', e); reportBridgeError('mediaNext', e); return false; }
     },
     isUsageAccessGranted: async () => {
       try { return await nativeModule.isUsageAccessGranted(); }
-      catch (e) { console.error('LauncherModule.isUsageAccessGranted failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.isUsageAccessGranted failed:', e); reportBridgeError('isUsageAccessGranted', e); return false; }
     },
     openUsageAccessSettings: async () => {
       try { return await nativeModule.openUsageAccessSettings(); }
-      catch (e) { console.error('LauncherModule.openUsageAccessSettings failed:', e); return false; }
+      catch (e) { console.error('LauncherModule.openUsageAccessSettings failed:', e); reportBridgeError('openUsageAccessSettings', e); return false; }
     },
     getScreenTimeStats: async (daysBack: number) => {
       try { return await nativeModule.getScreenTimeStats(daysBack); }
-      catch (e) { console.error('LauncherModule.getScreenTimeStats failed:', e); return []; }
+      catch (e) { console.error('LauncherModule.getScreenTimeStats failed:', e); reportBridgeError('getScreenTimeStats', e); return []; }
     },
     getTodayScreenTime: async () => {
       try { return await nativeModule.getTodayScreenTime(); }
-      catch (e) { console.error('LauncherModule.getTodayScreenTime failed:', e); return { totalMinutes: 0, topApps: [] }; }
+      catch (e) { console.error('LauncherModule.getTodayScreenTime failed:', e); reportBridgeError('getTodayScreenTime', e); return { totalMinutes: 0, topApps: [] }; }
     },
   };
 }
@@ -483,3 +483,34 @@ export function reportBridgeError(method: string, error: unknown): void {
 
 export { LauncherModuleType };
 export default LauncherModule;
+
+// ─── Event-driven notification listeners ────────────────────────────────────
+// Subscribe to real-time notification events emitted by NotificationService
+// (via RCTDeviceEventEmitter on the native side) instead of polling.
+
+import { DeviceEventEmitter } from 'react-native';
+
+/**
+ * Subscribe to new notifications as they arrive.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addNotificationListener(
+  listener: (n: DeviceNotification) => void,
+): () => void {
+  const sub = DeviceEventEmitter.addListener('onNotificationPosted', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to notification removals.
+ * The callback receives the notification key (string id).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addNotificationRemovedListener(
+  listener: (id: string) => void,
+): () => void {
+  const sub = DeviceEventEmitter.addListener('onNotificationRemoved', (n: { id: string }) => {
+    listener(n.id);
+  });
+  return () => sub.remove();
+}

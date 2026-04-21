@@ -8,11 +8,13 @@ import {
   Modal,
   Linking,
   Platform,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -238,7 +240,7 @@ async function requestNotificationPermissions(): Promise<{
     const existing = await Notifications.getPermissionsAsync();
     if (existing.status === 'granted') return { granted: true, canAskAgain: true };
     if (!existing.canAskAgain) return { granted: false, canAskAgain: false };
-    const result = await Notifications.requestPermissionsAsync();
+    const result = await withAutoLockSuppressed(() => Notifications.requestPermissionsAsync());
     return { granted: result.status === 'granted', canAskAgain: result.canAskAgain };
   } catch {
     return { granted: false, canAskAgain: false };
@@ -345,6 +347,7 @@ function WorldClockTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [openCityId, setOpenCityId] = useState<string | null>(null);
+  const [tzTick, setTzTick] = useState(0); // forces re-render when TZ changes
 
   useEffect(() => {
     loadWorldClocks().then(setCities);
@@ -353,6 +356,14 @@ function WorldClockTab() {
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Refresh timezone when app returns to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setTzTick((t) => t + 1);
+    });
+    return () => sub.remove();
   }, []);
 
   const persistCities = useCallback((next: WorldClock[]) => {

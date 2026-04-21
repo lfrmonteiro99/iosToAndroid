@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import React, { useMemo, useRef, useCallback } from 'react';
+import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, GestureResponderEvent } from 'react-native';
 import { ImpactFeedbackStyle } from 'expo-haptics';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
@@ -33,6 +33,14 @@ export const CupertinoButton = React.memo(function CupertinoButton({
 }: CupertinoButtonProps) {
   const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
+  const lastPressRef = useRef(0);
+
+  const handlePress = useCallback((e: GestureResponderEvent) => {
+    const now = Date.now();
+    if (now - lastPressRef.current < 300) return;
+    lastPressRef.current = now;
+    onPress?.(e);
+  }, [onPress]);
 
   const baseColor = destructive ? colors.systemRed : colors.systemBlue;
 
@@ -72,9 +80,9 @@ export const CupertinoButton = React.memo(function CupertinoButton({
 
   return (
     <Pressable
-      onPress={() => {
+      onPress={(e) => {
         hapticImpact(ImpactFeedbackStyle.Light);
-        onPress?.();
+        handlePress(e);
       }}
       disabled={disabled}
       accessibilityRole="button"

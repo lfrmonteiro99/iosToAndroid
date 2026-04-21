@@ -22,6 +22,8 @@ export function CupertinoSegmentedControl({
   const { theme, typography, shadows } = useTheme();
   const { colors } = theme;
 
+  if (!values || values.length === 0) return null;
+
   const translateX = useSharedValue(0);
   const animatedWidth = useSharedValue(0);
   const [containerWidth, setContainerWidth] = useState(0);

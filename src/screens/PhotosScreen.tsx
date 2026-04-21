@@ -17,11 +17,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoNavigationBar, CupertinoSegmentedControl, useAlert, CupertinoSkeleton } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 2;
@@ -79,7 +82,6 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   const [permissionStatus, setPermissionStatus] = useState<'undetermined' | 'granted' | 'denied'>('undetermined');
   const [canAskAgain, setCanAskAgain] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [skeletonLoading, setSkeletonLoading] = useState(true);
   const [selectedMemory, setSelectedMemory] = useState<{ title: string } | null>(null);
 
   // ---- Library tab state ----
@@ -115,14 +117,6 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
     };
   }, []);
 
-  // ---- Skeleton loading timer (800ms) ----
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mountedRef.current) setSkeletonLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
-
   // ------------------------------------------------------------------
   // Permissions
   // ------------------------------------------------------------------
@@ -149,7 +143,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         setLoading(false);
         return;
       }
-      const result = await MediaLibrary.requestPermissionsAsync();
+      const result = await withAutoLockSuppressed(() => MediaLibrary.requestPermissionsAsync());
       setPermissionStatus(result.status === 'granted' ? 'granted' : 'denied');
       setCanAskAgain(result.canAskAgain);
     } catch {
@@ -512,7 +506,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         // ============================================================
         // Library Tab
         // ============================================================
-        skeletonLoading ? (
+        loading ? (
           // Skeleton loading grid
           <ScrollView contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
             {/* Memories skeleton */}
@@ -646,8 +640,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
 // ======================================================================
 interface MemoriesSectionProps {
   onSelectMemory: (memory: { title: string }) => void;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSectionProps) {
@@ -680,8 +674,8 @@ function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSection
 interface ForYouTabProps {
   assets: MediaLibrary.Asset[];
   loading: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   insets: { bottom: number };
   onSelectAsset: (asset: MediaLibrary.Asset) => void;
 }
@@ -765,8 +759,8 @@ function ForYouTab({ assets, loading, colors, typography, insets, onSelectAsset 
 interface MemorySectionProps {
   title: string;
   assets: MediaLibrary.Asset[];
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   onSelectAsset: (asset: MediaLibrary.Asset) => void;
 }
 
@@ -806,8 +800,8 @@ interface AlbumsTabProps {
   albums: MediaLibrary.Album[];
   albumCovers: Record<string, string>;
   loading: boolean;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   insets: { bottom: number };
   showCreateAlbum: boolean;
   newAlbumName: string;

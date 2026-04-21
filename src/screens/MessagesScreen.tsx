@@ -15,6 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
+import type { AppNavigationProp } from '../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } from '../components';
@@ -81,10 +84,8 @@ function avatarColor(address: string): string {
 interface ConversationRowProps {
   conversation: Conversation;
   contacts: DeviceContact[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: CupertinoColors;
+  typography: typeof Typography;
   onPress: () => void;
   onDelete: () => void;
   onMarkRead: () => void;
@@ -248,8 +249,7 @@ export function MessagesScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<AppNavigationProp>();
   const device = useDevice();
   const alert = useAlert();
 

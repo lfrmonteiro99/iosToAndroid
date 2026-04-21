@@ -190,6 +190,27 @@ describe('FoldersStore', () => {
     expect(result.current.isReady).toBe(true);
   });
 
+  it('migrates legacy @folders key to @iostoandroid/folders on mount', async () => {
+    const legacy = JSON.stringify([
+      { id: 'legacy-1', name: 'Legacy Folder', apps: ['com.legacy.app'], color: '#34C759' },
+    ]);
+    // Simulate: legacy key has data, new key is empty
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === '@folders') return Promise.resolve(legacy);
+      if (key === '@iostoandroid/folders') return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
+
+    const { result } = renderHook(() => useFolders(), { wrapper });
+    await act(async () => {});
+
+    // After migration the new key is written with legacy data and legacy key removed
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@iostoandroid/folders', legacy);
+    expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@folders');
+    expect(result.current.folders).toHaveLength(1);
+    expect(result.current.folders[0].name).toBe('Legacy Folder');
+  });
+
   it('multiple folders can coexist independently', async () => {
     const { result } = renderHook(() => useFolders(), { wrapper });
     await act(async () => {});

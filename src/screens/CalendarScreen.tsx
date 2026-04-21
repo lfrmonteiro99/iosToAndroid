@@ -137,6 +137,53 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
     });
   }, [persistEvents]);
 
+  // Safe time setters that auto-correct invalid durations
+  const setSafeStartHour = useCallback((h: number) => {
+    const newTotalStart = h * 60 + startMinute;
+    const totalEnd = endHour * 60 + endMinute;
+    if (newTotalStart >= totalEnd) {
+      setStartHour(h);
+      setEndHour(h + 1);
+      setEndMinute(startMinute);
+    } else {
+      setStartHour(h);
+    }
+  }, [startMinute, endHour, endMinute]);
+
+  const setSafeStartMinute = useCallback((m: number) => {
+    const newTotalStart = startHour * 60 + m;
+    const totalEnd = endHour * 60 + endMinute;
+    if (newTotalStart >= totalEnd) {
+      setStartMinute(m);
+      setEndHour(startHour + 1);
+      setEndMinute(m);
+    } else {
+      setStartMinute(m);
+    }
+  }, [startHour, endHour, endMinute]);
+
+  const setSafeEndHour = useCallback((h: number) => {
+    const newTotalEnd = h * 60 + endMinute;
+    const totalStart = startHour * 60 + startMinute;
+    if (newTotalEnd <= totalStart) {
+      setEndHour(startHour + 1);
+      setEndMinute(startMinute);
+    } else {
+      setEndHour(h);
+    }
+  }, [endMinute, startHour, startMinute]);
+
+  const setSafeEndMinute = useCallback((m: number) => {
+    const newTotalEnd = endHour * 60 + m;
+    const totalStart = startHour * 60 + startMinute;
+    if (newTotalEnd <= totalStart) {
+      setEndHour(startHour + 1);
+      setEndMinute(startMinute);
+    } else {
+      setEndMinute(m);
+    }
+  }, [endHour, startHour, startMinute]);
+
   const handleAddEvent = useCallback(() => {
     if (!newTitle.trim()) {
       alert('Missing Title', 'Please enter an event title.');
@@ -148,7 +195,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
     start.setHours(startHour, startMinute, 0, 0);
     const end = new Date(baseDate);
     end.setHours(endHour, endMinute, 0, 0);
-    // Ensure end is after start
+    // Ensure end is after start (belt-and-braces guard)
     if (end.getTime() <= start.getTime() && !newAllDay) {
       end.setHours(startHour + 1, startMinute, 0, 0);
     }
@@ -433,13 +480,13 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 <View style={styles.timeRow}>
                   <Text style={[typography.body, { color: colors.label, flex: 1 }]}>Starts</Text>
                   <View style={styles.timePicker}>
-                    <Pressable onPress={() => setStartHour((h) => (h + 1) % 24)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeStartHour((startHour + 1) % 24)} style={styles.timeBtn}>
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(startHour).padStart(2, '0')}
                       </Text>
                     </Pressable>
                     <Text style={[typography.headline, { color: colors.label }]}>:</Text>
-                    <Pressable onPress={() => setStartMinute((m) => (m + 15) % 60)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeStartMinute((startMinute + 15) % 60)} style={styles.timeBtn}>
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(startMinute).padStart(2, '0')}
                       </Text>
@@ -449,13 +496,13 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 <View style={styles.timeRow}>
                   <Text style={[typography.body, { color: colors.label, flex: 1 }]}>Ends</Text>
                   <View style={styles.timePicker}>
-                    <Pressable onPress={() => setEndHour((h) => (h + 1) % 24)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeEndHour((endHour + 1) % 24)} style={styles.timeBtn}>
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(endHour).padStart(2, '0')}
                       </Text>
                     </Pressable>
                     <Text style={[typography.headline, { color: colors.label }]}>:</Text>
-                    <Pressable onPress={() => setEndMinute((m) => (m + 15) % 60)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeEndMinute((endMinute + 15) % 60)} style={styles.timeBtn}>
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(endMinute).padStart(2, '0')}
                       </Text>

@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
@@ -24,6 +25,8 @@ import {
   CupertinoEmptyState,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +78,7 @@ async function requestNotificationPermissions(): Promise<boolean> {
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === 'granted') return true;
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await withAutoLockSuppressed(() => Notifications.requestPermissionsAsync());
     return status === 'granted';
   } catch {
     return false;
@@ -98,6 +101,9 @@ async function scheduleReminderNotification(reminder: Reminder): Promise<string 
         repeats: true,
       };
     } else if (reminder.recurrence === 'weekly') {
+      // Expo WeeklyTriggerInput.weekday is 1..7 with 1 = Sunday.
+      // Date.getDay() is 0..6 with 0 = Sunday. Hence +1.
+      // See https://docs.expo.dev/versions/latest/sdk/notifications/#weeklytriggerinput
       trigger = {
         type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         weekday: dueDate.getDay() + 1,
@@ -213,10 +219,8 @@ interface ReminderRowProps {
   onDelete: () => void;
   onFlag: () => void;
   onEdit: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: CupertinoColors;
+  typography: typeof Typography;
   isOpen: boolean;
   onOpen: () => void;
 }
@@ -310,10 +314,8 @@ interface SmartListCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   count: number;
   onPress: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  themeColors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  themeColors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 const SmartListCard = React.memo(function SmartListCard({

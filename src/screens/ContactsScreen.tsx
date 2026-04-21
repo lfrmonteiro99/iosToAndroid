@@ -8,6 +8,9 @@ import { useTheme } from '../theme/ThemeContext';
 import { useContacts } from '../store/ContactsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton, SkeletonListRow, BackEdgeSwipe } from '../components';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
+import type { AppNavigationProp } from '../navigation/types';
 
 function groupByLetter(contacts: DeviceContact[]) {
   const groups: Record<string, DeviceContact[]> = {};
@@ -33,8 +36,8 @@ const ContactRow = React.memo(function ContactRow({
   onLongPress,
 }: {
   contact: DeviceContact;
-  colors: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  typography: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  colors: CupertinoColors;
+  typography: typeof Typography;
   isLast: boolean;
   onPress: () => void;
   onLongPress: () => void;
@@ -89,7 +92,7 @@ export function ContactsScreen() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const navigation = useNavigation<AppNavigationProp>();
   const { toggleFavorite } = useContacts();
   const { contacts: deviceContacts, requestContactsPermission, isReady: deviceReady } = useDevice();
   const [searchQuery, setSearchQuery] = useState('');
@@ -252,8 +255,7 @@ export function ContactsScreen() {
           },
           {
             label: 'Send Message',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onPress: () => (navigation as any).navigate('Conversation', { address: contextContact.phone }),
+            onPress: () => navigation.navigate('Conversation', { address: contextContact.phone }),
           },
           {
             label: 'Add to Favorites',

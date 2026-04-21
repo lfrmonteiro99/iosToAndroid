@@ -228,25 +228,29 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
     ]).then(([notesRaw, mailRaw, remindersRaw]) => {
       if (notesRaw) {
         try {
-          const parsed = JSON.parse(notesRaw);
+          const parsed: unknown = JSON.parse(notesRaw);
           if (Array.isArray(parsed)) {
-            setNotes(parsed.map((n: any) => ({ id: n.id ?? String(n.title), title: n.title ?? '' })));
+            setNotes(parsed.map((n: Record<string, unknown>) => ({ id: String(n.id ?? n.title ?? ''), title: String(n.title ?? '') })));
           }
         } catch { /* ignore */ }
       }
       if (mailRaw) {
         try {
-          const parsed = JSON.parse(mailRaw);
+          const parsed: unknown = JSON.parse(mailRaw);
           if (Array.isArray(parsed)) {
-            setMails(parsed.map((m: any) => ({ id: m.id ?? '', subject: m.subject ?? '', sender: m.sender ?? '' })));
+            setMails(parsed.map((m: Record<string, unknown>) => ({ id: String(m.id ?? ''), subject: String(m.subject ?? ''), sender: String(m.sender ?? '') })));
           }
         } catch { /* ignore */ }
       }
       if (remindersRaw) {
         try {
-          const parsed = JSON.parse(remindersRaw);
+          const parsed: unknown = JSON.parse(remindersRaw);
           if (Array.isArray(parsed)) {
-            setReminders(parsed.filter((r: any) => !r.completed).map((r: any) => ({ id: r.id ?? '', title: r.title ?? '' })));
+            setReminders(
+              (parsed as Record<string, unknown>[])
+                .filter((r) => !r.completed)
+                .map((r) => ({ id: String(r.id ?? ''), title: String(r.title ?? '') })),
+            );
           }
         } catch { /* ignore */ }
       }

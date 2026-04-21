@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +18,7 @@ type FocusMode = 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
 interface FocusModeOption {
   key: FocusMode;
   label: string;
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   iconBg: string;
 }
 
@@ -31,7 +30,6 @@ const FOCUS_MODES: FocusModeOption[] = [
   { key: 'personal', label: 'Personal', icon: 'person', iconBg: '#FF9500' },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
@@ -105,8 +103,7 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
                   key={mode.key}
                   title={mode.label}
                   leading={{
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    name: mode.icon as any,
+                    name: mode.icon,
                     color: '#FFFFFF',
                     backgroundColor: isActive ? mode.iconBg : colors.systemGray4 ?? '#8E8E93',
                   }}

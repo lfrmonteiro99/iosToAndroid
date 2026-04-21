@@ -22,6 +22,8 @@ import {
   useAlert,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { Typography } from '../theme/CupertinoTheme';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -66,10 +68,8 @@ interface QuickActionProps {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 const QuickAction = React.memo(function QuickAction({
@@ -111,10 +111,8 @@ interface RecentRowProps {
   onPress: () => void;
   onDelete: () => void;
   onToggleFavorite: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  typography: any;
+  colors: CupertinoColors;
+  typography: typeof Typography;
 }
 
 const RecentRow = React.memo(function RecentRow({

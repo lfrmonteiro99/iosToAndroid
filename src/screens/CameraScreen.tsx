@@ -11,14 +11,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
 
 // Attempt to import expo-camera; gracefully handle if unavailable
-let CameraViewComponent: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
-let useCameraPermissionsHook: (() => [any, () => Promise<any>]) | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- CameraView is a dynamic optional module; exact type not available at build time
+let CameraViewComponent: React.ComponentType<any> | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+type PermissionResult = { granted: boolean; canAskAgain: boolean } | null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- useCameraPermissions shape varies across expo-camera versions
+let useCameraPermissionsHook: (() => [PermissionResult, () => Promise<PermissionResult>]) | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('expo-camera');
@@ -37,13 +41,12 @@ const useCamPerms = useCameraPermissionsHook ?? useStubPermissions;
 
 type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const { textScale } = useTheme();
-  // cameraRef is typed any because expo-camera ref methods vary by platform; we guard with optional chaining
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // cameraRef is unknown because expo-camera ref methods vary by platform; we guard with optional chaining
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- expo-camera ref API is untyped and accessed via optional chaining
   const cameraRef = useRef<any>(null);
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [flashOn, setFlashOn] = useState(false);
@@ -78,7 +81,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
 
   const saveToLibrary = useCallback(async (uri: string) => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await withAutoLockSuppressed(() => MediaLibrary.requestPermissionsAsync());
       if (status === 'granted') {
         await MediaLibrary.saveToLibraryAsync(uri);
       }
@@ -212,6 +215,8 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
             <Pressable
               onPress={requestPermission}
               style={styles.permissionBtn}
+              accessibilityLabel="Grant camera permission"
+              accessibilityRole="button"
             >
               <Text style={[styles.permissionBtnText, { fontSize: 14 * textScale }]}>Grant Permission</Text>
             </Pressable>
@@ -228,8 +233,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
         flash={flashOn ? 'on' : 'off'}
         mode={cameraMode}
         onCameraReady={onCameraReady}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onMountError={(event: any) => {
+        onMountError={(event: { nativeEvent?: { message?: string } }) => {
           const msg = event?.nativeEvent?.message ?? 'Could not start camera preview.';
           alert('Camera Error', msg);
         }}
@@ -241,10 +245,20 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Top controls */}
       <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={12}
+          accessibilityLabel="Close camera"
+          accessibilityRole="button"
+        >
           <Ionicons name="close" size={28} color="#fff" />
         </Pressable>
-        <Pressable onPress={toggleFlash} hitSlop={12}>
+        <Pressable
+          onPress={toggleFlash}
+          hitSlop={12}
+          accessibilityLabel={flashOn ? 'Turn off flash' : 'Turn on flash'}
+          accessibilityRole="button"
+        >
           <Ionicons name={flashOn ? 'flash' : 'flash-off'} size={24} color="#fff" />
         </Pressable>
       </View>
@@ -261,6 +275,8 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
             key={m}
             onPress={() => selectMode(m)}
             hitSlop={8}
+            accessibilityLabel={`Switch to ${m.charAt(0) + m.slice(1).toLowerCase()} mode`}
+            accessibilityRole="button"
             style={({ pressed }) => [
               styles.modeButton,
               pressed && styles.modeButtonPressed,
@@ -277,7 +293,12 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
       {/* Bottom controls */}
       <View style={styles.bottomBar}>
         {/* Gallery thumbnail */}
-        <Pressable onPress={pickFromGallery} style={styles.galleryBtn}>
+        <Pressable
+          onPress={pickFromGallery}
+          style={styles.galleryBtn}
+          accessibilityLabel="Open photo gallery"
+          accessibilityRole="button"
+        >
           {lastPhoto ? (
             <Image source={{ uri: lastPhoto }} style={styles.galleryThumb} />
           ) : (
@@ -292,6 +313,14 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
         <Pressable
           onPress={handleShutter}
           disabled={cameraUnavailable || permissionDenied || permissionLoading || !cameraReady}
+          accessibilityLabel={
+            mode === 'VIDEO'
+              ? isRecording
+                ? 'Stop recording'
+                : 'Start recording'
+              : 'Take photo'
+          }
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.shutterOuter,
             (cameraUnavailable || permissionDenied || permissionLoading || !cameraReady) && styles.shutterDisabled,
@@ -308,7 +337,12 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
         </Pressable>
 
         {/* Flip camera */}
-        <Pressable onPress={flipCamera} style={styles.flipBtn}>
+        <Pressable
+          onPress={flipCamera}
+          style={styles.flipBtn}
+          accessibilityLabel="Switch camera"
+          accessibilityRole="button"
+        >
           <Ionicons name="camera-reverse-outline" size={28} color="#fff" />
         </Pressable>
       </View>

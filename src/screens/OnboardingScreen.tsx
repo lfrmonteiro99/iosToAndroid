@@ -98,8 +98,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     const mod = await getLauncher();
     if (mod) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (mod as any).openLauncherSettings?.();
+        await (mod as { openLauncherSettings?: () => Promise<void> }).openLauncherSettings?.();
       } catch { /* Expected: openLauncherSettings may not exist on all devices */ }
     }
     goToPage(3);
