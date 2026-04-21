@@ -68,7 +68,10 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
       const progress = panelProgress.value;
       const reason = commitForNC({ progress, velocity: vy, holdMs: 0 });
       if (reason !== 'none') {
-        panelProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value);
+        // Hand off to the real screen: retract the preview so it doesn't
+        // linger underneath the transparent modal and block the home screen
+        // when the user returns.
+        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
         runOnJS(onCommit)();
       } else {
         panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
