@@ -46,6 +46,7 @@ import {
   useAlert,
 } from '../components';
 import type { BannerNotification } from '../components';
+import type { RootStackParamList } from '../navigation/types';
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
@@ -708,7 +709,7 @@ export function LauncherHomeScreen() {
 
     // Add virtual built-in apps to the grid (if not in dock)
     const virtualApps: InstalledApp[] = Object.entries(BUILT_IN_APPS).map(([pkg, name]) => ({
-      name,
+      name: String(name),
       packageName: pkg,
       icon: '',
       isSystem: false,

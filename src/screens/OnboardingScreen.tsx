@@ -98,7 +98,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     const mod = await getLauncher();
     if (mod) {
       try {
-        await (mod as { openLauncherSettings?: () => Promise<void> }).openLauncherSettings?.();
+        await (mod as unknown as { openLauncherSettings?: () => Promise<void> }).openLauncherSettings?.();
       } catch { /* Expected: openLauncherSettings may not exist on all devices */ }
     }
     goToPage(3);
