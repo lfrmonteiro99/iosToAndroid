@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useFrameCallback,
   withSpring,
   withTiming,
   withSequence,
@@ -25,6 +26,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import * as Haptics from 'expo-haptics';
+import { gestureConfig } from '../utils/gestureConfig';
+import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
+import { GestureHaptics } from '../utils/gestureHaptics';
 import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
@@ -558,6 +562,16 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
 
+  // Frame-callback timestamp for velocity sampling
+  const currentT = useSharedValue(0);
+  useFrameCallback(({ timestamp }) => {
+    'worklet';
+    currentT.value = timestamp;
+  });
+
+  // Multi-sample velocity buffer
+  const lockBuf = useVelocityBuffer();
+
   const handleUnlock = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (onUnlock) {
@@ -568,21 +582,38 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: any; route?:
   };
 
   const swipeGesture = Gesture.Pan()
+    .onBegin(() => {
+      'worklet';
+      lockBuf.value = [];
+    })
     .onUpdate((e) => {
+      'worklet';
       if (e.translationY < 0) {
         // Only track upward swipes
         translateY.value = e.translationY;
         opacity.value = 1 + e.translationY / (SCREEN_HEIGHT * 0.4);
+        pushSample(lockBuf.value, e.translationX, e.translationY, currentT.value);
       }
     })
     .onEnd((e) => {
-      if (e.translationY < -SWIPE_THRESHOLD) {
-        translateY.value = withSpring(-SCREEN_HEIGHT, { damping: 20, stiffness: 200 });
+      'worklet';
+      pushSample(lockBuf.value, e.translationX, e.translationY, currentT.value);
+      const { vy } = sampledVelocity(lockBuf.value, currentT.value);
+      const upwardV = -vy; // vy is negative for upward motion
+      const progress = Math.min(1, -e.translationY / (SCREEN_HEIGHT * 0.4));
+      const shouldCommit =
+        e.translationY < -SWIPE_THRESHOLD ||
+        progress >= gestureConfig.panelCommitProgress ||
+        upwardV >= gestureConfig.panelCommitVelocity;
+
+      if (shouldCommit) {
+        runOnJS(GestureHaptics.commit)('light');
+        translateY.value = withSpring(-SCREEN_HEIGHT, gestureConfig.spring.mediumSettle);
         opacity.value = withTiming(0, { duration: 250 }, () => {
           runOnJS(handleUnlock)();
         });
       } else {
-        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        translateY.value = withSpring(0, gestureConfig.spring.fastSettle);
         opacity.value = withTiming(1, { duration: 200 });
       }
     });
