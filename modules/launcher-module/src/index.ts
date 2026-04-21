@@ -486,9 +486,17 @@ export default LauncherModule;
 
 // ─── Event-driven notification listeners ────────────────────────────────────
 // Subscribe to real-time notification events emitted by NotificationService
-// (via RCTDeviceEventEmitter on the native side) instead of polling.
+// via the Expo module's own event emitter (sendEvent from the native side).
 
-import { DeviceEventEmitter } from 'react-native';
+type Subscription = { remove: () => void };
+
+function addModuleListener(eventName: string, handler: (payload: any) => void): Subscription {
+  if (!nativeModule || typeof nativeModule.addListener !== 'function') {
+    return { remove: () => {} };
+  }
+  const sub: Subscription = nativeModule.addListener(eventName, handler);
+  return sub;
+}
 
 /**
  * Subscribe to new notifications as they arrive.
@@ -497,7 +505,7 @@ import { DeviceEventEmitter } from 'react-native';
 export function addNotificationListener(
   listener: (n: DeviceNotification) => void,
 ): () => void {
-  const sub = DeviceEventEmitter.addListener('onNotificationPosted', listener);
+  const sub = addModuleListener('onNotificationPosted', listener);
   return () => sub.remove();
 }
 
@@ -509,7 +517,7 @@ export function addNotificationListener(
 export function addNotificationRemovedListener(
   listener: (id: string) => void,
 ): () => void {
-  const sub = DeviceEventEmitter.addListener('onNotificationRemoved', (n: { id: string }) => {
+  const sub = addModuleListener('onNotificationRemoved', (n: { id: string }) => {
     listener(n.id);
   });
   return () => sub.remove();
