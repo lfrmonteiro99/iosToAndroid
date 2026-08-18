@@ -91,6 +91,37 @@ TEAM_FALLBACK_LOW="${TEAM_FALLBACK_LOW:-gpt-oss:20b-cloud}"
 TEAM_FALLBACK_MED="${TEAM_FALLBACK_MED:-deepseek-v4-flash:cloud}"
 TEAM_FALLBACK_STRONG="${TEAM_FALLBACK_STRONG:-deepseek-v4-pro:cloud}"
 
+# How many judged rejections before the orchestrator changes strategy (curator,
+# then a forced split). Lives here, not in the orchestrator, because implement.sh
+# and review.sh both report against it.
+MAX_ATTEMPTS="${TEAM_MAX_ATTEMPTS:-3}"
+
+ATTEMPTS_DIR="$STATE_DIR/attempts"
+mkdir -p "$ATTEMPTS_DIR" 2>/dev/null || true
+
+# Count a JUDGED REJECTION, never a dispatch.
+#
+# This used to fire when the orchestrator handed an issue to the implementer, so it
+# counted three different things as the same thing: real work that a reviewer
+# rejected, a run that died because run-agent.sh never entered the worktree, and the
+# mere fact of starting. #190 reached the strong tier — opus, deepseek-v4-pro — on
+# two attempts that were both MY bugs, having never once been judged on its merits.
+#
+# The counter exists to answer one question: "has the cheap model been given a fair
+# shot and failed?" Only a verdict that was produced and then rejected answers it.
+# Infrastructure failures requeue the work without counting, which is what
+# no_verdict_is_real_failure already decides for the state machine.
+bump_attempts() {
+  local issue="$1" n
+  n=$(( $(cat "$ATTEMPTS_DIR/$issue" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$ATTEMPTS_DIR/$issue"
+  printf '%s' "$n"
+}
+
+attempts_of() { cat "$ATTEMPTS_DIR/${1}" 2>/dev/null || echo 0; }
+
+clear_attempts() { rm -f "$ATTEMPTS_DIR/${1}" 2>/dev/null || true; }
+
 # After this many failed attempts an issue is promoted to the strong tier. This is
 # the "only if it needs it" rule made mechanical: nobody guesses up front which
 # issue is hard, the issue demonstrates it by defeating the cheaper model.

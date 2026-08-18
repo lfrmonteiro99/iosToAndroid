@@ -242,6 +242,7 @@ $SUMMARY
 
 PR #$PR integrado em \`$BASE\`."
         set_state "$ISSUE" "$L_DONE"
+        clear_attempts "$ISSUE"
         gh issue close "$ISSUE" --repo "$REPO" --reason completed >/dev/null 2>&1 || true
       fi
     else
@@ -255,6 +256,8 @@ deve actualizar o branch." >/dev/null 2>&1 || true
     ;;
 
   blocked-impl)
+    # Judged rejection — this is what promotes an issue to a stronger tier.
+    [ -n "$ISSUE" ] && log "#$ISSUE: rejeição $(bump_attempts "$ISSUE")"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: bloqueado — problema de código
 
 $SUMMARY$DETAIL$CHANGES
@@ -269,6 +272,7 @@ $SUMMARY$DETAIL$CHANGES"
     ;;
 
   blocked-spec)
+    [ -n "$ISSUE" ] && log "#$ISSUE: rejeição $(bump_attempts "$ISSUE")"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: bloqueado — problema do enunciado
 
 $SUMMARY$DETAIL$CHANGES
