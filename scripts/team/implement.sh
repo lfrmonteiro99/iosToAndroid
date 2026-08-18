@@ -194,6 +194,11 @@ log "outcome=$OUTCOME alterações=${CHANGED:+sim}${CHANGED:-nao}"
 if [ "$OUTCOME" != "implemented" ] || [ -z "$CHANGED" ]; then
   REASON="$OUTCOME"
   [ -n "$OUTCOME" ] && [ -z "$CHANGED" ] && REASON="$OUTCOME (sem alterações reais no código)"
+  # A JUDGED REJECTION: the agent ran, produced a verdict, and the verdict was not
+  # usable work. This is what the attempt counter is for — not dispatches, and not
+  # runs that died on infrastructure.
+  log "#$ISSUE: rejeição $(bump_attempts "$ISSUE") de $MAX_ATTEMPTS"
+
   # THIS IS THE DOOR TO THE CURATOR. `blocked` means the implementer investigated
   # and the issue is not actionable as written — analysis is now warranted. Anything
   # else that failed to produce code goes the same way rather than being parked,
