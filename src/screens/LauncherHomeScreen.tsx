@@ -722,6 +722,20 @@ export function LauncherHomeScreen() {
     return counts;
   }, [device.messages]);
 
+  // Spotlight reveal is suppressed when jiggling, folder is open, or action sheet
+  // is up.
+  //
+  // This lives ABOVE the early returns deliberately. It used to sit ~80 lines
+  // further down, after the non-Android and loading returns, so on any render that
+  // took one of those paths the effect was skipped — React saw a different number
+  // of hooks between renders, which is the "Rendered more hooks than during the
+  // previous render" crash waiting to happen. eslint's rules-of-hooks was reporting
+  // it as an error, correctly.
+  const canSpotlight = !isJiggling && !actionSheet.visible && openFolder === null;
+  useEffect(() => {
+    canSpotlightShared.value = canSpotlight;
+  }, [canSpotlight, canSpotlightShared]);
+
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
     return <NonAndroidFallback />;
@@ -803,12 +817,6 @@ export function LauncherHomeScreen() {
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
-
-  // Spotlight reveal is suppressed when jiggling, folder is open, or action sheet is up
-  const canSpotlight = !isJiggling && !actionSheet.visible && openFolder === null;
-  useEffect(() => {
-    canSpotlightShared.value = canSpotlight;
-  }, [canSpotlight, canSpotlightShared]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;

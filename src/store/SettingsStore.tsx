@@ -134,7 +134,23 @@ interface SettingsContextValue {
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
-export function SettingsProvider({ children }: { children: React.ReactNode }) {
+export function SettingsProvider({
+  children,
+  gateFirstRender = true,
+}: {
+  children: React.ReactNode;
+  /**
+   * Hold back the first render until AsyncStorage has loaded and the initial
+   * device sync has completed, so the UI never flashes default settings before
+   * the real ones arrive.
+   *
+   * Consumers that render synchronously and cannot wait for that round trip pass
+   * `false` — notably the test harness (`src/test-utils.tsx`). With the gate on,
+   * a synchronous render returns `null` for the whole subtree, which is why every
+   * screen test used to fail with "Unable to find an element with text: ...".
+   */
+  gateFirstRender?: boolean;
+}) {
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [isReady, setIsReady] = useState(false);
   const [firstSyncDone, setFirstSyncDone] = useState(false);
@@ -255,7 +271,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     [settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
   );
 
-  if (!firstSyncDone) return null;
+  if (gateFirstRender && !firstSyncDone) return null;
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }
