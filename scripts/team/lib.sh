@@ -281,6 +281,19 @@ wt_prepare_node() {
   local wt="$1"
   [ -f "$wt/package.json" ] || return 0
 
+  # `.gitignore` says `node_modules/`, with a trailing slash — which matches a
+  # DIRECTORY and not a SYMLINK of the same name. So the symlink below shows up as
+  # untracked, and the implementer's `git add -A` commits it: a mode-120000 entry
+  # pointing at an absolute path on this machine, broken in every other checkout.
+  # The reviewer caught exactly that on PR #295, the first PR this pipeline
+  # produced. Excluding it per worktree stops it at the source.
+  local excl
+  excl=$(git -C "$wt" rev-parse --git-path info/exclude 2>/dev/null || echo "")
+  if [ -n "$excl" ]; then
+    mkdir -p "$(dirname "$excl")" 2>/dev/null || true
+    grep -qxF 'node_modules' "$excl" 2>/dev/null || echo 'node_modules' >> "$excl"
+  fi
+
   if [ -d "$TEAM_ROOT/node_modules" ] \
      && [ -f "$wt/package-lock.json" ] && [ -f "$TEAM_ROOT/package-lock.json" ] \
      && cmp -s "$wt/package-lock.json" "$TEAM_ROOT/package-lock.json"; then
