@@ -66,6 +66,68 @@ TEAM_USE_FALLBACK="${TEAM_USE_FALLBACK:-1}"
 
 COOLDOWN_FILE="$STATE_DIR/claude-usage-cooldown"
 
+# ── Model tiers ────────────────────────────────────────────────────────────
+#
+# The backlog is already triaged with `haiku-ready` / `sonnet-ready`, so the tier
+# comes from the issue, not from a global default. Each tier names BOTH engines —
+# the subscription model and the Ollama tag used when the subscription is out —
+# because a run must not silently change difficulty class just because the quota
+# ran out.
+#
+# The cloud tags below were verified to resolve (2026-08-19). Note `glm-5.2:cloud`
+# takes a hyphen: `glm5.2:cloud` does not exist, and `glm-4.7` was retired
+# 2026-07-15.
+#
+# LOW tier — chosen by measurement, see TEAM_FALLBACK_LOW's value in the repo's
+# bakeoff notes. The only low-usage model the implement bakeoff ever tested,
+# `gemma4:cloud`, scored 10/18 and crucially came back with produced_diff=false —
+# it wrote a verdict but no code. So a low tag is only used here once it has been
+# shown to produce a diff on a real issue in THIS repo.
+TEAM_MODEL_LOW_CLAUDE="${TEAM_MODEL_LOW_CLAUDE:-haiku}"
+TEAM_MODEL_MED_CLAUDE="${TEAM_MODEL_MED_CLAUDE:-sonnet}"
+TEAM_MODEL_STRONG_CLAUDE="${TEAM_MODEL_STRONG_CLAUDE:-opus}"
+
+TEAM_FALLBACK_LOW="${TEAM_FALLBACK_LOW:-gpt-oss:20b-cloud}"
+TEAM_FALLBACK_MED="${TEAM_FALLBACK_MED:-deepseek-v4-flash:cloud}"
+TEAM_FALLBACK_STRONG="${TEAM_FALLBACK_STRONG:-deepseek-v4-pro:cloud}"
+
+# After this many failed attempts an issue is promoted to the strong tier. This is
+# the "only if it needs it" rule made mechanical: nobody guesses up front which
+# issue is hard, the issue demonstrates it by defeating the cheaper model.
+TEAM_STRONG_AFTER="${TEAM_STRONG_AFTER:-2}"
+
+# Echo "<claude-model> <fallback-tag> <tier>" for an issue.
+#
+# $2 floors the tier: pass "med" for roles that must not run on the cheap model
+# regardless of the label. The reviewer does that — the label describes how hard
+# the CHANGE is, not how hard judging it is, and the reviewer is the only gate in
+# front of main.
+resolve_models() {
+  local issue="$1" floor="${2:-low}" labels tier attempts
+
+  labels=$(gh issue view "$issue" --repo "$REPO" --json labels \
+           --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+
+  case ",$labels," in
+    *,haiku-ready,*)  tier=low ;;
+    *,sonnet-ready,*) tier=med ;;
+    *)                tier=med ;;   # unlabelled is not evidence of being easy
+  esac
+
+  [ "$floor" = "med" ] && [ "$tier" = "low" ] && tier=med
+
+  # Earned promotion: repeated failure is the only evidence that the cheap model
+  # is not enough.
+  attempts=$(cat "$STATE_DIR/attempts/$issue" 2>/dev/null || echo 0)
+  if [ "${attempts:-0}" -ge "$TEAM_STRONG_AFTER" ]; then tier=strong; fi
+
+  case "$tier" in
+    low)    echo "$TEAM_MODEL_LOW_CLAUDE $TEAM_FALLBACK_LOW low" ;;
+    strong) echo "$TEAM_MODEL_STRONG_CLAUDE $TEAM_FALLBACK_STRONG strong" ;;
+    *)      echo "$TEAM_MODEL_MED_CLAUDE $TEAM_FALLBACK_MED med" ;;
+  esac
+}
+
 # Seconds remaining on the subscription cooldown; 0 when there is none.
 cooldown_remaining() {
   [ -f "$COOLDOWN_FILE" ] || { echo 0; return; }
@@ -254,6 +316,39 @@ agent_log_header() {
     echo "  $what — $(date '+%Y-%m-%d %H:%M:%S')"
     echo "════════════════════════════════════════════════════════════════════"
   } >> "$file"
+}
+
+# A verdict must be PRESENT and PARSEABLE before anything reads a field from it.
+#
+# `jqv` swallows a parse error and returns its fallback. For `.outcome` that
+# fallback is `blocked`, so a malformed verdict was indistinguishable from an agent
+# that declared itself blocked — and implement.sh routed the work to the curator to
+# analyse a problem that did not exist.
+#
+# Measured on #217: the agent implemented the fix, wrote the test file, and set
+# `"outcome": "implemented"` — but wrote `mensagem "onPress impreciso" (exemplo)`
+# inside the description with the inner quotes unescaped. The file stopped parsing,
+# jqv returned `blocked`, and the issue went to qa:blocked-spec. Nothing in the log
+# said the problem was syntax.
+#
+# So: try to repair, and if it still will not parse, report NO VERDICT. That path
+# requeues the work instead of misclassifying it, which is the only safe reading of
+# "I cannot tell what this agent decided".
+verdict_readable() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  jq -e . "$file" >/dev/null 2>&1 && return 0
+
+  warn "veredicto $(basename "$file") não faz parse — a tentar reparar"
+  if python3 "$(dirname "${BASH_SOURCE[0]}")/repair-verdict.py" "$file" 2>&1 \
+     | while IFS= read -r l; do warn "  $l"; done; then :; fi
+  if jq -e . "$file" >/dev/null 2>&1; then
+    warn "veredicto reparado com sucesso"
+    return 0
+  fi
+  warn "veredicto irrecuperável — tratado como SEM VEREDICTO (o trabalho volta à fila)"
+  rm -f "$file"
+  return 1
 }
 
 jqv() {

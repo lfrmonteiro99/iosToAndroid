@@ -29,7 +29,8 @@ ROLE="curator"
 VERDICT_FILE="$VERDICT_DIR/curator-$ISSUE.json"
 WT=""
 PROMPT="/tmp/ios2a-curator-prompt-$ISSUE.txt"
-MODEL="${CURATOR_MODEL:-sonnet}"
+MODEL="${CURATOR_MODEL:-$TEAM_MODEL_MED_CLAUDE}"
+export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$TEAM_FALLBACK_MED}"
 
 cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
 trap cleanup EXIT
@@ -76,7 +77,7 @@ AGENT_SLOT=curator CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${CURATOR_TIMEOUT:-1200}" \
   >> "$LOG_DIR/curator-$ISSUE.log" 2>&1; AGENT_RC=$?
 
-if [ ! -f "$VERDICT_FILE" ]; then
+if ! verdict_readable "$VERDICT_FILE"; then
   # A failed RUN is not a failed issue: leave the state alone so it is picked up
   # again. Nobody is coming to unpark it.
   if ! no_verdict_is_real_failure curator "$AGENT_RC"; then
