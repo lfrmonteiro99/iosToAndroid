@@ -1,12 +1,11 @@
 import React from 'react';
 import { Text } from 'react-native';
-import { render } from '@testing-library/react-native';
+// Shared harness, not a hand-rolled provider wrapper: SettingsProvider and
+// ThemeProvider gate their first render on an async load, so wrapping them here
+// rendered `null` and every snapshot compared against nothing. test-utils turns
+// that gate off — see the comment there.
+import { render as renderWithTheme } from '../../test-utils';
 import { CupertinoCard } from '../CupertinoCard';
-import { ThemeProvider } from '../../theme/ThemeContext';
-import { SettingsProvider } from '../../store/SettingsStore';
-
-const renderWithTheme = (ui: React.ReactElement) =>
-  render(<SettingsProvider><ThemeProvider>{ui}</ThemeProvider></SettingsProvider>);
 
 describe('CupertinoCard', () => {
   it('renders with title and subtitle', () => {

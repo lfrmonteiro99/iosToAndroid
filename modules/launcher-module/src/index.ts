@@ -490,7 +490,13 @@ export default LauncherModule;
 
 type Subscription = { remove: () => void };
 
-function addModuleListener(eventName: string, handler: (payload: any) => void): Subscription {
+// Generic rather than `any`: each caller already knows the shape the native side
+// emits for its event, and stating it here propagates that type to the handler
+// instead of erasing it at the boundary.
+function addModuleListener<TPayload>(
+  eventName: string,
+  handler: (payload: TPayload) => void,
+): Subscription {
   if (!nativeModule || typeof nativeModule.addListener !== 'function') {
     return { remove: () => {} };
   }

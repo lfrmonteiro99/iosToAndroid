@@ -74,7 +74,18 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({
+  children,
+  gateFirstRender = true,
+}: {
+  children: React.ReactNode;
+  /**
+   * Hold back the first render until the saved theme has loaded, so the app never
+   * flashes the wrong theme on launch. See the sibling flag on `SettingsProvider`
+   * — the test harness passes `false` because it renders synchronously.
+   */
+  gateFirstRender?: boolean;
+}) {
   const [mode, setMode] = useState<ThemeMode>('system');
   const [isReady, setIsReady] = useState(false);
   const [accentColor, setAccentColorState] = useState<AccentColorKey>('blue');
@@ -176,7 +187,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [isDark, isReady, mode, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setThemeMode, setAccentColor, setHighContrast]
   );
 
-  if (!isReady) return null;
+  if (gateFirstRender && !isReady) return null;
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
