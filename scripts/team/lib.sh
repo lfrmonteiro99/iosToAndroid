@@ -37,6 +37,40 @@ STATE_DIR="${TEAM_STATE_DIR:-$HOME/Documentos/iostoandroid-verdicts/state}"
 
 LOCK_PREFIX="${TEAM_LOCK_PREFIX:-/tmp/ios2android-agent}"
 
+# THE OLLAMA FALLBACK IS OFF BY DEFAULT HERE, AND THAT IS A MEASUREMENT, NOT A
+# PREFERENCE.
+#
+# The sibling project keeps working through a quota outage on `ollama launch claude`
+# with a cloud model, and its logs justify that: the fallback there produced real
+# implementations. It does not work for this repo's roles. Measured on the first
+# live run, with `deepseek-v4-flash:cloud`:
+#
+#   * a two-word prompt returns "OK" in seconds — the engine and credential are fine;
+#   * the actual 16KB implementer prompt, with the same flags, produced ZERO bytes of
+#     output for four minutes and had to be killed.
+#
+# Three dispatches of #190 burned that way, each looking from the log like an agent
+# that ran and declined to answer. Retrying it every 45 seconds for the three hours
+# until the subscription resets buys nothing and makes the log lie about what the
+# pipeline is doing.
+#
+# So when the subscription is in cooldown the orchestrator WAITS instead, and says
+# so. Set TEAM_USE_FALLBACK=1 (optionally with AGENT_FALLBACK_MODEL pointing at a
+# larger cloud tag) to try the fallback again — if a bigger model does cope with a
+# prompt this size, this default is the thing to revisit.
+TEAM_USE_FALLBACK="${TEAM_USE_FALLBACK:-0}"
+
+COOLDOWN_FILE="$STATE_DIR/claude-usage-cooldown"
+
+# Seconds remaining on the subscription cooldown; 0 when there is none.
+cooldown_remaining() {
+  [ -f "$COOLDOWN_FILE" ] || { echo 0; return; }
+  local until_ts now
+  until_ts=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  if [ "$now" -lt "$until_ts" ]; then echo $(( until_ts - now )); else echo 0; fi
+}
+
 mkdir -p "$VERDICT_DIR" "$LOG_DIR" "$STATE_DIR" "$WT_ROOT" 2>/dev/null || true
 
 # ── Labels: the pipeline state machine ─────────────────────────────────────
@@ -186,6 +220,10 @@ no_verdict_is_real_failure() {
 
   if [ "$rc" = "75" ]; then
     warn "sem veredicto porque o slot '$slot' estava ocupado (exit 75) — não escalo"
+    return 1
+  fi
+  if [ "$rc" = "77" ]; then
+    warn "sem veredicto porque a subscrição está em cooldown e o fallback está desligado (exit 77) — não escalo"
     return 1
   fi
   if agent_used_fallback "$slot"; then

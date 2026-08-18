@@ -239,6 +239,14 @@ else
 fi
 
 # ── 2. Fallback (Ollama Cloud model behind the same harness) ───────────────
+if [ -z "$USED" ] && [ "${TEAM_USE_FALLBACK:-0}" != "1" ]; then
+  # Measured not to work for these roles on this repo — see the comment on
+  # TEAM_USE_FALLBACK in lib.sh. Exit 77 so the caller can tell "we deliberately
+  # did not run" from "the agent ran and failed", and leave the work untouched.
+  echo "[run-agent] subscrição indisponível e fallback desligado (TEAM_USE_FALLBACK=0) — não corro" >&2
+  exit 77
+fi
+
 if [ -z "$USED" ]; then
   # Credential: explicit env wins, then a local override file, then the sibling
   # project's .env, which is where this key is maintained on this machine.
