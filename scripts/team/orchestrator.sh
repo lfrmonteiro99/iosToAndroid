@@ -361,6 +361,27 @@ while true; do
 
   cleanup_stale
 
+  # ── Subscription cooldown: WAIT, don't spin ───────────────────────────────
+  #
+  # With the fallback off (the default — see lib.sh), no write-path role can run
+  # while the subscription is exhausted. Cycling every 45s to re-discover that
+  # produces a log full of dispatches that did nothing, and on the first live run
+  # it burned three attempts on #190 against an engine that returns no output at
+  # all for a prompt this size.
+  #
+  # Sleep to the reset instead, in chunks, so the pipeline picks straight back up
+  # and a `--stop` still lands promptly.
+  if [ "${TEAM_USE_FALLBACK:-0}" != "1" ]; then
+    REMAIN=$(cooldown_remaining)
+    if [ "$REMAIN" -gt 0 ]; then
+      log "subscrição esgotada — volta às $(date -d "@$(( $(date +%s) + REMAIN ))" +%H:%M). A aguardar (fallback desligado)."
+      if [ "$ONCE" = "1" ]; then exit 0; fi
+      while [ "$(cooldown_remaining)" -gt 0 ]; do sleep 60; done
+      log "subscrição de volta — a retomar"
+      continue
+    fi
+  fi
+
   # One read of the world per cycle. Everything below reasons from this snapshot. If
   # it fails we know nothing about the queue, so the cycle does nothing rather than
   # acting on a guess.
