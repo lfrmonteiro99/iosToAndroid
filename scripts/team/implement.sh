@@ -160,9 +160,10 @@ fi
         -e "s|__BASE_BRANCH__|$BASE_BRANCH|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
+agent_log_header "$LOG_DIR/implement-$ISSUE.log" "implement #$ISSUE modelo=$MODEL"
 AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${IMPLEMENT_TIMEOUT:-2700}" \
-  > "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
+  >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
 
 if [ ! -f "$VERDICT_FILE" ]; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then

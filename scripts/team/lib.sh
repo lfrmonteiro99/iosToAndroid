@@ -37,28 +37,32 @@ STATE_DIR="${TEAM_STATE_DIR:-$HOME/Documentos/iostoandroid-verdicts/state}"
 
 LOCK_PREFIX="${TEAM_LOCK_PREFIX:-/tmp/ios2android-agent}"
 
-# THE OLLAMA FALLBACK IS OFF BY DEFAULT HERE, AND THAT IS A MEASUREMENT, NOT A
-# PREFERENCE.
+# The Ollama fallback is ON: when the Claude subscription runs out of usage, the
+# same harness keeps working behind a cloud model.
 #
-# The sibling project keeps working through a quota outage on `ollama launch claude`
-# with a cloud model, and its logs justify that: the fallback there produced real
-# implementations. It does not work for this repo's roles. Measured on the first
-# live run, with `deepseek-v4-flash:cloud`:
+# This was briefly defaulted to 0 on the belief that `deepseek-v4-flash:cloud` could
+# not handle a 16KB agentic prompt. That belief was wrong, and the evidence for it
+# was three separate misreadings — worth recording, because each one is easy to
+# repeat:
 #
-#   * a two-word prompt returns "OK" in seconds — the engine and credential are fine;
-#   * the actual 16KB implementer prompt, with the same flags, produced ZERO bytes of
-#     output for four minutes and had to be killed.
+#   * `claude -p` does not stream. It prints only the final message, so "no output
+#     for four minutes" is what a working agent looks like. Use
+#     `--output-format stream-json --verbose` to actually watch one.
+#   * the role logs were opened with `>`, so each retry destroyed the previous
+#     attempt's output. Reading the log mid-retry showed two lines and looked like
+#     an engine that ran and said nothing. (Now appended — see agent_log_header.)
+#   * the engine was probed with a two-word prompt and the real task with a short
+#     timeout. The difference measured was latency, not capability.
 #
-# Three dispatches of #190 burned that way, each looking from the log like an agent
-# that ran and declined to answer. Retrying it every 45 seconds for the three hours
-# until the subscription resets buys nothing and makes the log lie about what the
-# pipeline is doing.
+# What was actually broken was run-agent.sh never entering $WORKDIR, so the agent
+# had no access to the tree it was told to change. With that fixed, #215 ran end to
+# end on this exact fallback in 4m34s: verdict `implemented`, branch pushed, PR
+# opened.
 #
-# So when the subscription is in cooldown the orchestrator WAITS instead, and says
-# so. Set TEAM_USE_FALLBACK=1 (optionally with AGENT_FALLBACK_MODEL pointing at a
-# larger cloud tag) to try the fallback again — if a bigger model does cope with a
-# prompt this size, this default is the thing to revisit.
-TEAM_USE_FALLBACK="${TEAM_USE_FALLBACK:-0}"
+# Set TEAM_USE_FALLBACK=0 to make the orchestrator sleep out a quota window instead
+# — useful if you would rather wait for the stronger model than take fallback-grade
+# work on a delicate issue.
+TEAM_USE_FALLBACK="${TEAM_USE_FALLBACK:-1}"
 
 COOLDOWN_FILE="$STATE_DIR/claude-usage-cooldown"
 
@@ -231,6 +235,25 @@ no_verdict_is_real_failure() {
     return 1
   fi
   return 0
+}
+
+# ── Agent logs: APPEND, never truncate ─────────────────────────────────────
+#
+# These used to be opened with `>`, so every retry destroyed the evidence of the
+# attempt before it. That is exactly how I misdiagnosed the first live run: I read
+# implement-190.log while the THIRD attempt was still starting, saw two lines, and
+# concluded the engine had run and produced nothing. Attempts 1 and 2 — the ones
+# that actually failed and would have shown why — had already been overwritten.
+#
+# A log that deletes the failure you are trying to explain is worse than no log.
+agent_log_header() {
+  local file="$1" what="$2"
+  {
+    echo
+    echo "════════════════════════════════════════════════════════════════════"
+    echo "  $what — $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "════════════════════════════════════════════════════════════════════"
+  } >> "$file"
 }
 
 jqv() {
