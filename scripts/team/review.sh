@@ -118,9 +118,10 @@ fi
         -e "s|__WORKDIR__|$WT|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
+agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
-  > "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
+  >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
 if [ ! -f "$VERDICT_FILE" ]; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then

@@ -71,9 +71,10 @@ rm -f "$VERDICT_FILE"
 # or the reviewer, and serialising it onto them would add its whole runtime to every
 # issue that needs repair. The slot lock still guarantees two curators never run at
 # the same time.
+agent_log_header "$LOG_DIR/curator-$ISSUE.log" "curator #$ISSUE modelo=$MODEL"
 AGENT_SLOT=curator CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${CURATOR_TIMEOUT:-1200}" \
-  > "$LOG_DIR/curator-$ISSUE.log" 2>&1; AGENT_RC=$?
+  >> "$LOG_DIR/curator-$ISSUE.log" 2>&1; AGENT_RC=$?
 
 if [ ! -f "$VERDICT_FILE" ]; then
   # A failed RUN is not a failed issue: leave the state alone so it is picked up

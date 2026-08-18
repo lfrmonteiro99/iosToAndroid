@@ -105,8 +105,30 @@ is_usage_exhausted() {
     <<<"$out"
 }
 
+# THE AGENT MUST ACTUALLY BE IN THE WORKTREE.
+#
+# This script took $WORKDIR, validated it, printed it in the log — and never
+# entered it. So the harness inherited the CALLER's cwd, which for every role is
+# `scripts/team` inside the main checkout. Claude Code roots its project scope at
+# the process cwd, so the worktree the agent was told to work in
+# (`__WORKDIR__` in the prompt) sat entirely outside that scope: Read/Write/Edit
+# on the code under test were out of bounds, and the only writable path was the
+# verdict dir from --add-dir.
+#
+# From the outside that looks exactly like "the model could not do the task" —
+# three dispatches of #190 died in ~3 minutes each, and I read that as the
+# fallback engine being incapable. It was not: probed directly, the same engine
+# answers correctly on the same slot. It was an implementer with no access to the
+# tree it was asked to change.
+#
+# Inherited from the sibling project's run-agent.sh, which has the same gap.
+cd "$WORKDIR" || { echo "ERRO: não consegui entrar em $WORKDIR" >&2; exit 1; }
+
 build_add_dirs() {
   local -a args=()
+  # Belt and braces alongside the cd: if a role ever passes a workdir that is not
+  # the tree root (or cwd changes underneath), the tree stays in scope.
+  args+=(--add-dir "$WORKDIR")
   # The verdict is written OUTSIDE the working tree, so the harness has to be told
   # that directory is in scope — otherwise it refuses the Write and the agent
   # finishes having recorded nothing, which is the exact failure this whole design

@@ -122,6 +122,38 @@ volta a ser estrito sozinho: quando `main` estiver verde, apaga
 Volta a correr `baseline.sh` sempre que `main` receber um lote de correcções de
 testes, ou a linha de base envelhece e passa a perdoar regressões reais.
 
+## Quando a subscrição esgota
+
+`run-agent.sh` detecta o limite de sessão, lê a hora de reset da mensagem do CLI,
+grava um cooldown, e passa para o mesmo harness com um modelo do Ollama Cloud
+(`TEAM_USE_FALLBACK=1`, por omissão). Medido: o #215 correu de ponta a ponta no
+fallback em 4m34s — veredicto, push e PR.
+
+Põe `TEAM_USE_FALLBACK=0` para o orquestrador **dormir** até ao reset em vez de
+trabalhar em modo degradado.
+
+### Diagnosticar um agente que "não produz nada"
+
+`claude -p` **não faz streaming** — imprime só a mensagem final. Ausência de output
+não é prova de falha; é o aspecto normal de um agente a trabalhar. Para ver o que
+se passa:
+
+```bash
+ollama launch claude --model <tag> --yes -- -p "$(cat /tmp/ios2a-implement-prompt-N.txt)" \
+  --output-format stream-json --verbose --strict-mcp-config --mcp-config '{"mcpServers":{}}' < /dev/null
+```
+
+E antes de culpar o modelo, **prova que ele tem acesso ao que precisa** — uma sonda
+de duas linhas (`pwd` + `ls <ficheiro do worktree>`) responde a isso em segundos:
+
+```bash
+printf 'Executa `pwd` e diz o resultado. Depois `ls <WT>/package.json`.\n' > /tmp/p.txt
+cd scripts/team && AGENT_SLOT=probe AGENT_FORCE_FALLBACK=1 bash run-agent.sh /tmp/p.txt <WT> 240
+```
+
+Foi exactamente essa sonda que revelou que o agente corria em `scripts/team` e não
+no worktree.
+
 ## Ficheiros e estado
 
 Tudo o que é volátil vive **fora** do repositório, de propósito: dentro da árvore
@@ -162,6 +194,7 @@ Tudo por variável de ambiente, com omissões em `lib.sh`:
 | `REVIEW_TIMEOUT` | `1800` | segundos |
 | `CURATOR_TIMEOUT` | `1200` | segundos |
 | `AGENT_FALLBACK_MODEL` | `deepseek-v4-flash:cloud` | motor quando a subscrição esgota |
+| `TEAM_USE_FALLBACK` | `1` | a `0`, dorme até ao reset em vez de usar o fallback |
 
 Sobre `IMPLEMENT_HONOUR_READY_LABELS`: o backlog está triado com
 `haiku-ready`/`sonnet-ready`, mas essa triagem é sobre o **tamanho da alteração**,
