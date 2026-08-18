@@ -19,7 +19,7 @@ ROLE="review"
 
 VERDICT_FILE="$VERDICT_DIR/review-$PR.json"
 PROMPT="/tmp/ios2a-review-prompt-$PR.txt"
-MODEL="${REVIEW_MODEL:-sonnet}"
+# (modelo resolvido mais abaixo, a partir do issue ligado)
 WT=""
 
 cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
@@ -34,7 +34,7 @@ BASE=$(printf '%s' "$PR_INFO" | jq -r '.baseRefName')
 TITLE=$(printf '%s' "$PR_INFO" | jq -r '.title')
 STATE=$(printf '%s' "$PR_INFO" | jq -r '.state')
 
-log "PR #$PR $BRANCH -> $BASE ($STATE) modelo=$MODEL"
+log "PR #$PR $BRANCH -> $BASE ($STATE)"
 
 if [ "$STATE" != "OPEN" ]; then
   log "PR #$PR não está aberto — nada a rever"
@@ -47,6 +47,23 @@ ISSUE=$(printf '%s' "$PR_INFO" | jq -r '.body' \
   | grep -oiE '(Fixes|Closes|Resolves)[[:space:]]+#[0-9]+' \
   | grep -oE '[0-9]+' | head -1 || true)
 log "issue ligado: ${ISSUE:-nenhum}"
+
+# Tier from the linked issue, but FLOORED AT MED.
+#
+# The `haiku-ready` label says how hard the CHANGE is, not how hard judging it is —
+# and judging is the harder half here: enumerate the blast radius, compare the diff
+# against the issue, prove the red step by reverting production code. This reviewer
+# is also the only gate in front of `main`, with no verifier behind it and no CI on
+# pull requests, so a cheap reviewer waving work through is the one failure this
+# pipeline cannot detect on its own.
+if [ -n "$ISSUE" ]; then
+  read -r RMODEL RFALLBACK RTIER <<<"$(resolve_models "$ISSUE" med)"
+else
+  RMODEL="$TEAM_MODEL_MED_CLAUDE"; RFALLBACK="$TEAM_FALLBACK_MED"; RTIER="med"
+fi
+MODEL="${REVIEW_MODEL:-$RMODEL}"
+export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$RFALLBACK}"
+log "tier=$RTIER modelo=$MODEL fallback=$AGENT_FALLBACK_MODEL"
 
 # wt_checkout, NOT wt_create: the reviewer needs the PR's code. wt_create would cut
 # a new branch from the base, the diff would come out EMPTY, and the reviewer would
@@ -123,7 +140,7 @@ AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
-if [ ! -f "$VERDICT_FILE" ]; then
+if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — PR fica para nova review"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: corrida degradada, sem veredicto

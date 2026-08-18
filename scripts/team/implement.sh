@@ -24,24 +24,15 @@ VERDICT_FILE="$VERDICT_DIR/implement-$ISSUE.json"
 PROMPT="/tmp/ios2a-implement-prompt-$ISSUE.txt"
 WT=""
 
-# Model. This repo's backlog is already triaged with `haiku-ready` / `sonnet-ready`,
-# but that triage was about the SIZE OF THE CHANGE, not about the size of the job
-# this agent does: investigate root cause, write a failing test, prove the red step,
-# implement, run three gates, then write a structured verdict. A one-line fix still
-# carries all of that, so honouring `haiku-ready` by default would silently degrade
-# most of the queue.
-#
-# Default is therefore sonnet everywhere. Set IMPLEMENT_HONOUR_READY_LABELS=1 to
-# trust the labels instead.
-MODEL="${IMPLEMENT_MODEL:-sonnet}"
-if [ -z "${IMPLEMENT_MODEL:-}" ] && [ "${IMPLEMENT_HONOUR_READY_LABELS:-0}" = "1" ]; then
-  if gh issue view "$ISSUE" --repo "$REPO" --json labels \
-       --jq '[.labels[].name] | index("haiku-ready")' 2>/dev/null | grep -qv '^null$'; then
-    MODEL="haiku"
-  fi
-fi
+# The issue's own triage picks the tier: `haiku-ready` -> low, `sonnet-ready` -> med,
+# and repeated failure promotes to strong. resolve_models returns the pair, so the
+# difficulty class stays the same whether we are on the subscription or on the
+# Ollama fallback.
+read -r MODEL FALLBACK_TAG TIER <<<"$(resolve_models "$ISSUE")"
+MODEL="${IMPLEMENT_MODEL:-$MODEL}"
+export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$FALLBACK_TAG}"
 
-log "issue #$ISSUE branch=$BRANCH modelo=$MODEL"
+log "issue #$ISSUE branch=$BRANCH tier=$TIER modelo=$MODEL fallback=$AGENT_FALLBACK_MODEL"
 
 set_state "$ISSUE" "$L_WIP"
 
@@ -51,7 +42,7 @@ set_state "$ISSUE" "$L_WIP"
 comment_issue "$ISSUE" "## Implementador: a trabalhar
 
 - Branch: \`$BRANCH\`
-- Modelo: \`$MODEL\`
+- Modelo: \`$MODEL\` (tier \`$TIER\`, fallback \`$AGENT_FALLBACK_MODEL\`)
 - Início: $(date '+%H:%M')
 
 Comento outra vez quando houver PR ou se ficar bloqueado."
@@ -165,7 +156,7 @@ AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${IMPLEMENT_TIMEOUT:-2700}" \
   >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
 
-if [ ! -f "$VERDICT_FILE" ]; then
+if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — issue volta a $L_READY"
     comment_issue "$ISSUE" "## Implementador: corrida degradada, sem veredicto
