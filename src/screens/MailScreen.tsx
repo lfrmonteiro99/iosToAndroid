@@ -55,6 +55,8 @@ const DEMO_EMAILS: Email[] = [
 const SENT_STORAGE_KEY = '@iostoandroid/mail_sent';
 const DEMO_BANNER_KEY = '@iostoandroid/mail_demo_dismissed';
 const INBOX_KEY = '@iostoandroid/mail_inbox';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_BODY = 100_000;
 
 function getInitials(name: string): string {
   const parts = name.split(' ');
@@ -102,9 +104,6 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
     AsyncStorage.setItem(INBOX_KEY, JSON.stringify(updated)).catch(() => { /* ignore */ });
   }, []);
 
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const MAX_BODY = 100_000;
-
   const routeParams = (route?.params ?? {}) as {
     composeTo?: unknown; composeSubject?: unknown; composeBody?: unknown;
   };
@@ -115,8 +114,11 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   const initialBody = typeof routeParams.composeBody === 'string'
     ? routeParams.composeBody.slice(0, MAX_BODY) : '';
 
-  // Initialize compose state from route params if navigated here to compose
-  const [showCompose, setShowCompose] = useState(!!initialCompose);
+  // Initialize compose state from route params if navigated here to compose.
+  // Open compose sheet if ANY params were provided, even if some are invalid.
+  // Invalid params are sanitized (empty strings) but don't prevent sheet from opening.
+  const hasComposeParams = !!(routeParams.composeTo || routeParams.composeSubject || routeParams.composeBody);
+  const [showCompose, setShowCompose] = useState(hasComposeParams);
   const [composeTo, setComposeTo] = useState(initialCompose);
   const [composeSubject, setComposeSubject] = useState(initialSubject);
   const [composeBody, setComposeBody] = useState(initialBody);
@@ -165,12 +167,19 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
       alert('Missing Fields', 'Please fill in To and Subject.');
       return;
     }
+    // Validate email format before sending
+    if (!EMAIL_RE.test(composeTo.trim())) {
+      alert('Invalid Email', 'Please enter a valid email address in the To field.');
+      return;
+    }
+    // Cap body length before sending
+    const safeBody = composeBody.slice(0, MAX_BODY);
     hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const sent = {
       id: Date.now().toString(),
       to: composeTo.trim(),
       subject: composeSubject.trim(),
-      body: composeBody.trim(),
+      body: safeBody.trim(),
       date: new Date().toISOString(),
     };
     try {
