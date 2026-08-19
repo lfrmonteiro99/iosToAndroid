@@ -29,6 +29,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms } from '../store/DeviceStore';
+import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
@@ -311,7 +312,8 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
   const [localImageMessages, setLocalImageMessages] = useState<LocalImageMessage[]>([]);
   const listRef = useRef<FlatList>(null);
-  const draftKey = `@draft_${address}`;
+  const draftKey = draftStorageKey(address);
+  const legacyDraftKey = draftLegacyStorageKey(address);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load reactions from storage
@@ -358,12 +360,14 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     }
   }, [selectedMsgId]);
 
-  // Load draft on mount
+  // Load draft on mount — migrate the legacy key first so existing users keep their drafts
   useEffect(() => {
-    AsyncStorage.getItem(draftKey).then((value) => {
+    (async () => {
+      await migrateAsyncStorageKey(legacyDraftKey, draftKey);
+      const value = await AsyncStorage.getItem(draftKey);
       if (value) setInputText(value);
-    }).catch(() => {});
-  }, [draftKey]);
+    })().catch(() => {});
+  }, [draftKey, legacyDraftKey]);
 
   // Debounced draft save on text change
   const handleInputChange = useCallback((text: string) => {

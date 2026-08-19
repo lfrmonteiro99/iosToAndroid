@@ -70,6 +70,7 @@ import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 const LOCK_PIN_KEY = 'lock_pin';
+const LOCK_PIN_STORAGE_KEY = '@iostoandroid/lock_pin';
 const LOCK_PIN_LEGACY_KEY = '@lock_pin';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -438,16 +439,26 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
     };
   }, []);
 
-  // Migrate PIN from AsyncStorage to SecureStore if needed
+  // Migrate PIN from AsyncStorage (namespaced fallback or legacy) to SecureStore if needed
   useEffect(() => {
     (async () => {
       try {
         const securePin = await SecureStore.getItemAsync(LOCK_PIN_KEY);
-        if (securePin) return; // Already in SecureStore
-        // Check for legacy AsyncStorage PIN
-        const legacyPin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY);
-        if (legacyPin) {
-          await SecureStore.setItemAsync(LOCK_PIN_KEY, legacyPin);
+        if (securePin) {
+          // SecureStore is authoritative — drop any AsyncStorage copies
+          await AsyncStorage.removeItem(LOCK_PIN_STORAGE_KEY);
+          await AsyncStorage.removeItem(LOCK_PIN_LEGACY_KEY);
+          return;
+        }
+        // Check the namespaced AsyncStorage key first, then the legacy key
+        let storedPin: string | null = null;
+        try { storedPin = await AsyncStorage.getItem(LOCK_PIN_STORAGE_KEY); } catch { /* ignore */ }
+        if (!storedPin) {
+          try { storedPin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
+        }
+        if (storedPin) {
+          await SecureStore.setItemAsync(LOCK_PIN_KEY, storedPin);
+          await AsyncStorage.removeItem(LOCK_PIN_STORAGE_KEY);
           await AsyncStorage.removeItem(LOCK_PIN_LEGACY_KEY);
         }
         // No default PIN is set automatically - user must set one in settings
@@ -469,19 +480,16 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
       if (prev.length >= 4) return prev;
       const next = prev + digit;
       if (next.length === 4) {
-        // Verify PIN from SecureStore (fall back to AsyncStorage for legacy)
+        // Verify PIN from SecureStore (fall back to namespaced AsyncStorage key, then legacy)
         (async () => {
           let pin: string | null = null;
-          let storeAvailable = false;
           try {
             pin = await SecureStore.getItemAsync(LOCK_PIN_KEY);
-            storeAvailable = true;
           } catch { /* SecureStore unavailable */ }
-          if (!pin && !storeAvailable) {
-            // SecureStore failed — try legacy AsyncStorage as last resort
-            try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
-          } else if (!pin) {
-            // SecureStore is available but no PIN set — try legacy migration
+          if (!pin) {
+            try { pin = await AsyncStorage.getItem(LOCK_PIN_STORAGE_KEY); } catch { /* ignore */ }
+          }
+          if (!pin) {
             try { pin = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
           }
           // If no PIN is set anywhere, allow unlock (first-time user)

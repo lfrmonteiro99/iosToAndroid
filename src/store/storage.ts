@@ -17,3 +17,13 @@ export async function migrateAsyncStorageKey(legacy: string, next: string): Prom
     /* best-effort migration — ignore failures */
   }
 }
+
+// Per-address message draft keys. The legacy form (`@draft_<address>`) predates
+// the @iostoandroid/ namespace and is only read as a migration source.
+export function draftStorageKey(address: string): string {
+  return `@iostoandroid/draft_${address}`;
+}
+
+export function draftLegacyStorageKey(address: string): string {
+  return `@draft_${address}`;
+}
