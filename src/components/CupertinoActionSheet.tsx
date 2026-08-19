@@ -50,8 +50,8 @@ export function CupertinoActionSheet({
       translateY.value = withSpring(400, { damping: 25, stiffness: 300 });
       backdropOpacity.value = withTiming(0, { duration: 200 });
     }
+    // Shared values are stable refs; only respond to visible changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Shared values are stable references; only respond to visible prop changes
   }, [visible]);
 
   const sheetStyle = useAnimatedStyle(() => ({

@@ -29,7 +29,9 @@ export function QuickSwitchHomeBar() {
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
     reduceMotionShared.value = reduceMotion;
-  }, [reduceMotion, reduceMotionShared]);
+    // Shared values are stable refs; only respond to reduceMotion changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
 
   // Shared values
   const currentT = useSharedValue(0);
@@ -51,7 +53,9 @@ export function QuickSwitchHomeBar() {
   useEffect(() => {
     canSwipeLeftShared.value = recentApps.length >= 2;
     canSwipeRightShared.value = recentApps.length >= 3;
-  }, [recentApps, canSwipeLeftShared, canSwipeRightShared]);
+    // Shared values are stable refs; only respond to recentApps changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentApps]);
 
   const onCommitSwitch = useCallback(
     (dir: 'left' | 'right') => {

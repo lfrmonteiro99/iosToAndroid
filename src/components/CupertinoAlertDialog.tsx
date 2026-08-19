@@ -43,7 +43,9 @@ export function CupertinoAlertDialog({
       scale.value = withTiming(1.2, { duration: 150 });
       opacity.value = withTiming(0, { duration: 150 });
     }
-  }, [visible, scale, opacity]);
+    // Shared values are stable refs; only respond to visible changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const dialogStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

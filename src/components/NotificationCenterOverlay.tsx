@@ -30,7 +30,9 @@ export function NotificationCenterOverlay({ zone, onCommit }: Props) {
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
     reduceMotionShared.value = reduceMotion;
-  }, [reduceMotion, reduceMotionShared]);
+    // Shared values are stable refs; only respond to reduceMotion changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
 
   const panelProgress = useSharedValue(0);
   const buf = useVelocityBuffer();

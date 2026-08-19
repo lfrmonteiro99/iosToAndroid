@@ -31,7 +31,9 @@ export function CupertinoProgressBar({
     animatedProgress.value = withTiming(Math.max(0, Math.min(1, progress)), {
       duration: 300,
     });
-  }, [progress, animatedProgress]);
+    // Shared values are stable refs; only respond to progress changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress]);
 
   const progressStyle = useAnimatedStyle(() => ({
     width: `${animatedProgress.value * 100}%`,

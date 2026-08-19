@@ -32,7 +32,9 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
     reduceMotionShared.value = reduceMotion;
-  }, [reduceMotion, reduceMotionShared]);
+    // Shared values are stable refs; only respond to reduceMotion changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
 
   const progress = useSharedValue(0);
   const thresholdFired = useSharedValue(false);
