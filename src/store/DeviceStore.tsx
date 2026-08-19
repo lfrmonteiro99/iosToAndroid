@@ -382,7 +382,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   const requestSmsPermission = useCallback(async () => {
     if (Platform.OS === 'android') {
       try {
-        const granted = await PermissionsAndroid.request(
+        const granted = await withAutoLockSuppressed(() => PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.READ_SMS,
           {
             title: 'SMS Access',
@@ -390,7 +390,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
             buttonPositive: 'Allow',
             buttonNegative: 'Deny',
           },
-        );
+        ));
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
       } catch { return false; }
     }

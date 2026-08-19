@@ -48,6 +48,7 @@ import {
 import type { BannerNotification } from '../components';
 import type { RootStackParamList } from '../navigation/types';
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
@@ -644,7 +645,10 @@ export function LauncherHomeScreen() {
         const perms = await mod.checkPermissions();
         const needsPermission = Object.values(perms).some(v => !v);
         if (needsPermission) {
-          await mod.requestAllPermissions();
+          // Requests every missing category one after another — each native
+          // dialog backgrounds the app, so the whole batch must be
+          // suppressed or a slow reader gets auto-locked on first launch.
+          await withAutoLockSuppressed(() => mod.requestAllPermissions());
         }
       } catch { /* Expected: permissions check may fail on non-Android or first install */ }
     })();

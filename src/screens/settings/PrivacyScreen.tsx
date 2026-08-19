@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import LauncherModule from '../../../modules/launcher-module/src';
+import { withAutoLockSuppressed } from '../../utils/permissions';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -54,7 +55,10 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
   const handleRequestPermissions = useCallback(async () => {
     setRequestingPermissions(true);
     try {
-      await LauncherModule.requestAllPermissions();
+      // Requests every category one after another — each native dialog
+      // backgrounds the app, so the whole batch must be suppressed or a
+      // slow reader gets auto-locked mid-flow.
+      await withAutoLockSuppressed(() => LauncherModule.requestAllPermissions());
       // Re-check after requesting
       await checkPermissions();
       alert('Permissions Updated', 'Permission status has been refreshed.');
