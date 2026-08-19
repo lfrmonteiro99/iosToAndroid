@@ -182,7 +182,6 @@ interface RecentEntry {
   launchedAt: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
   const { apps, recentApps, removeFromRecents, clearRecents } = useApps();

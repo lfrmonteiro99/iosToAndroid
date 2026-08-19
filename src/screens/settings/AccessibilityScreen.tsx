@@ -24,7 +24,6 @@ const A11Y_KEYS = {
   contrast: '@iostoandroid/a11y_contrast',
 } as const;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AccessibilityScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing, textScale } = useTheme();
   const { colors } = theme;

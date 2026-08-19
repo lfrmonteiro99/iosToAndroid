@@ -23,7 +23,6 @@ const PERMISSION_CATEGORIES = [
   { key: 'callLog', title: 'Phone', icon: 'call', bg: '#34C759' },
 ] as const;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

@@ -41,7 +41,6 @@ const APP_BAR_COLORS = [
   '#8E8E93', // gray
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

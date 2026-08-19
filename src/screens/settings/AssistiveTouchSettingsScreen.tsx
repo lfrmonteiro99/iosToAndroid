@@ -49,7 +49,6 @@ const ALL_MENU_ITEMS: { id: MenuItemId; label: string }[] = [
   { id: 'hideTemporarily',  label: 'Hide Temporarily' },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AssistiveTouchSettingsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

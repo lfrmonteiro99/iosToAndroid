@@ -23,7 +23,6 @@ function generatePassword(): string {
   return pw;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function HotspotScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

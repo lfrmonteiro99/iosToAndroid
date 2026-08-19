@@ -26,7 +26,6 @@ function getBatteryIcon(level: number, isCharging: boolean): 'battery-full-outli
   return 'battery-dead-outline';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function BatteryScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
