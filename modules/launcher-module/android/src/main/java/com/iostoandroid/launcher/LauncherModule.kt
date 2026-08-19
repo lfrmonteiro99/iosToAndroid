@@ -636,16 +636,14 @@ class LauncherModule : Module() {
         // ── Make Call (via TelecomManager) ────────────────────────────────
 
         AsyncFunction("makeCall") { number: String ->
-            try {
-                val clean = number.trim()
-                if (!PHONE_REGEX.matches(clean)) {
-                    return@AsyncFunction false
-                }
-                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(clean)}"))
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                true
-            } catch (e: Exception) { false }
+            val clean = number.trim()
+            if (!PHONE_REGEX.matches(clean)) {
+                return@AsyncFunction false
+            }
+            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(clean)}"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
         }
 
         // ── Notifications ────────────────────────────────────────────────
