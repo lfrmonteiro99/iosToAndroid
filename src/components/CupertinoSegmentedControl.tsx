@@ -26,7 +26,10 @@ export function CupertinoSegmentedControl({
   const animatedWidth = useSharedValue(0);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Prevent division by zero when values is empty
+  // `values` can empty out after the control has already been measured. The
+  // early return below hides the control but does not stop the effect from
+  // running, so without the length check the division yields Infinity and
+  // poisons both shared values.
   const segWidth = containerWidth > 0 && values.length > 0 ? containerWidth / values.length : 0;
 
   useEffect(() => {
@@ -48,7 +51,6 @@ export function CupertinoSegmentedControl({
     width: animatedWidth.value,
   }));
 
-  // Return null if no values to render
   if (!values || values.length === 0) return null;
 
   return (

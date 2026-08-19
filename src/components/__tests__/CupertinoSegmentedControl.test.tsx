@@ -1,102 +1,184 @@
 import React from 'react';
-import { render } from '../../test-utils';
+import * as Reanimated from 'react-native-reanimated';
+import { render, fireEvent } from '../../test-utils';
 import { CupertinoSegmentedControl } from '../CupertinoSegmentedControl';
 
+/**
+ * Fires the `onLayout` of the control's root view, which is what populates
+ * `containerWidth` in the component. Without this the component never leaves
+ * `containerWidth === 0` and the whole segWidth branch is dead code.
+ */
+function layout(node: unknown, width: number) {
+  fireEvent(node as never, 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width, height: 32 } },
+  });
+}
+
 describe('CupertinoSegmentedControl', () => {
-  it('renders with multiple values', () => {
-    const { toJSON } = render(
-      <CupertinoSegmentedControl
-        values={['Option A', 'Option B', 'Option C']}
-        selectedIndex={0}
-        onChange={jest.fn()}
-      />
-    );
-    expect(toJSON()).toBeTruthy();
+  let withSpringSpy: jest.SpyInstance;
+  let sharedValueSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    withSpringSpy = jest.spyOn(Reanimated, 'withSpring');
+    // The reanimated test double hands back a fresh object on every call, so
+    // the only way to see what the effect wrote is to keep every object it
+    // ever returned.
+    sharedValueSpy = jest.spyOn(Reanimated, 'useSharedValue');
   });
 
-  it('renders with a single value', () => {
-    const { toJSON } = render(
-      <CupertinoSegmentedControl
-        values={['Only']}
-        selectedIndex={0}
-        onChange={jest.fn()}
-      />
-    );
-    expect(toJSON()).toBeTruthy();
+  afterEach(() => {
+    withSpringSpy.mockRestore();
+    sharedValueSpy.mockRestore();
   });
 
-  it('renders nothing when values is empty', () => {
-    const { toJSON } = render(
-      <CupertinoSegmentedControl
-        values={[]}
-        selectedIndex={0}
-        onChange={jest.fn()}
-      />
-    );
-    expect(toJSON()).toBeNull();
-  });
+  /** Every value handed to `withSpring` as the animation target. */
+  const springTargets = () => withSpringSpy.mock.calls.map((call) => call[0]);
 
-  it('calls onChange when a segment is pressed', () => {
+  /** Everything ever written to a shared value, across all renders. */
+  const sharedValues = () =>
+    sharedValueSpy.mock.results.map((result) => (result.value as { value: unknown }).value);
+
+  /**
+   * The component calls `useSharedValue` twice per render, translateX first and
+   * animatedWidth second, so the last result belongs to the animated width of
+   * the most recent render.
+   */
+  const latestAnimatedWidth = () => sharedValues().slice(-1)[0];
+
+  it('renders every segment and reports the pressed index', () => {
     const onChange = jest.fn();
     const { getByText } = render(
       <CupertinoSegmentedControl
-        values={['First', 'Second']}
+        values={['Option A', 'Option B', 'Option C']}
         selectedIndex={0}
         onChange={onChange}
       />
     );
-    // Render the component to verify both segments are present
-    expect(getByText('First')).toBeTruthy();
-    expect(getByText('Second')).toBeTruthy();
+
+    expect(getByText('Option A')).toBeTruthy();
+    expect(getByText('Option B')).toBeTruthy();
+    expect(getByText('Option C')).toBeTruthy();
+
+    fireEvent.press(getByText('Option C'));
+    expect(onChange).toHaveBeenCalledWith(2);
+
+    // Pressing the same segment twice must report it twice, not swallow the
+    // second press (double-tap is a recurring defect in this codebase).
+    fireEvent.press(getByText('Option C'));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenNthCalledWith(2, 2);
   });
 
-  it('does not crash with empty values and renders null without errors', () => {
-    expect(() => {
-      render(
-        <CupertinoSegmentedControl
-          values={[]}
-          selectedIndex={0}
-          onChange={jest.fn()}
-        />
-      );
-    }).not.toThrow();
+  it('does not crash when pressed without an onChange handler', () => {
+    const { getByText } = render(
+      <CupertinoSegmentedControl values={['Solo']} selectedIndex={0} />
+    );
+
+    expect(() => fireEvent.press(getByText('Solo'))).not.toThrow();
   });
 
-  it('prevents division by zero: segWidth guard when values is empty (M4 regression)', () => {
-    // PASSO VERMELHO TEST for Issue #189 (M4)
-    // This test FAILS without the && values.length > 0 guard in segWidth calculation
-    //
-    // Bug scenario:
-    // - Component mounts with values=['A','B'] → containerWidth = 0 initially
-    // - Layout fires → handleLayout() → setContainerWidth(300)
-    // - Component re-renders with values=[] (parent prop change)
-    // - Old calculation: segWidth = 300 > 0 ? 300 / 0 : 0 = Infinity ❌
-    // - New calculation: segWidth = 300 > 0 && 0 > 0 ? 300 / 0 : 0 = 0 ✓
-    //
-    // Without the fix, Reanimated gets Infinity and fails (animation cannot animate Infinity)
-    // With the fix, Reanimated gets 0 and safely skips the animation
+  // The inverse of the fix: an empty control must stay invisible. This guard
+  // already existed on main; it is asserted here so the segWidth fix below
+  // cannot be "fixed" by making the empty control render something.
+  it('renders nothing when values is empty', () => {
+    const { toJSON } = render(
+      <CupertinoSegmentedControl values={[]} selectedIndex={0} onChange={jest.fn()} />
+    );
 
-    // Test the segWidth calculation logic directly
-    const computeSegWidth = (width: number, count: number): number => {
-      // THIS IS THE FIX: Added && count > 0 to prevent 300 / 0 = Infinity
-      return width > 0 && count > 0 ? width / count : 0;
-    };
+    expect(toJSON()).toBeNull();
+  });
 
-    // Test each scenario
-    expect(computeSegWidth(0, 0)).toBe(0); // both zero
-    expect(computeSegWidth(0, 2)).toBe(0); // width not set
-    expect(computeSegWidth(300, 2)).toBe(150); // normal case
-    expect(computeSegWidth(300, 0)).toBe(0); // THE BUG: 300 / 0 should be prevented = 0
+  it('animates the thumb to the measured segment width once laid out', () => {
+    const { root } = render(
+      <CupertinoSegmentedControl
+        values={['A', 'B', 'C']}
+        selectedIndex={2}
+        onChange={jest.fn()}
+      />
+    );
 
-    // Critical assertions: prove the fix prevents Infinity
-    expect(Number.isFinite(computeSegWidth(300, 0))).toBe(true);
-    expect(computeSegWidth(300, 0)).not.toBe(Infinity);
+    // Before layout there is nothing to measure, so no animation may start.
+    expect(withSpringSpy).not.toHaveBeenCalled();
 
-    // Demonstrate what would happen WITHOUT the fix
-    const buggyCalculation = (width: number, count: number): number => {
-      return width > 0 ? width / count : 0; // Missing && count > 0 guard
-    };
-    expect(buggyCalculation(300, 0)).toBe(Infinity); // PROVES this is the bug
-    expect(Number.isFinite(buggyCalculation(300, 0))).toBe(false);
+    layout(root, 300);
+
+    expect(springTargets()).toEqual([200]); // index 2 * (300 / 3)
+  });
+
+  it('does not animate while the container measures zero width', () => {
+    const { root } = render(
+      <CupertinoSegmentedControl values={['A', 'B']} selectedIndex={1} onChange={jest.fn()} />
+    );
+
+    layout(root, 0);
+
+    // 0 / 2 === 0, but a spring towards 0 from an unmeasured control would
+    // still be wrong: nothing has been measured yet.
+    expect(withSpringSpy).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------
+  // Issue #189 (M4). The `values.length === 0` early return already existed
+  // and covers the *initial* mount. The defect that survives it is the
+  // transition: a control that has already been measured and then loses its
+  // values (a store that re-hydrates, a filter that empties a tab list).
+  // The early return fires only AFTER the hooks, so the effect still runs
+  // with `segWidth = containerWidth / 0 === Infinity` and poisons both
+  // shared values on its way out.
+  // ---------------------------------------------------------------------
+  it('never targets a non-finite position when values empty after layout', () => {
+    const { root, rerender } = render(
+      <CupertinoSegmentedControl values={['A', 'B']} selectedIndex={1} onChange={jest.fn()} />
+    );
+    layout(root, 300);
+    rerender(
+      <CupertinoSegmentedControl values={[]} selectedIndex={1} onChange={jest.fn()} />
+    );
+
+    // selectedIndex 1 * Infinity === Infinity
+    expect(springTargets().filter((target) => !Number.isFinite(target))).toEqual([]);
+
+    // selectedIndex 0 * Infinity === NaN, a different poison value out of the
+    // same division, so it is exercised explicitly.
+    withSpringSpy.mockClear();
+    const second = render(
+      <CupertinoSegmentedControl values={['A', 'B']} selectedIndex={0} onChange={jest.fn()} />
+    );
+    layout(second.root, 300);
+    second.rerender(
+      <CupertinoSegmentedControl values={[]} selectedIndex={0} onChange={jest.fn()} />
+    );
+
+    expect(springTargets().filter((target) => !Number.isFinite(target))).toEqual([]);
+  });
+
+  it('never writes a non-finite width to the animated thumb when values empty', () => {
+    const { root, rerender } = render(
+      <CupertinoSegmentedControl values={['A', 'B']} selectedIndex={1} onChange={jest.fn()} />
+    );
+    layout(root, 300);
+    rerender(
+      <CupertinoSegmentedControl values={[]} selectedIndex={1} onChange={jest.fn()} />
+    );
+
+    // `animatedWidth` feeds the thumb's `width` style, which `useAnimatedStyle`
+    // reads during render. A width written while empty is therefore what the
+    // control carries into the next frame, hidden or not.
+    expect(sharedValues().filter((value) => !Number.isFinite(value))).toEqual([]);
+    expect(latestAnimatedWidth()).toBe(0);
+  });
+
+  it('still recomputes the segment width when values shrink to one', () => {
+    const { root, rerender } = render(
+      <CupertinoSegmentedControl values={['A', 'B', 'C']} selectedIndex={0} onChange={jest.fn()} />
+    );
+    layout(root, 300);
+    rerender(
+      <CupertinoSegmentedControl values={['A']} selectedIndex={0} onChange={jest.fn()} />
+    );
+
+    // Guarding the empty case must not turn every non-empty recomputation off:
+    // one value must still claim the whole measured container.
+    expect(latestAnimatedWidth()).toBe(300);
   });
 });
