@@ -79,15 +79,36 @@ describe('CalculatorScreen', () => {
   });
 
   it('0.1 + 0.2 equals 0.3 without float artifacts', () => {
-    const { getByText } = render(<CalculatorScreen />);
-    fireEvent.press(getByText('0'));
+    const { getByText, getAllByText } = render(<CalculatorScreen />);
+    // The initial display and the '0' digit button both render the text '0' —
+    // getAllByText('0')[0] is the display (see 'renders calculator display'
+    // above), [1] is the actual pressable button.
+    fireEvent.press(getAllByText('0')[1]);
     fireEvent.press(getByText('.'));
     fireEvent.press(getByText('1'));
     fireEvent.press(getByText('+'));
+    // Display now reads '0.1', so the '0' button is unambiguous again.
     fireEvent.press(getByText('0'));
     fireEvent.press(getByText('.'));
     fireEvent.press(getByText('2'));
     fireEvent.press(getByText('='));
     expect(getByText('0.3')).toBeTruthy();
+  });
+
+  it('large multiplication stays in plain notation under 1e16', () => {
+    const { getByText } = render(<CalculatorScreen />);
+    // Query the '9' button once — after the first press the display itself
+    // reads '9' too, which would make later getByText('9') calls ambiguous.
+    const nineButton = getByText('9');
+    for (let i = 0; i < 9; i++) fireEvent.press(nineButton);
+    fireEvent.press(getByText('×'));
+    fireEvent.press(getByText('1'));
+    fireEvent.press(getByText('0'));
+    fireEvent.press(getByText('0'));
+    fireEvent.press(getByText('0'));
+    fireEvent.press(getByText('='));
+    // 999999999 × 1000 = 999999999000 — must not fall back to scientific
+    // notation or lose digits.
+    expect(getByText('999999999000')).toBeTruthy();
   });
 });
