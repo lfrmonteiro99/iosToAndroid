@@ -279,6 +279,35 @@ create_pr_api() {
   return 1
 }
 
+# Break accidental issue-closing keywords in model-written prose.
+#
+# GitHub closes an issue when a commit message or PR body contains `fix #N`,
+# `closes #N`, `resolved #N` and friends — anywhere, in any sentence. Everything
+# this pipeline publishes is written by an agent and is full of issue numbers:
+# summaries, PR descriptions, reviewer findings, curator analyses.
+#
+# It has already bitten. My own commit said
+#
+#     "...and with this fix #215 ran end to end on that same slot..."
+#
+# and GitHub read `fix #215` as a directive and CLOSED #215 — an issue whose PR was
+# open and blocked at the time. Nothing warned; the issue simply left the board as
+# if delivered. An agent writing "this also fixes #212" in a description would do
+# the same to someone else's work.
+#
+# So every field that reaches GitHub goes through this, and the ONLY closing
+# keyword that survives is the `Fixes #N` line the harness itself appends, after
+# sanitising. `#N` on its own is left intact — a plain reference is useful and
+# harmless.
+# FLAT alternation, exactly three capture groups. Nested groups here silently
+# renumber the back-references: a first attempt used `(fix(es|ed)?)` and emitted
+# `\1\4issue \5`, which turned "fix #215" into "fixissue" — the issue NUMBER was
+# dropped, destroying the very information the text was carrying. POSIX ERE has no
+# non-capturing groups, so the alternatives are spelled out instead of nested.
+sanitize_closing_keywords() {
+  sed -E 's/\b([Ff]ix|[Ff]ixes|[Ff]ixed|[Cc]lose|[Cc]loses|[Cc]losed|[Cc]losing|[Rr]esolve|[Rr]esolves|[Rr]esolved|[Rr]esolving)([[:space:]]+)#([0-9]+)/\1\2issue \3/g'
+}
+
 comment_issue() {
   local issue="$1" body="$2"
   gh issue comment "$issue" --repo "$REPO" --body "$body" >/dev/null 2>&1 \

@@ -184,6 +184,14 @@ SUMMARY=$(jqv "$VERDICT_FILE" '.summary' 'correção automática'); SUMMARY="${S
 DESCRIPTION=$(jqv "$VERDICT_FILE" '.description' '')
 TESTS=$(jqv "$VERDICT_FILE" '.tests' '(não reportado)'); TESTS="${TESTS:0:400}"
 
+# Model-written prose goes into a commit message and a PR body, both of which
+# GitHub scans for closing keywords. An agent writing "this also fixes #212"
+# would close #212. Only the `Fixes #$ISSUE` line the harness appends below is
+# meant to close anything.
+SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
+DESCRIPTION=$(printf '%s' "$DESCRIPTION" | sanitize_closing_keywords)
+TESTS=$(printf '%s' "$TESTS" | sanitize_closing_keywords)
+
 # Ignore build artefacts and the dependency symlink when deciding "did anything
 # change".
 CHANGED=$(git -C "$WT" status --porcelain 2>/dev/null \

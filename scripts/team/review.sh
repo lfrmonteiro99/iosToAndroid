@@ -162,6 +162,9 @@ fi
 
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:1500}"
+# The reviewer's findings are posted as PR and issue comments and routinely cite
+# other issue numbers. See sanitize_closing_keywords in lib.sh.
+SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
 
 # Per-dimension detail, so the defect is visible in the comment without opening the
 # verdict — and so it is auditable whether the reviewer actually filled it in.

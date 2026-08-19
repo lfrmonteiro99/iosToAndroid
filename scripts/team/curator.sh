@@ -100,6 +100,9 @@ fi
 OUTCOME=$(jqv "$VERDICT_FILE" '.outcome' 'ready')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:600}"
 ANALYSIS=$(jqv "$VERDICT_FILE" '.analysis' '')
+# The analysis is published as an issue comment and cites related issues freely.
+SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
+ANALYSIS=$(printf '%s' "$ANALYSIS" | sanitize_closing_keywords)
 PRIORITY=$(jqv "$VERDICT_FILE" '.priority' '')
 
 log "outcome=$OUTCOME priority=${PRIORITY:-n/d}"
