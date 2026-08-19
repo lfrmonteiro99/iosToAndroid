@@ -34,8 +34,7 @@ import { SystemColors } from '../theme/CupertinoTheme';
 import { useAlert } from '../components';
 import * as Haptics from 'expo-haptics';
 import type { AppNavigationProp } from '../navigation/types';
-import { hapticSelection } from '../utils/haptics';
-import { hapticImpact } from '../utils/haptics';
+import { hapticSelection, hapticImpact } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Constants

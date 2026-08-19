@@ -1,8 +1,20 @@
 import React from 'react';
+import { Pressable, Text } from 'react-native';
 import { render, fireEvent } from '../../test-utils';
 import { CupertinoSwitch } from '../CupertinoSwitch';
 import * as Haptics from 'expo-haptics';
 import { setHapticsEnabled } from '../../utils/haptics';
+import { useSettings } from '../../store/SettingsStore';
+
+/** Turns the real `vibration` setting off; SettingsStore feeds the haptics cache. */
+function DisableVibration() {
+  const { update } = useSettings();
+  return (
+    <Pressable testID="disable-vibration" onPress={() => update('vibration', false)}>
+      <Text>off</Text>
+    </Pressable>
+  );
+}
 
 describe('CupertinoSwitch', () => {
   beforeEach(() => {
@@ -46,29 +58,42 @@ describe('CupertinoSwitch', () => {
     expect(Haptics.selectionAsync).not.toHaveBeenCalled();
   });
 
-  it('swallows haptics rejection without throwing or warning (H5)', async () => {
-    // This test ensures that when hapticSelection() rejects,
-    // the component has a `.catch()` handler that prevents unhandled rejections.
-    // Before fix: hapticSelection() without .catch() causes unhandled rejection warning
-    // After fix: hapticSelection().catch(() => {}) swallows the error silently
-    (Haptics.selectionAsync as jest.Mock).mockClear();
+  it('does not touch the native module when the user disabled vibration (H5)', () => {
+    // The old `Haptics.selectionAsync()` call site ignored the vibration setting
+    // entirely; hapticSelection() consults the cache fed by SettingsStore.
+    const onValueChange = jest.fn();
+    const { getByRole, getByTestId } = render(
+      <>
+        <DisableVibration />
+        <CupertinoSwitch value={false} onValueChange={onValueChange} />
+      </>,
+    );
+    fireEvent.press(getByTestId('disable-vibration'));
+    fireEvent.press(getByRole('switch'));
+    expect(Haptics.selectionAsync).not.toHaveBeenCalled();
+    // Silencing vibration must not silence the switch itself.
+    expect(onValueChange).toHaveBeenCalledWith(true);
+  });
+
+  it('does not leak an unhandled rejection when the native module rejects (H5)', async () => {
+    // What this proves is the routing, not the `.catch(() => {})` at the call site:
+    // a rejection from expo-haptics is absorbed inside hapticSelection()
+    // (src/utils/haptics.ts). Before H5 the component awaited nothing and caught
+    // nothing, so the rejected promise reached Node as unhandled.
     (Haptics.selectionAsync as jest.Mock).mockRejectedValueOnce(new Error('haptics unavailable'));
 
-    // Capture unhandled rejections
-    const unhandledRejections: Error[] = [];
-    const rejectionHandler = (reason: Error) => unhandledRejections.push(reason);
-    process.on('unhandledRejection', rejectionHandler as NodeJS.UncaughtExceptionListener);
+    const captured: unknown[] = [];
+    const handler = (reason: unknown) => captured.push(reason);
+    process.on('unhandledRejection', handler);
+    try {
+      const { getByRole } = render(<CupertinoSwitch value={false} />);
+      fireEvent.press(getByRole('switch'));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      process.off('unhandledRejection', handler);
+    }
 
-    const { getByRole } = render(<CupertinoSwitch value={false} />);
-    fireEvent.press(getByRole('switch'));
-
-    // Give any microtasks time to run
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    // After fix, there should be no unhandled rejections because .catch() handles it
-    // Without the fix, this would have captured the rejection
-    expect(unhandledRejections.length).toBe(0);
-
-    process.off('unhandledRejection', rejectionHandler as NodeJS.UncaughtExceptionListener);
+    expect(Haptics.selectionAsync).toHaveBeenCalled();
+    expect(captured).toEqual([]);
   });
 });
