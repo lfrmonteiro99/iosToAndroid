@@ -28,6 +28,12 @@ const DEFAULT_DOCK = [
   'com.iostoandroid.settings',
 ];
 
+// Passcode storage: SecureStore is primary; AsyncStorage is a fallback when
+// SecureStore is unavailable. The legacy key predates the @iostoandroid/ namespace.
+const LOCK_PIN_KEY = 'lock_pin';
+const LOCK_PIN_STORAGE_KEY = '@iostoandroid/lock_pin';
+const LOCK_PIN_LEGACY_KEY = '@lock_pin';
+
 const DOCK_LABELS: Record<string, string> = {
   'com.iostoandroid.phone': 'Phone',
   'com.iostoandroid.messages': 'Messages',
@@ -63,11 +69,14 @@ export function LauncherSettingsScreen() {
       return;
     }
     if (pinStep === 'current') {
-      // Read PIN from SecureStore (fall back to legacy AsyncStorage)
+      // Read PIN from SecureStore (fall back to namespaced AsyncStorage key, then legacy)
       let current: string | null = null;
-      try { current = await SecureStore.getItemAsync('lock_pin'); } catch { /* ignore */ }
+      try { current = await SecureStore.getItemAsync(LOCK_PIN_KEY); } catch { /* ignore */ }
       if (!current) {
-        try { current = await AsyncStorage.getItem('@lock_pin'); } catch { /* ignore */ }
+        try { current = await AsyncStorage.getItem(LOCK_PIN_STORAGE_KEY); } catch { /* ignore */ }
+      }
+      if (!current) {
+        try { current = await AsyncStorage.getItem(LOCK_PIN_LEGACY_KEY); } catch { /* ignore */ }
       }
       if (current && pinInput !== current) {
         alert('Incorrect PIN', 'The current PIN you entered is wrong.');
@@ -90,12 +99,13 @@ export function LauncherSettingsScreen() {
       }
       // Store PIN securely
       try {
-        await SecureStore.setItemAsync('lock_pin', pinInput);
-        // Remove legacy key if it exists
-        await AsyncStorage.removeItem('@lock_pin');
+        await SecureStore.setItemAsync(LOCK_PIN_KEY, pinInput);
+        // Remove AsyncStorage copies if they exist
+        await AsyncStorage.removeItem(LOCK_PIN_STORAGE_KEY);
+        await AsyncStorage.removeItem(LOCK_PIN_LEGACY_KEY);
       } catch {
-        // Fallback to AsyncStorage if SecureStore unavailable
-        await AsyncStorage.setItem('@lock_pin', pinInput);
+        // Fallback to AsyncStorage if SecureStore unavailable (namespaced key only)
+        await AsyncStorage.setItem(LOCK_PIN_STORAGE_KEY, pinInput);
       }
       setShowPinModal(false);
       alert('Success', 'Your passcode has been changed.');

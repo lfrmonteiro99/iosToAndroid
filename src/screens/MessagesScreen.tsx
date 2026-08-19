@@ -20,6 +20,7 @@ import { Typography } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
+import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import { logger } from '../utils/logger';
@@ -328,7 +329,9 @@ export function MessagesScreen() {
         const loaded: Record<string, string> = {};
         await Promise.all(
           allConvs.map(async (c) => {
-            const value = await AsyncStorage.getItem(`@draft_${c.address}`);
+            // Migrate the legacy draft key before reading so existing drafts survive
+            await migrateAsyncStorageKey(draftLegacyStorageKey(c.address), draftStorageKey(c.address));
+            const value = await AsyncStorage.getItem(draftStorageKey(c.address));
             if (value) loaded[c.address] = value;
           }),
         );
