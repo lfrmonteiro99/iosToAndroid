@@ -473,12 +473,14 @@ export function CalculatorScreen() {
         setResetOnNext(true);
         break;
       case 'M+':
-        setMemory(prev => prev + current);
+        // Route through performOp so the memory register accumulates with the
+        // same decimal arithmetic as the '=' key, instead of raw IEEE-754.
+        setMemory(prev => performOp(prev, current, '+'));
         setHasMemory(true);
         setResetOnNext(true);
         break;
       case 'M-':
-        setMemory(prev => prev - current);
+        setMemory(prev => performOp(prev, current, '-'));
         setHasMemory(true);
         setResetOnNext(true);
         break;
