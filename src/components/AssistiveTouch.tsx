@@ -122,7 +122,9 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       edge === 'right' ? SCREEN_W - size - 8 : 8,
       SNAP_SPRING,
     );
-  }, [edge, size, translateX]);
+    // Shared values are stable refs; translateX identity doesn't drive re-runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edge, size]);
 
   // ── Idle dim ──────────────────────────────────────────────────────────────
   const opacity = useSharedValue(1);

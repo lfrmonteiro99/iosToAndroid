@@ -37,7 +37,9 @@ export function CupertinoSwitch({
       damping: 20,
       stiffness: 300,
     });
-  }, [value, progress]);
+    // Shared values are stable refs; only respond to value changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   const onColor = trackColor?.true ?? colors.systemGreen;
   const offColor = trackColor?.false ?? colors.systemGray4;

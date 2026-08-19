@@ -47,7 +47,9 @@ export function CupertinoSwipeableRow({
     if (isOpen === false) {
       translateX.value = withSpring(0, SPRING_CONFIG);
     }
-  }, [isOpen, translateX]);
+    // Shared values are stable refs; only respond to isOpen changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const maxTrailing = trailingActions.length * ACTION_WIDTH;
   const maxLeading = leadingActions.length * ACTION_WIDTH;
