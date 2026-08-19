@@ -25,4 +25,25 @@ describe('CupertinoCard', () => {
     );
     expect(toJSON()).toMatchSnapshot();
   });
+
+  it('has shadowColor defined for Android elevation (visibility on OEM skins)', () => {
+    const { root } = renderWithTheme(
+      <CupertinoCard>
+        <Text>Card with shadow</Text>
+      </CupertinoCard>,
+    );
+
+    // root is the View component returned by CupertinoCard
+    const styles = root.props.style;
+
+    // Find the shadow style object in the style array
+    const shadowStyle = Array.isArray(styles)
+      ? styles.find((s) => s && typeof s === 'object' && 'elevation' in s)
+      : null;
+
+    // Verify shadowColor is explicitly defined for Android OEMs that rely on it
+    expect(shadowStyle).toBeDefined();
+    expect(shadowStyle?.shadowColor).toBe('#000');
+    expect(shadowStyle?.elevation).toBe(4);
+  });
 });
