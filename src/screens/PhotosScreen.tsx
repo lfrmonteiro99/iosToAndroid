@@ -88,6 +88,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   const [endCursor, setEndCursor] = useState<string | undefined>(undefined);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
 
   // ---- Full-screen viewer state ----
   const [selectedAsset, setSelectedAsset] = useState<MediaLibrary.Asset | null>(null);
@@ -169,6 +170,9 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   const loadLibraryPhotos = useCallback(
     async (after?: string) => {
       if (!mountedRef.current) return;
+      if (!after) {
+        setLoadingLibrary(true);
+      }
       try {
         const result = await MediaLibrary.getAssetsAsync({
           first: PAGE_SIZE,
@@ -187,6 +191,10 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         setHasNextPage(result.hasNextPage);
       } catch {
         // silently handle
+      } finally {
+        if (!after && mountedRef.current) {
+          setLoadingLibrary(false);
+        }
       }
     },
     [],
@@ -505,9 +513,9 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         // ============================================================
         // Library Tab
         // ============================================================
-        loading ? (
-          // Skeleton loading grid
-          <ScrollView contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
+        loadingLibrary ? (
+          // Skeleton loading grid (shown only while assets are actually loading)
+          <ScrollView testID="library-skeleton-loading" contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
             {/* Memories skeleton */}
             <View style={{ marginBottom: 16 }}>
               <CupertinoSkeleton width="40%" height={18} borderRadius={9} style={{ marginBottom: 12 }} />
