@@ -78,16 +78,33 @@ COOLDOWN_FILE="$STATE_DIR/claude-usage-cooldown"
 # takes a hyphen: `glm5.2:cloud` does not exist, and `glm-4.7` was retired
 # 2026-07-15.
 #
-# LOW tier — chosen by measurement, see TEAM_FALLBACK_LOW's value in the repo's
-# bakeoff notes. The only low-usage model the implement bakeoff ever tested,
-# `gemma4:cloud`, scored 10/18 and crucially came back with produced_diff=false —
-# it wrote a verdict but no code. So a low tag is only used here once it has been
-# shown to produce a diff on a real issue in THIS repo.
+# LOW TIER ON THE FALLBACK: THERE IS NO EVIDENCE FOR A LOW-USAGE MODEL THAT CODES.
+#
+# The sibling repo's bakeoffs tested exactly one low-usage model on the implement
+# role — `gemma4:cloud` — and it scored 10/18 with produced_diff=FALSE: a verdict,
+# no code. The other low tags (`gpt-oss:20b-cloud`, `nemotron-3-nano:30b-cloud`)
+# only ever ran the *gate* bakeoff, which is counting lines and writing a JSON
+# object, not programming.
+#
+# `gpt-oss:20b-cloud` then got two real runs here and lost both:
+#   * #217 — implemented and wrote the test, but emitted a verdict with unescaped
+#     quotes that did not parse. Recoverable only because repair-verdict.py now
+#     salvages it.
+#   * #215 rework — no verdict at all, in 2m35s.
+#
+# Two for two is not proof of incapability, but it is the only evidence there is
+# and it points one way. So the FALLBACK low tier is the model that has actually
+# produced clean verdicts here (#215 first run, end to end in 4m34s). The Claude
+# side keeps `haiku` for haiku-ready issues, which is what the labels ask for — the
+# downgrade applies only while the subscription is out and something has to run.
+#
+# Set TEAM_FALLBACK_LOW=gpt-oss:20b-cloud to go back to a genuinely low-usage tag
+# once there is evidence for one.
 TEAM_MODEL_LOW_CLAUDE="${TEAM_MODEL_LOW_CLAUDE:-haiku}"
 TEAM_MODEL_MED_CLAUDE="${TEAM_MODEL_MED_CLAUDE:-sonnet}"
 TEAM_MODEL_STRONG_CLAUDE="${TEAM_MODEL_STRONG_CLAUDE:-opus}"
 
-TEAM_FALLBACK_LOW="${TEAM_FALLBACK_LOW:-gpt-oss:20b-cloud}"
+TEAM_FALLBACK_LOW="${TEAM_FALLBACK_LOW:-deepseek-v4-flash:cloud}"
 TEAM_FALLBACK_MED="${TEAM_FALLBACK_MED:-deepseek-v4-flash:cloud}"
 TEAM_FALLBACK_STRONG="${TEAM_FALLBACK_STRONG:-deepseek-v4-pro:cloud}"
 
