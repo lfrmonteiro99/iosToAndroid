@@ -117,6 +117,13 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
     const endDate = new Date(evt.end);
     setEndHour(endDate.getHours());
     setEndMinute(endDate.getMinutes());
+    // Legacy/invalid stored events may carry end <= start. Normalize the end
+    // shown in the picker to start + 1h so the value persisted on Save matches
+    // what the user sees — the same correction the save-time guard applies.
+    if (!evt.allDay && endDate.getTime() <= startDate.getTime()) {
+      setEndHour(startDate.getHours() + 1);
+      setEndMinute(startDate.getMinutes());
+    }
     setShowAddEvent(true);
   }, []);
 
@@ -499,7 +506,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                   <View style={styles.timePicker}>
                     <Pressable onPress={() => setSafeEndHour((endHour + 1) % 24)} style={styles.timeBtn}>
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
-                        {String(endHour).padStart(2, '0')}
+                        {String(endHour % 24).padStart(2, '0')}
                       </Text>
                     </Pressable>
                     <Text style={[typography.headline, { color: colors.label }]}>:</Text>
