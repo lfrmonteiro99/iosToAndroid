@@ -131,7 +131,20 @@ issues_with() {
       2>/dev/null
 }
 
-first_with() { issues_with "$1" | head -1; }
+# First actionable issue for a label, SKIPPING anything currently deferred.
+#
+# Without the skip, a deferred issue keeps being returned as the head of the queue
+# and the dispatcher pins itself on it — which is the exact failure the deferral
+# exists to break.
+first_with() {
+  local n
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    is_deferred "$n" && continue
+    echo "$n"; return 0
+  done < <(issues_with "$1")
+  return 0
+}
 
 # Labels on one issue, straight from the cache.
 labels_of() {
