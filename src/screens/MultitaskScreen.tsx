@@ -23,6 +23,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useApps, InstalledApp, RecentApp } from '../store/AppsStore';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -85,7 +86,7 @@ function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps
   const [bgTop, bgBottom] = GRADIENT_PAIRS[gradientIndex];
 
   const dismiss = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onSwipeUp();
   }, [onSwipeUp]);
 
@@ -206,7 +207,7 @@ export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp 
   }, [removeFromRecents]);
 
   const handleClearAll = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setEntries([]);
     clearRecents();
     setShowClearedNotice(true);
@@ -215,7 +216,7 @@ export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp 
   }, [clearRecents]);
 
   const handleTap = useCallback((_app: InstalledApp) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     navigation.goBack();
   }, [navigation]);
 

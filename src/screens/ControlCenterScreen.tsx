@@ -34,7 +34,7 @@ import { SystemColors } from '../theme/CupertinoTheme';
 import { useAlert } from '../components';
 import * as Haptics from 'expo-haptics';
 import type { AppNavigationProp } from '../navigation/types';
-import { hapticSelection } from '../utils/haptics';
+import { hapticSelection, hapticImpact } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -176,7 +176,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
   }, [refreshNowPlaying]);
 
   const toggleFlashlight = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
     const mod = await getLauncher();
     if (mod) {
       const newState = !flashlightOn;
@@ -237,7 +237,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
 
   // Focus mode toggle — fully in-app (persisted in settings)
   const toggleFocus = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const newMode = settings.focusMode === 'off' ? 'doNotDisturb' : 'off';
     update('focusMode', newMode);
   };
@@ -363,7 +363,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 activeColor={colors.accent}
                 textScale={textScale}
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                   update('airplaneMode', !settings.airplaneMode);
                 }}
               />
@@ -374,7 +374,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 active={device.wifi.enabled}
                 activeColor={colors.accent}
                 textScale={textScale}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleWifi(); }}
+                onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); device.toggleWifi(); }}
               />
               <ToggleButton
                 iconName="bluetooth-outline"
@@ -383,7 +383,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 active={device.bluetooth.enabled}
                 activeColor={colors.accent}
                 textScale={textScale}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); device.toggleBluetooth(); }}
+                onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); device.toggleBluetooth(); }}
               />
               <ToggleButton
                 iconName="moon-outline"
@@ -541,7 +541,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 label="Screen Rec"
                 textScale={textScale}
                 onPress={async () => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                   const mod = await getLauncher();
                   if (mod) {
                     await mod.openSystemSettings('cast');
@@ -555,14 +555,14 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 iconName="calculator-outline"
                 label="Calculator"
                 textScale={textScale}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCalculator(); }}
+                onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); launchCalculator(); }}
                 accessibilityLabel="Open Calculator"
               />
               <ShortcutButton
                 iconName="camera-outline"
                 label="Camera"
                 textScale={textScale}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); launchCamera(); }}
+                onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); launchCamera(); }}
                 accessibilityLabel="Open Camera"
               />
               <ShortcutButton
@@ -570,7 +570,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 label="Nearby Share"
                 textScale={textScale}
                 onPress={async () => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                   const mod = await getLauncher();
                   if (mod) {
                     try {
@@ -599,7 +599,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
             <Pressable
               style={styles.mirrorTile}
               onPress={async () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 const mod = await getLauncher();
                 if (mod) {
                   await mod.openSystemSettings('cast');

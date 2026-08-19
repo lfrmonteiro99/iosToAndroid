@@ -34,6 +34,7 @@ import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
+import { hapticImpact } from '../utils/haptics';
 
 // ─── Local message type extension ────────────────────────────────────────────
 
@@ -327,7 +328,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, []);
 
   const handleReaction = useCallback((msgId: string, emoji: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setReactions((prev) => {
       const current = prev[msgId] || [];
       const updated = current.includes(emoji)
@@ -342,7 +343,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, [saveReactions]);
 
   const handleLongPress = useCallback((msgId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setSelectedMsgId((prev) => (prev === msgId ? null : msgId));
   }, []);
 

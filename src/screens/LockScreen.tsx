@@ -67,6 +67,7 @@ function formatNotifTime(timestamp: number): string {
 }
 
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 const LOCK_PIN_KEY = 'lock_pin';
 const LOCK_PIN_LEGACY_KEY = '@lock_pin';
@@ -201,7 +202,7 @@ function NotificationGroupCard({
         </Text>
         {/* Clear all for this app's notifications */}
         <Pressable
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDismissGroup(group.packageName); }}
+          onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onDismissGroup(group.packageName); }}
           hitSlop={8}
           style={styles.groupClearBtn}
           accessibilityLabel={`Clear all ${group.appName} notifications`}
@@ -237,7 +238,7 @@ function NotificationGroupCard({
             )}
           </Pressable>
           <Pressable
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDismissNotif(latest.id); }}
+            onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onDismissNotif(latest.id); }}
             hitSlop={8}
             style={styles.notifDismissBtn}
             accessibilityLabel="Dismiss notification"
@@ -284,7 +285,7 @@ function NotificationGroupCard({
               )}
             </Pressable>
             <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onDismissNotif(item.id); }}
+              onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onDismissNotif(item.id); }}
               hitSlop={8}
               style={styles.notifDismissBtn}
               accessibilityLabel="Dismiss notification"
@@ -336,7 +337,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   }, [notifications]);
 
   const handleOpenNotif = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     // Cannot open apps from lock screen without authentication
     // Trigger biometric/passcode flow
     setShowPasscode(true);
@@ -378,7 +379,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   }, []);
 
   const toggleFlashlight = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const mod = await getLauncher();
     if (mod) {
       const newState = !flashlightOn;
@@ -392,7 +393,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   };
 
   const openCamera = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     // Unlock first, then navigate to in-app Camera screen (no Android system apps)
     handleUnlock();
     setTimeout(() => {
@@ -461,7 +462,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   const handlePasscodeDigit = useCallback((digit: string) => {
     // Rate limiting: block input during lockout period
     if (Date.now() < lockoutUntil) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      hapticNotification(Haptics.NotificationFeedbackType.Error).catch(() => {});
       return;
     }
     setPasscode((prev) => {
@@ -488,7 +489,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
             setFailedAttempts(0);
             handleUnlock();
           } else {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            hapticNotification(Haptics.NotificationFeedbackType.Error).catch(() => {});
             passcodeShake.value = withSequence(
               withTiming(-12, { duration: 50 }),
               withTiming(12, { duration: 50 }),
@@ -573,7 +574,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   const lockBuf = useVelocityBuffer();
 
   const handleUnlock = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     if (onUnlock) {
       onUnlock();
     } else {
@@ -817,7 +818,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
 
           <View style={styles.swipeHintWrap}>
             <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); triggerBiometric(); }}
+              onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); triggerBiometric(); }}
               accessibilityLabel="Biometric unlock"
               accessibilityRole="button"
               style={styles.biometricButton}

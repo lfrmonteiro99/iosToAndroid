@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { useAlert } from '../components';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact } from '../utils/haptics';
 
 // Attempt to import expo-camera; gracefully handle if unavailable
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- CameraView is a dynamic optional module; exact type not available at build time
@@ -70,12 +71,12 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   }, []);
 
   const flipCamera = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
   }, []);
 
   const toggleFlash = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setFlashOn((f) => !f);
   }, []);
 
@@ -91,7 +92,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   }, []);
 
   const takePhoto = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     if (!cameraRef.current || !cameraReady) {
       alert('Camera Not Ready', 'Please wait for the camera to initialize.');
       return;
@@ -112,7 +113,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   }, [cameraReady, alert, saveToLibrary]);
 
   const startRecording = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
     if (!cameraRef.current || !cameraReady) {
       alert('Camera Not Ready', 'Please wait for the camera to initialize.');
       return;
@@ -132,7 +133,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   }, [cameraReady, alert, saveToLibrary]);
 
   const stopRecording = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     try {
       if (cameraRef.current) {
         cameraRef.current.stopRecording();
@@ -156,7 +157,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   }, [mode, isRecording, takePhoto, startRecording, stopRecording]);
 
   const pickFromGallery = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.9,
@@ -167,7 +168,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   }, []);
 
   const selectMode = useCallback((newMode: CameraModeType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setMode(newMode);
   }, []);
 

@@ -21,6 +21,7 @@ import Animated, {
 
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+import { hapticImpact } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,19 +149,19 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEndCall = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     navigation.goBack();
   }, [navigation]);
 
   const toggleMute = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setIsMuted((v) => !v);
     // Note: mute/speaker toggle the visual state only.
     // The native Android dialer handles actual call audio routing.
   }, []);
 
   const toggleSpeaker = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setIsSpeaker((v) => !v);
   }, []);
 

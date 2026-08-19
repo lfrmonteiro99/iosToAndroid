@@ -30,6 +30,7 @@ import { GestureHaptics } from '../utils/gestureHaptics';
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Widget configuration types & storage
@@ -413,7 +414,7 @@ function EditWidgetsPanel({
   const disabled = ALL_WIDGET_TYPES.filter((t) => !draft.includes(t));
 
   const toggle = (w: WidgetType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (draft.includes(w)) {
       setDraft(draft.filter((t) => t !== w));
     } else {
@@ -423,7 +424,7 @@ function EditWidgetsPanel({
 
   const moveUp = (idx: number) => {
     if (idx <= 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const next = [...draft];
     [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
     setDraft(next);
@@ -431,7 +432,7 @@ function EditWidgetsPanel({
 
   const moveDown = (idx: number) => {
     if (idx >= draft.length - 1) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const next = [...draft];
     [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
     setDraft(next);

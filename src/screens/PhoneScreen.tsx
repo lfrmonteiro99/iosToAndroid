@@ -22,6 +22,7 @@ import { SkeletonListRow } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 const getLauncher = async () => {
   try {
@@ -177,7 +178,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
     [c.firstName, c.lastName].filter(Boolean).join(' ') || c.phone;
 
   const handleCall = useCallback((phone: string, name?: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onCall(phone, name);
   }, [onCall]);
 
@@ -224,7 +225,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
             <Ionicons name="call" size={22} color={colors.systemGreen} />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleFavorite(item.id); }}
+            onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); toggleFavorite(item.id); }}
             style={[styles.callBtn, { marginLeft: 4 }]}
             accessibilityLabel={`Remove ${getContactFullName(item)} from favorites`}
             accessibilityRole="button"
@@ -263,7 +264,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
   }, []);
 
   const handleCall = useCallback((number: string, name?: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onCall(number, name);
   }, [onCall]);
 
@@ -345,7 +346,7 @@ function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[
   );
 
   const handleCall = useCallback((phone: string, name?: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onCall(phone, name);
   }, [onCall]);
 
@@ -415,18 +416,18 @@ function KeypadTab({ onCall }: { onCall: (phone: string, name?: string) => void 
   const [number, setNumber] = useState('');
 
   const handleDigit = useCallback((digit: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setNumber((prev) => prev + digit);
   }, []);
 
   const handleDelete = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setNumber((prev) => prev.slice(0, -1));
   }, []);
 
   const handleCall = useCallback(() => {
     if (!number) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     onCall(number);
   }, [number, onCall]);
 
@@ -528,7 +529,7 @@ function VoicemailTab({ onCall }: { onCall: (phone: string, name?: string) => vo
   const { colors } = theme;
 
   const handleCallVoicemail = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     onCall('*86', 'Voicemail');
   }, [onCall]);
 

@@ -13,6 +13,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticNotification } from '../utils/haptics';
 
 export interface BannerNotification {
   id: string;
@@ -54,7 +55,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
   // Show animation
   useEffect(() => {
     if (notification) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
       opacity.value = 1;
       translateY.value = withSpring(0, { damping: 22, stiffness: 350, mass: 0.8 });
       scale.value = withSpring(1, { damping: 22, stiffness: 350 });

@@ -24,6 +24,7 @@ import {
   useAlert,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -214,7 +215,7 @@ export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
   // ── Note Actions ────────────────────────────────────────────
 
   const createNote = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const now = Date.now();
     const newNote: Note = {
       id: generateId(),
@@ -239,7 +240,7 @@ export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   const deleteNote = useCallback(
     (noteId: string) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      hapticNotification(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       const updated = notes.filter((n) => n.id !== noteId);
       setNotes(updated);
       persistNotes(updated);

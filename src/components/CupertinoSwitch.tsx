@@ -61,7 +61,7 @@ export function CupertinoSwitch({
 
   const handlePress = () => {
     if (!disabled) {
-      hapticSelection();
+      hapticSelection().catch(() => {});
       onValueChange?.(!value);
     }
   };

@@ -23,6 +23,7 @@ import {
   CupertinoSkeleton,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -123,7 +124,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   const unreadCount = emails.filter(e => !e.isRead).length;
 
   const handleOpenEmail = useCallback((email: Email) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setEmails(prev => {
       const updated = prev.map(e => e.id === email.id ? { ...e, isRead: true } : e);
       persistEmails(updated);
@@ -133,7 +134,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   }, [persistEmails]);
 
   const handleArchive = useCallback((id: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setEmails(prev => {
       const updated = prev.filter(e => e.id !== id);
       persistEmails(updated);
@@ -142,7 +143,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   }, [persistEmails]);
 
   const handleDelete = useCallback((id: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    hapticNotification(Haptics.NotificationFeedbackType.Warning).catch(() => {});
     setEmails(prev => {
       const updated = prev.filter(e => e.id !== id);
       persistEmails(updated);
@@ -151,7 +152,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
   }, [persistEmails]);
 
   const handleFlag = useCallback((id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setEmails(prev => {
       const updated = prev.map(e => e.id === id ? { ...e, isFlagged: !e.isFlagged } : e);
       persistEmails(updated);
@@ -164,7 +165,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
       alert('Missing Fields', 'Please fill in To and Subject.');
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const sent = {
       id: Date.now().toString(),
       to: composeTo.trim(),

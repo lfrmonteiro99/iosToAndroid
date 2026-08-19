@@ -57,6 +57,7 @@ import { commitForSpotlight } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
+import { hapticImpact, hapticSelection } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -191,7 +192,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
     if (isJiggling) return;
     // eslint-disable-next-line react-hooks/immutability
     pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [isJiggling, pressScale]);
 
   const handlePressOut = useCallback(() => {
@@ -550,7 +551,7 @@ export function LauncherHomeScreen() {
 
   // Unified app press handler — routes built-in apps to internal screens
   const handleAppPress = useCallback((app: InstalledApp) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BUILT_IN_APPS routes all have undefined params; navigate overloads require params spec
@@ -689,7 +690,7 @@ export function LauncherHomeScreen() {
 
   const handleLongPress = useCallback((app: InstalledApp) => {
     if (isJiggling) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     openActionSheet(app);
   }, [isJiggling, openActionSheet]);
 
@@ -824,7 +825,7 @@ export function LauncherHomeScreen() {
     const page = Math.round(offsetX / SCREEN_WIDTH);
     if (page !== currentPage && page >= 0 && page < totalPages) {
       setCurrentPage(page);
-      Haptics.selectionAsync();
+      hapticSelection().catch(() => {});
     }
   };
 
@@ -1111,8 +1112,8 @@ export function LauncherHomeScreen() {
                       cellWidth={CELL_WIDTH}
                       apps={apps}
                       textScale={textScale}
-                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setOpenFolder(item.folder); }}
-                      onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIsJiggling(true); }}
+                      onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setOpenFolder(item.folder); }}
+                      onLongPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setIsJiggling(true); }}
                     />
                   );
                 }
@@ -1128,7 +1129,7 @@ export function LauncherHomeScreen() {
                     badge={badgeCounts[item.app.packageName]}
                     onDelete={() => {
                       removeFromHome(item.app.packageName);
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                     }}
                   />
                 );
@@ -1187,7 +1188,7 @@ export function LauncherHomeScreen() {
                 badge={badgeCounts[app.packageName]}
                 onDelete={() => {
                   removeFromHome(app.packageName);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 }}
               />
             ))}
