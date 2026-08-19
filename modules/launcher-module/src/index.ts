@@ -270,8 +270,15 @@ function createBridgedModule(): LauncherModuleType {
       catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {
-      try { return await nativeModule.launchApp(packageName); }
-      catch (e) { console.error('LauncherModule.launchApp failed:', e); reportBridgeError('launchApp', e); return false; }
+      try {
+        const ok = await nativeModule.launchApp(packageName);
+        // A false result is a rejection (malformed / not installed / not
+        // launchable), not an exception — surface it so the UI can react.
+        if (!ok) {
+          reportBridgeError('launchApp', new Error(`Could not launch app: ${packageName}`));
+        }
+        return ok;
+      } catch (e) { console.error('LauncherModule.launchApp failed:', e); reportBridgeError('launchApp', e); return false; }
     },
     getAppIcon: async (packageName: string) => {
       try { return await nativeModule.getAppIcon(packageName); }

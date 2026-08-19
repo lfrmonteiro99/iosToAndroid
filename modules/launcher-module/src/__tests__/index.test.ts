@@ -8,10 +8,14 @@ jest.mock('expo', () => ({
   requireNativeModule: jest.fn(() => mockNativeModule),
 }));
 
-function makeNativeModule(reject: boolean): Record<string, jest.Mock> {
+function makeNativeModule(
+  reject: boolean,
+  overrides: Record<string, jest.Mock> = {},
+): Record<string, jest.Mock> {
   return new Proxy({}, {
     get: (target, prop) => {
       if (prop === 'addListener') return undefined;
+      if (prop in overrides) return overrides[prop as string];
       return jest.fn(() =>
         reject ? Promise.reject(new Error('native failure')) : Promise.resolve(true),
       );
@@ -80,6 +84,30 @@ describe('LauncherModule bridge error reporting', () => {
     const okListener = jest.fn();
     const unsub = mod.onBridgeError(okListener);
     await expect(mod.default.getWifiInfo()).resolves.toBe(true);
+    expect(okListener).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it('reports a launchApp rejection (native returns false) to onBridgeError listeners', async () => {
+    mockNativeModule = makeNativeModule(false, {
+      launchApp: jest.fn().mockResolvedValue(false),
+    });
+    mod = loadBridge();
+    const okListener = jest.fn();
+    const unsub = mod.onBridgeError(okListener);
+    await expect(mod.default.launchApp('com.nonexistent.app')).resolves.toBe(false);
+    expect(okListener).toHaveBeenCalledWith('launchApp', expect.any(Error));
+    unsub();
+  });
+
+  it('does not report when launchApp succeeds', async () => {
+    mockNativeModule = makeNativeModule(false, {
+      launchApp: jest.fn().mockResolvedValue(true),
+    });
+    mod = loadBridge();
+    const okListener = jest.fn();
+    const unsub = mod.onBridgeError(okListener);
+    await expect(mod.default.launchApp('com.android.settings')).resolves.toBe(true);
     expect(okListener).not.toHaveBeenCalled();
     unsub();
   });

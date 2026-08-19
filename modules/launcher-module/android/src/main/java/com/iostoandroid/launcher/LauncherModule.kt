@@ -42,7 +42,6 @@ class LauncherModule : Module() {
     companion object {
         var flashlightState = false
         private val PHONE_REGEX = Regex("^[+0-9*#(). -]{1,20}$")
-        private val PKG_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+\$")
 
         @Volatile private var instance: LauncherModule? = null
 
@@ -98,12 +97,14 @@ class LauncherModule : Module() {
         }
 
         AsyncFunction("launchApp") { packageName: String ->
-            if (!PKG_REGEX.matches(packageName)) {
-                return@AsyncFunction false
+            // Shape regex first, then whitelist via PackageManager: malformed names
+            // never reach the resolver, and non-installed / non-launchable packages
+            // resolve to null. See PackageNameValidator for the pure-JVM logic.
+            val intent = PackageNameValidator.resolveIfValidShape(packageName) {
+                context.packageManager.getLaunchIntentForPackage(it)
             }
-            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (intent == null) {
-                return@AsyncFunction false  // not installed or not launchable
+                return@AsyncFunction false  // malformed, not installed, or not launchable
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
