@@ -300,8 +300,54 @@ git -C "$WT" add -A -- ':!scripts/team' ':!.github' ':!android' ':!ios' ':!.expo
   || git -C "$WT" add -A -- ':!node_modules' >/dev/null 2>&1 || true
 # Belt and braces: if it got staged some other way, unstage it before committing.
 git -C "$WT" rm --cached -q --ignore-unmatch node_modules >/dev/null 2>&1 || true
+# NEVER COMMIT CONFLICT MARKERS.
+#
+# The pre-run merge leaves markers in the tree for the agent to resolve by intent.
+# If it did not resolve them, `add -A` happily stages `<<<<<<<` and the branch ships
+# code that cannot even parse — and the reviewer then spends a full run discovering
+# that. Treat it exactly like `blocked`: the work is not finished, hand it back with
+# the file list.
+UNMERGED=$(git -C "$WT" diff --name-only --diff-filter=U 2>/dev/null || true)
+MARKERS=$(git -C "$WT" grep -lE '^(<<<<<<<|>>>>>>>) ' -- . 2>/dev/null | head -5 || true)
+if [ -n "$UNMERGED" ] || [ -n "$MARKERS" ]; then
+  BAD=$(printf '%s\n%s' "$UNMERGED" "$MARKERS" | grep -v '^$' | sort -u | tr '\n' ' ')
+  log "CONFLITO POR RESOLVER — não commito: $BAD"
+  log "#$ISSUE: rejeição $(bump_attempts "$ISSUE") de $MAX_ATTEMPTS"
+  set_state "$ISSUE" "$L_BLOCKED_IMPL"
+  comment_issue "$ISSUE" "## Implementador: conflito por resolver
+
+O agente declarou \`implemented\` mas deixou marcadores de conflito por resolver:
+
+$(printf '%s' "$BAD" | tr ' ' '\n' | sed 's/^/- /')
+
+Nada foi commitado — código com \`<<<<<<<\` não compila sequer, e não vale a pena
+gastar uma review a descobri-lo. Volta ao implementador, que recebe os marcadores
+outra vez e as instruções para resolver por intenção."
+  wt_remove "$WT"
+  exit 0
+fi
+
 git -C "$WT" -c user.name="qa-implementer" -c user.email="qa@local" \
   commit -m "fix/$ISSUE: $SUMMARY" >/dev/null 2>&1 || true
+
+# ── Bring the branch up to date with main, NOW, right before the PR ─────────
+#
+# The tree was already merged with main once, at the top of this script — but that
+# was before the agent ran, and an implementation takes minutes during which other
+# PRs land on main. A branch that was current when the work started is routinely
+# stale by the time the PR opens, and a PR that cannot merge is as good as no PR.
+#
+# If this second merge conflicts, there is no agent left to resolve it: it has
+# already written its verdict and exited. So the WORK IS PRESERVED (the commit above
+# is pushed) and the issue goes back to blocked-impl — the same treatment as any
+# other "not finished yet". The next run's pre-agent merge recreates the markers and
+# hands them to a live agent with the resolve-by-intent instructions.
+git -C "$WT" fetch origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+CONFLICT_AFTER=""
+if ! git -C "$WT" merge --no-edit "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  CONFLICT_AFTER=$(git -C "$WT" diff --name-only --diff-filter=U 2>/dev/null || true)
+  git -C "$WT" merge --abort >/dev/null 2>&1 || true
+fi
 
 if ! git -C "$WT" push -u origin "$BRANCH" --force >/dev/null 2>&1; then
   log "ERRO: push falhou — volta a $PREV_STATE"
@@ -314,6 +360,29 @@ infraestrutura, não do issue — volta à fila."
   exit 1
 fi
 log "push ok -> $BRANCH"
+
+# The work is safe on the remote. Now honour the conflict found above: do NOT open
+# or refresh a PR that cannot merge. Sending it to review would burn a full agent
+# run to be told what git already said in a second.
+if [ -n "$CONFLICT_AFTER" ]; then
+  log "CONFLITO com $BASE_BRANCH depois do trabalho — sem PR, volta a $L_BLOCKED_IMPL"
+  log "#$ISSUE: rejeição $(bump_attempts "$ISSUE") de $MAX_ATTEMPTS"
+  set_state "$ISSUE" "$L_BLOCKED_IMPL"
+  comment_issue "$ISSUE" "## Implementador: trabalho feito, mas o branch já não integra
+
+O código está no branch \`$BRANCH\` e **não se perde**. Entretanto o \`$BASE_BRANCH\`
+avançou e estes ficheiros entram em conflito:
+
+$(printf '%s' "$CONFLICT_AFTER" | sed 's/^/- /')
+
+Não abro PR neste estado — um PR que não integra não é revisível, e gastar uma
+review para o descobrir é desperdício. Na próxima passagem o \`$BASE_BRANCH\` é
+integrado neste branch antes do agente arrancar, os marcadores ficam na árvore, e a
+resolução é feita por intenção: perceber o que cada lado queria e preservar as duas
+intenções. **Não refaças o trabalho** — ele já está aqui."
+  wt_remove "$WT"
+  exit 0
+fi
 
 # ── PR into main ───────────────────────────────────────────────────────────
 # `Fixes #N` is mandatory: the reviewer reads it to find its way back to the issue,

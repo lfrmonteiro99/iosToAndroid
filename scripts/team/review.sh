@@ -65,6 +65,49 @@ MODEL="${REVIEW_MODEL:-$RMODEL}"
 export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$RFALLBACK}"
 log "tier=$RTIER modelo=$MODEL fallback=$AGENT_FALLBACK_MODEL"
 
+# ── A PR THAT CANNOT MERGE IS NOT REVIEWABLE ───────────────────────────────
+#
+# Check mergeability BEFORE spending an agent. A conflicted PR would otherwise get
+# the full treatment — checkout, npm install, lint, tsc, the whole suite, a diff read
+# end to end — only to be told at the merge step what git could have said in one API
+# call. That is 10-25 minutes of quota per attempt, and it repeats every time the
+# branch is touched.
+#
+# Conflicts are handled like `blocked`: back to the implementer, which merges the
+# base into the branch before the agent starts and hands it the markers to resolve by
+# intent.
+#
+# UNKNOWN is not CONFLICTING. GitHub computes mergeability asynchronously and answers
+# UNKNOWN while it is still thinking; treating that as a conflict would bounce
+# perfectly good PRs. Ask again a few times, and if it still will not say, review
+# normally — the merge step is the backstop.
+MSTATE=""
+for _ in 1 2 3; do
+  MSTATE=$(gh pr view "$PR" --repo "$REPO" --json mergeable --jq .mergeable 2>/dev/null || echo "")
+  [ "$MSTATE" = "UNKNOWN" ] || [ -z "$MSTATE" ] || break
+  sleep 3
+done
+if [ "$MSTATE" = "CONFLICTING" ]; then
+  log "PR #$PR em conflito com $BASE — devolvido sem gastar uma review"
+  gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: em conflito, nao revisto
+
+Este PR nao integra em \`$BASE\` — tem conflitos por resolver. Nao o revi: uma
+review custa a suite completa e o diff todo, para no fim bater no mesmo que o git ja
+diz numa chamada.
+
+**Nao e um juizo sobre o codigo.** Volta ao implementador, que integra o \`$BASE\`
+neste branch antes de arrancar e resolve os marcadores por intencao — percebendo o
+que cada lado queria e preservando as duas intencoes. Depois disso volto a olhar." >/dev/null 2>&1 || true
+  if [ -n "$ISSUE" ]; then
+    comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
+
+Devolvido ao implementador para resolver os conflitos. O trabalho no branch
+mantem-se — nao e para refazer."
+    set_state "$ISSUE" "$L_BLOCKED_IMPL"
+  fi
+  exit 0
+fi
+
 # wt_checkout, NOT wt_create: the reviewer needs the PR's code. wt_create would cut
 # a new branch from the base, the diff would come out EMPTY, and the reviewer would
 # be judging the PR by its title alone — with no error in the log to reveal it.
