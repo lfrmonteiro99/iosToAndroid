@@ -191,7 +191,7 @@ if ! verdict_readable "$VERDICT_FILE"; then
 A corrida não produziu veredicto por uma razão alheia ao PR: ou o slot estava
 ocupado, ou a subscrição estava esgotada e o fallback não conseguiu concluir. O PR
 fica como está e será revisto de novo." >/dev/null 2>&1 || true
-    exit 0
+    exit 78   # <- "não julguei este PR": o orquestrador NÃO pode marcá-lo como revisto
   fi
   # A failed run must not consume the PR: leave it open so the next cycle picks it
   # up again (its head sha is unchanged, and no reviewed-sha record was written).
@@ -200,7 +200,7 @@ fica como está e será revisto de novo." >/dev/null 2>&1 || true
 
 A corrida terminou sem escrever veredicto (ver \`$LOG_DIR/review-$PR.log\`). Falha
 da corrida, não do PR — será revisto de novo." >/dev/null 2>&1 || true
-  exit 0
+  exit 78
 fi
 
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
