@@ -111,4 +111,27 @@ describe('CalculatorScreen', () => {
     // notation or lose digits.
     expect(getByText('999999999000')).toBeTruthy();
   });
+
+  it('1e20 × 1e20 = 1e+40 switches to scientific notation', () => {
+    const { getByText, getAllByText } = render(<CalculatorScreen />);
+    // The calculator has no exponent-entry key, so 1e20 is built digit by
+    // digit: '1' followed by twenty '0' presses. At the very start the
+    // display and the '0' button both show '0' (see 'renders calculator
+    // display' above), so the '0' button must be queried via getAllByText —
+    // '1' has no such ambiguity since the display still reads '0'.
+    const oneButton = getByText('1');
+    const zeroButton = getAllByText('0')[1];
+
+    const enterOneE20 = () => {
+      fireEvent.press(oneButton);
+      for (let i = 0; i < 20; i++) fireEvent.press(zeroButton);
+    };
+
+    enterOneE20();
+    fireEvent.press(getByText('×'));
+    enterOneE20();
+    fireEvent.press(getByText('='));
+
+    expect(getByText('1e+40')).toBeTruthy();
+  });
 });
