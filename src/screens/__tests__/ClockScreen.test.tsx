@@ -20,6 +20,7 @@ jest.mock('expo-notifications', () => ({
 }));
 
 const ALARMS_STORAGE_KEY = '@iostoandroid/alarms';
+const ALARM_TIMEZONE_STORAGE_KEY = '@iostoandroid/alarm_scheduling_timezone';
 
 interface StoredAlarm {
   id: string;
@@ -60,10 +61,28 @@ function fireAppState(state: AppStateStatus) {
 let deviceTimezone: string | undefined = 'Europe/Lisbon';
 const realResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
 
-function seedAlarms(alarms: StoredAlarm[]) {
-  (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
-    Promise.resolve(key === ALARMS_STORAGE_KEY ? JSON.stringify(alarms) : null),
+// --- AsyncStorage harness --------------------------------------------------
+// Stateful on purpose: production writes the timezone it scheduled against and
+// then reads it back on the next check. A write-only stub would make a second
+// foreground look like a fresh timezone change and hide double-scheduling.
+let storage: Record<string, string> = {};
+
+/**
+ * Seeds stored alarms plus the timezone they were scheduled against. Both are
+ * needed: production only reschedules when it can compare the device zone with
+ * the zone the pending notifications were computed in, and that reference lives
+ * in AsyncStorage so it survives the process being killed.
+ */
+function seedAlarms(alarms: StoredAlarm[], scheduledIn: string | null = 'Europe/Lisbon') {
+  storage[ALARMS_STORAGE_KEY] = JSON.stringify(alarms);
+  if (scheduledIn !== null) storage[ALARM_TIMEZONE_STORAGE_KEY] = scheduledIn;
+}
+
+function savedSchedulingTimezone(): string | null {
+  const calls = (AsyncStorage.setItem as jest.Mock).mock.calls.filter(
+    ([key]) => key === ALARM_TIMEZONE_STORAGE_KEY,
   );
+  return calls.length === 0 ? null : calls[calls.length - 1][1];
 }
 
 function savedAlarms(): StoredAlarm[] | null {
@@ -104,8 +123,14 @@ beforeEach(() => {
       return { ...realResolvedOptions.call(this), timeZone: deviceTimezone as string };
     });
 
-  (AsyncStorage.getItem as jest.Mock).mockImplementation(() => Promise.resolve(null));
-  (AsyncStorage.setItem as jest.Mock).mockImplementation(() => Promise.resolve());
+  storage = {};
+  (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+    Promise.resolve(key in storage ? storage[key] : null),
+  );
+  (AsyncStorage.setItem as jest.Mock).mockImplementation((key: string, value: string) => {
+    storage[key] = value;
+    return Promise.resolve();
+  });
   (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
     status: 'granted',
     canAskAgain: true,
@@ -311,12 +336,53 @@ describe('ClockScreen alarms — device timezone changes', () => {
     expect(savedAlarms()).toEqual([{ ...ONE_SHOT_ALARM, enabled: true, notificationIds: [] }]);
   });
 
-  it('stops reacting to foreground events once the Alarm tab is unmounted', async () => {
+  it('reschedules even when the Alarm tab is no longer mounted', async () => {
+    // The traveller is far more likely to have some other screen open than to be
+    // sitting on the Alarm tab when the device switches zones.
     seedAlarms([ONE_SHOT_ALARM]);
     const api = await renderAlarmTab();
 
     fireEvent.press(api.getByText('Stopwatch'));
     await waitFor(() => expect(api.getByText('Start')).toBeTruthy());
+    expect(api.queryByText('7:00 AM')).toBeNull();
+
+    deviceTimezone = 'Asia/Tokyo';
+    await act(async () => {
+      fireAppState('active');
+    });
+
+    await waitFor(() =>
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('scheduled-id-1'),
+    );
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(savedAlarms()).toEqual([{ ...ONE_SHOT_ALARM, notificationIds: ['notification-id'] }]),
+    );
+  });
+
+  it('reschedules on a cold start that already happens in the new timezone', async () => {
+    // No AppState transition is ever observed here: the process starts fresh
+    // with the device already in Tokyo, which is exactly the case a
+    // foreground-only, in-component check cannot see.
+    seedAlarms([ONE_SHOT_ALARM], 'Europe/Lisbon');
+    deviceTimezone = 'Asia/Tokyo';
+
+    render(<ClockScreen navigation={mockNavigation} />);
+
+    await waitFor(() =>
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('scheduled-id-1'),
+    );
+    await waitFor(() =>
+      expect(savedAlarms()).toEqual([{ ...ONE_SHOT_ALARM, notificationIds: ['notification-id'] }]),
+    );
+    expect(changeHandlers.length).toBeGreaterThan(0); // listener registered, never fired
+  });
+
+  it('does nothing when no scheduling timezone was ever recorded', async () => {
+    // First ever launch: no notification has been computed against any zone, so
+    // there is nothing that could be anchored to the wrong one.
+    seedAlarms([ONE_SHOT_ALARM], null);
+    await renderAlarmTab();
 
     deviceTimezone = 'Asia/Tokyo';
     await act(async () => {
@@ -325,6 +391,78 @@ describe('ClockScreen alarms — device timezone changes', () => {
 
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalled();
+    expect(savedAlarms()).toBeNull();
+  });
+
+  it('records the new timezone so the next launch does not reschedule again', async () => {
+    seedAlarms([ONE_SHOT_ALARM]);
+    await renderAlarmTab();
+
+    deviceTimezone = 'Asia/Tokyo';
+    await act(async () => {
+      fireAppState('active');
+    });
+
+    await waitFor(() => expect(savedSchedulingTimezone()).toBe('Asia/Tokyo'));
+  });
+
+  it('turning the alarm off cancels the id it was rescheduled to, not the stale one', async () => {
+    // The reschedule happens outside the Alarm tab. If the mounted list kept the
+    // ids it read on mount, this toggle would cancel a notification that no
+    // longer exists and leave the live one pending — the alarm would ring after
+    // the user switched it off.
+    seedAlarms([ONE_SHOT_ALARM]);
+    const api = await renderAlarmTab();
+
+    deviceTimezone = 'Asia/Tokyo';
+    (Notifications.scheduleNotificationAsync as jest.Mock).mockResolvedValue('rescheduled-id');
+    await act(async () => {
+      fireAppState('active');
+    });
+    await waitFor(() =>
+      expect(savedAlarms()).toEqual([{ ...ONE_SHOT_ALARM, notificationIds: ['rescheduled-id'] }]),
+    );
+    (Notifications.cancelScheduledNotificationAsync as jest.Mock).mockClear();
+
+    await act(async () => {
+      fireEvent.press(api.getByRole('switch'));
+    });
+
+    await waitFor(() =>
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('rescheduled-id'),
+    );
+    expect(Notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'scheduled-id-1',
+    );
+  });
+
+  it('schedules once when the mount check and a foreground event overlap', async () => {
+    seedAlarms([ONE_SHOT_ALARM]);
+    deviceTimezone = 'Asia/Tokyo';
+
+    // Hold the reference-timezone read open so the mount check is still in
+    // flight when the foreground event arrives. Two reconciliations racing on
+    // the same alarm would cancel one notification and schedule two.
+    let releaseRead: () => void = () => {};
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const passthrough = (AsyncStorage.getItem as jest.Mock).getMockImplementation()!;
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
+      if (key === ALARM_TIMEZONE_STORAGE_KEY) await readGate;
+      return passthrough(key);
+    });
+
+    render(<ClockScreen navigation={mockNavigation} />);
+    act(() => {
+      fireAppState('active');
+    });
+    await act(async () => {
+      releaseRead();
+    });
+
+    await waitFor(() => expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1));
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
   });
 });
 
