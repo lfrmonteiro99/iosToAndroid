@@ -136,13 +136,52 @@ issues_with() {
 # Without the skip, a deferred issue keeps being returned as the head of the queue
 # and the dispatcher pins itself on it — which is the exact failure the deferral
 # exists to break.
+# First actionable issue for a label, SKIPPING anything currently deferred.
+#
+# Without the skip, a deferred issue keeps being returned as the head of the queue
+# and the dispatcher pins itself on it — which is the exact failure the deferral
+# exists to break.
+#
+# ON THE FALLBACK, PICK THE EASY ONES.
+#
+# The normal order is worst-first, which is right on the subscription and backwards
+# on a weaker engine: it throws the cheap model at the hardest issues in the
+# backlog, burns ~3 minutes per failed run, and delivers nothing. Measured on the
+# morning quota outage — 0 verdicts in 4 runs, three issues deferred, all of them
+# P1/P2 defects.
+#
+# So while the quota is spent the dispatcher prefers, in order:
+#   * issues the triage already called small (`haiku-ready`);
+#   * issues that have never been rejected — one that already defeated this engine
+#     is not going to be easier the third time;
+#   * and it skips outright anything promoted to the strong tier, which by
+#     definition needs the model that is currently unavailable.
+#
+# If nothing easy is left it still takes the head of the queue rather than idling:
+# a hard issue attempted is better than a queue that stops, and the deferral
+# breaker bounds the cost of getting that wrong.
 first_with() {
-  local n
+  local n first_any="" fb=0
+  on_fallback && fb=1
+
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     is_deferred "$n" && continue
+    [ -z "$first_any" ] && first_any="$n"
+
+    if [ "$fb" = "1" ]; then
+      [ "$(attempts_of "$n")" -ge "$TEAM_STRONG_AFTER" ] && continue   # needs the strong model
+      [ "$(attempts_of "$n")" -gt 0 ] && continue                      # already lost once here
+      printf '%s' "$(labels_of "$n")" | grep -qx 'haiku-ready' || continue
+    fi
     echo "$n"; return 0
   done < <(issues_with "$1")
+
+  # Fallback mode found nothing small: take the head of the queue anyway.
+  if [ "$fb" = "1" ] && [ -n "$first_any" ]; then
+    log "fallback: sem issues fáceis por fazer — sigo com #$first_any na mesma"
+    echo "$first_any"
+  fi
   return 0
 }
 

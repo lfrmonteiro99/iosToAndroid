@@ -184,6 +184,13 @@ defer_issue() {
   printf '%s' "$until_ts"
 }
 
+# True when the next agent run will land on the fallback engine rather than the
+# subscription: the quota is spent and the fallback is enabled.
+on_fallback() {
+  [ "${TEAM_USE_FALLBACK:-1}" = "1" ] || return 1
+  [ "$(cooldown_remaining)" -gt 0 ]
+}
+
 is_deferred() {
   local issue="$1" until_ts now
   [ -f "$DEFER_DIR/$issue" ] || return 1
