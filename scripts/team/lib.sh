@@ -184,10 +184,41 @@ defer_issue() {
   printf '%s' "$until_ts"
 }
 
+# THE FALLBACK HAS ITS OWN QUOTA, AND IT RUNS OUT TOO.
+#
+# Ollama Cloud enforces a WEEKLY limit, and when it is spent every run dies in
+# seconds with
+#
+#   API Error: ... you have reached your weekly usage limit, upgrade for higher
+#   limits: https://ollama.com/upgrade
+#
+# The harness used to read that as a generic failed run and retry it forever: 47 of
+# those on 2026-08-19, the first at 07:27, while I spent the day measuring "success
+# rates" and concluding the model was weak. It was not weak, it was locked out —
+# and every measurement I took after 07:27 was of a wall, not of capability.
+#
+# So the fallback gets a cooldown of its own. A weekly limit does not clear in
+# minutes, hence the long default: retry occasionally in case it was a soft limit,
+# and otherwise leave it alone.
+FALLBACK_COOLDOWN_FILE="$STATE_DIR/ollama-usage-cooldown"
+TEAM_FALLBACK_COOLDOWN_H="${TEAM_FALLBACK_COOLDOWN_H:-6}"
+
+fallback_cooldown_remaining() {
+  [ -f "$FALLBACK_COOLDOWN_FILE" ] || { echo 0; return; }
+  local until_ts now
+  until_ts=$(cat "$FALLBACK_COOLDOWN_FILE" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  if [ "$now" -lt "$until_ts" ]; then echo $(( until_ts - now )); else echo 0; fi
+}
+
+fallback_exhausted() { [ "$(fallback_cooldown_remaining)" -gt 0 ]; }
+
 # True when the next agent run will land on the fallback engine rather than the
-# subscription: the quota is spent and the fallback is enabled.
+# subscription: the subscription quota is spent, the fallback is enabled, and the
+# fallback still has quota of its own.
 on_fallback() {
   [ "${TEAM_USE_FALLBACK:-1}" = "1" ] || return 1
+  fallback_exhausted && return 1
   [ "$(cooldown_remaining)" -gt 0 ]
 }
 

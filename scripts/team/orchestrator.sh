@@ -492,9 +492,10 @@ while true; do
   #
   # Sleep to the reset instead, in chunks, so the pipeline picks straight back up
   # and a `--stop` still lands promptly.
-  if [ "${TEAM_USE_FALLBACK:-0}" != "1" ]; then
+  if [ "${TEAM_USE_FALLBACK:-1}" != "1" ] || fallback_exhausted; then
     REMAIN=$(cooldown_remaining)
     if [ "$REMAIN" -gt 0 ]; then
+      fallback_exhausted && log "o fallback tambem esta sem quota (Ollama Cloud, ~$(( $(fallback_cooldown_remaining) / 60 ))min)"
       log "subscrição esgotada — volta às $(date -d "@$(( $(date +%s) + REMAIN ))" +%H:%M). A aguardar (fallback desligado)."
       if [ "$ONCE" = "1" ]; then exit 0; fi
       while [ "$(cooldown_remaining)" -gt 0 ]; do sleep 60; done

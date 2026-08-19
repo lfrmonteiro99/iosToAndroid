@@ -261,6 +261,13 @@ else
 fi
 
 # ── 2. Fallback (Ollama Cloud model behind the same harness) ───────────────
+# The fallback has its own quota. If a previous run found it spent, do not spend a
+# further 3 minutes rediscovering that.
+if [ -z "$USED" ] && [ "${TEAM_USE_FALLBACK:-1}" = "1" ] && fallback_exhausted; then
+  echo "[run-agent] fallback tambem sem quota (volta em ~$(( $(fallback_cooldown_remaining) / 60 ))min) — nao corro" >&2
+  exit 77
+fi
+
 if [ -z "$USED" ] && [ "${TEAM_USE_FALLBACK:-0}" != "1" ]; then
   # Measured not to work for these roles on this repo — see the comment on
   # TEAM_USE_FALLBACK in lib.sh. Exit 77 so the caller can tell "we deliberately
@@ -302,9 +309,18 @@ if [ -z "$USED" ]; then
       --allowedTools "$ALLOWED_TOOLS" \
       --strict-mcp-config --mcp-config '{"mcpServers":{}}'
   RC=$?
+
+  # Same detection as the subscription path, applied to the fallback: a usage limit
+  # is not a failed task, and retrying it every 45 seconds achieves nothing.
+  if [ "$RC" -ne 0 ] && is_usage_exhausted "${AGENT_OUTPUT:-}"; then
+    echo $(( $(date +%s) + TEAM_FALLBACK_COOLDOWN_H * 3600 )) > "$FALLBACK_COOLDOWN_FILE"
+    echo "[run-agent] fallback SEM QUOTA (limite do Ollama Cloud) — em pausa ${TEAM_FALLBACK_COOLDOWN_H}h" >&2
+    USED=""
+    RC=77
+  fi
 fi
 
-echo "[run-agent] fim: motor=$USED rc=$RC" >&2
+echo "[run-agent] fim: motor=${USED:-nenhum} rc=$RC" >&2
 
 # Record which engine actually ran, so the caller can tell a DEGRADED run from a
 # genuine failure. Without this marker "no verdict" reads as "this issue defeated
