@@ -163,30 +163,6 @@ describe('MailScreen', () => {
     });
   });
 
-  it('handleSend prevents sending email with invalid recipient address', async () => {
-    const store = setupMemoryAsyncStorage();
-    // Start with invalid email and try to send
-    const mockRoute = { params: { composeTo: 'not-an-email', composeSubject: 'Test', composeBody: 'Body' } };
-    const { getByText } = render(
-      <MailScreen navigation={mockNavigation as never} route={mockRoute as never} />
-    );
-
-    // Try to send with invalid email
-    const sendButton = getByText('Send');
-    fireEvent.press(sendButton);
-
-    // The message should NOT be stored (invalid email prevents send)
-    await waitFor(() => {
-      const sent = store.get('@iostoandroid/mail_sent');
-      // If invalid email is rejected, sent will be null or empty
-      if (sent) {
-        const sentList = JSON.parse(sent);
-        // Should not have stored the message with invalid email
-        expect(sentList.length).toBe(0);
-      }
-    }, { timeout: 1000 });
-  });
-
   it('handleSend allows sending email with valid recipient address', async () => {
     const store = setupMemoryAsyncStorage();
     // Use route params to open compose with valid data
@@ -210,23 +186,90 @@ describe('MailScreen', () => {
     });
   });
 
-  it('handleSend caps body length at MAX_BODY before storing', async () => {
+  /**
+   * CRITICAL TEST: Validates that handleSend rejects invalid email addresses.
+   * Red step (without EMAIL_RE guard in handleSend): this test must FAIL.
+   * - Manually types an invalid email into the To field via fireEvent.changeText
+   * - Presses Send
+   * - Verifies that AsyncStorage.setItem was NOT called (email not stored)
+   */
+  it('handleSend prevents sending email when user types invalid email', async () => {
     const store = setupMemoryAsyncStorage();
-    const longBody = 'x'.repeat(200000); // 200KB
-    const mockRoute = { params: { composeTo: 'test@example.com', composeSubject: 'Subject', composeBody: longBody } };
-    const { getByText } = render(
+    // Open compose modal with a valid email to start
+    const mockRoute = { params: { composeTo: 'initial@example.com', composeSubject: 'Test' } };
+    const { getByPlaceholderText, getByText } = render(
       <MailScreen navigation={mockNavigation as never} route={mockRoute as never} />
     );
+
+    // Wait for compose modal to be visible
+    await waitFor(() => {
+      expect(getByPlaceholderText('To:')).toBeTruthy();
+    });
+
+    // Manually REPLACE the valid email with an invalid one
+    const toField = getByPlaceholderText('To:');
+    fireEvent.changeText(toField, 'not-an-email');
+
+    // Verify the field was updated (sanity check)
+    expect(toField.props.value).toBe('not-an-email');
+
+    // Try to send with invalid email
+    const sendButton = getByText('Send');
+    fireEvent.press(sendButton);
+
+    // Wait a bit for async operations
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Verify that email was NOT stored due to EMAIL_RE validation
+    const sent = store.get('@iostoandroid/mail_sent');
+    expect(sent).toBeFalsy(); // Invalid email should prevent send
+  });
+
+  /**
+   * CRITICAL TEST: Validates that handleSend caps body length before storing.
+   * Red step (without composeBody.slice in handleSend): this test must FAIL.
+   * - Opens compose modal via route params
+   * - Manually types >100KB of text into the body field via fireEvent.changeText
+   *   (this bypasses the prefill cap and tests the handleSend cap)
+   * - Presses Send
+   * - Verifies the stored body is <= 100KB characters
+   */
+  it('handleSend caps body length at MAX_BODY before storing (validates in handleSend)', async () => {
+    const store = setupMemoryAsyncStorage();
+    // Open compose modal by passing a route param
+    const mockRoute = { params: { composeTo: 'test@example.com' } };
+    const { getByPlaceholderText, getByText } = render(
+      <MailScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    // Wait for compose modal to be visible
+    await waitFor(() => {
+      expect(getByPlaceholderText('To:')).toBeTruthy();
+    });
+
+    // Manually type subject
+    const subjectField = getByPlaceholderText('Subject:');
+    fireEvent.changeText(subjectField, 'Subject');
+
+    // Manually type a VERY long body (150KB of text)
+    // This bypasses the prefill cap and tests handleSend's cap
+    const longBody = 'x'.repeat(150000);
+    const bodyField = getByPlaceholderText('Write your email...');
+    fireEvent.changeText(bodyField, longBody);
 
     // Send
     const sendButton = getByText('Send');
     fireEvent.press(sendButton);
 
-    // The stored body should be capped
+    // Verify that the stored body was capped to MAX_BODY (100KB)
     await waitFor(() => {
       const sent = store.get('@iostoandroid/mail_sent');
+      expect(sent).toBeTruthy();
       const sentList = JSON.parse(sent!);
+      expect(sentList.length).toBeGreaterThan(0);
+      // Body should be capped at 100000 chars, NOT the full 150000 we typed
       expect(sentList[0].body.length).toBeLessThanOrEqual(100000);
-    });
+      expect(sentList[0].body.length).toBeGreaterThan(99999);
+    }, { timeout: 1000 });
   });
 });
