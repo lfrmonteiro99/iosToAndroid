@@ -90,6 +90,14 @@ if git -C "$WT" ls-files --error-unmatch node_modules >/dev/null 2>&1; then
   git -C "$WT" -c user.name="qa-implementer" -c user.email="qa@local" \
     commit -q -m "$BRANCH: remove node_modules symlink committed by an earlier attempt" \
     >/dev/null 2>&1 || true
+  # PUSH IT NOW, not at the end. This is a harness repair, not agent work, and it
+  # must not depend on the agent succeeding: the first time it ran, the agent
+  # produced no verdict, implement.sh took the early-exit path, the worktree was
+  # deleted, and the removal never reached the remote — so the reviewer went on
+  # blocking PR #295 for junk that had already been "fixed" twice locally.
+  git -C "$WT" push -q origin "$BRANCH" >/dev/null 2>&1 \
+    && log "limpeza do node_modules enviada para o remoto" \
+    || warn "não consegui enviar a limpeza do node_modules"
 fi
 
 ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" \
