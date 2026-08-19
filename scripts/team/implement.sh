@@ -80,6 +80,18 @@ fi
 log "a preparar dependências..."
 wt_prepare_node "$WT"
 
+# Junk that a PREVIOUS attempt committed has to be removed here, not just kept out
+# of the next commit. The node_modules symlink landed on qa/issue-215 before the
+# guard existed, and it stays in the branch's tree until something deletes it — the
+# reviewer keeps blocking on junk the implementer never re-adds and cannot see.
+if git -C "$WT" ls-files --error-unmatch node_modules >/dev/null 2>&1; then
+  log "a remover node_modules versionado por uma tentativa anterior"
+  git -C "$WT" rm --cached -q node_modules >/dev/null 2>&1 || true
+  git -C "$WT" -c user.name="qa-implementer" -c user.email="qa@local" \
+    commit -q -m "$BRANCH: remove node_modules symlink committed by an earlier attempt" \
+    >/dev/null 2>&1 || true
+fi
+
 ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" \
   --json title,body,labels,comments --jq '
   "# " + .title + "\n\n" +
@@ -192,12 +204,28 @@ SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
 DESCRIPTION=$(printf '%s' "$DESCRIPTION" | sanitize_closing_keywords)
 TESTS=$(printf '%s' "$TESTS" | sanitize_closing_keywords)
 
-# Ignore build artefacts and the dependency symlink when deciding "did anything
-# change".
-CHANGED=$(git -C "$WT" status --porcelain 2>/dev/null \
+# "Is there real work here?" — the WORKING TREE ALONE DOES NOT ANSWER THAT.
+#
+# This used to be `git status --porcelain` only, which is right on a first attempt
+# and wrong on every REWORK: wt_create resumes from origin/qa/issue-N, so the
+# previous attempt's code is already COMMITTED and the tree is clean. An agent that
+# correctly decides the existing work stands — or whose only required change was
+# something the harness now does itself — leaves nothing dirty, and the run was read
+# as "no real code" and rejected.
+#
+# Measured on #215: the branch carried 119 lines of new tests, the agent returned
+# `implemented`, and the harness routed it to the curator as empty while ALSO
+# counting a rejection that pushes the issue toward the strong tier. It threw away
+# real work and lied about why.
+#
+# Work exists if the tree is dirty OR the branch differs from the base.
+DIRTY=$(git -C "$WT" status --porcelain 2>/dev/null \
   | grep -vE '(^.. )?(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+BRANCH_WORK=$(git -C "$WT" diff --name-only "origin/$BASE_BRANCH...HEAD" 2>/dev/null \
+  | grep -vE '^(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+CHANGED="${DIRTY:-$BRANCH_WORK}"
 
-log "outcome=$OUTCOME alterações=${CHANGED:+sim}${CHANGED:-nao}"
+log "outcome=$OUTCOME árvore=${DIRTY:+suja}${DIRTY:-limpa} branch=${BRANCH_WORK:+com trabalho}${BRANCH_WORK:-vazio}"
 
 if [ "$OUTCOME" != "implemented" ] || [ -z "$CHANGED" ]; then
   REASON="$OUTCOME"
