@@ -14,8 +14,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
-import { withAutoLockSuppressed } from '../utils/permissions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Alarm,
+  cancelAlarmNotifications,
+  loadAlarms,
+  requestNotificationPermissions,
+  saveAlarms,
+  scheduleAlarmNotifications,
+  subscribeToAlarms,
+} from '../utils/alarmScheduling';
 import { useTheme } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
@@ -35,7 +43,6 @@ import { hapticImpact, hapticNotification, hapticSelection } from '../utils/hapt
 // ---------------------------------------------------------------------------
 const TABS = ['World Clock', 'Alarm', 'Stopwatch', 'Timer'];
 
-const ALARMS_STORAGE_KEY = '@iostoandroid/alarms';
 const WORLD_CLOCKS_STORAGE_KEY = '@iostoandroid/worldclocks';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -43,16 +50,6 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-interface Alarm {
-  id: string;
-  hour: number;
-  minute: number;
-  label: string;
-  days: number[]; // 1=Sunday .. 7=Saturday (Expo weekday format)
-  enabled: boolean;
-  notificationIds: string[];
-}
-
 interface WorldClock {
   city: string;
   timezone: string; // IANA timezone name
@@ -232,96 +229,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-async function requestNotificationPermissions(): Promise<{
-  granted: boolean;
-  canAskAgain: boolean;
-}> {
-  try {
-    const existing = await Notifications.getPermissionsAsync();
-    if (existing.status === 'granted') return { granted: true, canAskAgain: true };
-    if (!existing.canAskAgain) return { granted: false, canAskAgain: false };
-    const result = await withAutoLockSuppressed(() => Notifications.requestPermissionsAsync());
-    return { granted: result.status === 'granted', canAskAgain: result.canAskAgain };
-  } catch {
-    return { granted: false, canAskAgain: false };
-  }
-}
-
-async function scheduleAlarmNotifications(alarm: Alarm): Promise<string[]> {
-  const perm = await requestNotificationPermissions();
-  if (!perm.granted) return [];
-
-  const ids: string[] = [];
-
-  if (alarm.days.length === 0) {
-    // One-shot alarm: schedule for next occurrence of this time
-    const now = new Date();
-    const target = new Date();
-    target.setHours(alarm.hour, alarm.minute, 0, 0);
-    if (target <= now) {
-      target.setDate(target.getDate() + 1);
-    }
-    const seconds = Math.floor((target.getTime() - now.getTime()) / 1000);
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Alarm',
-        body: alarm.label || 'Alarm',
-        sound: true,
-        categoryIdentifier: 'ALARM',
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.max(seconds, 1),
-        repeats: false,
-      },
-    });
-    ids.push(id);
-  } else {
-    // Repeating alarm for each selected day
-    for (const weekday of alarm.days) {
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Alarm',
-          body: alarm.label || 'Alarm',
-          sound: true,
-          categoryIdentifier: 'ALARM',
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-          weekday,
-          hour: alarm.hour,
-          minute: alarm.minute,
-        },
-      });
-      ids.push(id);
-    }
-  }
-
-  return ids;
-}
-
-async function cancelAlarmNotifications(notificationIds: string[]): Promise<void> {
-  for (const id of notificationIds) {
-    await Notifications.cancelScheduledNotificationAsync(id);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// AsyncStorage helpers
-// ---------------------------------------------------------------------------
-async function loadAlarms(): Promise<Alarm[]> {
-  try {
-    const raw = await AsyncStorage.getItem(ALARMS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-async function saveAlarms(alarms: Alarm[]): Promise<void> {
-  await AsyncStorage.setItem(ALARMS_STORAGE_KEY, JSON.stringify(alarms));
-}
 
 async function loadWorldClocks(): Promise<WorldClock[]> {
   try {
@@ -579,6 +486,12 @@ function AlarmTab() {
     setAlarms(next);
     saveAlarms(next);
   }, []);
+
+  // Alarms can be rescheduled from outside this component: DeviceProvider
+  // reconciles one-shot alarms with the device timezone whether or not the Alarm
+  // tab is mounted. Adopting the result keeps the notification ids in this list
+  // current, so toggling an alarm off cancels the id that is actually pending.
+  useEffect(() => subscribeToAlarms(setAlarms), []);
 
   const toggleAlarm = useCallback(
     async (id: string) => {
