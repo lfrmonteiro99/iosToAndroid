@@ -62,7 +62,35 @@ App React Native / Expo em TypeScript que replica a interface do iOS em Android.
    continuou a passar, e ficou provado que não testava nada. O passo vermelho é a
    única prova de que o teste está ligado ao comportamento.
 
-   Regista no `description` **a mensagem de falha** que obtiveste. É a tua prova.
+   ### A prova do passo vermelho tem um procedimento. Segue-o à letra.
+
+   Não descrevas o passo vermelho: **executa-o e cola o output**. Este pipeline
+   já bloqueou quatro PRs porque o reviewer reverteu o fix, correu o teste, e
+   ele **passou** — a alegação era falsa e o teste não testava nada.
+
+   ```bash
+   # 1. com o teste escrito e o fix AINDA NÃO feito (ou revertido):
+   git stash push -- <ficheiro(s) de produção>     # tira só o fix, deixa o teste
+   npx jest <caminho/do/teste> 2>&1 | tail -30     # <-- COLA ISTO no description
+   git stash pop
+   # 2. agora com o fix:
+   npx jest <caminho/do/teste> 2>&1 | tail -5
+   ```
+
+   No `description`, o passo vermelho é um bloco de código com o **output real
+   do jest**, incluindo o nome do teste e a linha do `expect` que falhou. Uma
+   frase a dizer "o teste falhava com X" não conta. Se não tens o output, não
+   tens a prova — e sem prova é preferível dizê-lo do que inventá-la.
+
+   **O teste tem de exercitar a unidade REAL.** Reimplementar a fórmula ou a
+   lógica dentro do ficheiro de teste e verificar essa cópia não prova nada
+   sobre o código de produção — já foi bloqueado aqui exactamente por isso.
+   Monta o componente, chama a função exportada, dispara o evento verdadeiro.
+
+   **Cuidado com o guard que já existe.** Antes de alegar passo vermelho,
+   confirma com `git log -S` ou lendo `origin/main` que o comportamento que
+   testas **não estava já lá**. Dois PRs foram bloqueados por alegarem provar um
+   guard que existia em `main` antes deles.
 
 4. **🟢 Implementa até passar** — a causa raiz, não o sintoma. Esconder o erro
    (um `try/catch` vazio, um `?? 0` que tapa um `undefined` inesperado, um
@@ -200,17 +228,39 @@ A decisão técnica e as alternativas que descartaste.
 
 ## Testes
 
-- **Passo vermelho:** o teste que escreveste primeiro e a mensagem de falha exacta
-  que obteve antes do fix.
+- **Passo vermelho:** bloco de código com o **output real do jest** obtido com o
+  fix revertido (ver o procedimento acima). Nome do teste + linha do `expect`.
+  Não é uma frase, é o output.
 - **Casos cobertos:** o que testaste além do caminho feliz (fronteiras, vazios,
   inválidos, repetição, assíncrono, o inverso do fix) e porque escolheste esses.
 - **Sanity-check:** confirma que reverteste o fix, a suite falhou, e restauraste.
 - Resultado de `npm run lint`, `npx tsc --noEmit` e `npm test`.
 ```
 
-O `description` é lido pelo reviewer **em confronto com o diff**. Se disser que
-mexeste num ficheiro que não está no diff, o PR é bloqueado. Descreve o que
-fizeste de facto.
+## ⛔ A lista de ficheiros NÃO se escreve de memória — gera-se
+
+**Este é o defeito número um deste pipeline**: seis PRs bloqueados por
+`description_matches_diff = false`, mais do que qualquer outra causa. Acontece
+sempre da mesma maneira — o agente descreve o que *tencionava* mudar, e não o que
+mudou.
+
+Antes de escreveres o veredicto, corre isto e usa o resultado **literal**:
+
+```bash
+git -C __WORKDIR__ status --porcelain
+git -C __WORKDIR__ diff --name-only origin/__BASE_BRANCH__...HEAD
+```
+
+- O `files_changed` do veredicto é essa lista, exactamente. Nem mais um, nem
+  menos um.
+- A secção "O que mudou" só pode falar de ficheiros que aparecem ali.
+- Se te apeteceu escrever sobre um ficheiro que não está na lista, então ou não o
+  mudaste ou a alteração não ficou guardada — verifica qual dos dois, não
+  descrevas na mesma.
+
+O `description` é lido pelo reviewer **em confronto com o diff**, com a lista
+completa de ficheiros à frente dele e nunca truncada. Uma descrição optimista é
+mais cara que uma descrição pobre: custa uma ronda inteira.
 
 ## Notas
 
