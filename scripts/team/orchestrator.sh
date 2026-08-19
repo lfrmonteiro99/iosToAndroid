@@ -279,6 +279,9 @@ pick_pr() {
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     num=${line%% *}; sha=${line##* }
+    # Deferred PRs are skipped for the same reason deferred issues are: an unjudged
+    # PR returns every cycle, and if the engine is what failed that is a spin.
+    is_deferred "pr-$num" && continue
     if ! grep -qxF "$num $sha" "$REVIEWED_STATE" 2>/dev/null; then
       echo "$num"; return 0
     fi
