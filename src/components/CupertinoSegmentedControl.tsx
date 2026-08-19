@@ -26,7 +26,8 @@ export function CupertinoSegmentedControl({
   const animatedWidth = useSharedValue(0);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  const segWidth = containerWidth > 0 ? containerWidth / values.length : 0;
+  // Prevent division by zero when values is empty
+  const segWidth = containerWidth > 0 && values.length > 0 ? containerWidth / values.length : 0;
 
   useEffect(() => {
     if (segWidth > 0) {
@@ -47,6 +48,7 @@ export function CupertinoSegmentedControl({
     width: animatedWidth.value,
   }));
 
+  // Return null if no values to render
   if (!values || values.length === 0) return null;
 
   return (
