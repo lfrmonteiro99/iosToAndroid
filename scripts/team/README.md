@@ -232,3 +232,37 @@ Cada uma custou trabalho real no projecto irmão e está comentada no sítio:
 - não fechar o stdin (`< /dev/null`) faz o `ollama launch` pendurar até ao timeout;
 - confiar no código de saída do `gh pr merge` reporta falha em merges que
   aconteceram, e fila retrabalho de código já integrado.
+
+## Quando o fallback deixa de compensar
+
+O fallback está ligado por omissão porque entrega — mas nem sempre. Medido a
+2026-08-19, sobre as corridas do implementador:
+
+| motor | corridas | saída limpa |
+|---|---|---|
+| `claude` | 17 | 17 (100%) |
+| `ollama` | 32 | 18 (56%) |
+
+E há janelas em que corre bem pior: entre as 10:22 e as 10:39, com a quota
+esgotada, foram **0 veredictos em 4 corridas** e três issues adiados. Cinco falhas
+seguidas com uma taxa de falha de 44% dá ~1,6% de probabilidade, portanto não é
+azar — é o fallback a estar pior que a sua média.
+
+O disjuntor faz isto degenerar sozinho em espera (todos os issues adiados → ciclos
+vazios até a quota voltar), mas gasta ~3 minutos por issue a lá chegar. Quando a
+janela é claramente má, é mais barato dizê-lo:
+
+```bash
+bash scripts/team/start.sh --stop
+export TEAM_USE_FALLBACK=0
+bash scripts/team/start.sh          # dorme até ao reset da subscrição
+```
+
+**Como decidir:** conta veredictos contra corridas na janela actual. Se houver
+entregas pelo meio, deixa ligado — 56% é melhor que 0%. Se forem várias corridas
+seguidas sem um único veredicto, desliga e espera.
+
+```bash
+LOG=$(ls -t /tmp/ios2android-team/orchestrator-*.log | head -1)
+echo "veredictos=$(grep -ac 'outcome=' $LOG) sem-veredicto=$(grep -ac 'SEM VEREDICTO' $LOG)"
+```
