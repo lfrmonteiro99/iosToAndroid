@@ -515,7 +515,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
         // ============================================================
         loadingLibrary ? (
           // Skeleton loading grid (shown only while assets are actually loading)
-          <ScrollView contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
+          <ScrollView testID="library-skeleton-loading" contentContainerStyle={{ padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}>
             {/* Memories skeleton */}
             <View style={{ marginBottom: 16 }}>
               <CupertinoSkeleton width="40%" height={18} borderRadius={9} style={{ marginBottom: 12 }} />
