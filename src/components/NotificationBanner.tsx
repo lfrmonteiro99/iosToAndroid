@@ -49,7 +49,10 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
     translateY.value = withTiming(-150, { duration: 200 });
     scale.value = withTiming(0.95, { duration: 200 });
     opacity.value = withTiming(0, { duration: 200 });
-    setTimeout(onDismiss, 250);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      onDismiss();
+    }, 250);
   }, [onDismiss, translateY, scale, opacity]);
 
   // Show animation

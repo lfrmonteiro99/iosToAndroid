@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, Text } from 'react-native';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, act } from '../../test-utils';
 import { NotificationBanner, BannerNotification } from '../NotificationBanner';
 import * as Haptics from 'expo-haptics';
 import { setHapticsEnabled } from '../../utils/haptics';
@@ -136,5 +136,74 @@ describe('NotificationBanner haptics (H5)', () => {
 
     expect(Haptics.notificationAsync).toHaveBeenCalled();
     expect(unhandled).toEqual([]);
+  });
+});
+
+// The full provider tree from test-utils is required: ThemeProvider itself calls
+// useSettings. DeviceStore/SettingsStore install timers on mount, but with fake
+// timers they only fire inside the act() blocks below (their state updates are
+// flushed there), so they don't interfere with the banner's own timer window.
+describe('NotificationBanner auto-dismiss (M3)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('auto-dismisses after the timer, calling onDismiss exactly once', () => {
+    const onDismiss = jest.fn();
+    render(<NotificationBanner notification={makeNotification()} onDismiss={onDismiss} />);
+
+    act(() => {
+      jest.advanceTimersByTime(5000); // auto-dismiss timer fires → dismiss() schedules onDismiss in 250ms
+    });
+    act(() => {
+      jest.advanceTimersByTime(250); // exit-animation window → onDismiss
+    });
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the pending onDismiss when a new banner replaces the old one during the exit animation', () => {
+    const onDismiss = jest.fn();
+    const { rerender } = render(
+      <NotificationBanner notification={makeNotification({ id: 'n1' })} onDismiss={onDismiss} />,
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(5000); // old banner auto-dismisses → onDismiss scheduled in 250ms
+    });
+
+    // A new banner arrives before the old one's delayed onDismiss runs.
+    rerender(<NotificationBanner notification={makeNotification({ id: 'n2' })} onDismiss={onDismiss} />);
+
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+
+    // The old banner's stale onDismiss must not clear the new banner.
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('does not call onDismiss after the banner unmounts while the exit animation is pending', () => {
+    const onDismiss = jest.fn();
+    const { unmount } = render(
+      <NotificationBanner notification={makeNotification()} onDismiss={onDismiss} />,
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(5000); // dismiss() schedules onDismiss in 250ms
+    });
+
+    unmount(); // banner goes away inside the 250ms exit window
+
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 });
