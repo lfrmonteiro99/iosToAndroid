@@ -39,7 +39,14 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null; // Expected: module unavailable on non-Android
+    // Dynamic import is unavailable in some environments (e.g. Jest's VM);
+    // fall back to a synchronous require so the module stays reachable there.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src').default;
+    } catch {
+      return null; // Expected: module unavailable on non-Android
+    }
   }
 };
 
@@ -404,7 +411,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
     }, 300);
   };
 
-  // Fetch real notifications
+  // Fetch real notifications. Re-runs when the store's notification-access state
+  // flips to true (e.g. the user grants access in settings and returns to the app),
+  // so the list populates without remounting the screen.
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -423,7 +432,7 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
       } catch { /* Expected: notification access not granted */ }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [device.notificationAccessGranted]);
 
   // Update clock aligned to minute boundaries (like real iOS)
   useEffect(() => {
@@ -709,8 +718,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
               <Pressable
                 style={styles.notifPermissionButton}
                 onPress={async () => {
+                  const mod = await getLauncher();
+                  if (!mod) return;
                   try {
-                    const mod = (await import('../../modules/launcher-module/src')).default;
                     await mod.openNotificationAccessSettings();
                   } catch {
                     /* settings intent may be unavailable on some OEM builds */
