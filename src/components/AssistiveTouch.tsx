@@ -148,12 +148,22 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   // ── Radial menu state ─────────────────────────────────────────────────────
   const [menuOpen, setMenuOpen] = useState(false);
   const [fullyOpen, setFullyOpen] = useState(false);
+  // Timer that mounts the backdrop once the opening animation settles. Owned by
+  // the callbacks (not by an effect on `menuOpen`) so a reopen while the close
+  // animation is still running re-arms it: the effect version skipped it
+  // because `menuOpen` never transitions when the user reopens mid-close, and
+  // the backdrop was then gone for the whole session. `closeMenu` clears it so
+  // the backdrop cannot flash back on during the closing animation.
+  const fullyOpenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuScale = useSharedValue(0);
   const menuOpacity = useSharedValue(0);
 
   const openMenu = useCallback(() => {
     if (hapticFeedback) hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setMenuOpen(true);
+    setFullyOpen(false);
+    if (fullyOpenTimer.current) clearTimeout(fullyOpenTimer.current);
+    fullyOpenTimer.current = setTimeout(() => setFullyOpen(true), 150);
     menuScale.value = withSpring(1, { damping: 14, stiffness: 220 });
     menuOpacity.value = withTiming(1, { duration: 160 });
     wake();
@@ -165,15 +175,17 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       if (finished) runOnJS(setMenuOpen)(false);
     });
     setFullyOpen(false);
+    if (fullyOpenTimer.current) {
+      clearTimeout(fullyOpenTimer.current);
+      fullyOpenTimer.current = null;
+    }
   }, [menuScale, menuOpacity]);
 
   useEffect(() => {
-    if (menuOpen) {
-      const t = setTimeout(() => setFullyOpen(true), 150);
-      return () => clearTimeout(t);
-    }
-    setFullyOpen(false);
-  }, [menuOpen]);
+    return () => {
+      if (fullyOpenTimer.current) clearTimeout(fullyOpenTimer.current);
+    };
+  }, []);
 
   // ── Action execution ──────────────────────────────────────────────────────
   const navigate = useCallback(

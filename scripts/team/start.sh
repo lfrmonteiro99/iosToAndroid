@@ -85,6 +85,35 @@ case "$ACTION" in
       2>/dev/null || echo "?"
     echo "fechados até agora: $(gh issue list --repo "$REPO" --label qa:done --state closed --limit 300 --json number --jq 'length' 2>/dev/null || echo '?')"
 
+    # PRs QUE PARARAM DE SER OLHADOS.
+    #
+    # A ausência de actividade num sítio específico é o que nenhum monitor apanha:
+    # o board mostra "em review" e ninguém repara que ninguém está a rever. Quatro
+    # PRs ficaram assim, o mais antigo catorze horas, e foi o utilizador que deu por
+    # isso — duas vezes.
+    #
+    # Um PR aberto há mais de uma hora sem actualização é, na prática, sempre um
+    # destes casos: sha marcado como revisto sem ter sido julgado, ou adiado à
+    # espera de motor.
+    # `gh --jq` does not take `--arg`, so the cutoff is interpolated into the
+    # filter instead. The first version passed --arg and silently produced nothing:
+    # a check for silent failures that itself failed silently.
+    CUT=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)
+    STALE=$(gh pr list --repo "$REPO" --base "$BASE_BRANCH" --state open --limit 100 \
+      --json number,updatedAt,headRefName \
+      --jq "[.[] | select(.headRefName|startswith(\"qa/\")) | select(.updatedAt < \"$CUT\") | .number] | join(\",\")" \
+      2>/dev/null || echo "")
+    if [ -n "${STALE//[[:space:]]/}" ]; then
+      echo "⚠️  PRs parados há >1h: #${STALE//,/, #}"
+      for p in ${STALE//,/ }; do
+        if is_deferred "pr-$p"; then
+          echo "    #$p adiado até $(date -d "@$(cat "$DEFER_DIR/pr-$p")" '+%H:%M') (à espera de motor)"
+        else
+          echo "    #$p sem adiamento — verifica se a sha está em reviewed-shas sem ter sido julgado"
+        fi
+      done
+    fi
+
     # FECHOS ACIDENTAIS.
     #
     # Um issue fechado que ainda traz uma etiqueta de TRABALHO (ready/wip/review/

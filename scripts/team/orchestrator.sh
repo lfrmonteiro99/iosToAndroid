@@ -136,13 +136,52 @@ issues_with() {
 # Without the skip, a deferred issue keeps being returned as the head of the queue
 # and the dispatcher pins itself on it — which is the exact failure the deferral
 # exists to break.
+# First actionable issue for a label, SKIPPING anything currently deferred.
+#
+# Without the skip, a deferred issue keeps being returned as the head of the queue
+# and the dispatcher pins itself on it — which is the exact failure the deferral
+# exists to break.
+#
+# ON THE FALLBACK, PICK THE EASY ONES.
+#
+# The normal order is worst-first, which is right on the subscription and backwards
+# on a weaker engine: it throws the cheap model at the hardest issues in the
+# backlog, burns ~3 minutes per failed run, and delivers nothing. Measured on the
+# morning quota outage — 0 verdicts in 4 runs, three issues deferred, all of them
+# P1/P2 defects.
+#
+# So while the quota is spent the dispatcher prefers, in order:
+#   * issues the triage already called small (`haiku-ready`);
+#   * issues that have never been rejected — one that already defeated this engine
+#     is not going to be easier the third time;
+#   * and it skips outright anything promoted to the strong tier, which by
+#     definition needs the model that is currently unavailable.
+#
+# If nothing easy is left it still takes the head of the queue rather than idling:
+# a hard issue attempted is better than a queue that stops, and the deferral
+# breaker bounds the cost of getting that wrong.
 first_with() {
-  local n
+  local n first_any="" fb=0
+  on_fallback && fb=1
+
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     is_deferred "$n" && continue
+    [ -z "$first_any" ] && first_any="$n"
+
+    if [ "$fb" = "1" ]; then
+      [ "$(attempts_of "$n")" -ge "$TEAM_STRONG_AFTER" ] && continue   # needs the strong model
+      [ "$(attempts_of "$n")" -gt 0 ] && continue                      # already lost once here
+      printf '%s' "$(labels_of "$n")" | grep -qx 'haiku-ready' || continue
+    fi
     echo "$n"; return 0
   done < <(issues_with "$1")
+
+  # Fallback mode found nothing small: take the head of the queue anyway.
+  if [ "$fb" = "1" ] && [ -n "$first_any" ]; then
+    log "fallback: sem issues fáceis por fazer — sigo com #$first_any na mesma"
+    echo "$first_any"
+  fi
   return 0
 }
 
@@ -240,6 +279,9 @@ pick_pr() {
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     num=${line%% *}; sha=${line##* }
+    # Deferred PRs are skipped for the same reason deferred issues are: an unjudged
+    # PR returns every cycle, and if the engine is what failed that is a spin.
+    is_deferred "pr-$num" && continue
     if ! grep -qxF "$num $sha" "$REVIEWED_STATE" 2>/dev/null; then
       echo "$num"; return 0
     fi
@@ -294,6 +336,43 @@ cleanup_stale() {
   fi
 }
 
+# ── PRs whose issue no longer exists ──────────────────────────────────────
+#
+# The curator's `split` closes the parent issue and opens children. If that parent
+# already had an open PR, the PR is orphaned: its `Fixes #N` points at a closed
+# issue, no rework will ever touch its branch, and the reviewer would spend a full
+# run judging work whose contract was withdrawn.
+#
+# PR #333 sat like that — issue #212 closed as qa:done by a split into #335/#336/
+# #337, the PR still open hours later.
+#
+# Closing it is not throwing work away: the children carry the scope forward, and
+# the branch stays on the remote if anyone wants the diff.
+close_orphan_prs() {
+  local list num issue state
+  list=$(gh pr list --repo "$REPO" --base "$BASE_BRANCH" --state open \
+           --json number,headRefName,body \
+           --jq '.[] | select(.headRefName | startswith("qa/")) | "\(.number)\t\(.body // "" | gsub("\n"; " "))"' \
+           2>/dev/null) || return 0
+  [ -n "$list" ] || return 0
+  while IFS=$'\t' read -r num body; do
+    [ -n "$num" ] || continue
+    issue=$(printf '%s' "$body" | grep -oiE '(Fixes|Closes|Resolves)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' | head -1)
+    [ -n "$issue" ] || continue
+    state=$(gh issue view "$issue" --repo "$REPO" --json state --jq .state 2>/dev/null || echo "")
+    [ "$state" = "CLOSED" ] || continue
+    log "PR #$num órfão: o issue #$issue está fechado — a fechar o PR"
+    gh pr comment "$num" --repo "$REPO" --body "## Orquestrador: PR órfão
+
+O issue #$issue que este PR resolvia foi **fechado** — tipicamente porque o curator
+o partiu em sub-issues, que levam o âmbito daqui para a frente.
+
+Um PR cujo contrato foi retirado não é revisível, e deixá-lo aberto só gasta uma
+corrida de review. Fechado. O branch fica no remoto se alguém quiser o diff." >/dev/null 2>&1 || true
+    gh pr close "$num" --repo "$REPO" >/dev/null 2>&1 || true
+  done <<< "$list"
+}
+
 # An issue stuck in qa:wip with no agent alive means the implementer died. Left
 # alone it blocks that issue forever, because nothing dispatches on qa:wip.
 rescue_stuck_wip() {
@@ -330,7 +409,30 @@ Devolvido a \`$L_READY\` para nova tentativa."
 
 # ── Role dispatch ──────────────────────────────────────────────────────────
 run_implement() { log "IMPLEMENTADOR -> #$1"; bash "$SCRIPT_DIR/implement.sh" "$1" || log "implement falhou #$1"; }
-run_review()    { log "REVIEWER -> PR #$1"; bash "$SCRIPT_DIR/review.sh" "$1" || log "review falhou PR #$1"; mark_reviewed "$1"; }
+# A PR IS ONLY "REVIEWED" IF IT WAS ACTUALLY JUDGED.
+#
+# mark_reviewed used to run unconditionally, so a review that produced NO verdict —
+# quota exhausted, slot busy, engine died — still recorded the head sha. pick_pr
+# only re-reviews a PR whose head MOVED, and nothing pushes to a branch whose issue
+# is sitting in qa:review, so the PR was never looked at again.
+#
+# Four PRs were stranded exactly that way (#324, #333, #338, #342), the oldest for
+# fourteen hours, while the board showed them as "in review". review.sh's own
+# comment claimed "no reviewed-sha record was written" — it was wrong, because the
+# orchestrator wrote it.
+#
+# review.sh now exits 78 for "I did not judge this", and only a real verdict marks
+# the sha.
+run_review() {
+  log "REVIEWER -> PR #$1"
+  bash "$SCRIPT_DIR/review.sh" "$1"; local rc=$?
+  if [ "$rc" = "78" ]; then
+    log "PR #$1 não foi julgado (rc=78) — NÃO marco como revisto, volta na próxima"
+    return 0
+  fi
+  [ "$rc" -ne 0 ] && log "review falhou PR #$1 (rc=$rc)"
+  mark_reviewed "$1"
+}
 
 # The curator runs DETACHED on its own slot. It writes only GitHub comments and
 # labels — no git, no build, no push — so it costs nothing to run alongside the
@@ -390,9 +492,10 @@ while true; do
   #
   # Sleep to the reset instead, in chunks, so the pipeline picks straight back up
   # and a `--stop` still lands promptly.
-  if [ "${TEAM_USE_FALLBACK:-0}" != "1" ]; then
+  if [ "${TEAM_USE_FALLBACK:-1}" != "1" ] || fallback_exhausted; then
     REMAIN=$(cooldown_remaining)
     if [ "$REMAIN" -gt 0 ]; then
+      fallback_exhausted && log "o fallback tambem esta sem quota (Ollama Cloud, ~$(( $(fallback_cooldown_remaining) / 60 ))min)"
       log "subscrição esgotada — volta às $(date -d "@$(( $(date +%s) + REMAIN ))" +%H:%M). A aguardar (fallback desligado)."
       if [ "$ONCE" = "1" ]; then exit 0; fi
       while [ "$(cooldown_remaining)" -gt 0 ]; do sleep 60; done
@@ -413,6 +516,7 @@ while true; do
   fi
 
   rescue_stuck_wip
+  close_orphan_prs
 
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed

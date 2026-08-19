@@ -6,6 +6,7 @@ import * as Brightness from 'expo-brightness';
 import * as Network from 'expo-network';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
+import { syncAlarmsWithDeviceTimezone } from '../utils/alarmTimezone';
 
 export interface DeviceWifi {
   enabled: boolean;
@@ -300,6 +301,20 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     });
     return () => sub.remove();
   }, [refresh]);
+
+  // Bring scheduled alarms back in line with the device timezone. This lives in
+  // the provider, not in the Clock screen: the Alarm tab is only mounted while
+  // `tabIndex === 1`, so a traveller who changes zones with any other screen (or
+  // any other Clock tab) open would never trigger the reconciliation. Running it
+  // on mount as well covers the cold start that happens already in the new zone,
+  // where no foreground transition is ever observed.
+  useEffect(() => {
+    syncAlarmsWithDeviceTimezone();
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') syncAlarmsWithDeviceTimezone();
+    });
+    return () => sub.remove();
+  }, []);
 
   // Lightweight background refresh — battery + messages every 30 seconds
   useEffect(() => {

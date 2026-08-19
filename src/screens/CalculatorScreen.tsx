@@ -142,6 +142,10 @@ const SCIENTIFIC_ROWS: ButtonDef[][] = [
     { label: 'π', type: 'scientific' },
     { label: 'e', type: 'scientific' },
   ],
+  [
+    { label: '1/x', type: 'scientific' },
+    { label: '|x|', type: 'scientific' },
+  ],
 ];
 
 // ---------------------------------------------------------------------------
@@ -528,34 +532,38 @@ export function CalculatorScreen() {
 
     if (resetIfError()) return;
     const current = parseFloat(display);
-    let result: number;
+    const currentD = new Decimal(current);
+    let result: Decimal;
 
-    const toRad = (deg: number) => deg * (Math.PI / 180);
+    // Degrees→radians conversion also goes through Decimal (Decimal.acos(-1)
+    // at the configured 20-digit precision) instead of mixing in native
+    // Math.PI, so the whole sin/cos/tan chain stays at one precision level.
+    const toRad = (deg: Decimal) => deg.times(Decimal.acos(-1)).div(180);
 
     switch (label) {
       case 'sin':
-        result = isDeg ? Math.sin(toRad(current)) : Math.sin(current);
+        result = isDeg ? toRad(currentD).sin() : currentD.sin();
         break;
       case 'cos':
-        result = isDeg ? Math.cos(toRad(current)) : Math.cos(current);
+        result = isDeg ? toRad(currentD).cos() : currentD.cos();
         break;
       case 'tan':
-        result = isDeg ? Math.tan(toRad(current)) : Math.tan(current);
+        result = isDeg ? toRad(currentD).tan() : currentD.tan();
         break;
       case 'log':
-        result = Math.log10(current);
+        result = currentD.log();
         break;
       case 'ln':
-        result = Math.log(current);
+        result = currentD.ln();
         break;
       case '√':
-        result = Math.sqrt(current);
+        result = currentD.sqrt();
         break;
       case 'x²':
-        result = Math.pow(current, 2);
+        result = currentD.pow(2);
         break;
       case 'x³':
-        result = Math.pow(current, 3);
+        result = currentD.pow(3);
         break;
       case 'π':
         setDisplay(formatNumber(Math.PI));
@@ -567,16 +575,16 @@ export function CalculatorScreen() {
         return;
       case '1/x':
         if (current === 0) { setDisplay('Error'); setResetOnNext(true); return; }
-        result = 1 / current;
+        result = new Decimal(1).div(currentD);
         break;
       case '|x|':
-        result = Math.abs(current);
+        result = currentD.abs();
         break;
       default:
         return;
     }
 
-    setDisplay(formatNumber(result));
+    setDisplay(formatNumber(result.toNumber()));
     setResetOnNext(true);
   };
 

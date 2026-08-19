@@ -183,6 +183,35 @@ AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
+# THE SAME CIRCUIT BREAKER THE ISSUES HAVE, FOR PULL REQUESTS.
+#
+# Not marking an unjudged PR as reviewed is what stops it being stranded — and it
+# is also what makes it come back EVERY cycle. If the engine is what is failing,
+# that is a spin: #342 was reviewed five times before this existed.
+#
+# So consecutive verdict-less reviews are counted per PR and, after a couple, the
+# PR is parked until the subscription returns. Keys are namespaced `pr-N` so they
+# never collide with an issue of the same number.
+review_noverdict_breaker() {
+  local n until_ts
+  n=$(bump_noverdict "pr-$PR")
+  if [ "$n" -ge "$TEAM_DEFER_AFTER" ]; then
+    until_ts=$(defer_issue "pr-$PR")
+    log "PR #$PR adiado até $(date -d "@$until_ts" '+%H:%M') após $n reviews sem veredicto"
+    gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: adiado após $n corridas sem veredicto
+
+O motor não concluiu a review $n vezes seguidas, sempre por razões alheias a este
+PR — subscrição esgotada e fallback a não terminar. Como um PR não julgado volta à
+fila em cada ciclo, isto passaria a tempo gasto sem nada decidido.
+
+Fica adiado até **$(date -d "@$until_ts" '+%H:%M')**, quando a subscrição volta, e
+a fila segue para o resto. O PR não foi julgado nem aprovado — está apenas à espera
+de um motor que consiga julgá-lo." >/dev/null 2>&1 || true
+  else
+    log "PR #$PR: $n review(s) seguidas sem veredicto"
+  fi
+}
+
 if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — PR fica para nova review"
@@ -191,7 +220,8 @@ if ! verdict_readable "$VERDICT_FILE"; then
 A corrida não produziu veredicto por uma razão alheia ao PR: ou o slot estava
 ocupado, ou a subscrição estava esgotada e o fallback não conseguiu concluir. O PR
 fica como está e será revisto de novo." >/dev/null 2>&1 || true
-    exit 0
+    review_noverdict_breaker
+    exit 78   # <- "não julguei este PR": o orquestrador NÃO pode marcá-lo como revisto
   fi
   # A failed run must not consume the PR: leave it open so the next cycle picks it
   # up again (its head sha is unchanged, and no reviewed-sha record was written).
@@ -200,8 +230,11 @@ fica como está e será revisto de novo." >/dev/null 2>&1 || true
 
 A corrida terminou sem escrever veredicto (ver \`$LOG_DIR/review-$PR.log\`). Falha
 da corrida, não do PR — será revisto de novo." >/dev/null 2>&1 || true
-  exit 0
+  review_noverdict_breaker
+  exit 78
 fi
+
+clear_noverdict "pr-$PR"   # judged: the streak is over
 
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:1500}"
