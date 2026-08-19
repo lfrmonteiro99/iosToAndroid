@@ -12,6 +12,7 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+import { hapticImpact } from '../../utils/haptics';
 
 const CACHE_KEYS = [
   'calculator_history',
@@ -214,7 +215,7 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
               }}
               showChevron
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 alert(
                   'Clear App Cache',
                   'Clear app cache? This will reset app preferences but not your personal data.',
@@ -251,7 +252,7 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
                 backgroundColor: colors.systemGreen,
               }}
               showChevron={false}
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              onPress={() => hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {})}
             />
           </CupertinoListSection>
         </View>

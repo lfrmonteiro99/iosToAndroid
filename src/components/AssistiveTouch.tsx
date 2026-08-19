@@ -21,6 +21,7 @@ import {
   MenuItemId,
 } from '../store/AssistiveTouchStore';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -149,7 +150,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   const menuOpacity = useSharedValue(0);
 
   const openMenu = useCallback(() => {
-    if (hapticFeedback) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (hapticFeedback) hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setMenuOpen(true);
     menuScale.value = withSpring(1, { damping: 14, stiffness: 220 });
     menuOpacity.value = withTiming(1, { duration: 160 });
@@ -184,7 +185,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
 
   const runAction = useCallback(
     async (action: AssistiveAction) => {
-      if (hapticFeedback) Haptics.selectionAsync().catch(() => {});
+      if (hapticFeedback) hapticSelection().catch(() => {});
       if (action !== 'openMenu') closeMenu();
       switch (action) {
         case 'openMenu':
@@ -209,7 +210,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
         case 'screenshot':
           // No reliable programmatic screenshot API; briefly flash the screen
           // and let the user capture via power+volume. Treat as placeholder.
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
           break;
         case 'lock':             navigate('LockScreen'); break;
         case 'reachability':
@@ -238,7 +239,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   );
 
   const snapHaptic = useCallback(() => {
-    if (hapticFeedback) Haptics.selectionAsync().catch(() => {});
+    if (hapticFeedback) hapticSelection().catch(() => {});
   }, [hapticFeedback]);
 
   const panGesture = Gesture.Pan()

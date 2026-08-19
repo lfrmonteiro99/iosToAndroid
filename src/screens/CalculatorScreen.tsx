@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import Decimal from 'decimal.js';
+import { hapticImpact } from '../utils/haptics';
 
 Decimal.set({ precision: 20 });
 
@@ -339,7 +340,7 @@ export function CalculatorScreen() {
   // ------- Core handlers -------
 
   const handleNumber = (num: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (resetIfError()) {
       setDisplay(num);
       return;
@@ -367,7 +368,7 @@ export function CalculatorScreen() {
   );
 
   const handleOperator = (op: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (resetIfError() && op !== '=') {
       return;
     }
@@ -414,7 +415,7 @@ export function CalculatorScreen() {
   };
 
   const handleClear = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setDisplay('0');
     setPreviousValue(null);
     setOperation(null);
@@ -424,7 +425,7 @@ export function CalculatorScreen() {
   };
 
   const handlePercent = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (resetIfError()) return;
     const current = parseFloat(display);
     if (previousValue !== null && operation) {
@@ -438,13 +439,13 @@ export function CalculatorScreen() {
   };
 
   const handleToggleSign = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (resetIfError()) return;
     setDisplay(String(-parseFloat(display)));
   };
 
   const handleDecimal = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (resetIfError()) {
       setDisplay('0.');
       return;
@@ -460,7 +461,7 @@ export function CalculatorScreen() {
   // ------- Memory handlers -------
 
   const handleMemory = (action: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const current = isError(display) ? 0 : parseFloat(display);
     switch (action) {
       case 'MC':
@@ -487,7 +488,7 @@ export function CalculatorScreen() {
   // ------- Scientific handlers -------
 
   const handleScientific = (label: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
     if (label === '(') {
       setParenStack(prev => [...prev, { prev: previousValue, op: operation }]);

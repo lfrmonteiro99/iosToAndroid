@@ -27,6 +27,7 @@ import {
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -501,7 +502,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
 
   const toggleReminder = useCallback(
     (id: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const reminder = reminders.find((r) => r.id === id);
       // When marking a reminder as completed, cancel any pending notification
       if (reminder && !reminder.completed && reminder.notificationId) {
@@ -518,7 +519,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
 
   const toggleFlag = useCallback(
     (id: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const updated = reminders.map((r) =>
         r.id === id ? { ...r, flagged: !r.flagged } : r,
       );
@@ -530,7 +531,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
 
   const deleteReminder = useCallback(
     (id: string) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      hapticNotification(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       const reminder = reminders.find((r) => r.id === id);
       if (reminder?.notificationId) {
         cancelReminderNotification(reminder.notificationId);
@@ -544,7 +545,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
 
   const addReminder = useCallback(async () => {
     if (!newTitle.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     const listName =
       !activeFilter ||
@@ -627,7 +628,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
   }, [editingReminder, editTitle, editNotes, editDueDate, editRecurrence, reminders, persistReminders]);
 
   const openList = useCallback((filter: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setActiveFilter(filter);
     setViewMode('list');
   }, []);

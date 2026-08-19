@@ -8,6 +8,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAlert } from '../components';
 import { CupertinoNavigationBar } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 const EVENTS_STORAGE_KEY = '@iostoandroid/calendar_events';
 
@@ -103,7 +104,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
   }, []);
 
   const openEditModal = useCallback((evt: CalEvent) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setEditingEvent(evt);
     setNewTitle(evt.title);
     setNewLocation(evt.location || '');
@@ -129,7 +130,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
   }, []);
 
   const handleDeleteEvent = useCallback((eventId: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setEvents((prev) => {
       const next = prev.filter((e) => e.id !== eventId);
       persistEvents(next);
@@ -189,7 +190,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
       alert('Missing Title', 'Please enter an event title.');
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const baseDate = editingEvent ? new Date(editingEvent.start) : selectedDate;
     const start = new Date(baseDate);
     start.setHours(startHour, startMinute, 0, 0);
@@ -518,7 +519,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 {REPEAT_OPTIONS.map((opt) => (
                   <Pressable
                     key={opt}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setNewRepeat(opt); }}
+                    onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setNewRepeat(opt); }}
                     style={[styles.repeatChip, newRepeat === opt && { backgroundColor: colors.systemRed }]}
                   >
                     <Text style={[typography.caption1, { color: newRepeat === opt ? '#fff' : colors.label, fontWeight: '600' }]}>

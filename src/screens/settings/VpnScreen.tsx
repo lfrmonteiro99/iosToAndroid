@@ -11,6 +11,7 @@ import {
   CupertinoListTile,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+import { hapticImpact } from '../../utils/haptics';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
@@ -68,7 +69,7 @@ export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
             <CupertinoListTile
               title="Add VPN Configuration..."
               leading={{ name: 'add-circle-outline', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openSystemPanel('vpn'); }}
+              onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); openSystemPanel('vpn'); }}
             />
           </CupertinoListSection>
         </View>
@@ -79,7 +80,7 @@ export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
             <CupertinoListTile
               title="Open VPN Settings"
               leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openSystemPanel('vpn'); }}
+              onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); openSystemPanel('vpn'); }}
             />
           </CupertinoListSection>
         </View>

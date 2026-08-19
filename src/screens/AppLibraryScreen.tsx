@@ -20,6 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
+import { hapticImpact } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Category detection
@@ -367,7 +368,7 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
   }, [apps, query]);
 
   const handleLaunch = useCallback((packageName: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     launchApp(packageName);
   }, [launchApp]);
 

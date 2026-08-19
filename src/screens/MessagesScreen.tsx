@@ -23,6 +23,7 @@ import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import { logger } from '../utils/logger';
+import { hapticImpact } from '../utils/haptics';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -388,7 +389,7 @@ export function MessagesScreen() {
   }, []);
 
   const toggleSelection = useCallback((address: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setSelectedAddresses((prev) => {
       const next = new Set(prev);
       if (next.has(address)) next.delete(address);
@@ -452,7 +453,7 @@ export function MessagesScreen() {
 
   const handleConversationPress = useCallback(
     (address: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       // Mark as read when opening a conversation
       setReadOverrides((prev) => {
         const next = { ...prev, [address]: true };

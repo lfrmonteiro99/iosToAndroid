@@ -24,6 +24,7 @@ import {
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   const handleCurrentLocation = useCallback(() => {
     // In-app only: show My Location in the modal view
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setSelectedLocation({
       id: 'current',
       name: 'My Location',
@@ -236,7 +237,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   const handleSearch = useCallback(() => {
     if (!searchQuery.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
     const query = searchQuery.trim();
 
@@ -257,14 +258,14 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   }, [searchQuery, recents, persistRecents]);
 
   const openRecentInMaps = useCallback((item: RecentLocation) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     // Show in-app detail view instead of launching external map app
     setSelectedLocation(item);
   }, []);
 
   const deleteRecent = useCallback(
     (id: string) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      hapticNotification(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       const updated = recents.filter((r) => r.id !== id);
       setRecents(updated);
       persistRecents(updated);
@@ -274,7 +275,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   const toggleFavorite = useCallback(
     (id: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const updated = recents.map((r) =>
         r.id === id ? { ...r, isFavorite: !r.isFavorite } : r,
       );
@@ -301,17 +302,17 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   // ── Quick Actions ───────────────────────────────────────────
 
   const handleDirections = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     alert('Directions', 'Enter a destination in the search bar above to get directions.');
   }, [alert]);
 
   const handleSearchNearby = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     alert('Search Nearby', 'Enter a place type (e.g. "restaurants", "gas stations") in the search bar.');
   }, [alert]);
 
   const handleFavorites = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setShowFavoritesOnly((v) => !v);
   }, []);
 
@@ -511,7 +512,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
             </View>
             <View style={styles.modalActions}>
               <Pressable
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); alert('Directions', 'Directions from current location will be calculated in a future update.'); }}
+                onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); alert('Directions', 'Directions from current location will be calculated in a future update.'); }}
                 style={[styles.modalActionBtn, { backgroundColor: MAPS_ACCENT }]}
               >
                 <Ionicons name="navigate" size={18} color="#fff" />
@@ -520,7 +521,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShareSheet(true); }}
+                onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setShowShareSheet(true); }}
                 style={[styles.modalActionBtn, { backgroundColor: colors.systemGray5 }]}
               >
                 <Ionicons name="share-outline" size={18} color={colors.label} />

@@ -28,6 +28,7 @@ import {
   useAlert,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -373,7 +374,7 @@ function WorldClockTab() {
 
   const removeCity = useCallback(
     (timezone: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       persistCities(cities.filter((c) => c.timezone !== timezone));
     },
     [cities, persistCities],
@@ -382,7 +383,7 @@ function WorldClockTab() {
   const addCity = useCallback(
     (city: WorldClock) => {
       if (cities.some((c) => c.timezone === city.timezone)) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       persistCities([...cities, city]);
       setShowAddModal(false);
       setSearchQuery('');
@@ -581,7 +582,7 @@ function AlarmTab() {
 
   const toggleAlarm = useCallback(
     async (id: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const alarm = alarms.find((a) => a.id === id);
       if (!alarm) return;
 
@@ -608,7 +609,7 @@ function AlarmTab() {
 
   const deleteAlarm = useCallback(
     async (id: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       const alarm = alarms.find((a) => a.id === id);
       if (alarm) {
         await cancelAlarmNotifications(alarm.notificationIds);
@@ -619,7 +620,7 @@ function AlarmTab() {
   );
 
   const snoozeAlarm = useCallback(async (alarm: Alarm) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const snoozeTime = new Date(Date.now() + 9 * 60 * 1000);
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -712,7 +713,7 @@ function AlarmTab() {
 
   const toggleDay = useCallback(
     (day: number) => {
-      Haptics.selectionAsync();
+      hapticSelection().catch(() => {});
       setEditDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
     },
     [],
@@ -923,12 +924,12 @@ function StopwatchTab() {
   }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStartStop = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setRunning((r) => !r);
   };
 
   const handleLapReset = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (running) {
       setLaps((prev) => [elapsed, ...prev]);
     } else {
@@ -984,7 +985,7 @@ function TimerTab() {
         setRemaining((r) => {
           if (r <= 1) {
             setRunning(false);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
             return 0;
           }
           return r - 1;
@@ -1033,7 +1034,7 @@ function TimerTab() {
         <Pressable
           style={[styles.roundBtn, { backgroundColor: running ? 'rgba(255,59,48,0.2)' : 'rgba(52,199,89,0.2)' }]}
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             if (remaining === 0) { setRemaining(duration); }
             setRunning((r) => !r);
           }}

@@ -20,6 +20,7 @@ import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
 import { useAlert } from '../components';
+import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 const getLauncher = async () => {
   try {
@@ -181,14 +182,14 @@ export function NotificationCenterScreen() {
   }, []);
 
   const handleNotifCardTap = useCallback((notif: DeviceNotification) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setExpandedNotifKey(prev => prev === notif.key ? null : notif.key);
     // Also mark as read
     setReadIds(prev => new Set(prev).add(notif.key));
   }, []);
 
   const handleStartReply = useCallback((notif: DeviceNotification) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setReplyingKey(notif.key);
     setReplyText('');
     setTimeout(() => replyInputRef.current?.focus(), 100);
@@ -196,7 +197,7 @@ export function NotificationCenterScreen() {
 
   const handleSendReply = useCallback((notif: DeviceNotification) => {
     if (!replyText.trim()) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
     // In real impl this would send via notification reply; here we just dismiss
     setReplyingKey(null);
     setReplyText('');
