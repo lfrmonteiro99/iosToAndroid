@@ -348,7 +348,6 @@ function WorldClockTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [openCityId, setOpenCityId] = useState<string | null>(null);
-  const [tzTick, setTzTick] = useState(0); // forces re-render when TZ changes
 
   useEffect(() => {
     loadWorldClocks().then(setCities);
@@ -362,7 +361,11 @@ function WorldClockTab() {
   // Refresh timezone when app returns to foreground
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setTzTick((t) => t + 1);
+      if (state === 'active') {
+        // Bump tick to ensure immediate re-render with updated timezone values
+        // when the app returns from background (in case device timezone changed)
+        setTick((t) => t + 1);
+      }
     });
     return () => sub.remove();
   }, []);
