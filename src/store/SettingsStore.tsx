@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { LauncherModuleType } from '../../modules/launcher-module/src';
 import { setHapticsEnabled } from '../utils/haptics';
 
 const STORAGE_KEY = '@iostoandroid/settings';
@@ -176,7 +177,15 @@ export function SettingsProvider({
   const syncFromDevice = useCallback(async () => {
     const getLauncherModule = async () => {
       try {
-        return (await import('../../modules/launcher-module/src')).default;
+        // require(), not `await import(...)`: Metro has no real code-splitting
+        // for RN apps, so both compile to the same synchronous module load at
+        // runtime — but a bare `import()` throws under Jest's CommonJS test
+        // environment (ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG), which
+        // silently made this catch swallow every call and left syncFromDevice
+        // a permanent no-op in every test in the suite. require() goes through
+        // Jest's normal resolver (and moduleNameMapper), so it's mockable.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        return (require('../../modules/launcher-module/src') as { default: LauncherModuleType }).default;
       } catch { return null; }
     };
 
