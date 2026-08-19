@@ -139,6 +139,61 @@ attempts_of() { cat "$ATTEMPTS_DIR/${1}" 2>/dev/null || echo 0; }
 
 clear_attempts() { rm -f "$ATTEMPTS_DIR/${1}" 2>/dev/null || true; }
 
+# ── Circuit breaker for runs that keep dying without a verdict ─────────────
+#
+# A run that produces no verdict is not the issue's fault, so it does not count as a
+# rejection and the issue goes straight back in the queue. Correct in isolation, and
+# a trap in aggregate: the issue returns to the SAME position — the head of the
+# queue — and is dispatched again immediately. If the cause is the engine rather
+# than the issue, that repeats forever.
+#
+# Measured: with the subscription exhausted, #318 failed three times in a row on the
+# fallback, ~3 minutes each, and the orchestrator dispatched nothing else in
+# between. The whole pipeline was pinned on one issue, and from the log every cycle
+# looked like work starting.
+#
+# So after a couple of consecutive verdict-less runs the issue is DEFERRED — parked
+# with a timestamp and skipped by the dispatcher until it passes. When the cause is
+# a quota outage the natural deadline is the moment the subscription returns: the
+# stronger engine is exactly what it was missing.
+NOVERDICT_DIR="$STATE_DIR/noverdict"
+DEFER_DIR="$STATE_DIR/deferred"
+mkdir -p "$NOVERDICT_DIR" "$DEFER_DIR" 2>/dev/null || true
+
+TEAM_DEFER_AFTER="${TEAM_DEFER_AFTER:-2}"
+
+bump_noverdict() {
+  local issue="$1" n
+  n=$(( $(cat "$NOVERDICT_DIR/$issue" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$NOVERDICT_DIR/$issue"
+  printf '%s' "$n"
+}
+
+clear_noverdict() { rm -f "$NOVERDICT_DIR/${1}" 2>/dev/null || true; }
+
+# Park an issue until $2 (epoch seconds). Defaults to the end of the current quota
+# cooldown, or 30 minutes when there is none.
+defer_issue() {
+  local issue="$1" until_ts="${2:-}" cd now
+  if [ -z "$until_ts" ]; then
+    cd=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo 0)
+    now=$(date +%s)
+    if [ "$cd" -gt "$now" ]; then until_ts=$(( cd + 120 )); else until_ts=$(( now + 1800 )); fi
+  fi
+  echo "$until_ts" > "$DEFER_DIR/$issue"
+  printf '%s' "$until_ts"
+}
+
+is_deferred() {
+  local issue="$1" until_ts now
+  [ -f "$DEFER_DIR/$issue" ] || return 1
+  until_ts=$(cat "$DEFER_DIR/$issue" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  if [ "$now" -lt "$until_ts" ]; then return 0; fi
+  rm -f "$DEFER_DIR/$issue" 2>/dev/null || true   # expired
+  return 1
+}
+
 # After this many failed attempts an issue is promoted to the strong tier. This is
 # the "only if it needs it" rule made mechanical: nobody guesses up front which
 # issue is hard, the issue demonstrates it by defeating the cheaper model.

@@ -196,13 +196,31 @@ AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
 
 if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
-    log "SEM VEREDICTO (corrida degradada ou não arrancada) — issue volta a $PREV_STATE"
-    comment_issue "$ISSUE" "## Implementador: corrida degradada, sem veredicto
+    NV=$(bump_noverdict "$ISSUE")
+    log "SEM VEREDICTO (corrida degradada ou não arrancada) — $NV seguidas — issue volta a $PREV_STATE"
+    if [ "$NV" -ge "$TEAM_DEFER_AFTER" ]; then
+      # Circuit breaker: the issue keeps coming back to the head of the queue and
+      # pinning the pipeline on a failure that is not its fault. Park it until the
+      # subscription returns — the stronger engine is what it was missing.
+      UNTIL=$(defer_issue "$ISSUE")
+      log "#$ISSUE adiado até $(date -d "@$UNTIL" '+%H:%M') — a fila segue para o próximo"
+      comment_issue "$ISSUE" "## Implementador: adiado após $NV corridas sem veredicto
+
+O motor não concluiu $NV vezes seguidas, sempre por razões alheias ao issue
+(subscrição esgotada, fallback a não terminar). Cada tentativa devolvia o issue à
+cabeça da fila e voltava a ser despachada, o que prendia o pipeline inteiro num
+problema que não é deste issue.
+
+Fica adiado até **$(date -d "@$UNTIL" '+%H:%M')** — o momento em que a subscrição
+volta — e a fila segue para o próximo. Nada se perdeu."
+    else
+      comment_issue "$ISSUE" "## Implementador: corrida degradada, sem veredicto
 
 A corrida não produziu veredicto por uma razão alheia ao issue: ou o slot estava
 ocupado, ou a subscrição estava esgotada e o modelo de fallback não conseguiu
-concluir. **Isto não é um problema do issue** — volta a \`$L_READY\` para nova
+concluir. **Isto não é um problema do issue** — volta a \`$PREV_STATE\` para nova
 tentativa."
+    fi
     set_state "$ISSUE" "$PREV_STATE"
     wt_remove "$WT"
     exit 0
@@ -216,6 +234,8 @@ corrida, não do issue — volta à fila."
   wt_remove "$WT"
   exit 0
 fi
+
+clear_noverdict "$ISSUE"   # a verdict arrived: the streak is over
 
 OUTCOME=$(jqv "$VERDICT_FILE" '.outcome' 'blocked')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' 'correção automática'); SUMMARY="${SUMMARY:0:200}"
