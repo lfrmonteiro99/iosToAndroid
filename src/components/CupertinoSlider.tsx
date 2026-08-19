@@ -7,6 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticImpact } from '../utils/haptics';
 
 interface CupertinoSliderProps {
   value: number;
@@ -53,7 +54,7 @@ export function CupertinoSlider({
   };
 
   const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
   const pan = Gesture.Pan()

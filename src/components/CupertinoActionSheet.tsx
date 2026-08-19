@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticImpact } from '../utils/haptics';
 
 interface ActionSheetOption {
   label: string;
@@ -125,7 +126,7 @@ export function CupertinoActionSheet({
                   },
                 ]}
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                   option.onPress();
                   onClose();
                 }}

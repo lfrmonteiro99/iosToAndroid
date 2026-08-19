@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, LayoutChangeEvent } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { hapticSelection } from '../utils/haptics';
 
 interface CupertinoSegmentedControlProps {
   values: string[];
@@ -75,7 +75,7 @@ export function CupertinoSegmentedControl({
           key={value}
           style={styles.segment}
           onPress={() => {
-            Haptics.selectionAsync();
+            hapticSelection().catch(() => {});
             onChange?.(index);
           }}
         >

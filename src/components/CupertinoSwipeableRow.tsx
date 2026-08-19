@@ -8,6 +8,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { hapticImpact } from '../utils/haptics';
 
 export interface SwipeAction {
   label: string;
@@ -52,7 +53,7 @@ export function CupertinoSwipeableRow({
   const maxLeading = leadingActions.length * ACTION_WIDTH;
 
   const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
   const notifyOpen = () => { onOpenRef.current?.(); };
