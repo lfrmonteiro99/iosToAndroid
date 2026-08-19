@@ -95,6 +95,8 @@ interface DeviceContextValue extends DeviceState {
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
 
+export { DeviceContext, type DeviceContextValue };
+
 const DEFAULT_STATE: DeviceState = {
   battery: { level: 1, isCharging: false },
   brightness: 0.5,
