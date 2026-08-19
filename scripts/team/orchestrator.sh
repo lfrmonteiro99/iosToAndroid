@@ -100,6 +100,18 @@ refresh_issue_cache() {
 # Ties break on issue number, so within a priority the oldest goes first and nothing
 # starves. Issues with no P* label sort LAST — an unlabelled issue is not evidence
 # of importance.
+# THE ORIGINAL BACKLOG COMES FIRST, WHOLE, BEFORE ANY EPIC SUB-ISSUE.
+#
+# Sorting by priority alone is not enough. The epic split produced sub-issues at
+# P2 (the test-coverage children) and P3 (the feature children), while the filed
+# bugs that remain are mostly P3 — so a P2 sub-issue outranked a P3 bug and the
+# pipeline started delivering new-feature scaffolding while real defects waited.
+# #287 was already shipped that way before it was noticed.
+#
+# `epic-child` therefore dominates the sort: every one of them ranks after every
+# original issue, and priority only breaks ties within each group. Nothing is
+# starved — when the filed backlog drains, the children start on their own, which
+# is exactly "only after the bugs are resolved".
 issues_with() {
   printf '%s' "$ISSUE_CACHE" \
     | jq -r --arg l "$1" '
@@ -109,10 +121,13 @@ issues_with() {
           elif (ns | index("P2")) then 2
           elif (ns | index("P3")) then 3
           else 4 end;
+        def childrank(ns): if (ns | index("epic-child")) then 1 else 0 end;
         [ .[]
           | select([.labels[].name] | index($l))
-          | {n: .number, r: prank([.labels[].name])} ]
-        | sort_by(.r, .n) | .[].n' \
+          | {n: .number,
+             c: childrank([.labels[].name]),
+             r: prank([.labels[].name])} ]
+        | sort_by(.c, .r, .n) | .[].n' \
       2>/dev/null
 }
 
