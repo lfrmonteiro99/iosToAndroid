@@ -59,10 +59,12 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
   // Camera permissions (uses real hook or stub depending on expo-camera availability)
   const [permission, requestPermission] = useCamPerms();
 
-  // Request permission on mount
+  // Request permission on mount. Showing the native camera-permission dialog
+  // backgrounds the app (it's a separate Activity), so this must go through
+  // withAutoLockSuppressed or a slow reader gets auto-locked out mid-prompt.
   useEffect(() => {
     if (useCameraPermissionsHook && permission && !permission.granted && permission.canAskAgain) {
-      requestPermission();
+      withAutoLockSuppressed(requestPermission).catch(() => {});
     }
   }, [permission, requestPermission]);
 
@@ -214,7 +216,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
           </Text>
           {permission?.canAskAgain && (
             <Pressable
-              onPress={requestPermission}
+              onPress={() => { withAutoLockSuppressed(requestPermission).catch(() => {}); }}
               style={styles.permissionBtn}
               accessibilityLabel="Grant camera permission"
               accessibilityRole="button"

@@ -486,7 +486,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
           PermissionsAndroid.PERMISSIONS.SEND_SMS,
         );
         if (!already) {
-          const result = await PermissionsAndroid.request(
+          const result = await withAutoLockSuppressed(() => PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.SEND_SMS,
             {
               title: 'Send Messages',
@@ -494,7 +494,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
               buttonPositive: 'Allow',
               buttonNegative: 'Deny',
             },
-          );
+          ));
           if (result !== PermissionsAndroid.RESULTS.GRANTED) {
             alert(
               'Permission Needed',

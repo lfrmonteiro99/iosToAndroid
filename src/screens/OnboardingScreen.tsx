@@ -13,10 +13,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SystemColors } from '../theme/CupertinoTheme';
+import { withAutoLockSuppressed } from '../utils/permissions';
+import type { LauncherModuleType } from '../../modules/launcher-module/src';
 
 const getLauncher = async () => {
   try {
-    return (await import('../../modules/launcher-module/src')).default;
+    // require(), not `await import(...)`: Metro has no real code-splitting
+    // for RN apps, so both compile to the same synchronous module load at
+    // runtime — but a bare `import()` throws under Jest's CommonJS test
+    // environment (ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG), silently
+    // swallowed by this catch, which made handleGrantPermissions a permanent
+    // no-op in every test (see #210's identical fix in SettingsStore.tsx).
+    // require() goes through Jest's normal resolver (and moduleNameMapper),
+    // so it's mockable.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require('../../modules/launcher-module/src') as { default: LauncherModuleType }).default;
   } catch {
     return null; // Expected: module unavailable on non-Android
   }
@@ -78,7 +89,10 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
     if (mod) {
       try {
         setPermissionError(null);
-        await mod.requestAllPermissions();
+        // Requests Camera, Microphone, Storage etc. one after another — each
+        // native dialog backgrounds the app, so the whole batch must be
+        // suppressed or a slow reader gets auto-locked mid-onboarding.
+        await withAutoLockSuppressed(() => mod.requestAllPermissions());
         const results = await mod.checkPermissions();
         setPermissionResults(results);
       } catch (e: unknown) {
