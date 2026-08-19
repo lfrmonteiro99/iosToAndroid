@@ -86,7 +86,7 @@ async function requestNotificationPermissions(): Promise<boolean> {
   }
 }
 
-async function scheduleReminderNotification(reminder: Reminder): Promise<string | undefined> {
+export async function scheduleReminderNotification(reminder: Reminder): Promise<string | undefined> {
   if (!reminder.dueDate) return undefined;
   const dueDate = new Date(reminder.dueDate);
   try {
