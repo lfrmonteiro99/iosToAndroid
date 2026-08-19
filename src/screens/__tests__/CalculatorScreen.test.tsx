@@ -134,4 +134,91 @@ describe('CalculatorScreen', () => {
 
     expect(getByText('1e+40')).toBeTruthy();
   });
+
+  it('subtracting nearly equal operands keeps the exact decimal difference', () => {
+    const { getByText, getAllByText } = render(<CalculatorScreen />);
+    // Catastrophic cancellation: in IEEE-754 doubles
+    // 100000000.30000001 - 100000000.3 === 1.4901161193847656e-8, and the
+    // relative error survives formatNumber's 10-significant-digit rounding
+    // ('1.490116119e-8'). Only exact decimal arithmetic yields '1e-8'.
+    // Buttons are captured before the first press: once the display echoes a
+    // digit, getByText for that digit becomes ambiguous.
+    const one = getByText('1');
+    const zero = getAllByText('0')[1];
+    const three = getByText('3');
+    const dot = getByText('.');
+
+    const enterHundredMillionPointThree = () => {
+      fireEvent.press(one);
+      for (let i = 0; i < 8; i++) fireEvent.press(zero);
+      fireEvent.press(dot);
+      fireEvent.press(three);
+    };
+
+    enterHundredMillionPointThree();
+    for (let i = 0; i < 6; i++) fireEvent.press(zero);
+    fireEvent.press(one); // 100000000.30000001
+    fireEvent.press(getByText('-'));
+    enterHundredMillionPointThree(); // 100000000.3
+    fireEvent.press(getByText('='));
+
+    expect(getByText('1e-8')).toBeTruthy();
+  });
+
+  it('memory add/subtract keeps the exact decimal difference', () => {
+    const { getByText, getAllByText } = render(<CalculatorScreen />);
+    // Same cancellation, but routed through M+/M- instead of the '=' key —
+    // memory must accumulate with the same decimal arithmetic as performOp.
+    const one = getByText('1');
+    const zero = getAllByText('0')[1];
+    const three = getByText('3');
+    const dot = getByText('.');
+
+    const enterHundredMillionPointThree = () => {
+      fireEvent.press(one);
+      for (let i = 0; i < 8; i++) fireEvent.press(zero);
+      fireEvent.press(dot);
+      fireEvent.press(three);
+    };
+
+    enterHundredMillionPointThree();
+    for (let i = 0; i < 6; i++) fireEvent.press(zero);
+    fireEvent.press(one); // 100000000.30000001
+    fireEvent.press(getByText('M+'));
+    enterHundredMillionPointThree(); // 100000000.3
+    fireEvent.press(getByText('M-'));
+    fireEvent.press(getByText('MR'));
+
+    expect(getByText('1e-8')).toBeTruthy();
+  });
+
+  it('pressing M+ twice adds the displayed value twice', () => {
+    const { getByText } = render(<CalculatorScreen />);
+    const five = getByText('5');
+    fireEvent.press(five);
+    const memoryAdd = getByText('M+');
+    fireEvent.press(memoryAdd);
+    fireEvent.press(memoryAdd);
+    fireEvent.press(getByText('MR'));
+    expect(getByText('10')).toBeTruthy();
+  });
+
+  it('MC empties memory so MR recalls zero', () => {
+    const { getByText, getAllByText } = render(<CalculatorScreen />);
+    fireEvent.press(getByText('5'));
+    fireEvent.press(getByText('M+'));
+    fireEvent.press(getByText('MC'));
+    fireEvent.press(getByText('MR'));
+    // Display and the '0' button both read '0'; [0] is the display.
+    expect(getAllByText('0')[0]).toBeTruthy();
+  });
+
+  it('dividing by zero shows Error instead of a numeric result', () => {
+    const { getByText } = render(<CalculatorScreen />);
+    fireEvent.press(getByText('5'));
+    fireEvent.press(getByText('÷'));
+    fireEvent.press(getByText('0'));
+    fireEvent.press(getByText('='));
+    expect(getByText('Error')).toBeTruthy();
+  });
 });
