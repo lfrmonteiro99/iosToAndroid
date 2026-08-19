@@ -24,24 +24,33 @@ VERDICT_FILE="$VERDICT_DIR/implement-$ISSUE.json"
 PROMPT="/tmp/ios2a-implement-prompt-$ISSUE.txt"
 WT=""
 
-# Model. This repo's backlog is already triaged with `haiku-ready` / `sonnet-ready`,
-# but that triage was about the SIZE OF THE CHANGE, not about the size of the job
-# this agent does: investigate root cause, write a failing test, prove the red step,
-# implement, run three gates, then write a structured verdict. A one-line fix still
-# carries all of that, so honouring `haiku-ready` by default would silently degrade
-# most of the queue.
-#
-# Default is therefore sonnet everywhere. Set IMPLEMENT_HONOUR_READY_LABELS=1 to
-# trust the labels instead.
-MODEL="${IMPLEMENT_MODEL:-sonnet}"
-if [ -z "${IMPLEMENT_MODEL:-}" ] && [ "${IMPLEMENT_HONOUR_READY_LABELS:-0}" = "1" ]; then
-  if gh issue view "$ISSUE" --repo "$REPO" --json labels \
-       --jq '[.labels[].name] | index("haiku-ready")' 2>/dev/null | grep -qv '^null$'; then
-    MODEL="haiku"
-  fi
-fi
+# The issue's own triage picks the tier: `haiku-ready` -> low, `sonnet-ready` -> med,
+# and repeated failure promotes to strong. resolve_models returns the pair, so the
+# difficulty class stays the same whether we are on the subscription or on the
+# Ollama fallback.
+read -r MODEL FALLBACK_TAG TIER <<<"$(resolve_models "$ISSUE")"
+MODEL="${IMPLEMENT_MODEL:-$MODEL}"
+export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$FALLBACK_TAG}"
 
-log "issue #$ISSUE branch=$BRANCH modelo=$MODEL"
+log "issue #$ISSUE branch=$BRANCH tier=$TIER modelo=$MODEL fallback=$AGENT_FALLBACK_MODEL"
+
+# Where to put the issue back if this run fails for a reason that is not the
+# issue's fault. It must be the state it CAME FROM, not the qa:ready default.
+#
+# Returning a rework to qa:ready loses the one fact that mattered: that it has an
+# open PR a reviewer already blocked. qa:blocked-impl is dispatched ahead of new
+# work; qa:ready is one of 83 entries sorted worst-first, and a P3 lands at the
+# back. Meanwhile pick_pr will never look at the PR again, because it only
+# re-reviews a PR whose HEAD MOVED and nothing is pushing to that branch.
+#
+# That is exactly how PR #295 was stranded: blocked by the reviewer, its rework
+# produced no verdict, the issue was filed back under qa:ready, and both the PR and
+# the issue went quiet with the pipeline looking perfectly busy.
+PREV_STATE=$(get_state "$ISSUE")
+case "$PREV_STATE" in
+  "$L_BLOCKED_IMPL"|"$L_BLOCKED_SPEC"|"$L_READY") ;;
+  *) PREV_STATE="$L_READY" ;;
+esac
 
 set_state "$ISSUE" "$L_WIP"
 
@@ -51,7 +60,7 @@ set_state "$ISSUE" "$L_WIP"
 comment_issue "$ISSUE" "## Implementador: a trabalhar
 
 - Branch: \`$BRANCH\`
-- Modelo: \`$MODEL\`
+- Modelo: \`$MODEL\` (tier \`$TIER\`, fallback \`$AGENT_FALLBACK_MODEL\`)
 - Início: $(date '+%H:%M')
 
 Comento outra vez quando houver PR ou se ficar bloqueado."
@@ -60,8 +69,8 @@ Comento outra vez quando houver PR ou se ficar bloqueado."
 # rework after a block) wt_create resumes from the remote tip.
 wt_remove "$WT_ROOT/implement-$ISSUE"
 WT_OUT=$(wt_create "$BRANCH" "implement-$ISSUE" "$BASE_BRANCH") || {
-  log "ERRO: não criei worktree — volta a $L_READY"
-  set_state "$ISSUE" "$L_READY"
+  log "ERRO: não criei worktree — volta a $PREV_STATE"
+  set_state "$ISSUE" "$PREV_STATE"
   comment_issue "$ISSUE" "## Implementador: falhou a preparar o worktree
 
 Não foi possível criar o branch \`$BRANCH\` a partir de \`$BASE_BRANCH\`."
@@ -88,6 +97,26 @@ fi
 
 log "a preparar dependências..."
 wt_prepare_node "$WT"
+
+# Junk that a PREVIOUS attempt committed has to be removed here, not just kept out
+# of the next commit. The node_modules symlink landed on qa/issue-215 before the
+# guard existed, and it stays in the branch's tree until something deletes it — the
+# reviewer keeps blocking on junk the implementer never re-adds and cannot see.
+if git -C "$WT" ls-files --error-unmatch node_modules >/dev/null 2>&1; then
+  log "a remover node_modules versionado por uma tentativa anterior"
+  git -C "$WT" rm --cached -q node_modules >/dev/null 2>&1 || true
+  git -C "$WT" -c user.name="qa-implementer" -c user.email="qa@local" \
+    commit -q -m "$BRANCH: remove node_modules symlink committed by an earlier attempt" \
+    >/dev/null 2>&1 || true
+  # PUSH IT NOW, not at the end. This is a harness repair, not agent work, and it
+  # must not depend on the agent succeeding: the first time it ran, the agent
+  # produced no verdict, implement.sh took the early-exit path, the worktree was
+  # deleted, and the removal never reached the remote — so the reviewer went on
+  # blocking PR #295 for junk that had already been "fixed" twice locally.
+  git -C "$WT" push -q origin "$BRANCH" >/dev/null 2>&1 \
+    && log "limpeza do node_modules enviada para o remoto" \
+    || warn "não consegui enviar a limpeza do node_modules"
+fi
 
 ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" \
   --json title,body,labels,comments --jq '
@@ -160,25 +189,26 @@ fi
         -e "s|__BASE_BRANCH__|$BASE_BRANCH|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
+agent_log_header "$LOG_DIR/implement-$ISSUE.log" "implement #$ISSUE modelo=$MODEL"
 AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${IMPLEMENT_TIMEOUT:-2700}" \
-  > "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
+  >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
 
-if [ ! -f "$VERDICT_FILE" ]; then
+if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
-    log "SEM VEREDICTO (corrida degradada ou não arrancada) — issue volta a $L_READY"
+    log "SEM VEREDICTO (corrida degradada ou não arrancada) — issue volta a $PREV_STATE"
     comment_issue "$ISSUE" "## Implementador: corrida degradada, sem veredicto
 
 A corrida não produziu veredicto por uma razão alheia ao issue: ou o slot estava
 ocupado, ou a subscrição estava esgotada e o modelo de fallback não conseguiu
 concluir. **Isto não é um problema do issue** — volta a \`$L_READY\` para nova
 tentativa."
-    set_state "$ISSUE" "$L_READY"
+    set_state "$ISSUE" "$PREV_STATE"
     wt_remove "$WT"
     exit 0
   fi
-  log "SEM VEREDICTO — volta a $L_READY para nova tentativa"
-  set_state "$ISSUE" "$L_READY"
+  log "SEM VEREDICTO — volta a $PREV_STATE para nova tentativa"
+  set_state "$ISSUE" "$PREV_STATE"
   comment_issue "$ISSUE" "## Implementador: corrida sem veredicto
 
 Terminou sem escrever veredicto (ver \`$LOG_DIR/implement-$ISSUE.log\`). Falha da
@@ -192,16 +222,45 @@ SUMMARY=$(jqv "$VERDICT_FILE" '.summary' 'correção automática'); SUMMARY="${S
 DESCRIPTION=$(jqv "$VERDICT_FILE" '.description' '')
 TESTS=$(jqv "$VERDICT_FILE" '.tests' '(não reportado)'); TESTS="${TESTS:0:400}"
 
-# Ignore build artefacts and the dependency symlink when deciding "did anything
-# change".
-CHANGED=$(git -C "$WT" status --porcelain 2>/dev/null \
-  | grep -vE '(^.. )?(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+# Model-written prose goes into a commit message and a PR body, both of which
+# GitHub scans for closing keywords. An agent writing "this also fixes #212"
+# would close #212. Only the `Fixes #$ISSUE` line the harness appends below is
+# meant to close anything.
+SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
+DESCRIPTION=$(printf '%s' "$DESCRIPTION" | sanitize_closing_keywords)
+TESTS=$(printf '%s' "$TESTS" | sanitize_closing_keywords)
 
-log "outcome=$OUTCOME alterações=${CHANGED:+sim}${CHANGED:-nao}"
+# "Is there real work here?" — the WORKING TREE ALONE DOES NOT ANSWER THAT.
+#
+# This used to be `git status --porcelain` only, which is right on a first attempt
+# and wrong on every REWORK: wt_create resumes from origin/qa/issue-N, so the
+# previous attempt's code is already COMMITTED and the tree is clean. An agent that
+# correctly decides the existing work stands — or whose only required change was
+# something the harness now does itself — leaves nothing dirty, and the run was read
+# as "no real code" and rejected.
+#
+# Measured on #215: the branch carried 119 lines of new tests, the agent returned
+# `implemented`, and the harness routed it to the curator as empty while ALSO
+# counting a rejection that pushes the issue toward the strong tier. It threw away
+# real work and lied about why.
+#
+# Work exists if the tree is dirty OR the branch differs from the base.
+DIRTY=$(git -C "$WT" status --porcelain 2>/dev/null \
+  | grep -vE '(^.. )?(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+BRANCH_WORK=$(git -C "$WT" diff --name-only "origin/$BASE_BRANCH...HEAD" 2>/dev/null \
+  | grep -vE '^(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+CHANGED="${DIRTY:-$BRANCH_WORK}"
+
+log "outcome=$OUTCOME árvore=${DIRTY:+suja}${DIRTY:-limpa} branch=${BRANCH_WORK:+com trabalho}${BRANCH_WORK:-vazio}"
 
 if [ "$OUTCOME" != "implemented" ] || [ -z "$CHANGED" ]; then
   REASON="$OUTCOME"
   [ -n "$OUTCOME" ] && [ -z "$CHANGED" ] && REASON="$OUTCOME (sem alterações reais no código)"
+  # A JUDGED REJECTION: the agent ran, produced a verdict, and the verdict was not
+  # usable work. This is what the attempt counter is for — not dispatches, and not
+  # runs that died on infrastructure.
+  log "#$ISSUE: rejeição $(bump_attempts "$ISSUE") de $MAX_ATTEMPTS"
+
   # THIS IS THE DOOR TO THE CURATOR. `blocked` means the implementer investigated
   # and the issue is not actionable as written — analysis is now warranted. Anything
   # else that failed to produce code goes the same way rather than being parked,
@@ -231,14 +290,68 @@ fi
 # Scoped add: the harness and CI live in paths the implementer is told not to
 # touch, and never staging them enforces it. Native output dirs are generated by
 # `expo prebuild` and must never be committed.
-git -C "$WT" add -A -- ':!scripts/team' ':!.github' ':!android' ':!ios' ':!.expo' >/dev/null 2>&1 \
-  || git -C "$WT" add -A >/dev/null 2>&1 || true
+# ':!node_modules' is load-bearing, not decorative. wt_prepare_node may leave a
+# SYMLINK named node_modules, and `.gitignore` only excludes `node_modules/` — with
+# the trailing slash it matches a directory, not a symlink. Without this pathspec
+# `add -A` stages a mode-120000 entry holding an absolute path from this machine,
+# which is junk in every other checkout. The reviewer blocked PR #295 for precisely
+# that, and it would have been in every PR this pipeline opened.
+git -C "$WT" add -A -- ':!scripts/team' ':!.github' ':!android' ':!ios' ':!.expo' ':!node_modules' >/dev/null 2>&1 \
+  || git -C "$WT" add -A -- ':!node_modules' >/dev/null 2>&1 || true
+# Belt and braces: if it got staged some other way, unstage it before committing.
+git -C "$WT" rm --cached -q --ignore-unmatch node_modules >/dev/null 2>&1 || true
+# NEVER COMMIT CONFLICT MARKERS.
+#
+# The pre-run merge leaves markers in the tree for the agent to resolve by intent.
+# If it did not resolve them, `add -A` happily stages `<<<<<<<` and the branch ships
+# code that cannot even parse — and the reviewer then spends a full run discovering
+# that. Treat it exactly like `blocked`: the work is not finished, hand it back with
+# the file list.
+UNMERGED=$(git -C "$WT" diff --name-only --diff-filter=U 2>/dev/null || true)
+MARKERS=$(git -C "$WT" grep -lE '^(<<<<<<<|>>>>>>>) ' -- . 2>/dev/null | head -5 || true)
+if [ -n "$UNMERGED" ] || [ -n "$MARKERS" ]; then
+  BAD=$(printf '%s\n%s' "$UNMERGED" "$MARKERS" | grep -v '^$' | sort -u | tr '\n' ' ')
+  log "CONFLITO POR RESOLVER — não commito: $BAD"
+  log "#$ISSUE: rejeição $(bump_attempts "$ISSUE") de $MAX_ATTEMPTS"
+  set_state "$ISSUE" "$L_BLOCKED_IMPL"
+  comment_issue "$ISSUE" "## Implementador: conflito por resolver
+
+O agente declarou \`implemented\` mas deixou marcadores de conflito por resolver:
+
+$(printf '%s' "$BAD" | tr ' ' '\n' | sed 's/^/- /')
+
+Nada foi commitado — código com \`<<<<<<<\` não compila sequer, e não vale a pena
+gastar uma review a descobri-lo. Volta ao implementador, que recebe os marcadores
+outra vez e as instruções para resolver por intenção."
+  wt_remove "$WT"
+  exit 0
+fi
+
 git -C "$WT" -c user.name="qa-implementer" -c user.email="qa@local" \
   commit -m "fix/$ISSUE: $SUMMARY" >/dev/null 2>&1 || true
 
+# ── Bring the branch up to date with main, NOW, right before the PR ─────────
+#
+# The tree was already merged with main once, at the top of this script — but that
+# was before the agent ran, and an implementation takes minutes during which other
+# PRs land on main. A branch that was current when the work started is routinely
+# stale by the time the PR opens, and a PR that cannot merge is as good as no PR.
+#
+# If this second merge conflicts, there is no agent left to resolve it: it has
+# already written its verdict and exited. So the WORK IS PRESERVED (the commit above
+# is pushed) and the issue goes back to blocked-impl — the same treatment as any
+# other "not finished yet". The next run's pre-agent merge recreates the markers and
+# hands them to a live agent with the resolve-by-intent instructions.
+git -C "$WT" fetch origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+CONFLICT_AFTER=""
+if ! git -C "$WT" merge --no-edit "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  CONFLICT_AFTER=$(git -C "$WT" diff --name-only --diff-filter=U 2>/dev/null || true)
+  git -C "$WT" merge --abort >/dev/null 2>&1 || true
+fi
+
 if ! git -C "$WT" push -u origin "$BRANCH" --force >/dev/null 2>&1; then
-  log "ERRO: push falhou — volta a $L_READY"
-  set_state "$ISSUE" "$L_READY"
+  log "ERRO: push falhou — volta a $PREV_STATE"
+  set_state "$ISSUE" "$PREV_STATE"
   comment_issue "$ISSUE" "## Implementador: push falhou
 
 O código foi escrito mas não chegou ao remoto (branch \`$BRANCH\`). Falha de
@@ -247,6 +360,29 @@ infraestrutura, não do issue — volta à fila."
   exit 1
 fi
 log "push ok -> $BRANCH"
+
+# The work is safe on the remote. Now honour the conflict found above: do NOT open
+# or refresh a PR that cannot merge. Sending it to review would burn a full agent
+# run to be told what git already said in a second.
+if [ -n "$CONFLICT_AFTER" ]; then
+  log "CONFLITO com $BASE_BRANCH depois do trabalho — sem PR, volta a $L_BLOCKED_IMPL"
+  log "#$ISSUE: rejeição $(bump_attempts "$ISSUE") de $MAX_ATTEMPTS"
+  set_state "$ISSUE" "$L_BLOCKED_IMPL"
+  comment_issue "$ISSUE" "## Implementador: trabalho feito, mas o branch já não integra
+
+O código está no branch \`$BRANCH\` e **não se perde**. Entretanto o \`$BASE_BRANCH\`
+avançou e estes ficheiros entram em conflito:
+
+$(printf '%s' "$CONFLICT_AFTER" | sed 's/^/- /')
+
+Não abro PR neste estado — um PR que não integra não é revisível, e gastar uma
+review para o descobrir é desperdício. Na próxima passagem o \`$BASE_BRANCH\` é
+integrado neste branch antes do agente arrancar, os marcadores ficam na árvore, e a
+resolução é feita por intenção: perceber o que cada lado queria e preservar as duas
+intenções. **Não refaças o trabalho** — ele já está aqui."
+  wt_remove "$WT"
+  exit 0
+fi
 
 # ── PR into main ───────────────────────────────────────────────────────────
 # `Fixes #N` is mandatory: the reviewer reads it to find its way back to the issue,
@@ -284,8 +420,8 @@ Testes: $TESTS" >/dev/null 2>&1 || true
 else
   PR_NUM=$(create_pr_api "$BRANCH" "$BASE_BRANCH" "$SUMMARY (#$ISSUE)" "$PR_BODY" || echo "")
   if [ -z "$PR_NUM" ]; then
-    log "ERRO: PR não criado — volta a $L_READY"
-    set_state "$ISSUE" "$L_READY"
+    log "ERRO: PR não criado — volta a $PREV_STATE"
+    set_state "$ISSUE" "$PREV_STATE"
     comment_issue "$ISSUE" "## Implementador: PR não criado
 
 O branch \`$BRANCH\` foi enviado mas o PR para \`$BASE_BRANCH\` não foi aberto."

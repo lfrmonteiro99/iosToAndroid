@@ -71,7 +71,11 @@ case "$ACTION" in
     fi
     echo -n "issues por estado: "
     for s in qa:ready qa:wip qa:review qa:blocked-impl qa:blocked-spec qa:triage qa:needs-human; do
-      n=$(gh issue list --repo "$REPO" --label "$s" --state open --json number --jq 'length' 2>/dev/null || echo 0)
+      # --limit 300: `gh issue list` defaults to 30, so without it the status
+      # command silently CAPS every count at 30. It reported "qa:ready=30" against
+      # a queue of 80 — a status line that under-reports is worse than none, since
+      # it looks precise.
+      n=$(gh issue list --repo "$REPO" --label "$s" --state open --limit 300 --json number --jq 'length' 2>/dev/null || echo 0)
       [ "$n" != "0" ] && printf '%s=%s ' "$s" "$n"
     done
     echo
@@ -79,7 +83,29 @@ case "$ACTION" in
     gh pr list --repo "$REPO" --base "$BASE_BRANCH" --state open \
       --json number,headRefName --jq '[.[] | select(.headRefName|startswith("qa/")) | "#\(.number)"] | join(" ")' \
       2>/dev/null || echo "?"
-    echo "fechados até agora: $(gh issue list --repo "$REPO" --label qa:done --state closed --json number --jq 'length' 2>/dev/null || echo '?')"
+    echo "fechados até agora: $(gh issue list --repo "$REPO" --label qa:done --state closed --limit 300 --json number --jq 'length' 2>/dev/null || echo '?')"
+
+    # FECHOS ACIDENTAIS.
+    #
+    # Um issue fechado que ainda traz uma etiqueta de TRABALHO (ready/wip/review/
+    # blocked-*) nunca passou por `qa:done` — logo ninguém o entregou, alguém o
+    # fechou por fora. Na prática isso quer dizer uma palavra-chave do GitHub numa
+    # frase: `fix #N`, `closes #N`.
+    #
+    # Aconteceu duas vezes na primeira noite, ambas por prosa minha. A segunda foi o
+    # PR que corrigia exactamente este problema: o corpo citava as frases ofensivas
+    # como exemplo e o GitHub obedeceu-lhes, fechando #215 e #212 — este último sem
+    # uma única linha de trabalho feita.
+    #
+    # A verificação é barata e é a única forma de dar por isso: um issue fechado sai
+    # da fila em silêncio e parece entregue.
+    ORPH=$(gh issue list --repo "$REPO" --state closed --limit 200 --json number,labels \
+      --jq '[.[] | select([.labels[].name] | any(startswith("qa:")) and (any(. == "qa:done") | not)) | .number] | @csv' \
+      2>/dev/null || echo "")
+    if [ -n "${ORPH//[\"[:space:]]/}" ]; then
+      echo "⚠️  FECHADOS SEM TEREM SIDO ENTREGUES: #${ORPH//,/, #}"
+      echo "    (fechados com etiqueta de trabalho — provável palavra-chave do GitHub em prosa)"
+    fi
     exit 0
     ;;
 esac

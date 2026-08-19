@@ -140,16 +140,7 @@ count_actionable() {
 # went round the loop for over two hours on its third implementation cycle while 21
 # issues sat untouched. From outside the pipeline looked busy and was delivering
 # nothing.
-MAX_ATTEMPTS="${TEAM_MAX_ATTEMPTS:-3}"
-ATTEMPTS_DIR="$STATE_DIR/attempts"
-mkdir -p "$ATTEMPTS_DIR" 2>/dev/null || true
-
-bump_attempts() {
-  local issue="$1" n
-  n=$(( $(cat "$ATTEMPTS_DIR/$issue" 2>/dev/null || echo 0) + 1 ))
-  echo "$n" > "$ATTEMPTS_DIR/$issue"
-  printf '%s' "$n"
-}
+# MAX_ATTEMPTS lives in lib.sh — the roles report against it too.
 
 # ESCALATE THE STRATEGY, NEVER TO A HUMAN.
 #
@@ -166,7 +157,7 @@ bump_attempts() {
 # one. Returns 0 to proceed with the normal action, 1 when it has been redirected.
 escalate_if_stuck() {
   local issue="$1" n
-  n=$(cat "$ATTEMPTS_DIR/$issue" 2>/dev/null || echo 0)
+  n=$(attempts_of "$issue")
   [ "$n" -lt "$MAX_ATTEMPTS" ] && return 0
 
   if [ "$n" -lt $(( MAX_ATTEMPTS * 2 )) ]; then
@@ -194,7 +185,7 @@ emaranhado**, não de esforço.
 resolúvel isoladamente — um ecrã, um componente, um cálculo de cada vez. Se um
 pedaço continuar a parecer difícil, parte-o outra vez. O histórico de falhas acima
 diz-te onde estão as fronteiras naturais."
-  echo 0 > "$ATTEMPTS_DIR/$issue"   # the pieces start fresh
+  clear_attempts "$issue"   # the pieces start fresh
   set_state "$issue" "$L_BLOCKED_SPEC"
   return 1
 }
@@ -413,7 +404,7 @@ while true; do
     I=$(first_with "$L_BLOCKED_IMPL")
     if [ -n "$I" ]; then
       if escalate_if_stuck "$I"; then
-        log "#$I: tentativa $(bump_attempts "$I") de $MAX_ATTEMPTS"
+        log "#$I: rejeições até agora: $(attempts_of "$I") de $MAX_ATTEMPTS"
         run_implement "$I"
       fi
       DID=1
@@ -425,7 +416,6 @@ while true; do
   if [ "$DID" = "0" ]; then
     I=$(first_with "$L_READY")
     if [ -n "$I" ]; then
-      log "#$I: tentativa $(bump_attempts "$I") de $MAX_ATTEMPTS"
       run_implement "$I"
       DID=1
     fi

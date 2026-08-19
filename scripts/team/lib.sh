@@ -37,30 +37,144 @@ STATE_DIR="${TEAM_STATE_DIR:-$HOME/Documentos/iostoandroid-verdicts/state}"
 
 LOCK_PREFIX="${TEAM_LOCK_PREFIX:-/tmp/ios2android-agent}"
 
-# THE OLLAMA FALLBACK IS OFF BY DEFAULT HERE, AND THAT IS A MEASUREMENT, NOT A
-# PREFERENCE.
+# The Ollama fallback is ON: when the Claude subscription runs out of usage, the
+# same harness keeps working behind a cloud model.
 #
-# The sibling project keeps working through a quota outage on `ollama launch claude`
-# with a cloud model, and its logs justify that: the fallback there produced real
-# implementations. It does not work for this repo's roles. Measured on the first
-# live run, with `deepseek-v4-flash:cloud`:
+# This was briefly defaulted to 0 on the belief that `deepseek-v4-flash:cloud` could
+# not handle a 16KB agentic prompt. That belief was wrong, and the evidence for it
+# was three separate misreadings — worth recording, because each one is easy to
+# repeat:
 #
-#   * a two-word prompt returns "OK" in seconds — the engine and credential are fine;
-#   * the actual 16KB implementer prompt, with the same flags, produced ZERO bytes of
-#     output for four minutes and had to be killed.
+#   * `claude -p` does not stream. It prints only the final message, so "no output
+#     for four minutes" is what a working agent looks like. Use
+#     `--output-format stream-json --verbose` to actually watch one.
+#   * the role logs were opened with `>`, so each retry destroyed the previous
+#     attempt's output. Reading the log mid-retry showed two lines and looked like
+#     an engine that ran and said nothing. (Now appended — see agent_log_header.)
+#   * the engine was probed with a two-word prompt and the real task with a short
+#     timeout. The difference measured was latency, not capability.
 #
-# Three dispatches of #190 burned that way, each looking from the log like an agent
-# that ran and declined to answer. Retrying it every 45 seconds for the three hours
-# until the subscription resets buys nothing and makes the log lie about what the
-# pipeline is doing.
+# What was actually broken was run-agent.sh never entering $WORKDIR, so the agent
+# had no access to the tree it was told to change. With that fixed, #215 ran end to
+# end on this exact fallback in 4m34s: verdict `implemented`, branch pushed, PR
+# opened.
 #
-# So when the subscription is in cooldown the orchestrator WAITS instead, and says
-# so. Set TEAM_USE_FALLBACK=1 (optionally with AGENT_FALLBACK_MODEL pointing at a
-# larger cloud tag) to try the fallback again — if a bigger model does cope with a
-# prompt this size, this default is the thing to revisit.
-TEAM_USE_FALLBACK="${TEAM_USE_FALLBACK:-0}"
+# Set TEAM_USE_FALLBACK=0 to make the orchestrator sleep out a quota window instead
+# — useful if you would rather wait for the stronger model than take fallback-grade
+# work on a delicate issue.
+TEAM_USE_FALLBACK="${TEAM_USE_FALLBACK:-1}"
 
 COOLDOWN_FILE="$STATE_DIR/claude-usage-cooldown"
+
+# ── Model tiers ────────────────────────────────────────────────────────────
+#
+# The backlog is already triaged with `haiku-ready` / `sonnet-ready`, so the tier
+# comes from the issue, not from a global default. Each tier names BOTH engines —
+# the subscription model and the Ollama tag used when the subscription is out —
+# because a run must not silently change difficulty class just because the quota
+# ran out.
+#
+# The cloud tags below were verified to resolve (2026-08-19). Note `glm-5.2:cloud`
+# takes a hyphen: `glm5.2:cloud` does not exist, and `glm-4.7` was retired
+# 2026-07-15.
+#
+# LOW TIER ON THE FALLBACK: THERE IS NO EVIDENCE FOR A LOW-USAGE MODEL THAT CODES.
+#
+# The sibling repo's bakeoffs tested exactly one low-usage model on the implement
+# role — `gemma4:cloud` — and it scored 10/18 with produced_diff=FALSE: a verdict,
+# no code. The other low tags (`gpt-oss:20b-cloud`, `nemotron-3-nano:30b-cloud`)
+# only ever ran the *gate* bakeoff, which is counting lines and writing a JSON
+# object, not programming.
+#
+# `gpt-oss:20b-cloud` then got two real runs here and lost both:
+#   * #217 — implemented and wrote the test, but emitted a verdict with unescaped
+#     quotes that did not parse. Recoverable only because repair-verdict.py now
+#     salvages it.
+#   * #215 rework — no verdict at all, in 2m35s.
+#
+# Two for two is not proof of incapability, but it is the only evidence there is
+# and it points one way. So the FALLBACK low tier is the model that has actually
+# produced clean verdicts here (#215 first run, end to end in 4m34s). The Claude
+# side keeps `haiku` for haiku-ready issues, which is what the labels ask for — the
+# downgrade applies only while the subscription is out and something has to run.
+#
+# Set TEAM_FALLBACK_LOW=gpt-oss:20b-cloud to go back to a genuinely low-usage tag
+# once there is evidence for one.
+TEAM_MODEL_LOW_CLAUDE="${TEAM_MODEL_LOW_CLAUDE:-haiku}"
+TEAM_MODEL_MED_CLAUDE="${TEAM_MODEL_MED_CLAUDE:-sonnet}"
+TEAM_MODEL_STRONG_CLAUDE="${TEAM_MODEL_STRONG_CLAUDE:-opus}"
+
+TEAM_FALLBACK_LOW="${TEAM_FALLBACK_LOW:-deepseek-v4-flash:cloud}"
+TEAM_FALLBACK_MED="${TEAM_FALLBACK_MED:-deepseek-v4-flash:cloud}"
+TEAM_FALLBACK_STRONG="${TEAM_FALLBACK_STRONG:-deepseek-v4-pro:cloud}"
+
+# How many judged rejections before the orchestrator changes strategy (curator,
+# then a forced split). Lives here, not in the orchestrator, because implement.sh
+# and review.sh both report against it.
+MAX_ATTEMPTS="${TEAM_MAX_ATTEMPTS:-3}"
+
+ATTEMPTS_DIR="$STATE_DIR/attempts"
+mkdir -p "$ATTEMPTS_DIR" 2>/dev/null || true
+
+# Count a JUDGED REJECTION, never a dispatch.
+#
+# This used to fire when the orchestrator handed an issue to the implementer, so it
+# counted three different things as the same thing: real work that a reviewer
+# rejected, a run that died because run-agent.sh never entered the worktree, and the
+# mere fact of starting. #190 reached the strong tier — opus, deepseek-v4-pro — on
+# two attempts that were both MY bugs, having never once been judged on its merits.
+#
+# The counter exists to answer one question: "has the cheap model been given a fair
+# shot and failed?" Only a verdict that was produced and then rejected answers it.
+# Infrastructure failures requeue the work without counting, which is what
+# no_verdict_is_real_failure already decides for the state machine.
+bump_attempts() {
+  local issue="$1" n
+  n=$(( $(cat "$ATTEMPTS_DIR/$issue" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$ATTEMPTS_DIR/$issue"
+  printf '%s' "$n"
+}
+
+attempts_of() { cat "$ATTEMPTS_DIR/${1}" 2>/dev/null || echo 0; }
+
+clear_attempts() { rm -f "$ATTEMPTS_DIR/${1}" 2>/dev/null || true; }
+
+# After this many failed attempts an issue is promoted to the strong tier. This is
+# the "only if it needs it" rule made mechanical: nobody guesses up front which
+# issue is hard, the issue demonstrates it by defeating the cheaper model.
+TEAM_STRONG_AFTER="${TEAM_STRONG_AFTER:-2}"
+
+# Echo "<claude-model> <fallback-tag> <tier>" for an issue.
+#
+# $2 floors the tier: pass "med" for roles that must not run on the cheap model
+# regardless of the label. The reviewer does that — the label describes how hard
+# the CHANGE is, not how hard judging it is, and the reviewer is the only gate in
+# front of main.
+resolve_models() {
+  local issue="$1" floor="${2:-low}" labels tier attempts
+
+  labels=$(gh issue view "$issue" --repo "$REPO" --json labels \
+           --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+
+  case ",$labels," in
+    *,haiku-ready,*)  tier=low ;;
+    *,sonnet-ready,*) tier=med ;;
+    *)                tier=med ;;   # unlabelled is not evidence of being easy
+  esac
+
+  [ "$floor" = "med" ] && [ "$tier" = "low" ] && tier=med
+
+  # Earned promotion: repeated failure is the only evidence that the cheap model
+  # is not enough.
+  attempts=$(cat "$STATE_DIR/attempts/$issue" 2>/dev/null || echo 0)
+  if [ "${attempts:-0}" -ge "$TEAM_STRONG_AFTER" ]; then tier=strong; fi
+
+  case "$tier" in
+    low)    echo "$TEAM_MODEL_LOW_CLAUDE $TEAM_FALLBACK_LOW low" ;;
+    strong) echo "$TEAM_MODEL_STRONG_CLAUDE $TEAM_FALLBACK_STRONG strong" ;;
+    *)      echo "$TEAM_MODEL_MED_CLAUDE $TEAM_FALLBACK_MED med" ;;
+  esac
+}
 
 # Seconds remaining on the subscription cooldown; 0 when there is none.
 cooldown_remaining() {
@@ -182,6 +296,35 @@ create_pr_api() {
   return 1
 }
 
+# Break accidental issue-closing keywords in model-written prose.
+#
+# GitHub closes an issue when a commit message or PR body contains `fix #N`,
+# `closes #N`, `resolved #N` and friends — anywhere, in any sentence. Everything
+# this pipeline publishes is written by an agent and is full of issue numbers:
+# summaries, PR descriptions, reviewer findings, curator analyses.
+#
+# It has already bitten. My own commit said
+#
+#     "...and with this fix #215 ran end to end on that same slot..."
+#
+# and GitHub read `fix #215` as a directive and CLOSED #215 — an issue whose PR was
+# open and blocked at the time. Nothing warned; the issue simply left the board as
+# if delivered. An agent writing "this also fixes #212" in a description would do
+# the same to someone else's work.
+#
+# So every field that reaches GitHub goes through this, and the ONLY closing
+# keyword that survives is the `Fixes #N` line the harness itself appends, after
+# sanitising. `#N` on its own is left intact — a plain reference is useful and
+# harmless.
+# FLAT alternation, exactly three capture groups. Nested groups here silently
+# renumber the back-references: a first attempt used `(fix(es|ed)?)` and emitted
+# `\1\4issue \5`, which turned "fix #215" into "fixissue" — the issue NUMBER was
+# dropped, destroying the very information the text was carrying. POSIX ERE has no
+# non-capturing groups, so the alternatives are spelled out instead of nested.
+sanitize_closing_keywords() {
+  sed -E 's/\b([Ff]ix|[Ff]ixes|[Ff]ixed|[Cc]lose|[Cc]loses|[Cc]losed|[Cc]losing|[Rr]esolve|[Rr]esolves|[Rr]esolved|[Rr]esolving)([[:space:]]+)#([0-9]+)/\1\2issue \3/g'
+}
+
 comment_issue() {
   local issue="$1" body="$2"
   gh issue comment "$issue" --repo "$REPO" --body "$body" >/dev/null 2>&1 \
@@ -233,6 +376,58 @@ no_verdict_is_real_failure() {
   return 0
 }
 
+# ── Agent logs: APPEND, never truncate ─────────────────────────────────────
+#
+# These used to be opened with `>`, so every retry destroyed the evidence of the
+# attempt before it. That is exactly how I misdiagnosed the first live run: I read
+# implement-190.log while the THIRD attempt was still starting, saw two lines, and
+# concluded the engine had run and produced nothing. Attempts 1 and 2 — the ones
+# that actually failed and would have shown why — had already been overwritten.
+#
+# A log that deletes the failure you are trying to explain is worse than no log.
+agent_log_header() {
+  local file="$1" what="$2"
+  {
+    echo
+    echo "════════════════════════════════════════════════════════════════════"
+    echo "  $what — $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "════════════════════════════════════════════════════════════════════"
+  } >> "$file"
+}
+
+# A verdict must be PRESENT and PARSEABLE before anything reads a field from it.
+#
+# `jqv` swallows a parse error and returns its fallback. For `.outcome` that
+# fallback is `blocked`, so a malformed verdict was indistinguishable from an agent
+# that declared itself blocked — and implement.sh routed the work to the curator to
+# analyse a problem that did not exist.
+#
+# Measured on #217: the agent implemented the fix, wrote the test file, and set
+# `"outcome": "implemented"` — but wrote `mensagem "onPress impreciso" (exemplo)`
+# inside the description with the inner quotes unescaped. The file stopped parsing,
+# jqv returned `blocked`, and the issue went to qa:blocked-spec. Nothing in the log
+# said the problem was syntax.
+#
+# So: try to repair, and if it still will not parse, report NO VERDICT. That path
+# requeues the work instead of misclassifying it, which is the only safe reading of
+# "I cannot tell what this agent decided".
+verdict_readable() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  jq -e . "$file" >/dev/null 2>&1 && return 0
+
+  warn "veredicto $(basename "$file") não faz parse — a tentar reparar"
+  if python3 "$(dirname "${BASH_SOURCE[0]}")/repair-verdict.py" "$file" 2>&1 \
+     | while IFS= read -r l; do warn "  $l"; done; then :; fi
+  if jq -e . "$file" >/dev/null 2>&1; then
+    warn "veredicto reparado com sucesso"
+    return 0
+  fi
+  warn "veredicto irrecuperável — tratado como SEM VEREDICTO (o trabalho volta à fila)"
+  rm -f "$file"
+  return 1
+}
+
 jqv() {
   local file="$1" filter="$2" fallback="${3:-}"
   local out
@@ -257,6 +452,19 @@ jqv() {
 wt_prepare_node() {
   local wt="$1"
   [ -f "$wt/package.json" ] || return 0
+
+  # `.gitignore` says `node_modules/`, with a trailing slash — which matches a
+  # DIRECTORY and not a SYMLINK of the same name. So the symlink below shows up as
+  # untracked, and the implementer's `git add -A` commits it: a mode-120000 entry
+  # pointing at an absolute path on this machine, broken in every other checkout.
+  # The reviewer caught exactly that on PR #295, the first PR this pipeline
+  # produced. Excluding it per worktree stops it at the source.
+  local excl
+  excl=$(git -C "$wt" rev-parse --git-path info/exclude 2>/dev/null || echo "")
+  if [ -n "$excl" ]; then
+    mkdir -p "$(dirname "$excl")" 2>/dev/null || true
+    grep -qxF 'node_modules' "$excl" 2>/dev/null || echo 'node_modules' >> "$excl"
+  fi
 
   if [ -d "$TEAM_ROOT/node_modules" ] \
      && [ -f "$wt/package-lock.json" ] && [ -f "$TEAM_ROOT/package-lock.json" ] \

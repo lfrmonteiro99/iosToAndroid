@@ -29,7 +29,8 @@ ROLE="curator"
 VERDICT_FILE="$VERDICT_DIR/curator-$ISSUE.json"
 WT=""
 PROMPT="/tmp/ios2a-curator-prompt-$ISSUE.txt"
-MODEL="${CURATOR_MODEL:-sonnet}"
+MODEL="${CURATOR_MODEL:-$TEAM_MODEL_MED_CLAUDE}"
+export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$TEAM_FALLBACK_MED}"
 
 cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
 trap cleanup EXIT
@@ -71,11 +72,12 @@ rm -f "$VERDICT_FILE"
 # or the reviewer, and serialising it onto them would add its whole runtime to every
 # issue that needs repair. The slot lock still guarantees two curators never run at
 # the same time.
+agent_log_header "$LOG_DIR/curator-$ISSUE.log" "curator #$ISSUE modelo=$MODEL"
 AGENT_SLOT=curator CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${CURATOR_TIMEOUT:-1200}" \
-  > "$LOG_DIR/curator-$ISSUE.log" 2>&1; AGENT_RC=$?
+  >> "$LOG_DIR/curator-$ISSUE.log" 2>&1; AGENT_RC=$?
 
-if [ ! -f "$VERDICT_FILE" ]; then
+if ! verdict_readable "$VERDICT_FILE"; then
   # A failed RUN is not a failed issue: leave the state alone so it is picked up
   # again. Nobody is coming to unpark it.
   if ! no_verdict_is_real_failure curator "$AGENT_RC"; then
@@ -98,6 +100,9 @@ fi
 OUTCOME=$(jqv "$VERDICT_FILE" '.outcome' 'ready')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:600}"
 ANALYSIS=$(jqv "$VERDICT_FILE" '.analysis' '')
+# The analysis is published as an issue comment and cites related issues freely.
+SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
+ANALYSIS=$(printf '%s' "$ANALYSIS" | sanitize_closing_keywords)
 PRIORITY=$(jqv "$VERDICT_FILE" '.priority' '')
 
 log "outcome=$OUTCOME priority=${PRIORITY:-n/d}"

@@ -19,7 +19,7 @@ ROLE="review"
 
 VERDICT_FILE="$VERDICT_DIR/review-$PR.json"
 PROMPT="/tmp/ios2a-review-prompt-$PR.txt"
-MODEL="${REVIEW_MODEL:-sonnet}"
+# (modelo resolvido mais abaixo, a partir do issue ligado)
 WT=""
 
 cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
@@ -34,7 +34,7 @@ BASE=$(printf '%s' "$PR_INFO" | jq -r '.baseRefName')
 TITLE=$(printf '%s' "$PR_INFO" | jq -r '.title')
 STATE=$(printf '%s' "$PR_INFO" | jq -r '.state')
 
-log "PR #$PR $BRANCH -> $BASE ($STATE) modelo=$MODEL"
+log "PR #$PR $BRANCH -> $BASE ($STATE)"
 
 if [ "$STATE" != "OPEN" ]; then
   log "PR #$PR não está aberto — nada a rever"
@@ -47,6 +47,66 @@ ISSUE=$(printf '%s' "$PR_INFO" | jq -r '.body' \
   | grep -oiE '(Fixes|Closes|Resolves)[[:space:]]+#[0-9]+' \
   | grep -oE '[0-9]+' | head -1 || true)
 log "issue ligado: ${ISSUE:-nenhum}"
+
+# Tier from the linked issue, but FLOORED AT MED.
+#
+# The `haiku-ready` label says how hard the CHANGE is, not how hard judging it is —
+# and judging is the harder half here: enumerate the blast radius, compare the diff
+# against the issue, prove the red step by reverting production code. This reviewer
+# is also the only gate in front of `main`, with no verifier behind it and no CI on
+# pull requests, so a cheap reviewer waving work through is the one failure this
+# pipeline cannot detect on its own.
+if [ -n "$ISSUE" ]; then
+  read -r RMODEL RFALLBACK RTIER <<<"$(resolve_models "$ISSUE" med)"
+else
+  RMODEL="$TEAM_MODEL_MED_CLAUDE"; RFALLBACK="$TEAM_FALLBACK_MED"; RTIER="med"
+fi
+MODEL="${REVIEW_MODEL:-$RMODEL}"
+export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$RFALLBACK}"
+log "tier=$RTIER modelo=$MODEL fallback=$AGENT_FALLBACK_MODEL"
+
+# ── A PR THAT CANNOT MERGE IS NOT REVIEWABLE ───────────────────────────────
+#
+# Check mergeability BEFORE spending an agent. A conflicted PR would otherwise get
+# the full treatment — checkout, npm install, lint, tsc, the whole suite, a diff read
+# end to end — only to be told at the merge step what git could have said in one API
+# call. That is 10-25 minutes of quota per attempt, and it repeats every time the
+# branch is touched.
+#
+# Conflicts are handled like `blocked`: back to the implementer, which merges the
+# base into the branch before the agent starts and hands it the markers to resolve by
+# intent.
+#
+# UNKNOWN is not CONFLICTING. GitHub computes mergeability asynchronously and answers
+# UNKNOWN while it is still thinking; treating that as a conflict would bounce
+# perfectly good PRs. Ask again a few times, and if it still will not say, review
+# normally — the merge step is the backstop.
+MSTATE=""
+for _ in 1 2 3; do
+  MSTATE=$(gh pr view "$PR" --repo "$REPO" --json mergeable --jq .mergeable 2>/dev/null || echo "")
+  [ "$MSTATE" = "UNKNOWN" ] || [ -z "$MSTATE" ] || break
+  sleep 3
+done
+if [ "$MSTATE" = "CONFLICTING" ]; then
+  log "PR #$PR em conflito com $BASE — devolvido sem gastar uma review"
+  gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: em conflito, nao revisto
+
+Este PR nao integra em \`$BASE\` — tem conflitos por resolver. Nao o revi: uma
+review custa a suite completa e o diff todo, para no fim bater no mesmo que o git ja
+diz numa chamada.
+
+**Nao e um juizo sobre o codigo.** Volta ao implementador, que integra o \`$BASE\`
+neste branch antes de arrancar e resolve os marcadores por intencao — percebendo o
+que cada lado queria e preservando as duas intencoes. Depois disso volto a olhar." >/dev/null 2>&1 || true
+  if [ -n "$ISSUE" ]; then
+    comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
+
+Devolvido ao implementador para resolver os conflitos. O trabalho no branch
+mantem-se — nao e para refazer."
+    set_state "$ISSUE" "$L_BLOCKED_IMPL"
+  fi
+  exit 0
+fi
 
 # wt_checkout, NOT wt_create: the reviewer needs the PR's code. wt_create would cut
 # a new branch from the base, the diff would come out EMPTY, and the reviewer would
@@ -118,11 +178,12 @@ fi
         -e "s|__WORKDIR__|$WT|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
+agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
-  > "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
+  >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
-if [ ! -f "$VERDICT_FILE" ]; then
+if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — PR fica para nova review"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: corrida degradada, sem veredicto
@@ -144,6 +205,9 @@ fi
 
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:1500}"
+# The reviewer's findings are posted as PR and issue comments and routinely cite
+# other issue numbers. See sanitize_closing_keywords in lib.sh.
+SUMMARY=$(printf '%s' "$SUMMARY" | sanitize_closing_keywords)
 
 # Per-dimension detail, so the defect is visible in the comment without opening the
 # verdict — and so it is auditable whether the reviewer actually filled it in.
@@ -224,6 +288,7 @@ $SUMMARY
 
 PR #$PR integrado em \`$BASE\`."
         set_state "$ISSUE" "$L_DONE"
+        clear_attempts "$ISSUE"
         gh issue close "$ISSUE" --repo "$REPO" --reason completed >/dev/null 2>&1 || true
       fi
     else
@@ -237,6 +302,8 @@ deve actualizar o branch." >/dev/null 2>&1 || true
     ;;
 
   blocked-impl)
+    # Judged rejection — this is what promotes an issue to a stronger tier.
+    [ -n "$ISSUE" ] && log "#$ISSUE: rejeição $(bump_attempts "$ISSUE")"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: bloqueado — problema de código
 
 $SUMMARY$DETAIL$CHANGES
@@ -251,6 +318,7 @@ $SUMMARY$DETAIL$CHANGES"
     ;;
 
   blocked-spec)
+    [ -n "$ISSUE" ] && log "#$ISSUE: rejeição $(bump_attempts "$ISSUE")"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: bloqueado — problema do enunciado
 
 $SUMMARY$DETAIL$CHANGES
