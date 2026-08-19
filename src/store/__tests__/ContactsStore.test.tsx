@@ -193,4 +193,79 @@ describe('ContactsStore', () => {
     expect(result.current.contacts).toHaveLength(1);
     expect(result.current.contacts[0].firstName).toBe('Stored');
   });
+
+  it('toggleFavorite() adds device contact to deviceFavoriteIds when not in store', async () => {
+    const { result } = renderHook(() => useContacts(), { wrapper });
+    await act(async () => {});
+
+    // Use a device contact ID (not in seed data)
+    const deviceContactId = 'device-contact-123';
+
+    await act(async () => {
+      result.current.toggleFavorite(deviceContactId);
+    });
+
+    expect(result.current.deviceFavoriteIds).toContain(deviceContactId);
+  });
+
+  it('toggleFavorite() removes device contact from deviceFavoriteIds on second call', async () => {
+    const { result } = renderHook(() => useContacts(), { wrapper });
+    await act(async () => {});
+
+    const deviceContactId = 'device-contact-456';
+
+    // First toggle: add to deviceFavoriteIds
+    await act(async () => {
+      result.current.toggleFavorite(deviceContactId);
+    });
+
+    expect(result.current.deviceFavoriteIds).toContain(deviceContactId);
+
+    // Second toggle: remove from deviceFavoriteIds
+    await act(async () => {
+      result.current.toggleFavorite(deviceContactId);
+    });
+
+    expect(result.current.deviceFavoriteIds).not.toContain(deviceContactId);
+  });
+
+  it('toggleFavorite() in StrictMode does not double-fire setDeviceFavoriteIds for device contact', async () => {
+    const strictWrapper = ({ children }: { children: React.ReactNode }) => (
+      <React.StrictMode>
+        <ContactsProvider>{children}</ContactsProvider>
+      </React.StrictMode>
+    );
+
+    const { result } = renderHook(() => useContacts(), { wrapper: strictWrapper });
+    await act(async () => {});
+
+    const deviceContactId = 'device-contact-strictmode';
+
+    // Single toggle in StrictMode
+    await act(async () => {
+      result.current.toggleFavorite(deviceContactId);
+    });
+
+    // Should be added (not toggled back by a second invocation)
+    expect(result.current.deviceFavoriteIds).toContain(deviceContactId);
+    expect(result.current.deviceFavoriteIds.length).toBe(1);
+  });
+
+  it('toggleFavorite() persists device favorites to AsyncStorage', async () => {
+    const { result } = renderHook(() => useContacts(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    const deviceContactId = 'device-contact-persist';
+
+    await act(async () => {
+      result.current.toggleFavorite(deviceContactId);
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/device_favorites',
+      expect.stringContaining(deviceContactId),
+    );
+  });
 });
