@@ -197,6 +197,15 @@ function getDayLabel(timezone: string): string {
   }
 }
 
+// Current IANA timezone of the device, or null when the runtime cannot resolve
+// one (an Intl build without full ICU data reports an empty timeZone). Callers
+// must treat null as "unknown" and skip timezone-dependent work rather than
+// guessing a zone — guessing would reschedule alarms against the wrong offset.
+function getDeviceTimezone(): string | null {
+  const { timeZone } = new Intl.DateTimeFormat().resolvedOptions();
+  return timeZone ? timeZone : null;
+}
+
 function formatAlarmTime(hour: number, minute: number): string {
   const h = hour % 12 || 12;
   const ampm = hour < 12 ? 'AM' : 'PM';
@@ -348,6 +357,7 @@ function WorldClockTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [openCityId, setOpenCityId] = useState<string | null>(null);
+  const [tzTick, setTzTick] = useState(0); // forces re-render when TZ changes
 
   useEffect(() => {
     loadWorldClocks().then(setCities);
@@ -361,11 +371,7 @@ function WorldClockTab() {
   // Refresh timezone when app returns to foreground
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        // Bump tick to ensure immediate re-render with updated timezone values
-        // when the app returns from background (in case device timezone changed)
-        setTick((t) => t + 1);
-      }
+      if (state === 'active') setTzTick((t) => t + 1);
     });
     return () => sub.remove();
   }, []);
@@ -582,6 +588,50 @@ function AlarmTab() {
     setAlarms(next);
     saveAlarms(next);
   }, []);
+
+  // Timezone the currently scheduled notifications were computed against.
+  // One-shot alarms (days === []) are scheduled by scheduleAlarmNotifications as
+  // a TIME_INTERVAL countdown of `target - now` seconds, so their trigger is
+  // anchored to an absolute instant. When the device timezone changes, that
+  // instant no longer falls on the alarm's local hour:minute — a 07:00 alarm set
+  // in Europe/Lisbon fires at 15:00 after the device moves to Asia/Tokyo.
+  // Repeating alarms use WEEKLY triggers, which the OS anchors to the local wall
+  // clock, so they follow the new timezone on their own and are left untouched.
+  const scheduledTimezoneRef = useRef<string | null>(getDeviceTimezone());
+
+  const rescheduleOneShotAlarms = useCallback(async () => {
+    const stale = alarms.filter((a) => a.enabled && a.days.length === 0);
+    if (stale.length === 0) return;
+
+    const newIdsByAlarm = new Map<string, string[]>();
+    for (const alarm of stale) {
+      await cancelAlarmNotifications(alarm.notificationIds);
+      newIdsByAlarm.set(alarm.id, await scheduleAlarmNotifications(alarm));
+    }
+
+    // `enabled` is deliberately left as-is: if rescheduling produced no ids
+    // (permissions revoked while backgrounded) the alarm stays on with an empty
+    // id list, which is the state the "Fix 2" recovery effect above picks up on
+    // the next launch. Flipping it off here would silently drop the user's alarm.
+    persistAlarms(
+      alarms.map((a) => {
+        const ids = newIdsByAlarm.get(a.id);
+        return ids ? { ...a, notificationIds: ids } : a;
+      }),
+    );
+  }, [alarms, persistAlarms]);
+
+  // Reschedule when the app returns to the foreground in a different timezone.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const timezone = getDeviceTimezone();
+      if (timezone === null || timezone === scheduledTimezoneRef.current) return;
+      scheduledTimezoneRef.current = timezone;
+      rescheduleOneShotAlarms();
+    });
+    return () => sub.remove();
+  }, [rescheduleOneShotAlarms]);
 
   const toggleAlarm = useCallback(
     async (id: string) => {
