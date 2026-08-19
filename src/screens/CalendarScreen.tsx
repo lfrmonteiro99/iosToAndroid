@@ -61,7 +61,6 @@ function formatEventTime(timestamp: number): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

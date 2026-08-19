@@ -19,7 +19,6 @@ const KBD_KEYS = {
   predictive: '@iostoandroid/kbd_predictive',
 } as const;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function KeyboardScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

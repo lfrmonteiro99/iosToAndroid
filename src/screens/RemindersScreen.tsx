@@ -362,7 +362,6 @@ const SmartListCard = React.memo(function SmartListCard({
 
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function RemindersScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;

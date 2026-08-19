@@ -155,7 +155,6 @@ const NoteRow = React.memo(function NoteRow({
 
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

@@ -69,7 +69,6 @@ const signalStyles = StyleSheet.create({
   },
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CellularScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

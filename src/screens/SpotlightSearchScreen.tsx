@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,

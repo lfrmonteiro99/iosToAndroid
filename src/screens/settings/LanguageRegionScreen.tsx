@@ -40,7 +40,6 @@ const CALENDAR_TYPES = ['Gregorian', 'Japanese', 'Buddhist', 'Hebrew', 'Islamic'
 const LANG_STORAGE_KEY = '@iostoandroid/language';
 const REGION_STORAGE_KEY = '@iostoandroid/region';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function LanguageRegionScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

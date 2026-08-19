@@ -19,7 +19,6 @@ const RN_VERSION: string = (() => {
   return '';
 })();
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function AboutScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

@@ -964,7 +964,6 @@ function TimerTab() {
 // ---------------------------------------------------------------------------
 // Main ClockScreen
 // ---------------------------------------------------------------------------
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ClockScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;

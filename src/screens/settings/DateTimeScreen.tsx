@@ -37,7 +37,6 @@ const COMMON_TIMEZONES = [
   'Pacific/Auckland',
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DateTimeScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

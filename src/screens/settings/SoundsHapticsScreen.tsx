@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -23,7 +22,6 @@ const RINGTONE_STORAGE_KEY = '@iostoandroid/ringtone';
 const TEXT_TONE_STORAGE_KEY = '@iostoandroid/text_tone';
 const SYSTEM_HAPTICS_STORAGE_KEY = '@iostoandroid/system_haptics';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

@@ -53,7 +53,6 @@ function getRssiLabel(rssi: number): string {
   return 'Weak';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

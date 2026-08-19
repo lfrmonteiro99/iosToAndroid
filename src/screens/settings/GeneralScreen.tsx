@@ -13,7 +13,6 @@ import {
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function GeneralScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;

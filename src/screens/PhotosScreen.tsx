@@ -69,7 +69,6 @@ function groupByDateRange(assets: MediaLibrary.Asset[]) {
   return { recent, lastMonth, lastYear: lastYearGroup, older };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
