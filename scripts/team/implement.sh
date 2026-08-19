@@ -34,6 +34,24 @@ export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$FALLBACK_TAG}"
 
 log "issue #$ISSUE branch=$BRANCH tier=$TIER modelo=$MODEL fallback=$AGENT_FALLBACK_MODEL"
 
+# Where to put the issue back if this run fails for a reason that is not the
+# issue's fault. It must be the state it CAME FROM, not the qa:ready default.
+#
+# Returning a rework to qa:ready loses the one fact that mattered: that it has an
+# open PR a reviewer already blocked. qa:blocked-impl is dispatched ahead of new
+# work; qa:ready is one of 83 entries sorted worst-first, and a P3 lands at the
+# back. Meanwhile pick_pr will never look at the PR again, because it only
+# re-reviews a PR whose HEAD MOVED and nothing is pushing to that branch.
+#
+# That is exactly how PR #295 was stranded: blocked by the reviewer, its rework
+# produced no verdict, the issue was filed back under qa:ready, and both the PR and
+# the issue went quiet with the pipeline looking perfectly busy.
+PREV_STATE=$(get_state "$ISSUE")
+case "$PREV_STATE" in
+  "$L_BLOCKED_IMPL"|"$L_BLOCKED_SPEC"|"$L_READY") ;;
+  *) PREV_STATE="$L_READY" ;;
+esac
+
 set_state "$ISSUE" "$L_WIP"
 
 # Say so at the START, not only at the end. In the sibling project the only comment
@@ -51,8 +69,8 @@ Comento outra vez quando houver PR ou se ficar bloqueado."
 # rework after a block) wt_create resumes from the remote tip.
 wt_remove "$WT_ROOT/implement-$ISSUE"
 WT_OUT=$(wt_create "$BRANCH" "implement-$ISSUE" "$BASE_BRANCH") || {
-  log "ERRO: não criei worktree — volta a $L_READY"
-  set_state "$ISSUE" "$L_READY"
+  log "ERRO: não criei worktree — volta a $PREV_STATE"
+  set_state "$ISSUE" "$PREV_STATE"
   comment_issue "$ISSUE" "## Implementador: falhou a preparar o worktree
 
 Não foi possível criar o branch \`$BRANCH\` a partir de \`$BASE_BRANCH\`."
@@ -178,19 +196,19 @@ AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
 
 if ! verdict_readable "$VERDICT_FILE"; then
   if ! no_verdict_is_real_failure main "$AGENT_RC"; then
-    log "SEM VEREDICTO (corrida degradada ou não arrancada) — issue volta a $L_READY"
+    log "SEM VEREDICTO (corrida degradada ou não arrancada) — issue volta a $PREV_STATE"
     comment_issue "$ISSUE" "## Implementador: corrida degradada, sem veredicto
 
 A corrida não produziu veredicto por uma razão alheia ao issue: ou o slot estava
 ocupado, ou a subscrição estava esgotada e o modelo de fallback não conseguiu
 concluir. **Isto não é um problema do issue** — volta a \`$L_READY\` para nova
 tentativa."
-    set_state "$ISSUE" "$L_READY"
+    set_state "$ISSUE" "$PREV_STATE"
     wt_remove "$WT"
     exit 0
   fi
-  log "SEM VEREDICTO — volta a $L_READY para nova tentativa"
-  set_state "$ISSUE" "$L_READY"
+  log "SEM VEREDICTO — volta a $PREV_STATE para nova tentativa"
+  set_state "$ISSUE" "$PREV_STATE"
   comment_issue "$ISSUE" "## Implementador: corrida sem veredicto
 
 Terminou sem escrever veredicto (ver \`$LOG_DIR/implement-$ISSUE.log\`). Falha da
@@ -286,8 +304,8 @@ git -C "$WT" -c user.name="qa-implementer" -c user.email="qa@local" \
   commit -m "fix/$ISSUE: $SUMMARY" >/dev/null 2>&1 || true
 
 if ! git -C "$WT" push -u origin "$BRANCH" --force >/dev/null 2>&1; then
-  log "ERRO: push falhou — volta a $L_READY"
-  set_state "$ISSUE" "$L_READY"
+  log "ERRO: push falhou — volta a $PREV_STATE"
+  set_state "$ISSUE" "$PREV_STATE"
   comment_issue "$ISSUE" "## Implementador: push falhou
 
 O código foi escrito mas não chegou ao remoto (branch \`$BRANCH\`). Falha de
@@ -333,8 +351,8 @@ Testes: $TESTS" >/dev/null 2>&1 || true
 else
   PR_NUM=$(create_pr_api "$BRANCH" "$BASE_BRANCH" "$SUMMARY (#$ISSUE)" "$PR_BODY" || echo "")
   if [ -z "$PR_NUM" ]; then
-    log "ERRO: PR não criado — volta a $L_READY"
-    set_state "$ISSUE" "$L_READY"
+    log "ERRO: PR não criado — volta a $PREV_STATE"
+    set_state "$ISSUE" "$PREV_STATE"
     comment_issue "$ISSUE" "## Implementador: PR não criado
 
 O branch \`$BRANCH\` foi enviado mas o PR para \`$BASE_BRANCH\` não foi aberto."
