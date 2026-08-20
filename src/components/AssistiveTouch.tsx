@@ -23,10 +23,9 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
+import { IDLE_DIM_MS } from '../utils/gestureConfig';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
-const IDLE_DIM_MS = 2500;
 const SNAP_SPRING = { damping: 18, stiffness: 220 } as const;
 
 // ─── Menu item catalog ──────────────────────────────────────────────────────

@@ -13,15 +13,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-import { gestureConfig } from '../utils/gestureConfig';
+import { gestureConfig, IDLE_DIM_MS } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { useGestureMachine, commitForHome, commitForSwitcher } from '../utils/gestureMachine';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 import { useOptionalGestureHost } from './GestureHost';
 
-// Keep idle-dim constants local (not gesture thresholds — these are UI-only)
-const IDLE_DIM_MS = 2500; // ms — pill fades after inactivity
 const IDLE_OPACITY = 0.35;
 
 interface HomeIndicatorProps {
@@ -170,7 +168,8 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       pushSample(buf.value, e.translationX, e.translationY, currentT.value);
       const { vy } = sampledVelocity(buf.value, currentT.value);
 
-      // Axis-lock: cancel if lateral drift exceeds threshold
+      // ×8 (80 dp): home-bar drag is intentionally tolerant of lateral wrist movement;
+      // stricter axis-lock would feel sticky on real devices during natural thumb swipes.
       if (Math.abs(e.translationX) > gestureConfig.axisLockDp * 8) {
         translateY.value = settle(0, 'homeSettle', reduceMotionShared.value);
         machine.phase.value = 'cancelled';
