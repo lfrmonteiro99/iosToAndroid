@@ -385,8 +385,8 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable style={styles.folderOverlayBackdrop} onPress={onClose}>
-        <Pressable onPress={e => e.stopPropagation()}>
+      <Pressable style={styles.folderOverlayBackdrop} onPress={onClose} accessibilityLabel="Dismiss" accessibilityRole="button">
+        <Pressable onPress={e => e.stopPropagation()} importantForAccessibility="no">
           <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput

@@ -480,6 +480,8 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
                       backgroundColor: joinSecurity === s ? colors.systemBlue : colors.systemGray5,
                     },
                   ]}
+                  accessibilityLabel={`Security: ${s}${joinSecurity === s ? ', selected' : ''}`}
+                  accessibilityRole="button"
                 >
                   <Text style={[typography.caption1, { color: joinSecurity === s ? '#fff' : colors.label, fontWeight: '600' }]}>{s}</Text>
                 </Pressable>

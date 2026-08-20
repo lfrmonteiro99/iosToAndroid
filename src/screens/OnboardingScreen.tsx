@@ -164,7 +164,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
             </View>
             <Text style={[typography.largeTitle, styles.pageTitle]}>Welcome to{'\n'}iOS Launcher</Text>
             <Text style={[typography.body, styles.pageSubtitle]}>Transform your Android into iOS</Text>
-            <Pressable style={styles.primaryButton} onPress={() => goToPage(1)}>
+            <Pressable style={styles.primaryButton} onPress={() => goToPage(1)} accessibilityLabel="Get Started" accessibilityRole="button">
               <Text style={[typography.body, styles.primaryButtonText]}>Get Started</Text>
             </Pressable>
           </ScrollView>
@@ -194,7 +194,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
                 <Text style={[typography.footnote, styles.errorText]}>{permissionError}</Text>
               </View>
             )}
-            <Pressable style={styles.primaryButton} onPress={handleGrantPermissions}>
+            <Pressable style={styles.primaryButton} onPress={handleGrantPermissions} accessibilityLabel={permissionError ? 'Try Again' : 'Grant Permissions'} accessibilityRole="button">
               <Text style={[typography.body, styles.primaryButtonText]}>
                 {permissionError ? 'Try Again' : 'Grant Permissions'}
               </Text>
@@ -220,10 +220,10 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
             <Text style={[typography.body, styles.pageSubtitle]}>
               To get the full experience, set this app as your home launcher
             </Text>
-            <Pressable style={styles.primaryButton} onPress={handleSetLauncher}>
+            <Pressable style={styles.primaryButton} onPress={handleSetLauncher} accessibilityLabel="Set as default launcher" accessibilityRole="button">
               <Text style={[typography.body, styles.primaryButtonText]}>Set Now</Text>
             </Pressable>
-            <Pressable onPress={() => goToPage(3)} hitSlop={12} style={{ marginTop: 16 }}>
+            <Pressable onPress={() => goToPage(3)} hitSlop={12} style={{ marginTop: 16 }} accessibilityLabel="Skip" accessibilityRole="button">
               <Text style={[typography.subhead, styles.skipText]}>Skip</Text>
             </Pressable>
           </ScrollView>
@@ -254,7 +254,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
               </View>
             )}
 
-            <Pressable style={styles.primaryButton} onPress={handleDone}>
+            <Pressable style={styles.primaryButton} onPress={handleDone} accessibilityLabel="Start" accessibilityRole="button">
               <Text style={[typography.body, styles.primaryButtonText]}>Start</Text>
             </Pressable>
           </ScrollView>

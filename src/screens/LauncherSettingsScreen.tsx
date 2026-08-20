@@ -370,8 +370,8 @@ export function LauncherSettingsScreen() {
 
       {/* ── PIN Change Modal ───────────────────────────────────── */}
       <Modal visible={showPinModal} transparent animationType="fade" onRequestClose={() => setShowPinModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowPinModal(false)}>
-          <Pressable style={[styles.modalCard, { backgroundColor: colors.secondarySystemGroupedBackground }]} onPress={() => {}}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowPinModal(false)} accessibilityLabel="Dismiss" accessibilityRole="button">
+          <Pressable style={[styles.modalCard, { backgroundColor: colors.secondarySystemGroupedBackground }]} onPress={() => {}} importantForAccessibility="no">
             <Text style={[typography.headline, { color: colors.label, marginBottom: 6 }]}>
               {pinStep === 'current' ? 'Enter Current Passcode' : pinStep === 'new' ? 'Enter New Passcode' : 'Confirm New Passcode'}
             </Text>
@@ -390,10 +390,10 @@ export function LauncherSettingsScreen() {
               autoFocus
             />
             <View style={styles.modalButtons}>
-              <Pressable onPress={() => setShowPinModal(false)} style={[styles.modalBtn, { borderColor: colors.separator }]}>
+              <Pressable onPress={() => setShowPinModal(false)} style={[styles.modalBtn, { borderColor: colors.separator }]} accessibilityLabel="Cancel" accessibilityRole="button">
                 <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={handlePinSubmit} style={[styles.modalBtn, { borderColor: colors.separator }]}>
+              <Pressable onPress={handlePinSubmit} style={[styles.modalBtn, { borderColor: colors.separator }]} accessibilityLabel="Next" accessibilityRole="button">
                 <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}>Next</Text>
               </Pressable>
             </View>

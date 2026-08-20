@@ -99,7 +99,7 @@ export function ProfileScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable onPress={() => setShowAvatarSheet(true)} style={styles.avatarWrapper}>
+        <Pressable onPress={() => setShowAvatarSheet(true)} style={styles.avatarWrapper} accessibilityLabel="Change profile photo" accessibilityRole="button">
           {profile.avatarUri ? (
             <Image
               source={{ uri: profile.avatarUri }}

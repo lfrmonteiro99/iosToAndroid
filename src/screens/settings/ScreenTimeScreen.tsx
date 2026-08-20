@@ -157,6 +157,8 @@ export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp
                         styles.permissionButton,
                         { backgroundColor: colors.systemBlue, opacity: pressed ? 0.7 : 1 },
                       ]}
+                      accessibilityLabel="Open Usage Access Settings"
+                      accessibilityRole="button"
                     >
                       <Text style={[typography.body, { color: '#FFFFFF', fontWeight: '600' }]}>
                         Open Usage Access Settings
@@ -168,6 +170,8 @@ export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp
                     <Pressable
                       onPress={() => { setLoading(true); loadScreenTimeData(); }}
                       style={{ marginTop: 12 }}
+                      accessibilityLabel="Refresh"
+                      accessibilityRole="button"
                     >
                       <Text style={[typography.body, { color: colors.systemBlue, textAlign: 'center' }]}>
                         Refresh

@@ -212,7 +212,7 @@ export function SettingsScreen() {
         title="Settings"
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
           </Pressable>
         }

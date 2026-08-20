@@ -178,7 +178,7 @@ function NotificationGroupCard({
   return (
     <View style={styles.groupContainer}>
       {/* App header row */}
-      <Pressable onPress={count > 1 ? onToggle : undefined} style={styles.groupHeader}>
+      <Pressable onPress={count > 1 ? onToggle : undefined} style={styles.groupHeader} accessibilityLabel="Toggle notification group" accessibilityRole="button">
         {group.appIcon ? (
           <Image
             source={{ uri: `data:image/png;base64,${group.appIcon}` }}

@@ -146,11 +146,11 @@ export function HotspotScreen({ navigation }: { navigation: AppNavigationProp })
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={8}>
+              <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={8} accessibilityLabel={showPassword ? 'Hide password' : 'Show password'} accessibilityRole="button">
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.secondaryLabel} />
               </Pressable>
             </View>
-            <Pressable onPress={handleGeneratePassword} style={{ alignSelf: 'center', padding: 6 }}>
+            <Pressable onPress={handleGeneratePassword} style={{ alignSelf: 'center', padding: 6 }} accessibilityLabel="Generate strong password" accessibilityRole="button">
               <Text style={[typography.footnote, { color: colors.systemBlue }]}>Generate strong password</Text>
             </Pressable>
             <View style={styles.pwActions}>

@@ -401,6 +401,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={`Search Web for "${item.query}"`}
+            accessibilityRole="button"
           >
             <View style={[styles.iconCircle, { backgroundColor: colors.systemBlue }]}>
               <Ionicons name="globe-outline" size={24} color="#fff" />
@@ -417,6 +419,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={item.app.name}
+            accessibilityRole="button"
           >
             <AppIcon app={item.app} size={40} />
             <View style={styles.resultTextWrap}>
@@ -429,6 +433,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={item.name}
+            accessibilityRole="button"
           >
             <View style={[styles.iconCircle, { backgroundColor: colors.systemGray4 }]}>
               <Ionicons name="person-circle-outline" size={36} color={colors.systemGray} />
@@ -446,6 +452,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={`Note: ${item.title}`}
+            accessibilityRole="button"
           >
             <View style={[styles.iconCircle, { backgroundColor: '#FFD60A' }]}>
               <Ionicons name="document-text-outline" size={22} color="#000" />
@@ -461,6 +469,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={`Mail: ${item.subject} from ${item.sender}`}
+            accessibilityRole="button"
           >
             <View style={[styles.iconCircle, { backgroundColor: '#007AFF' }]}>
               <Ionicons name="mail-outline" size={22} color="#fff" />
@@ -476,6 +486,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={`Reminder: ${item.title}`}
+            accessibilityRole="button"
           >
             <View style={[styles.iconCircle, { backgroundColor: '#FF9500' }]}>
               <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
@@ -491,6 +503,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           <Pressable
             onPress={() => handleResultPress(item)}
             style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityLabel={`Setting: ${item.name}`}
+            accessibilityRole="button"
           >
             <View style={[styles.iconCircle, { backgroundColor: colors.systemGray4 }]}>
               <Ionicons name="settings-outline" size={24} color={colors.systemGray} />
@@ -550,7 +564,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
         <View style={styles.historyContainer}>
           <View style={styles.historyHeader}>
             <Text style={[typography.title3, styles.historyTitle, { color: colors.label }]}>Recent Searches</Text>
-            <Pressable onPress={handleClearHistory}>
+            <Pressable onPress={handleClearHistory} accessibilityLabel="Clear search history" accessibilityRole="button">
               <Text style={[typography.callout, styles.historyClear, { color: colors.systemBlue }]}>Clear</Text>
             </Pressable>
           </View>
@@ -566,6 +580,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
                   borderBottomWidth: index < history.length - 1 ? StyleSheet.hairlineWidth : 0,
                 },
               ]}
+              accessibilityLabel={item}
+              accessibilityRole="button"
             >
               <Ionicons name="time-outline" size={18} color={colors.secondaryLabel} />
               <Text style={[typography.callout, styles.historyText, { color: colors.label }]}>{item}</Text>

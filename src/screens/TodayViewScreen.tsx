@@ -118,15 +118,18 @@ interface WidgetCardProps {
   children: React.ReactNode;
   style?: object;
   onPress?: () => void;
+  accessibilityLabel?: string;
 }
 
-function WidgetCard({ children, style, onPress }: WidgetCardProps) {
+function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCardProps) {
   if (onPress) {
     return (
       <Pressable
         style={[styles.widgetCard, style]}
         onPress={onPress}
         android_ripple={{ color: 'rgba(255,255,255,0.1)', borderless: false }}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole="button"
       >
         <BlurView intensity={55} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
         <View style={styles.widgetContent}>{children}</View>
@@ -166,7 +169,7 @@ function BatteryWidget({ level, isCharging, onPress }: { level: number; isChargi
   const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
 
   return (
-    <WidgetCard onPress={onPress}>
+    <WidgetCard onPress={onPress} accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={28} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Battery</Text>
@@ -200,7 +203,7 @@ function StorageWidget({
   const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : theme.colors.accent;
 
   return (
-    <WidgetCard onPress={onPress}>
+    <WidgetCard onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
       <View style={styles.widgetRow}>
         <Ionicons name="server-outline" size={22} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Storage</Text>
@@ -309,7 +312,7 @@ function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
 function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress?: () => void }) {
   const { textScale } = useTheme();
   return (
-    <WidgetCard onPress={onPress}>
+    <WidgetCard onPress={onPress} accessibilityLabel={`Messages: ${unreadCount > 0 ? `${unreadCount} unread` : 'No unread messages'}`}>
       <View style={styles.widgetRow}>
         <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Messages</Text>
@@ -354,7 +357,7 @@ function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
   }, []);
 
   return (
-    <WidgetCard onPress={onPress}>
+    <WidgetCard onPress={onPress} accessibilityLabel={totalMinutes !== null ? `Screen Time: ${formatScreenTime(totalMinutes)} today` : 'Screen Time'}>
       <View style={styles.widgetRow}>
         <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
@@ -401,6 +404,8 @@ function EditableWidgetRow({
         onPress={onToggle}
         hitSlop={8}
         style={styles.editToggleBtn}
+        accessibilityLabel={isEnabled ? `Remove ${WIDGET_LABELS[widgetType]}` : `Add ${WIDGET_LABELS[widgetType]}`}
+        accessibilityRole="button"
       >
         <Ionicons
           name={isEnabled ? 'remove-circle' : 'add-circle'}
@@ -414,10 +419,10 @@ function EditableWidgetRow({
 
       {isEnabled && (
         <View style={styles.editReorderGroup}>
-          <Pressable onPress={onMoveUp} disabled={isFirst} hitSlop={6} style={styles.editArrowBtn}>
+          <Pressable onPress={onMoveUp} disabled={isFirst} hitSlop={6} style={styles.editArrowBtn} accessibilityLabel={`Move ${WIDGET_LABELS[widgetType]} up`} accessibilityRole="button">
             <Ionicons name="chevron-up" size={20} color={isFirst ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)'} />
           </Pressable>
-          <Pressable onPress={onMoveDown} disabled={isLast} hitSlop={6} style={styles.editArrowBtn}>
+          <Pressable onPress={onMoveDown} disabled={isLast} hitSlop={6} style={styles.editArrowBtn} accessibilityLabel={`Move ${WIDGET_LABELS[widgetType]} down`} accessibilityRole="button">
             <Ionicons name="chevron-down" size={20} color={isLast ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)'} />
           </Pressable>
         </View>
@@ -501,7 +506,7 @@ function EditWidgetsPanel({
       )}
 
       <View style={styles.editButtonRow}>
-        <Pressable style={styles.editDoneBtn} onPress={() => onSave(draft)}>
+        <Pressable style={styles.editDoneBtn} onPress={() => onSave(draft)} accessibilityLabel="Done" accessibilityRole="button">
           <Text style={[styles.editDoneBtnText, { fontSize: 16 * textScale }]}>Done</Text>
         </Pressable>
       </View>
@@ -660,7 +665,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
       {/* Full-screen dark backdrop — tap to dismiss */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityLabel="Dismiss" accessibilityRole="button" />
 
       <GestureDetector gesture={swipeLeftGesture}>
         <Animated.View style={[styles.panel, sheetStyle]}>
@@ -691,6 +696,8 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
                 <Pressable
                   style={styles.editOpenBtn}
                   onPress={() => setEditMode(true)}
+                  accessibilityLabel="Edit Widgets"
+                  accessibilityRole="button"
                 >
                   <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.6)" />
                   <Text style={[styles.editOpenBtnText, { fontSize: 14 * textScale }]}>Edit Widgets</Text>

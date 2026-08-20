@@ -198,7 +198,7 @@ function Checkbox({ checked, color, onToggle }: CheckboxProps) {
   const { theme } = useTheme();
   const { colors } = theme;
   return (
-    <Pressable onPress={onToggle} hitSlop={8} style={styles.checkbox}>
+    <Pressable onPress={onToggle} hitSlop={8} style={styles.checkbox} accessibilityLabel={checked ? 'Mark incomplete' : 'Mark complete'} accessibilityRole="checkbox">
       <View
         style={[
           styles.checkboxOuter,
@@ -260,6 +260,8 @@ const ReminderRow = React.memo(function ReminderRow({
           styles.reminderRow,
           { backgroundColor: colors.secondarySystemGroupedBackground },
         ]}
+        accessibilityLabel={reminder.title}
+        accessibilityRole="button"
       >
         <Checkbox checked={reminder.completed} color={listColor} onToggle={onToggle} />
         <View style={[styles.reminderContent, { borderBottomColor: colors.separator }]}>
@@ -341,6 +343,8 @@ const SmartListCard = React.memo(function SmartListCard({
             : themeColors.secondarySystemGroupedBackground,
         },
       ]}
+      accessibilityLabel={`${label}: ${count} reminders`}
+      accessibilityRole="button"
     >
       <View style={styles.smartCardTop}>
         <View style={[styles.smartCardIcon, { backgroundColor: color }]}>
@@ -697,7 +701,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
           title={filterLabel}
           largeTitle={false}
           leftButton={
-            <Pressable onPress={goHome} style={styles.navButton} hitSlop={8}>
+            <Pressable onPress={goHome} style={styles.navButton} hitSlop={8} accessibilityLabel="Back to Lists" accessibilityRole="button">
               <Ionicons name="chevron-back" size={24} color={REMINDERS_ACCENT} />
               <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Lists</Text>
             </Pressable>
@@ -709,6 +713,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                 setTimeout(() => addInputRef.current?.focus(), 100);
               }}
               hitSlop={8}
+              accessibilityLabel="Add reminder"
+              accessibilityRole="button"
             >
               <Ionicons name="add-circle" size={28} color={REMINDERS_ACCENT} />
             </Pressable>
@@ -761,6 +767,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                   onPress={() => setShowDatePicker((v) => !v)}
                   hitSlop={8}
                   style={{ marginLeft: 8 }}
+                  accessibilityLabel={newDueDate ? 'Change due date' : 'Set due date'}
+                  accessibilityRole="button"
                 >
                   <Ionicons
                     name="calendar-outline"
@@ -768,7 +776,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                     color={newDueDate ? REMINDERS_ACCENT : colors.secondaryLabel}
                   />
                 </Pressable>
-                <Pressable onPress={addReminder} hitSlop={8} style={{ marginLeft: 12 }}>
+                <Pressable onPress={addReminder} hitSlop={8} style={{ marginLeft: 12 }} accessibilityLabel="Add reminder" accessibilityRole="button">
                   <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600' }]}>
                     Add
                   </Text>
@@ -789,6 +797,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                           key={chip.label}
                           onPress={() => { setNewDueDate(selected ? undefined : chip.value); setShowCustomDatePicker(false); }}
                           style={[styles.dateChip, { backgroundColor: selected ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                          accessibilityLabel={`${chip.label}${selected ? ', selected' : ''}`}
+                          accessibilityRole="button"
                         >
                           <Text style={[typography.caption1, { color: selected ? '#fff' : colors.label, fontWeight: '600' }]}>
                             {chip.label}
@@ -799,6 +809,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                     <Pressable
                       onPress={() => setShowCustomDatePicker((v) => !v)}
                       style={[styles.dateChip, { backgroundColor: showCustomDatePicker ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                      accessibilityLabel="Custom date"
+                      accessibilityRole="button"
                     >
                       <Text style={[typography.caption1, { color: showCustomDatePicker ? '#fff' : colors.label, fontWeight: '600' }]}>
                         Custom…
@@ -819,6 +831,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                               key={i}
                               onPress={() => setNewDueDate(ts)}
                               style={[styles.customDayChip, { backgroundColor: newDueDate === ts ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                              accessibilityLabel={`${label}${newDueDate === ts ? ', selected' : ''}`}
+                              accessibilityRole="button"
                             >
                               <Text style={[typography.caption2, { color: newDueDate === ts ? '#fff' : colors.label }]}>{label}</Text>
                             </Pressable>
@@ -873,6 +887,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
               }}
               style={styles.addButton}
               hitSlop={8}
+              accessibilityLabel="New Reminder"
+              accessibilityRole="button"
             >
               <Ionicons name="add-circle-outline" size={22} color={REMINDERS_ACCENT} />
               <Text
@@ -898,7 +914,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
         title="Reminders"
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={24} color={REMINDERS_ACCENT} />
           </Pressable>
         }
@@ -935,7 +951,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
               >
                 My Lists
               </Text>
-              <Pressable onPress={() => setShowCreateListModal(true)} hitSlop={8}>
+              <Pressable onPress={() => setShowCreateListModal(true)} hitSlop={8} accessibilityLabel="Add List" accessibilityRole="button">
                 <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600' }]}>
                   Add List
                 </Text>
@@ -954,6 +970,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                       : colors.secondarySystemGroupedBackground,
                   },
                 ]}
+                accessibilityLabel={list.name}
+                accessibilityRole="button"
               >
                 <View style={[styles.listIcon, { backgroundColor: list.color }]}>
                   <Ionicons name={list.icon} size={18} color="#fff" />
@@ -977,11 +995,11 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
       <Modal visible={showCreateListModal} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-            <Pressable onPress={() => { setShowCreateListModal(false); setNewListName(''); }}>
+            <Pressable onPress={() => { setShowCreateListModal(false); setNewListName(''); }} accessibilityLabel="Cancel" accessibilityRole="button">
               <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Cancel</Text>
             </Pressable>
             <Text style={[typography.headline, { color: colors.label }]}>New List</Text>
-            <Pressable onPress={handleCreateList} disabled={!newListName.trim()}>
+            <Pressable onPress={handleCreateList} disabled={!newListName.trim()} accessibilityLabel="Done" accessibilityRole="button">
               <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600', opacity: newListName.trim() ? 1 : 0.4 }]}>
                 Done
               </Text>
@@ -1007,6 +1025,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                   key={color}
                   onPress={() => setNewListColor(color)}
                   style={[styles.colorSwatch, { backgroundColor: color, borderWidth: newListColor === color ? 3 : 0, borderColor: colors.label }]}
+                  accessibilityLabel={`Color: ${color}${newListColor === color ? ', selected' : ''}`}
+                  accessibilityRole="button"
                 />
               ))}
             </View>
@@ -1018,11 +1038,11 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
       <Modal visible={editingReminder !== null} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-            <Pressable onPress={() => setEditingReminder(null)}>
+            <Pressable onPress={() => setEditingReminder(null)} accessibilityLabel="Cancel" accessibilityRole="button">
               <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Cancel</Text>
             </Pressable>
             <Text style={[typography.headline, { color: colors.label }]}>Edit Reminder</Text>
-            <Pressable onPress={saveEditReminder} disabled={!editTitle.trim()}>
+            <Pressable onPress={saveEditReminder} disabled={!editTitle.trim()} accessibilityLabel="Done" accessibilityRole="button">
               <Text style={[typography.body, { color: REMINDERS_ACCENT, fontWeight: '600', opacity: editTitle.trim() ? 1 : 0.4 }]}>
                 Done
               </Text>
@@ -1064,6 +1084,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                     key={chip.label}
                     onPress={() => { setEditDueDate(chip.value); setShowEditDuePicker(false); }}
                     style={[styles.dateChip, { backgroundColor: selected ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                    accessibilityLabel={`${chip.label}${selected ? ', selected' : ''}`}
+                    accessibilityRole="button"
                   >
                     <Text style={[typography.caption1, { color: selected ? '#fff' : colors.label, fontWeight: '600' }]}>
                       {chip.label}
@@ -1074,6 +1096,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
               <Pressable
                 onPress={() => setShowEditDuePicker((v) => !v)}
                 style={[styles.dateChip, { backgroundColor: showEditDuePicker ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                accessibilityLabel="Custom date"
+                accessibilityRole="button"
               >
                 <Text style={[typography.caption1, { color: showEditDuePicker ? '#fff' : colors.label, fontWeight: '600' }]}>
                   Custom…
@@ -1093,6 +1117,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                       key={i}
                       onPress={() => setEditDueDate(ts)}
                       style={[styles.customDayChip, { backgroundColor: editDueDate === ts ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                      accessibilityLabel={`${label}${editDueDate === ts ? ', selected' : ''}`}
+                      accessibilityRole="button"
                     >
                       <Text style={[typography.caption2, { color: editDueDate === ts ? '#fff' : colors.label }]}>{label}</Text>
                     </Pressable>
@@ -1134,6 +1160,8 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
                   key={r}
                   onPress={() => setEditRecurrence(r)}
                   style={[styles.dateChip, { backgroundColor: editRecurrence === r ? REMINDERS_ACCENT : colors.systemGray5 }]}
+                  accessibilityLabel={`Repeat ${r === 'none' ? 'never' : r}${editRecurrence === r ? ', selected' : ''}`}
+                  accessibilityRole="button"
                 >
                   <Text style={[typography.caption1, { color: editRecurrence === r ? '#fff' : colors.label, fontWeight: '600' }]}>
                     {r === 'none' ? 'Never' : r.charAt(0).toUpperCase() + r.slice(1)}

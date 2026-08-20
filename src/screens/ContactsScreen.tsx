@@ -171,7 +171,7 @@ export function ContactsScreen() {
         title="Contacts"
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
           </Pressable>
         }

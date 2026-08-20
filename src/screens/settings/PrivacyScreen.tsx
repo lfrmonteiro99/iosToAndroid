@@ -145,7 +145,7 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
             <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase' }]}>
               App Privacy
             </Text>
-            <Pressable onPress={checkPermissions} disabled={loadingPermissions} hitSlop={8}>
+            <Pressable onPress={checkPermissions} disabled={loadingPermissions} hitSlop={8} accessibilityLabel="Refresh permissions" accessibilityRole="button">
               {loadingPermissions ? (
                 <ActivityIndicator size="small" color={colors.systemBlue} />
               ) : (
@@ -203,6 +203,8 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
                               onPress={handleRequestPermissions}
                               disabled={requestingPermissions}
                               style={[styles.requestBtn, { backgroundColor: colors.systemBlue }]}
+                              accessibilityLabel="Request permission"
+                              accessibilityRole="button"
                             >
                               {requestingPermissions ? (
                                 <ActivityIndicator size="small" color="#fff" />

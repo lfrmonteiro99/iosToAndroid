@@ -246,7 +246,7 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
                           backgroundColor: getDeviceIconBackground(deviceType, colors.systemBlue),
                         }}
                         trailing={
-                          <Pressable onPress={() => handleUnpair(device.address, device.name)}>
+                          <Pressable onPress={() => handleUnpair(device.address, device.name)} accessibilityLabel={`Forget ${device.name}`} accessibilityRole="button">
                             <Text style={[typography.caption1, { color: colors.systemRed }]}>
                               Forget
                             </Text>
@@ -273,7 +273,7 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
               {scanning ? (
                 <ActivityIndicator size="small" color={colors.systemBlue} />
               ) : (
-                <Pressable onPress={startScan} hitSlop={8}>
+                <Pressable onPress={startScan} hitSlop={8} accessibilityLabel="Scan for devices" accessibilityRole="button">
                   <Text style={[typography.footnote, { color: colors.systemBlue }]}>
                     Scan
                   </Text>
@@ -327,7 +327,7 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
 
             {scanning && (
               <View style={styles.stopScanRow}>
-                <Pressable onPress={stopScan} hitSlop={8}>
+                <Pressable onPress={stopScan} hitSlop={8} accessibilityLabel="Stop scanning" accessibilityRole="button">
                   <Text style={[typography.body, { color: colors.systemRed }]}>
                     Stop Scanning
                   </Text>

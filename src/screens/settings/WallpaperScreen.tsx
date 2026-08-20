@@ -116,6 +116,8 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
                     isSelected && styles.wallpaperCellSelected,
                   ]}
                   onPress={() => update('wallpaperIndex', index)}
+                  accessibilityLabel={`${wp.name} wallpaper${isSelected ? ', selected' : ''}`}
+                  accessibilityRole="button"
                 >
                   {isSelected && (
                     <Ionicons name="checkmark-circle" size={32} color="#FFFFFF" />
@@ -130,6 +132,8 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
                   isCustomSelected && styles.wallpaperCellSelected,
                 ]}
                 onPress={() => update('wallpaperIndex', 6)}
+                accessibilityLabel={`Custom wallpaper${isCustomSelected ? ', selected' : ''}`}
+                accessibilityRole="button"
               >
                 <Image source={{ uri: customWallpaper }} style={styles.wallpaperImage} />
                 {isCustomSelected && (

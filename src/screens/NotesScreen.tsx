@@ -126,6 +126,8 @@ const NoteRow = React.memo(function NoteRow({
               : colors.secondarySystemGroupedBackground,
           },
         ]}
+        accessibilityLabel={`Note: ${getNoteTitle(note)}`}
+        accessibilityRole="button"
       >
         <View style={[styles.noteRowContent, { borderBottomColor: colors.separator }]}>
           <Text
@@ -359,20 +361,22 @@ export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
           title=""
           largeTitle={false}
           leftButton={
-            <Pressable onPress={handleBack} style={styles.navButton} hitSlop={8}>
+            <Pressable onPress={handleBack} style={styles.navButton} hitSlop={8} accessibilityLabel="Back to Notes" accessibilityRole="button">
               <Ionicons name="chevron-back" size={24} color={NOTES_ACCENT} />
               <Text style={[typography.body, { color: NOTES_ACCENT }]}>Notes</Text>
             </Pressable>
           }
           rightButton={
             <View style={styles.editorNavRight}>
-              <Pressable onPress={handleShare} hitSlop={8}>
+              <Pressable onPress={handleShare} hitSlop={8} accessibilityLabel="Share note" accessibilityRole="button">
                 <Ionicons name="share-outline" size={22} color={NOTES_ACCENT} />
               </Pressable>
               <Pressable
                 onPress={() => confirmDelete(editingNote.id)}
                 hitSlop={8}
                 style={{ marginLeft: 20 }}
+                accessibilityLabel="Delete note"
+                accessibilityRole="button"
               >
                 <Ionicons name="trash-outline" size={22} color={NOTES_ACCENT} />
               </Pressable>
@@ -380,6 +384,8 @@ export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
                 onPress={() => Keyboard.dismiss()}
                 hitSlop={8}
                 style={{ marginLeft: 20 }}
+                accessibilityLabel="Done editing"
+                accessibilityRole="button"
               >
                 <Text style={[typography.body, { color: NOTES_ACCENT, fontWeight: '600' }]}>
                   Done
@@ -519,12 +525,12 @@ export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
         title="Notes"
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={24} color={NOTES_ACCENT} />
           </Pressable>
         }
         rightButton={
-          <Pressable onPress={createNote} hitSlop={8}>
+          <Pressable onPress={createNote} hitSlop={8} accessibilityLabel="New note" accessibilityRole="button">
             <Ionicons name="create-outline" size={24} color={NOTES_ACCENT} />
           </Pressable>
         }
@@ -558,7 +564,7 @@ export function NotesScreen({ navigation }: { navigation: AppNavigationProp }) {
         <Text style={[typography.footnote, { color: colors.secondaryLabel }]}>
           {notes.length} {notes.length === 1 ? 'Note' : 'Notes'}
         </Text>
-        <Pressable onPress={createNote} hitSlop={8}>
+        <Pressable onPress={createNote} hitSlop={8} accessibilityLabel="New note" accessibilityRole="button">
           <Ionicons name="create-outline" size={24} color={NOTES_ACCENT} />
         </Pressable>
       </View>

@@ -92,6 +92,8 @@ const QuickAction = React.memo(function QuickAction({
             : colors.secondarySystemGroupedBackground,
         },
       ]}
+      accessibilityLabel={label}
+      accessibilityRole="button"
     >
       <View style={[styles.quickActionIcon, { backgroundColor: MAPS_ACCENT }]}>
         <Ionicons name={icon} size={20} color="#fff" />
@@ -148,6 +150,8 @@ const RecentRow = React.memo(function RecentRow({
               : colors.secondarySystemGroupedBackground,
           },
         ]}
+        accessibilityLabel={item.name}
+        accessibilityRole="button"
       >
         <View style={[styles.recentIcon, { backgroundColor: item.isFavorite ? 'rgba(255,149,0,0.15)' : colors.systemGray5 }]}>
           <Ionicons
@@ -418,6 +422,8 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
                 backgroundColor: pressed ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.95)',
               },
             ]}
+            accessibilityLabel="Current location"
+            accessibilityRole="button"
           >
             <Ionicons name="navigate" size={20} color={MAPS_ACCENT} />
           </Pressable>
@@ -485,7 +491,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
         title="Maps"
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={24} color={MAPS_ACCENT} />
           </Pressable>
         }
@@ -519,7 +525,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
               <Text style={[typography.title3, { color: colors.label, fontWeight: '700' }]}>
                 {selectedLocation?.name ?? ''}
               </Text>
-              <Pressable onPress={() => setSelectedLocation(null)} hitSlop={8}>
+              <Pressable onPress={() => setSelectedLocation(null)} hitSlop={8} accessibilityLabel="Close" accessibilityRole="button">
                 <Ionicons name="close-circle" size={28} color={colors.tertiaryLabel} />
               </Pressable>
             </View>
@@ -538,6 +544,8 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
               <Pressable
                 onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); alert('Directions', 'Directions from current location will be calculated in a future update.'); }}
                 style={[styles.modalActionBtn, { backgroundColor: MAPS_ACCENT }]}
+                accessibilityLabel="Get directions"
+                accessibilityRole="button"
               >
                 <Ionicons name="navigate" size={18} color="#fff" />
                 <Text style={[typography.subhead, { color: '#fff', fontWeight: '600' }]}>
@@ -547,6 +555,8 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
               <Pressable
                 onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setShowShareSheet(true); }}
                 style={[styles.modalActionBtn, { backgroundColor: colors.systemGray5 }]}
+                accessibilityLabel="Share location"
+                accessibilityRole="button"
               >
                 <Ionicons name="share-outline" size={18} color={colors.label} />
                 <Text style={[typography.subhead, { color: colors.label, fontWeight: '600' }]}>

@@ -198,13 +198,13 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
           title=""
           largeTitle={false}
           leftButton={
-            <Pressable onPress={() => setSelectedEmail(null)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Pressable onPress={() => setSelectedEmail(null)} style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityLabel="Back to Inbox" accessibilityRole="button">
               <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
               <Text style={[typography.body, { color: colors.systemBlue }]}>Inbox</Text>
             </Pressable>
           }
           rightButton={
-            <Pressable onPress={() => handleFlag(selectedEmail.id)}>
+            <Pressable onPress={() => handleFlag(selectedEmail.id)} accessibilityLabel={selectedEmail.isFlagged ? 'Unflag email' : 'Flag email'} accessibilityRole="button">
               <Ionicons name={selectedEmail.isFlagged ? 'flag' : 'flag-outline'} size={22} color={colors.systemOrange ?? '#FF9500'} />
             </Pressable>
           }
@@ -228,6 +228,8 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
             <Pressable
               style={[styles.actionBtn, { backgroundColor: colors.systemBlue }]}
               onPress={() => { setSelectedEmail(null); setShowCompose(true); setComposeTo(selectedEmail.fromEmail); setComposeSubject(`Re: ${selectedEmail.subject}`); }}
+              accessibilityLabel="Reply"
+              accessibilityRole="button"
             >
               <Ionicons name="return-up-back" size={18} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: '600', marginLeft: 6 }}>Reply</Text>
@@ -235,6 +237,8 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
             <Pressable
               style={[styles.actionBtn, { backgroundColor: colors.systemBlue }]}
               onPress={() => { setSelectedEmail(null); setShowCompose(true); setComposeSubject(`Fwd: ${selectedEmail.subject}`); setComposeBody(`\n\n---------- Forwarded ----------\nFrom: ${selectedEmail.from}\n\n${selectedEmail.body}`); }}
+              accessibilityLabel="Forward"
+              accessibilityRole="button"
             >
               <Ionicons name="return-up-forward" size={18} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: '600', marginLeft: 6 }}>Forward</Text>
@@ -256,7 +260,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
           </Text>
         }
         rightButton={
-          <Pressable onPress={() => setShowCompose(true)}>
+          <Pressable onPress={() => setShowCompose(true)} accessibilityLabel="Compose new email" accessibilityRole="button">
             <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
           </Pressable>
         }
@@ -290,7 +294,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
               <Text style={[typography.footnote, styles.demoBannerText]}>
                 Demo Mode — These are sample emails. This app does not send or receive real mail.
               </Text>
-              <Pressable onPress={dismissDemoBanner} hitSlop={8} style={{ marginLeft: 8 }}>
+              <Pressable onPress={dismissDemoBanner} hitSlop={8} style={{ marginLeft: 8 }} accessibilityLabel="Dismiss demo banner" accessibilityRole="button">
                 <Ionicons name="close" size={18} color="#92400e" />
               </Pressable>
             </View>
@@ -315,6 +319,8 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
             <Pressable
               style={[styles.emailRow, { backgroundColor: colors.systemBackground }]}
               onPress={() => handleOpenEmail(item)}
+              accessibilityLabel={`${item.from}: ${item.subject}`}
+              accessibilityRole="button"
             >
               {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: colors.systemBlue }]} />}
               <View style={[styles.avatar, { backgroundColor: avatarColorForName(item.from) }]}>
@@ -344,11 +350,11 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={[styles.composeHeader, { borderBottomColor: colors.separator, paddingTop: insets.top }]}>
-            <Pressable onPress={() => setShowCompose(false)}>
+            <Pressable onPress={() => setShowCompose(false)} accessibilityLabel="Cancel" accessibilityRole="button">
               <Text style={[typography.body, { color: colors.systemRed }]}>Cancel</Text>
             </Pressable>
             <Text style={[typography.headline, { color: colors.label }]}>New Message</Text>
-            <Pressable onPress={handleSend}>
+            <Pressable onPress={handleSend} accessibilityLabel="Send" accessibilityRole="button">
               <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}>Send</Text>
             </Pressable>
           </View>
