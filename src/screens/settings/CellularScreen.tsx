@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
@@ -15,6 +16,7 @@ import type { AppNavigationProp } from '../../navigation/types';
 
 const CELLULAR_DATA_KEY = '@iostoandroid/cellular_data';
 const DATA_ROAMING_KEY = '@iostoandroid/data_roaming';
+const LOW_DATA_MODE_KEY = '@iostoandroid/low_data_mode';
 
 const getLauncher = async () => {
   try { return (await import('../../../modules/launcher-module/src')).default; }
@@ -99,9 +101,10 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getMany([CELLULAR_DATA_KEY, DATA_ROAMING_KEY]).then((map) => {
+    AsyncStorage.getMany([CELLULAR_DATA_KEY, DATA_ROAMING_KEY, LOW_DATA_MODE_KEY]).then((map) => {
       if (map[CELLULAR_DATA_KEY] !== null) setCellularDataLocal(map[CELLULAR_DATA_KEY] !== 'false');
       if (map[DATA_ROAMING_KEY] !== null) setDataRoamingLocal(map[DATA_ROAMING_KEY] === 'true');
+      if (map[LOW_DATA_MODE_KEY] !== null) setLowDataMode(map[LOW_DATA_MODE_KEY] === 'true');
     });
   }, []);
 
@@ -110,11 +113,16 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
     AsyncStorage.setItem(CELLULAR_DATA_KEY, String(v));
   }, []);
 
+  const handleLowDataModeToggle = useCallback((v: boolean) => {
+    setLowDataMode(v);
+    AsyncStorage.setItem(LOW_DATA_MODE_KEY, String(v));
+  }, []);
+
   const handleDataRoamingToggle = useCallback((v: boolean) => {
     if (v) {
       alert(
         'Data Roaming',
-        'Enabling data roaming may incur additional charges from your carrier.',
+        'This is an in-app preference only and does not change your device\'s roaming settings. To change device roaming, use Android Settings.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -268,6 +276,12 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
         </View>
 
         {/* Cellular Data Options */}
+        <View style={{ backgroundColor: '#FFF3CD', borderRadius: 10, marginHorizontal: 16, marginTop: 16, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Ionicons name="warning-outline" size={20} color="#856404" />
+          <Text style={[typography.footnote, { color: '#856404', flex: 1 }]}>
+            {"These are local app preferences only. They do not affect your device’s mobile data or radio settings."}
+          </Text>
+        </View>
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Cellular Data Options">
             <CupertinoListTile
@@ -280,7 +294,7 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
             <CupertinoListTile
               title="Low Data Mode"
               trailing={
-                <CupertinoSwitch value={lowDataMode} onValueChange={setLowDataMode} />
+                <CupertinoSwitch value={lowDataMode} onValueChange={handleLowDataModeToggle} />
               }
               showChevron={false}
             />
