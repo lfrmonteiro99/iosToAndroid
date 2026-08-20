@@ -74,6 +74,26 @@ const GRID_HORIZONTAL_PADDING = 16;
 const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
+// How far past the screen edge the wallpaper layer is oversized (see the
+// `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
+// This is the entire travel budget for the parallax shift, so the shift must be
+// derived from it — not from a separate, independently-chosen multiplier — or
+// the layer can translate further than it was oversized and expose bare
+// background at the screen edge.
+export const PARALLAX_OVERHANG = 20;
+
+// Maps raw scroll progress (0 = first page, 1 = last page) to a horizontal
+// shift bounded by `overhang` in both directions, so the oversized layer never
+// reveals its own edge regardless of how many pages there are.
+export function computeWallpaperTranslateX(
+  scrollX: number,
+  maxScrollX: number,
+  overhang: number = PARALLAX_OVERHANG,
+): number {
+  const progress = Math.min(1, Math.max(0, scrollX / Math.max(1, maxScrollX)));
+  return overhang * (1 - 2 * progress);
+}
+
 // Built-in app routing: packageName → navigation screen name
 const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.phone': 'Phone',
@@ -705,8 +725,9 @@ export function LauncherHomeScreen() {
 
   // Parallax wallpaper
   const scrollX = useSharedValue(0);
+  const maxScrollX = useSharedValue(1);
   const wallpaperAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -(scrollX.value * 0.3) }],
+    transform: [{ translateX: computeWallpaperTranslateX(scrollX.value, maxScrollX.value) }],
   }));
 
   // Custom wallpaper URI (loaded from AsyncStorage when wallpaperIndex === 6)
@@ -827,6 +848,7 @@ export function LauncherHomeScreen() {
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     scrollX.value = offsetX;
+    maxScrollX.value = event.nativeEvent.contentSize.width - event.nativeEvent.layoutMeasurement.width;
     const page = Math.round(offsetX / SCREEN_WIDTH);
     if (page !== currentPage && page >= 0 && page < totalPages) {
       setCurrentPage(page);
@@ -836,6 +858,7 @@ export function LauncherHomeScreen() {
 
   const handlePageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollX.value = event.nativeEvent.contentOffset.x;
+    maxScrollX.value = event.nativeEvent.contentSize.width - event.nativeEvent.layoutMeasurement.width;
   };
 
   // Build "Move to Folder" sub-options for action sheet
@@ -987,9 +1010,10 @@ export function LauncherHomeScreen() {
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
         <Animated.View
+          testID="wallpaper-layer"
           style={[
             StyleSheet.absoluteFillObject,
-            { left: -20, right: -20 },
+            { left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG },
             wallpaperAnimStyle,
           ]}
         >
