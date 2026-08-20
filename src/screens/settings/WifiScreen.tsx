@@ -293,6 +293,25 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
                   showChevron={false}
                 />
               ) : null}
+              <CupertinoListTile
+                title="Forget This Network"
+                leading={{
+                  name: 'trash-outline',
+                  color: '#FFFFFF',
+                  backgroundColor: colors.systemRed,
+                }}
+                onPress={async () => {
+                  const mod = getLauncher();
+                  if (!mod || !wifi.ssid) return;
+                  const ok = await mod.forgetWifiNetwork(wifi.ssid);
+                  if (ok) {
+                    alert('Forgotten', `"${wifi.ssid}" has been forgotten.`);
+                    scanNetworks();
+                  } else {
+                    alert('Error', 'Could not forget network. Try again or use Android Wi-Fi settings.');
+                  }
+                }}
+              />
             </CupertinoListSection>
           </View>
         ) : null}

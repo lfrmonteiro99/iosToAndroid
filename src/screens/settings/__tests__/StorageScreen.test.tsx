@@ -1,6 +1,7 @@
 import React from 'react';
-import { render } from '../../../test-utils';
+import { render, fireEvent } from '../../../test-utils';
 import { StorageScreen } from '../StorageScreen';
+import * as haptics from '../../../utils/haptics';
 
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
@@ -115,5 +116,14 @@ describe('StorageScreen', () => {
     mockUseDevice.mockReturnValue({ ...baseDeviceValue, storageError: false });
     const { queryByText } = render(<StorageScreen navigation={mockNavigation as never} />);
     expect(queryByText(/Could not load storage information/i)).toBeNull();
+  });
+
+  it('pressing Offload Unused Apps does not fire a haptic (shows alert instead)', () => {
+    // Red step: broken code called hapticImpact on press; fixed code calls alert (no haptic).
+    const { getByText } = render(<StorageScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Offload Unused Apps'));
+
+    expect(haptics.hapticImpact).not.toHaveBeenCalled();
   });
 });

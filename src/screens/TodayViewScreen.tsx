@@ -330,15 +330,45 @@ function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress
 // Screen Time Widget
 // ---------------------------------------------------------------------------
 
+function formatScreenTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
   const { textScale } = useTheme();
+  const [totalMinutes, setTotalMinutes] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const mod = (await import('../../modules/launcher-module/src')).default;
+        const data = await mod.getTodayScreenTime();
+        setTotalMinutes(data.totalMinutes);
+      } catch {
+        // Usage Access permission not granted or module unavailable — leave null
+      }
+    })();
+  }, []);
+
   return (
     <WidgetCard onPress={onPress}>
       <View style={styles.widgetRow}>
         <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
       </View>
-      <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>Tap to view screen time details</Text>
+      {totalMinutes !== null ? (
+        <>
+          <Text style={[styles.widgetBigNumber, { color: '#BF5AF2', fontSize: 36 * textScale }]}>
+            {formatScreenTime(totalMinutes)}
+          </Text>
+          <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>today</Text>
+        </>
+      ) : (
+        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>Tap to view screen time details</Text>
+      )}
     </WidgetCard>
   );
 }

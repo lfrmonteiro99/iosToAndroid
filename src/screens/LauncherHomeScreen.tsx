@@ -427,11 +427,12 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
 // Fallback for non-Android
 // ---------------------------------------------------------------------------
 
-function NonAndroidFallback() {
+export function NonAndroidFallback() {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings } = useSettings();
+  const device = useDevice();
 
   const wallpaper = WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
   const wallpaperDark = darkenHex(wallpaper, 0.25);
@@ -471,7 +472,7 @@ function NonAndroidFallback() {
           <Text
             style={[typography.body, { color: colors.secondaryLabel, marginLeft: 'auto' as unknown as number }]}
           >
-            {settings.batteryPercentage ? '72%' : 'Hidden'}
+            {settings.batteryPercentage ? `${Math.round(device.battery.level * 100)}%` : 'Hidden'}
           </Text>
         </View>
       </View>

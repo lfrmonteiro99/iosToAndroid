@@ -17,6 +17,7 @@ jest.mock('../../../../modules/launcher-module/src', () => ({
     openSystemSettings: jest.fn(() => Promise.resolve(true)),
     getNetworkInfo: jest.fn(() => Promise.resolve({ isConnected: true })),
     joinWifiNetwork: jest.fn(() => Promise.resolve(false)),
+    forgetWifiNetwork: jest.fn(() => Promise.resolve(true)),
   },
 }));
 
@@ -77,5 +78,26 @@ describe('WifiScreen', () => {
     mockUseDevice.mockReturnValue({ ...baseDeviceValue, wifiError: false });
     const { queryByText } = render(<WifiScreen navigation={mockNavigation} />);
     expect(queryByText(/Could not load Wi-Fi status/i)).toBeNull();
+  });
+
+  it('shows Forget This Network tile when connected to a network', () => {
+    // Red step: before fix, there is no "Forget This Network" tile;
+    // after fix, the tile appears in the Current Network section.
+    mockUseDevice.mockReturnValue({
+      ...baseDeviceValue,
+      wifi: { enabled: true, ssid: 'HomeNetwork', rssi: -55, linkSpeed: 100, ip: '192.168.1.2' },
+    });
+    const { getByText } = render(<WifiScreen navigation={mockNavigation} />);
+    expect(getByText('Forget This Network')).toBeTruthy();
+  });
+
+  it('does not show Forget This Network tile when not connected', () => {
+    // ssid empty → Current Network section hidden → no Forget button
+    mockUseDevice.mockReturnValue({
+      ...baseDeviceValue,
+      wifi: { enabled: true, ssid: '', rssi: 0, linkSpeed: 0, ip: '' },
+    });
+    const { queryByText } = render(<WifiScreen navigation={mockNavigation} />);
+    expect(queryByText('Forget This Network')).toBeNull();
   });
 });
