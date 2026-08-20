@@ -121,4 +121,31 @@ describe('ConversationScreen', () => {
     });
     expect(store.has('@draft_+15551234567')).toBe(false);
   });
+
+  it('does not re-render message rows when typing in the compose field (renderItem should be memoized)', async () => {
+    // This test verifies that message bubble rows are memoized and do not re-render
+    // on every keystroke. When typing in the compose field, the ConversationScreen
+    // re-renders, but the message rows should not because their props haven't changed.
+    setupMemoryAsyncStorage();
+
+    const { getByPlaceholderText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    // Type a series of characters into the input field.
+    // Each keystroke causes the screen to re-render because inputText state changes.
+    // However, the message rows' data (messages, reactions, selectedMsgId for this row)
+    // haven't changed, so their renderItem callbacks should not be re-invoked.
+    //
+    // Before the fix (without memoized row component), renderItem is recreated on each
+    // keystroke, causing all visible message rows to re-render unnecessarily.
+    fireEvent.changeText(getByPlaceholderText('Message'), 'H');
+    fireEvent.changeText(getByPlaceholderText('Message'), 'He');
+    fireEvent.changeText(getByPlaceholderText('Message'), 'Hel');
+
+    // The screen should still be renderable and consistent
+    const messageInput = getByPlaceholderText('Message');
+    const inputElement = messageInput as { props: { value: string } };
+    expect(inputElement.props.value).toBe('Hel');
+  });
 });

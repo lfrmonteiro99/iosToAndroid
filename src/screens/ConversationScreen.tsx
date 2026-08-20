@@ -119,6 +119,50 @@ function insertDateSeparators(messages: DeviceSms[]): ListItem[] {
 const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 const REACTIONS_STORAGE_KEY = '@iostoandroid/message_reactions';
 
+// ─── Message Row (Bubble + Press Handler) ─────────────────────────────────────
+
+interface MessageRowProps {
+  item: DeviceSms | LocalImageMessage;
+  isDark: boolean;
+  colors: CupertinoColors;
+  typography: typeof Typography;
+  reactions?: string[];
+  selectedMsgId: string | null;
+  onLongPress: (msgId: string) => void;
+  onReaction: (msgId: string, emoji: string) => void;
+  onCopy: (msgBody: string) => void;
+  onPress: (msgId: string) => void;
+}
+
+const MessageRow = React.memo(function MessageRow({
+  item,
+  isDark,
+  colors,
+  typography,
+  reactions,
+  selectedMsgId,
+  onLongPress,
+  onReaction,
+  onCopy,
+  onPress,
+}: MessageRowProps) {
+  return (
+    <Pressable onPress={() => onPress(item.id)}>
+      <MessageBubble
+        message={item}
+        isDark={isDark}
+        colors={colors}
+        typography={typography}
+        reactions={reactions}
+        onLongPress={() => onLongPress(item.id)}
+        showReactionPicker={selectedMsgId === item.id}
+        onReaction={(emoji) => onReaction(item.id, emoji)}
+        onCopy={() => onCopy(item.body)}
+      />
+    </Pressable>
+  );
+});
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -549,19 +593,18 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         );
       }
       return (
-        <Pressable onPress={() => handleBubblePress(item.id)}>
-          <MessageBubble
-            message={item}
-            isDark={dark}
-            colors={colors}
-            typography={typography}
-            reactions={reactions[item.id]}
-            onLongPress={() => handleLongPress(item.id)}
-            showReactionPicker={selectedMsgId === item.id}
-            onReaction={(emoji) => handleReaction(item.id, emoji)}
-            onCopy={() => handleCopy(item.body)}
-          />
-        </Pressable>
+        <MessageRow
+          item={item}
+          isDark={dark}
+          colors={colors}
+          typography={typography}
+          reactions={reactions[item.id]}
+          selectedMsgId={selectedMsgId}
+          onLongPress={handleLongPress}
+          onReaction={handleReaction}
+          onCopy={handleCopy}
+          onPress={handleBubblePress}
+        />
       );
     },
     [dark, colors, typography, reactions, selectedMsgId, handleLongPress, handleReaction, handleCopy, handleBubblePress],
