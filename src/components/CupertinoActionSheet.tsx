@@ -138,7 +138,6 @@ export function CupertinoActionSheet({
                       color: option.destructive
                         ? colors.systemRed
                         : colors.systemBlue,
-                      fontSize: 20,
                     },
                   ]}
                 >
@@ -164,7 +163,7 @@ export function CupertinoActionSheet({
             <Text
               style={[
                 typography.body,
-                { color: colors.systemBlue, fontWeight: '600', fontSize: 20 },
+                { color: colors.systemBlue, fontWeight: '600' },
               ]}
             >
               {cancelLabel}

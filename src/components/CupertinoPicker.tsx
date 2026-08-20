@@ -66,7 +66,6 @@ export function CupertinoPicker({
                 typography.body,
                 {
                   color: isSelected ? colors.label : colors.tertiaryLabel,
-                  fontSize: isSelected ? 21 : 19,
                   fontWeight: isSelected ? '500' : '400',
                 },
               ]}

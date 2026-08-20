@@ -6,6 +6,27 @@ import * as Haptics from 'expo-haptics';
 import { setHapticsEnabled } from '../../utils/haptics';
 import { useSettings } from '../../store/SettingsStore';
 
+/** Returns the effective (last-wins) fontSize from a React Native style array. */
+function getEffectiveFontSize(element: { props: { style: unknown } }): number {
+  const styles = Array.isArray(element.props.style) ? element.props.style : [element.props.style];
+  let fontSize = 0;
+  for (const s of styles) {
+    if (s && typeof s === 'object' && 'fontSize' in (s as object)) {
+      fontSize = (s as { fontSize: number }).fontSize;
+    }
+  }
+  return fontSize;
+}
+
+function SetTextSize({ index }: { index: number }) {
+  const { update } = useSettings();
+  return (
+    <Pressable testID="set-text-size" onPress={() => update('textSizeIndex', index)}>
+      <Text>resize</Text>
+    </Pressable>
+  );
+}
+
 /** Turns the real `vibration` setting off; SettingsStore feeds the haptics cache. */
 function DisableVibration() {
   const { update } = useSettings();
@@ -32,6 +53,29 @@ async function collectUnhandledRejections(fn: () => void): Promise<unknown[]> {
   }
   return captured;
 }
+
+describe('CupertinoActionSheet Dynamic Type', () => {
+  it('option label fontSize scales with textSizeIndex', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <SetTextSize index={3} />
+        <CupertinoActionSheet
+          visible
+          onClose={jest.fn()}
+          options={[{ label: 'Option', onPress: jest.fn() }]}
+        />
+      </>,
+    );
+
+    const defaultFontSize = getEffectiveFontSize(getByText('Option'));
+
+    // Push textSizeIndex to maximum (3, scale 1.3×)
+    fireEvent.press(getByTestId('set-text-size'));
+
+    const scaledFontSize = getEffectiveFontSize(getByText('Option'));
+    expect(scaledFontSize).toBeGreaterThan(defaultFontSize);
+  });
+});
 
 describe('CupertinoActionSheet haptics (H5)', () => {
   beforeEach(() => {

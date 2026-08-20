@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { hapticImpact } from '../utils/haptics';
+import { useTheme } from '../theme/ThemeContext';
 
 export interface SwipeAction {
   label: string;
@@ -35,6 +36,7 @@ export function CupertinoSwipeableRow({
   isOpen,
   onOpen,
 }: CupertinoSwipeableRowProps) {
+  const { typography } = useTheme();
   const translateX = useSharedValue(0);
   const contextX = useSharedValue(0);
 
@@ -117,7 +119,7 @@ export function CupertinoSwipeableRow({
               style={[styles.action, { backgroundColor: action.color, width: ACTION_WIDTH }]}
               onPress={() => handleActionPress(action)}
             >
-              <Text style={styles.actionText}>{action.label}</Text>
+              <Text style={[typography.footnote, styles.actionText]}>{action.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -132,7 +134,7 @@ export function CupertinoSwipeableRow({
               style={[styles.action, { backgroundColor: action.color, width: ACTION_WIDTH }]}
               onPress={() => handleActionPress(action)}
             >
-              <Text style={styles.actionText}>{action.label}</Text>
+              <Text style={[typography.footnote, styles.actionText]}>{action.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -171,7 +173,6 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '600',
   },
   content: {
