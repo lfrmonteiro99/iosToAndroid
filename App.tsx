@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, AppState, Platform, Pressable, StatusBar as RNStatusBar } from 'react-native';
+import { View, AppState, BackHandler, Platform, Pressable, StatusBar as RNStatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -37,6 +37,46 @@ function AppContent() {
   const { settings } = useSettings();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [isLocked, setIsLocked] = useState(true);
+
+  // ── Botão físico de voltar na raiz ────────────────────────────────────────
+  //
+  // O #445 desligou o `predictiveBackGestureEnabled`, que era o que impedia o
+  // evento de chegar ao React Navigation. Com isso resolvido o back navega — mas
+  // no `HomeMain`, que é a RAIZ da stack, não há para onde voltar, ninguém
+  // consome o evento, ele cai na Activity e esta termina. Resultado: o utilizador
+  // sai do launcher, e nota-se sobretudo logo a seguir a desbloquear, que é
+  // quando se espera aterrar na home.
+  //
+  // Um launcher não deve poder ser fechado com o back — é o comportamento do
+  // Pixel Launcher, do One UI Home e do próprio iOS. Mas isso só vale quando a
+  // app É o launcher: numa app normal, sair no back é o correcto, e por isso o
+  // handler distingue os dois casos em vez de bloquear sempre.
+  const [isDefaultLauncher, setIsDefaultLauncher] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const mod = (await import('./modules/launcher-module/src')).default;
+        const is = await mod.isDefaultLauncher();
+        if (alive) setIsDefaultLauncher(!!is);
+      } catch {
+        // Módulo indisponível (não-Android): fica falso, comportamento de app normal.
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Ecrã bloqueado: o back nunca deve contornar o bloqueio.
+      if (isLocked) return true;
+      // Há para onde voltar: deixa o React Navigation tratar (não regride o #445).
+      if (navigationRef.current?.canGoBack()) return false;
+      // Raiz: consome se formos o launcher, deixa fechar se não formos.
+      return isDefaultLauncher;
+    });
+    return () => sub.remove();
+  }, [isLocked, isDefaultLauncher, navigationRef]);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [banner, setBanner] = useState<BannerNotification | null>(null);
 
