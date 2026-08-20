@@ -71,7 +71,7 @@ Key Expo modules in use: `expo-battery`, `expo-blur`, `expo-brightness`, `expo-c
 │   ├── hooks/                      # custom React hooks
 │   ├── utils/                      # contacts, haptics, wallpapers
 │   └── __mocks__/                  # Test mocks
-├── docs/                           # Gap analyses, background actions plan, delegation audit
+├── docs/                           # Background actions plan; archived gap analyses and delegation audit
 ├── .github/workflows/              # build-apk.yml, auto-release.yml
 ├── jest.config.js / jest.setup.js
 ├── tsconfig.json / babel.config.js
@@ -145,7 +145,7 @@ The lock screen is shown on cold start and whenever the app goes to the backgrou
 3. Label the PR (or linked issue) with `feature` / `enhancement` for a minor bump, or `breaking` / `major` for a major bump; otherwise release automation defaults to a patch.
 4. Keep the native module surface (`modules/launcher-module/src/index.ts`) in sync with the Kotlin implementation.
 
-See `docs/` for ongoing gap analyses and the background‑actions plan.
+See `docs/` for the background‑actions plan. Active work is tracked in **#352** (GitHub Issues); the gap analysis and delegation audit files in `docs/` are historical archives.
 
 ---
 
