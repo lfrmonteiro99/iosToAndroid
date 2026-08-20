@@ -263,7 +263,7 @@ export function NotificationCenterScreen() {
           >
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
             showsVerticalScrollIndicator={false}
             decelerationRate={0.998}
           >
@@ -481,7 +481,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
     gap: 20,
   },
   group: {
