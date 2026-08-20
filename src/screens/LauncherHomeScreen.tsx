@@ -54,7 +54,7 @@ import { NotificationCenterOverlay } from '../components/NotificationCenterOverl
 import { SpotlightReveal } from '../components/SpotlightReveal';
 import { zones, gestureConfig } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
-import { commitForSpotlight } from '../utils/gestureMachine';
+import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
@@ -111,6 +111,9 @@ const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.photos': 'Photos',
   'com.iostoandroid.calendar': 'Calendar',
   'com.iostoandroid.calculator': 'Calculator',
+  'com.iostoandroid.notes': 'Notes',
+  'com.iostoandroid.reminders': 'Reminders',
+  'com.iostoandroid.mail': 'Mail',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -161,6 +164,9 @@ const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.photos': { icon: 'images', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
   'com.iostoandroid.calendar': { icon: 'calendar', bg: '#FF3B30', gradient: ['#FF3B30', '#FF2D55'], iconSize: 34 },
   'com.iostoandroid.calculator': { icon: 'calculator', bg: '#1C1C1E', gradient: ['#636366', '#1C1C1E'], iconSize: 34 },
+  'com.iostoandroid.notes': { icon: 'document-text', bg: '#FFCC00', gradient: ['#FFD60A', '#FFB300'], iconSize: 32 },
+  'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
+  'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
 };
 
 // ---------------------------------------------------------------------------
@@ -1043,8 +1049,30 @@ export function LauncherHomeScreen() {
     return options;
   })();
 
+  // Right-swipe on the first home page → Today View (#442).
+  //
+  // TodayViewScreen was registered in RootStackParamList and given a
+  // `slide_from_left` transition (TabNavigator.tsx) but nothing in the app
+  // ever called `navigate('TodayView')` — the gesture that transition was
+  // built for was never wired up. This mirrors the existing vertical
+  // panGesture: built fresh every render (not memoized, same as panGesture
+  // above) so `.enabled()` always reflects the current page/mode, and
+  // `activeOffsetX([-Infinity, N])` activates only for RIGHTWARD drags —
+  // leftward drags are left untouched so paging to the next app page still
+  // works.
+  const todayViewGesture = Gesture.Pan()
+    .enabled(canSpotlight && currentPage === 0)
+    .activeOffsetX([-Infinity, 20])
+    .onEnd((event) => {
+      'worklet';
+      const progress = Math.max(0, event.translationX) / gestureConfig.todayViewCommitDp;
+      if (commitForTodayView({ progress, velocity: 0, holdMs: 0 }) !== 'none') {
+        runOnJS(navigateTo)('TodayView');
+      }
+    });
+
   return (
-    <GestureDetector gesture={panGesture}>
+    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
         <Animated.View
