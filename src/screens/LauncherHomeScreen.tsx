@@ -54,7 +54,7 @@ import { NotificationCenterOverlay } from '../components/NotificationCenterOverl
 import { SpotlightReveal } from '../components/SpotlightReveal';
 import { zones, gestureConfig } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
-import { commitForSpotlight } from '../utils/gestureMachine';
+import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
@@ -1043,8 +1043,30 @@ export function LauncherHomeScreen() {
     return options;
   })();
 
+  // Right-swipe on the first home page → Today View (#455).
+  //
+  // TodayViewScreen was registered in RootStackParamList and given a
+  // `slide_from_left` transition (TabNavigator.tsx) but nothing in the app
+  // ever called `navigate('TodayView')` — the gesture that transition was
+  // built for was never wired up. This mirrors the existing vertical
+  // panGesture: built fresh every render (not memoized, same as panGesture
+  // above) so `.enabled()` always reflects the current page/mode, and
+  // `activeOffsetX([-Infinity, 20])` activates only for RIGHTWARD drags —
+  // leftward drags are left untouched so paging to the next app page still
+  // works.
+  const todayViewGesture = Gesture.Pan()
+    .enabled(canSpotlight && currentPage === 0)
+    .activeOffsetX([-Infinity, 20])
+    .onEnd((event) => {
+      'worklet';
+      const progress = Math.max(0, event.translationX) / gestureConfig.todayViewCommitDp;
+      if (commitForTodayView({ progress, velocity: 0, holdMs: 0 }) !== 'none') {
+        runOnJS(navigateTo)('TodayView');
+      }
+    });
+
   return (
-    <GestureDetector gesture={panGesture}>
+    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
         <Animated.View
