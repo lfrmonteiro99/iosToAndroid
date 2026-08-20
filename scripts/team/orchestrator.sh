@@ -185,6 +185,27 @@ first_with() {
   return 0
 }
 
+# Nth actionable issue for a label (0-indexed), para o par Hermes.
+#
+# PORQUE NÃO first_with NOS DOIS: o implementador só marca qa:wip depois de
+# preparar o worktree, e o cache de issues é lido uma vez por ciclo. Se ambos
+# chamassem first_with, ambos liam a mesma fila antes de qualquer um marcar e
+# pegavam no MESMO issue — dois agentes, dois worktrees, o mesmo branch. A corrida
+# é evitada por construção: o Claude leva o índice 0, o Hermes o índice 1.
+#
+# Sem `on_fallback`: o Hermes é um motor próprio e não está sujeito ao cooldown
+# da subscrição Claude, portanto os filtros de degradação não se lhe aplicam.
+nth_with() {
+  local label="$1" want="$2" n i=0
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    is_deferred "$n" && continue
+    if [ "$i" -eq "$want" ]; then echo "$n"; return 0; fi
+    i=$((i + 1))
+  done < <(issues_with "$label")
+  return 0
+}
+
 # Labels on one issue, straight from the cache.
 labels_of() {
   printf '%s' "$ISSUE_CACHE" \
@@ -308,7 +329,21 @@ cleanup_stale() {
     # agent running in another slot is exactly the bug that destroyed the critic's
     # findings in the sibling project — four real findings lost, which from the
     # outside looked like "it found nothing".
-    local roles="implement review"
+    # O SLOT HERMES CONTA COMO OCUPADO. O implementador paralelo escreve
+    # `implement-N.json` tal como o do slot main, portanto apagar os veredictos de
+    # `implement` com o hermes vivo destrói o trabalho dele a meio — e o worktree
+    # dele é podado a seguir. Medido no #442: o agente reportou que o worktree foi
+    # "recriado de origin/main pelo menos 2 vezes" e que perdeu os edits, nunca
+    # chegou a commitar nem a escrever veredicto, e o issue voltou a qa:ready num
+    # ciclo infinito. É exactamente o modo de falha que o comentário acima descreve,
+    # e passou a ser possível quando o slot hermes foi acrescentado sem estender
+    # esta guarda.
+    local roles="review"
+    if flock -w 0 -n "$LOCK_PREFIX.hermes.lock" true 2>/dev/null; then
+      roles="implement $roles"
+    else
+      log "hermes a correr — não mexo nos veredictos de implement"
+    fi
     if flock -w 0 -n "$LOCK_PREFIX.curator.lock" true 2>/dev/null; then
       roles="curator $roles"
     fi
@@ -458,6 +493,36 @@ launch_curator_if_needed() {
   nohup bash "$SCRIPT_DIR/curator.sh" "$i" >> "$LOG_DIR/curator-bg.log" 2>&1 &
 }
 
+# ── Implementador paralelo (Hermes/Nous) ───────────────────────────────────
+#
+# Um SEGUNDO implementador, a correr ao mesmo tempo que o Claude, num motor
+# diferente. Desligado por defeito: só arranca com TEAM_HERMES=1.
+#
+# Três coisas mantêm os dois agentes fora do caminho um do outro:
+#   * slot próprio (TEAM_SLOT=hermes) -> lock próprio no run-agent.sh;
+#   * issue diferente por construção (nth_with índice 1, não first_with);
+#   * worktree próprio, que o implement.sh já cria por issue.
+#
+# Tal como o curator, vai ANTES dos despachos bloqueantes e não mexe no DID: se
+# ficasse depois, nunca seria alcançado enquanto o role pesado não terminasse, e
+# "destacado mas em último" é a mesma ordem em série com mais maquinaria.
+launch_hermes_if_needed() {
+  [ "${TEAM_HERMES:-0}" = "1" ] || return 0
+  command -v hermes >/dev/null 2>&1 || { log "TEAM_HERMES=1 mas o hermes não está no PATH"; return 0; }
+
+  local i
+  i=$(nth_with "$L_READY" 1)
+  [ -n "$i" ] || return 0   # menos de dois issues na fila: o Claude leva o único
+
+  if ! flock -w 0 -n "$LOCK_PREFIX.hermes.lock" true 2>/dev/null; then
+    log "hermes já a correr no seu slot — #$i espera a vez"
+    return 0
+  fi
+  log "IMPLEMENTADOR HERMES (paralelo) -> #$i"
+  TEAM_SLOT=hermes AGENT_ENGINE=hermes \
+    nohup bash "$SCRIPT_DIR/implement.sh" "$i" >> "$LOG_DIR/hermes-bg.log" 2>&1 &
+}
+
 # ── Explicit targets ───────────────────────────────────────────────────────
 if [ -n "$TARGET_PR" ]; then run_review "$TARGET_PR"; exit 0; fi
 
@@ -520,6 +585,9 @@ while true; do
 
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed
+
+  # Second implementer on a different engine and a different issue.
+  launch_hermes_if_needed
 
   DID=0
 

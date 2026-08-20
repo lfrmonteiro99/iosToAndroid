@@ -147,10 +147,24 @@ fi
 LOGFILE="$LOG_DIR/orchestrator-$(date +%Y%m%d-%H%M%S).log"
 log "a arrancar em tmux '$SESSION'; log: $LOGFILE"
 
+# Variáveis de ambiente injectadas EXPLICITAMENTE no comando.
+#
+# `tmux new-session` NÃO herda o ambiente de quem a invoca: herda o do SERVIDOR
+# tmux, que pode estar a correr desde uma sessão anterior com um ambiente
+# completamente diferente. Correr `TEAM_HERMES=1 bash start.sh` com um servidor
+# tmux já vivo lança um orquestrador sem TEAM_HERMES nenhum, em silêncio — foi
+# exactamente o que aconteceu na primeira tentativa de ligar o par Hermes.
+#
+# Passar no comando é a única forma que não depende do estado do servidor.
+TEAM_ENV=""
+for v in TEAM_HERMES TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL; do
+  [ -n "${!v:-}" ] && TEAM_ENV="$TEAM_ENV $v='${!v}'"
+done
+
 # `tee` into a file as well as the pane: once a pane closes there is no way to
 # inspect what happened, and this thing runs for hours unattended.
 tmux new-session -d -s "$SESSION" -n orchestrator \
-  "cd '$SCRIPT_DIR' && bash orchestrator.sh ${ORCH_ARGS[*]:-} 2>&1 | tee '$LOGFILE'; echo '--- TERMINOU ---'; read -r"
+  "cd '$SCRIPT_DIR' &&${TEAM_ENV:+ export$TEAM_ENV &&} bash orchestrator.sh ${ORCH_ARGS[*]:-} 2>&1 | tee '$LOGFILE'; echo '--- TERMINOU ---'; read -r"
 
 cat <<EOF
 Pipeline a correr.
