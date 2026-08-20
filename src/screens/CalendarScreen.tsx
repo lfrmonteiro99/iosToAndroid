@@ -309,10 +309,10 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
         }
         rightButton={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-            <Pressable onPress={() => { setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDate(today); }}>
+            <Pressable onPress={() => { setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDate(today); }} accessibilityLabel="Go to today" accessibilityRole="button">
               <Text style={[typography.body, { color: colors.systemRed }]}>Today</Text>
             </Pressable>
-            <Pressable onPress={openAddModal} hitSlop={8}>
+            <Pressable onPress={openAddModal} hitSlop={8} accessibilityLabel="Add event" accessibilityRole="button">
               <Ionicons name="add" size={28} color={colors.systemRed} />
             </Pressable>
           </View>
@@ -322,13 +322,13 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 90 }} showsVerticalScrollIndicator={false}>
         {/* Month navigation */}
         <View style={styles.monthNav}>
-          <Pressable onPress={prevMonth} hitSlop={12}>
+          <Pressable onPress={prevMonth} hitSlop={12} accessibilityLabel="Previous month" accessibilityRole="button">
             <Ionicons name="chevron-back" size={24} color={colors.systemRed} />
           </Pressable>
           <Text style={[typography.headline, { color: colors.label }]}>
             {MONTHS[viewMonth]} {viewYear}
           </Text>
-          <Pressable onPress={nextMonth} hitSlop={12}>
+          <Pressable onPress={nextMonth} hitSlop={12} accessibilityLabel="Next month" accessibilityRole="button">
             <Ionicons name="chevron-forward" size={24} color={colors.systemRed} />
           </Pressable>
         </View>
@@ -354,6 +354,8 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 key={day}
                 style={styles.dayCell}
                 onPress={() => setSelectedDate(cellDate)}
+                accessibilityLabel={`${day} ${MONTHS[viewMonth]} ${viewYear}`}
+                accessibilityRole="button"
               >
                 <View style={[
                   styles.dayCircle,
@@ -394,7 +396,7 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 key={evt.id}
                 style={[styles.eventCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}
                 onPress={() => evt.id.startsWith('user_') ? openEditModal(evt) : undefined}
-                accessibilityLabel={evt.id.startsWith('user_') ? `Edit event ${evt.title}` : evt.title}
+                accessibilityLabel={evt.title}
                 accessibilityRole={evt.id.startsWith('user_') ? 'button' : 'text'}
               >
                 <View style={[styles.eventBar, { backgroundColor: colors.systemRed }]} />
@@ -419,10 +421,10 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 </View>
                 {evt.id.startsWith('user_') && (
                   <View style={{ justifyContent: 'center', paddingRight: 12, gap: 12 }}>
-                    <Pressable onPress={() => openEditModal(evt)} hitSlop={8}>
+                    <Pressable onPress={() => openEditModal(evt)} hitSlop={8} accessibilityLabel={`Edit event ${evt.title}`} accessibilityRole="button">
                       <Ionicons name="pencil-outline" size={16} color={colors.systemBlue} />
                     </Pressable>
-                    <Pressable onPress={() => handleDeleteEvent(evt.id)} hitSlop={8}>
+                    <Pressable onPress={() => handleDeleteEvent(evt.id)} hitSlop={8} accessibilityLabel={`Delete event ${evt.title}`} accessibilityRole="button">
                       <Ionicons name="trash-outline" size={16} color={colors.systemRed} />
                     </Pressable>
                   </View>
@@ -439,11 +441,11 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ justifyContent: 'flex-end', flexGrow: 1 }}>
           <View style={[styles.modalContent, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
             <View style={styles.modalHeader}>
-              <Pressable onPress={() => { setShowAddEvent(false); setEditingEvent(null); }}>
+              <Pressable onPress={() => { setShowAddEvent(false); setEditingEvent(null); }} accessibilityLabel="Cancel" accessibilityRole="button">
                 <Text style={[typography.body, { color: colors.systemRed }]}>Cancel</Text>
               </Pressable>
               <Text style={[typography.headline, { color: colors.label }]}>{editingEvent ? 'Edit Event' : 'New Event'}</Text>
-              <Pressable onPress={handleAddEvent}>
+              <Pressable onPress={handleAddEvent} accessibilityLabel={editingEvent ? 'Save' : 'Add event'} accessibilityRole="button">
                 <Text style={[typography.body, { color: colors.systemRed, fontWeight: '600' }]}>{editingEvent ? 'Save' : 'Add'}</Text>
               </Pressable>
             </View>
@@ -476,6 +478,8 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
             <Pressable
               style={[styles.allDayRow, { borderColor: colors.separator }]}
               onPress={() => setNewAllDay((v) => !v)}
+              accessibilityLabel="All Day"
+              accessibilityRole="checkbox"
             >
               <Text style={[typography.body, { color: colors.label }]}>All Day</Text>
               <View style={[styles.checkBox, newAllDay && { backgroundColor: colors.systemRed, borderColor: colors.systemRed }]}>
@@ -487,13 +491,13 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 <View style={styles.timeRow}>
                   <Text style={[typography.body, { color: colors.label, flex: 1 }]}>Starts</Text>
                   <View style={styles.timePicker}>
-                    <Pressable onPress={() => setSafeStartHour((startHour + 1) % 24)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeStartHour((startHour + 1) % 24)} style={styles.timeBtn} accessibilityLabel="Increase start hour" accessibilityRole="button">
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(startHour).padStart(2, '0')}
                       </Text>
                     </Pressable>
                     <Text style={[typography.headline, { color: colors.label }]}>:</Text>
-                    <Pressable onPress={() => setSafeStartMinute((startMinute + 15) % 60)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeStartMinute((startMinute + 15) % 60)} style={styles.timeBtn} accessibilityLabel="Increase start minute" accessibilityRole="button">
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(startMinute).padStart(2, '0')}
                       </Text>
@@ -503,13 +507,13 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                 <View style={styles.timeRow}>
                   <Text style={[typography.body, { color: colors.label, flex: 1 }]}>Ends</Text>
                   <View style={styles.timePicker}>
-                    <Pressable onPress={() => setSafeEndHour((endHour + 1) % 24)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeEndHour((endHour + 1) % 24)} style={styles.timeBtn} accessibilityLabel="Increase end hour" accessibilityRole="button">
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(endHour % 24).padStart(2, '0')}
                       </Text>
                     </Pressable>
                     <Text style={[typography.headline, { color: colors.label }]}>:</Text>
-                    <Pressable onPress={() => setSafeEndMinute((endMinute + 15) % 60)} style={styles.timeBtn}>
+                    <Pressable onPress={() => setSafeEndMinute((endMinute + 15) % 60)} style={styles.timeBtn} accessibilityLabel="Increase end minute" accessibilityRole="button">
                       <Text style={[typography.headline, { color: colors.systemRed }]}>
                         {String(endMinute).padStart(2, '0')}
                       </Text>
@@ -527,6 +531,8 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                     key={opt}
                     onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setNewRepeat(opt); }}
                     style={[styles.repeatChip, newRepeat === opt && { backgroundColor: colors.systemRed }]}
+                    accessibilityLabel={`Repeat ${REPEAT_LABELS[opt]}`}
+                    accessibilityRole="button"
                   >
                     <Text style={[typography.caption1, { color: newRepeat === opt ? '#fff' : colors.label, fontWeight: '600' }]}>
                       {REPEAT_LABELS[opt]}
@@ -545,6 +551,8 @@ export function CalendarScreen({ navigation }: { navigation: AppNavigationProp }
                     { text: 'Delete', style: 'destructive', onPress: () => { handleDeleteEvent(editingEvent.id); setShowAddEvent(false); setEditingEvent(null); } },
                   ]);
                 }}
+                accessibilityLabel="Delete event"
+                accessibilityRole="button"
               >
                 <Ionicons name="trash-outline" size={16} color={colors.systemRed} />
                 <Text style={[typography.body, { color: colors.systemRed, fontWeight: '600' }]}>Delete Event</Text>

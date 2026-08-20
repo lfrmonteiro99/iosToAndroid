@@ -263,13 +263,15 @@ export function AssistiveTouchSettingsScreen({ navigation }: { navigation: AppNa
                       hitSlop={8}
                       disabled={assistive.menuItems.length <= 1}
                       style={{ opacity: assistive.menuItems.length <= 1 ? 0.3 : 1 }}
+                      accessibilityLabel={`Remove ${menuItemLabel[id]}`}
+                      accessibilityRole="button"
                     >
                       <Ionicons name="remove-circle" size={22} color={colors.systemRed} />
                     </Pressable>
                     <Text style={[typography.body, { color: colors.label, flex: 1, marginLeft: 10 }]}>
                       {menuItemLabel[id]}
                     </Text>
-                    <Pressable onPress={() => moveItem(i, -1)} hitSlop={8} disabled={i === 0}>
+                    <Pressable onPress={() => moveItem(i, -1)} hitSlop={8} disabled={i === 0} accessibilityLabel={`Move ${menuItemLabel[id]} up`} accessibilityRole="button">
                       <Ionicons name="chevron-up" size={20} color={i === 0 ? colors.tertiaryLabel : colors.systemBlue} />
                     </Pressable>
                     <View style={{ width: 10 }} />
@@ -277,6 +279,8 @@ export function AssistiveTouchSettingsScreen({ navigation }: { navigation: AppNa
                       onPress={() => moveItem(i, 1)}
                       hitSlop={8}
                       disabled={i === assistive.menuItems.length - 1}
+                      accessibilityLabel={`Move ${menuItemLabel[id]} down`}
+                      accessibilityRole="button"
                     >
                       <Ionicons
                         name="chevron-down"

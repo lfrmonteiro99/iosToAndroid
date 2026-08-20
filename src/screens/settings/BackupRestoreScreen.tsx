@@ -250,6 +250,8 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
                   setShowImportModal(false);
                   setImportText('');
                 }}
+                accessibilityLabel="Cancel"
+                accessibilityRole="button"
               >
                 <Text style={[styles.modalBtnText, { color: colors.label }]}>Cancel</Text>
               </Pressable>
@@ -257,6 +259,8 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
                 style={[styles.modalBtn, styles.modalBtnConfirm, { backgroundColor: colors.systemBlue }]}
                 onPress={handleImportConfirm}
                 disabled={importing}
+                accessibilityLabel="Import"
+                accessibilityRole="button"
               >
                 {importing ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />

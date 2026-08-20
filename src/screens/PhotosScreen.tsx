@@ -391,10 +391,10 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
     return (
       <View style={[styles.fullView, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.fullTopBar}>
-          <Pressable onPress={() => setSelectedAsset(null)}>
+          <Pressable onPress={() => setSelectedAsset(null)} accessibilityLabel="Back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={28} color="#fff" />
           </Pressable>
-          <Pressable onPress={() => handleShare(selectedAsset)}>
+          <Pressable onPress={() => handleShare(selectedAsset)} accessibilityLabel="Share photo" accessibilityRole="button">
             <Ionicons name="share-outline" size={24} color="#fff" />
           </Pressable>
         </View>
@@ -417,6 +417,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
                 setSelectedAlbum(null);
                 setAlbumAssets([]);
               }}
+              accessibilityLabel="Back"
+              accessibilityRole="button"
             >
               <Text style={[typography.body, { color: colors.systemBlue }]}>Back</Text>
             </Pressable>
@@ -442,7 +444,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
             columnWrapperStyle={{ gap: GRID_GAP }}
             contentContainerStyle={{ gap: GRID_GAP, padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}
             renderItem={({ item }) => (
-              <Pressable onPress={() => setSelectedAsset(item)}>
+              <Pressable onPress={() => setSelectedAsset(item)} accessibilityLabel="Photo" accessibilityRole="button">
                 <Image source={{ uri: item.uri }} style={styles.thumb} />
               </Pressable>
             )}
@@ -503,6 +505,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
                 Linking.openSettings().catch(() => {});
               }
             }}
+            accessibilityLabel={canAskAgain ? 'Grant Access' : 'Open Settings'}
+            accessibilityRole="button"
           >
             <Text style={{ color: '#fff', fontWeight: '600' }}>
               {canAskAgain ? 'Grant Access' : 'Open Settings'}
@@ -571,7 +575,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
               />
             }
             renderItem={({ item }) => (
-              <Pressable onPress={() => setSelectedAsset(item)}>
+              <Pressable onPress={() => setSelectedAsset(item)} accessibilityLabel="Photo" accessibilityRole="button">
                 <Image source={{ uri: item.uri }} style={styles.thumb} />
               </Pressable>
             )}
@@ -632,6 +636,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
             <Pressable
               onPress={() => setSelectedMemory(null)}
               style={[styles.memoryModalClose, { backgroundColor: colors.systemBlue }]}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
             >
               <Text style={{ color: '#fff', fontWeight: '600' }}>Close</Text>
             </Pressable>
@@ -659,7 +665,7 @@ function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSection
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 4, gap: 10 }}>
         {MEMORIES.map((memory) => (
-          <Pressable key={memory.id} onPress={() => onSelectMemory({ title: memory.title })}>
+          <Pressable key={memory.id} onPress={() => onSelectMemory({ title: memory.title })} accessibilityLabel={memory.title} accessibilityRole="button">
             <LinearGradient
               colors={memory.colors}
               style={styles.memoryCard}
@@ -723,7 +729,7 @@ function ForYouTab({ assets, loading, colors, typography, insets, onSelectAsset 
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
             {featured.map((asset) => (
-              <Pressable key={asset.id} onPress={() => onSelectAsset(asset)} style={styles.featuredCard}>
+              <Pressable key={asset.id} onPress={() => onSelectAsset(asset)} style={styles.featuredCard} accessibilityLabel={`Featured photo from ${new Date(asset.creationTime).toLocaleDateString()}`} accessibilityRole="button">
                 <Image source={{ uri: asset.uri }} style={styles.featuredImage} />
                 <Text style={[typography.caption1, styles.featuredLabel]} numberOfLines={1}>
                   {new Date(asset.creationTime).toLocaleDateString()}
@@ -781,7 +787,7 @@ function MemorySection({ title, assets, colors, typography, onSelectAsset }: Mem
       </Text>
       <View style={[styles.grid, { paddingHorizontal: GRID_GAP }]}>
         {assets.slice(0, 9).map((asset) => (
-          <Pressable key={asset.id} onPress={() => onSelectAsset(asset)}>
+          <Pressable key={asset.id} onPress={() => onSelectAsset(asset)} accessibilityLabel="Photo" accessibilityRole="button">
             <Image source={{ uri: asset.uri }} style={styles.thumb} />
           </Pressable>
         ))}
@@ -851,6 +857,8 @@ function AlbumsTab({
         <Pressable
           style={[styles.createAlbumBtn, { backgroundColor: colors.systemBlue }]}
           onPress={onToggleCreate}
+          accessibilityLabel="Create Album"
+          accessibilityRole="button"
         >
           <Ionicons name="add-circle-outline" size={20} color="#fff" />
           <Text style={{ color: '#fff', fontWeight: '600', fontSize: 16, marginLeft: 8 }}>Create Album</Text>
@@ -869,6 +877,8 @@ function AlbumsTab({
             <Pressable
               style={[styles.createConfirmBtn, { backgroundColor: colors.systemBlue }]}
               onPress={onCreateAlbum}
+              accessibilityLabel="Create"
+              accessibilityRole="button"
             >
               <Text style={{ color: '#fff', fontWeight: '600' }}>Create</Text>
             </Pressable>
@@ -891,6 +901,8 @@ function AlbumsTab({
               key={album.id}
               style={{ width: ALBUM_SIZE }}
               onPress={() => onOpenAlbum(album)}
+              accessibilityLabel={`${album.title}, ${album.assetCount} photos`}
+              accessibilityRole="button"
             >
               <View style={[styles.albumCover, { width: ALBUM_SIZE, height: ALBUM_SIZE, backgroundColor: colors.systemGray5 }]}>
                 {albumCovers[album.id] ? (

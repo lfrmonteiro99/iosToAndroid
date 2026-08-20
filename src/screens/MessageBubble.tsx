@@ -83,6 +83,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                 key={emoji}
                 onPress={() => onReaction?.(emoji)}
                 style={({ pressed }) => [styles.reactionBtn, pressed && { transform: [{ scale: 1.3 }] }]}
+                accessibilityLabel={`React with ${emoji}`}
+                accessibilityRole="button"
               >
                 <Text style={{ fontSize: 24 }}>{emoji}</Text>
               </Pressable>
@@ -92,6 +94,8 @@ export const MessageBubble = React.memo(function MessageBubble({
           <Pressable
             onPress={onCopy}
             style={({ pressed }) => [styles.reactionActionBtn, { opacity: pressed ? 0.6 : 1 }]}
+            accessibilityLabel="Copy message"
+            accessibilityRole="button"
           >
             <Ionicons name="copy-outline" size={16} color={isDark ? '#EBEBF5' : '#3C3C43'} />
             <Text style={[typography.subhead, { color: isDark ? '#EBEBF5' : '#3C3C43', marginLeft: 6 }]}>
@@ -100,7 +104,7 @@ export const MessageBubble = React.memo(function MessageBubble({
           </Pressable>
         </Animated.View>
       )}
-      <Pressable onLongPress={onLongPress} delayLongPress={400}>
+      <Pressable onLongPress={onLongPress} delayLongPress={400} accessibilityLabel="Message" accessibilityHint="Long press for options" accessibilityRole="button">
         <View
           style={[
             styles.bubble,

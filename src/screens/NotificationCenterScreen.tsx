@@ -227,7 +227,7 @@ export function NotificationCenterScreen() {
   return (
     <View style={styles.root}>
       {/* Tap-outside dismiss area */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={handleDismiss} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={handleDismiss} accessibilityLabel="Dismiss" accessibilityRole="button" />
 
       {/* Main panel */}
       <View style={[styles.panel, { paddingTop: insets.top + 8 }]}>
@@ -405,12 +405,16 @@ export function NotificationCenterScreen() {
                                     <Pressable
                                       style={styles.replyCancelBtn}
                                       onPress={() => { setReplyingKey(null); setReplyText(''); }}
+                                      accessibilityLabel="Cancel reply"
+                                      accessibilityRole="button"
                                     >
                                       <Text style={styles.replyCancelText}>Cancel</Text>
                                     </Pressable>
                                     <Pressable
                                       style={styles.replySendBtn}
                                       onPress={() => handleSendReply(notif)}
+                                      accessibilityLabel="Send reply"
+                                      accessibilityRole="button"
                                     >
                                       <Ionicons name="arrow-up-circle" size={28} color="#0A84FF" />
                                     </Pressable>

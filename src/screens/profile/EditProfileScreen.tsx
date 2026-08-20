@@ -48,12 +48,12 @@ export function EditProfileScreen({ navigation }: { navigation: AppNavigationPro
         title="Edit Profile"
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel="Cancel" accessibilityRole="button">
             <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
           </Pressable>
         }
         rightButton={
-          <Pressable onPress={handleSave} hitSlop={8}>
+          <Pressable onPress={handleSave} hitSlop={8} accessibilityLabel="Save" accessibilityRole="button">
             <Text style={[typography.headline, { color: colors.systemBlue }]}>Save</Text>
           </Pressable>
         }

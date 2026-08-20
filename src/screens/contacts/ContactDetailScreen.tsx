@@ -147,6 +147,8 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
               onPress={() => navigation.navigate('ContactEdit', { contactId })}
               hitSlop={8}
               style={styles.navIconButton}
+              accessibilityLabel="Edit contact"
+              accessibilityRole="button"
             >
               <Text style={[typography.body, { color: colors.systemBlue }]}>Edit</Text>
             </Pressable>

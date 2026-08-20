@@ -204,7 +204,7 @@ export function DateTimeScreen({ navigation }: { navigation: AppNavigationProp }
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <Pressable onPress={() => setShowTimezoneModal(false)}>
+              <Pressable onPress={() => setShowTimezoneModal(false)} accessibilityLabel="Cancel" accessibilityRole="button">
                 <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
               </Pressable>
               <Text style={[typography.headline, { color: colors.label }]}>Time Zone</Text>
@@ -220,6 +220,8 @@ export function DateTimeScreen({ navigation }: { navigation: AppNavigationProp }
                     displayedTimezone === tz && { backgroundColor: colors.systemBlue + '18' },
                   ]}
                   onPress={() => handleSelectTimezone(tz)}
+                  accessibilityLabel={tz}
+                  accessibilityRole="button"
                 >
                   <Text style={[typography.body, { color: colors.label, flex: 1 }]}>{tz}</Text>
                   {displayedTimezone === tz && (

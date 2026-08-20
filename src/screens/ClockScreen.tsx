@@ -348,6 +348,8 @@ function WorldClockTab() {
       <Pressable
         style={[styles.floatingAddBtn, { backgroundColor: colors.systemOrange }]}
         onPress={() => setShowAddModal(true)}
+        accessibilityLabel="Add city"
+        accessibilityRole="button"
       >
         <Ionicons name="add" size={28} color="#fff" />
       </Pressable>
@@ -360,6 +362,8 @@ function WorldClockTab() {
               onPress={() => { setShowAddModal(false); setSearchQuery(''); }}
               hitSlop={12}
               style={{ padding: 4 }}
+              accessibilityLabel="Cancel"
+              accessibilityRole="button"
             >
               <Text style={[typography.body, { color: colors.systemOrange }]}>Cancel</Text>
             </Pressable>
@@ -384,6 +388,8 @@ function WorldClockTab() {
                   style={[styles.cityListRow, { borderBottomColor: colors.separator }]}
                   onPress={() => !alreadyAdded && addCity(city)}
                   disabled={alreadyAdded}
+                  accessibilityLabel={`${city.city}, ${city.timezone}`}
+                  accessibilityRole="button"
                 >
                   <View>
                     <Text style={[typography.body, { color: alreadyAdded ? colors.tertiaryLabel : colors.label }]}>
@@ -672,6 +678,8 @@ function AlarmTab() {
                 { borderBottomColor: colors.separator, backgroundColor: colors.systemBackground },
               ]}
               onPress={() => openEditModal(alarm)}
+              accessibilityLabel={`${alarm.label} alarm at ${formatAlarmTime(alarm.hour, alarm.minute)}`}
+              accessibilityRole="button"
             >
               <View style={{ flex: 1 }}>
                 <Text
@@ -699,6 +707,8 @@ function AlarmTab() {
       <Pressable
         style={[styles.floatingAddBtn, { backgroundColor: colors.systemOrange }]}
         onPress={openAddModal}
+        accessibilityLabel="Add alarm"
+        accessibilityRole="button"
       >
         <Ionicons name="add" size={28} color="#fff" />
       </Pressable>
@@ -711,6 +721,8 @@ function AlarmTab() {
               onPress={() => { setShowAddModal(false); setEditingAlarmId(null); }}
               hitSlop={12}
               style={{ padding: 4 }}
+              accessibilityLabel="Cancel"
+              accessibilityRole="button"
             >
               <Text style={[typography.body, { color: colors.systemOrange }]}>Cancel</Text>
             </Pressable>
@@ -721,6 +733,8 @@ function AlarmTab() {
               onPress={handleSaveAlarm}
               hitSlop={12}
               style={{ padding: 4 }}
+              accessibilityLabel="Save alarm"
+              accessibilityRole="button"
             >
               <Text style={[typography.body, { color: colors.systemOrange, fontWeight: '600' }]}>
                 Save
@@ -789,6 +803,8 @@ function AlarmTab() {
                       },
                     ]}
                     onPress={() => toggleDay(expoDay)}
+                    accessibilityLabel={`${label} ${isSelected ? 'selected' : 'not selected'}`}
+                    accessibilityRole="checkbox"
                   >
                     <Text
                       style={[
@@ -856,12 +872,14 @@ function StopwatchTab() {
       <Text style={[styles.stopwatchDisplay, { color: colors.label }]}>{formatTime(elapsed)}</Text>
 
       <View style={styles.buttonRow}>
-        <Pressable style={[styles.roundBtn, { backgroundColor: colors.systemGray5 }]} onPress={handleLapReset}>
+        <Pressable style={[styles.roundBtn, { backgroundColor: colors.systemGray5 }]} onPress={handleLapReset} accessibilityLabel={running ? 'Lap' : 'Reset'} accessibilityRole="button">
           <Text style={[styles.roundBtnText, { color: colors.label }]}>{running ? 'Lap' : 'Reset'}</Text>
         </Pressable>
         <Pressable
           style={[styles.roundBtn, { backgroundColor: running ? 'rgba(255,59,48,0.2)' : 'rgba(52,199,89,0.2)' }]}
           onPress={handleStartStop}
+          accessibilityLabel={running ? 'Stop stopwatch' : 'Start stopwatch'}
+          accessibilityRole="button"
         >
           <Text style={[styles.roundBtnText, { color: running ? colors.systemRed : colors.systemGreen }]}>
             {running ? 'Stop' : 'Start'}
@@ -928,6 +946,8 @@ function TimerTab() {
               key={p}
               style={[styles.presetBtn, p === duration && { backgroundColor: colors.systemOrange }]}
               onPress={() => { setDuration(p); setRemaining(p); }}
+              accessibilityLabel={`Set timer to ${p >= 60 ? `${p / 60} minutes` : `${p} seconds`}`}
+              accessibilityRole="button"
             >
               <Text style={[styles.presetText, { color: p === duration ? '#fff' : colors.systemOrange }]}>
                 {p >= 60 ? `${p / 60}m` : `${p}s`}
@@ -941,6 +961,8 @@ function TimerTab() {
         <Pressable
           style={[styles.roundBtn, { backgroundColor: colors.systemGray5 }]}
           onPress={() => { setRunning(false); setRemaining(duration); }}
+          accessibilityLabel="Cancel timer"
+          accessibilityRole="button"
         >
           <Text style={[styles.roundBtnText, { color: colors.label }]}>Cancel</Text>
         </Pressable>
@@ -951,6 +973,8 @@ function TimerTab() {
             if (remaining === 0) { setRemaining(duration); }
             setRunning((r) => !r);
           }}
+          accessibilityLabel={running ? 'Pause timer' : remaining === 0 ? 'Restart timer' : 'Start timer'}
+          accessibilityRole="button"
         >
           <Text style={[styles.roundBtnText, { color: running ? colors.systemRed : colors.systemGreen }]}>
             {running ? 'Pause' : remaining === 0 ? 'Restart' : 'Start'}

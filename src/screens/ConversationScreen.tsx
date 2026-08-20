@@ -128,7 +128,7 @@ const MessageRow = React.memo(function MessageRow({
   onPress,
 }: MessageRowProps) {
   return (
-    <Pressable onPress={() => onPress(item.id)}>
+    <Pressable onPress={() => onPress(item.id)} accessibilityRole="button">
       <MessageBubble
         message={item}
         isDark={isDark}
@@ -474,6 +474,8 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
           <Pressable
             onPress={contact ? () => navigation.navigate('ContactDetail', { contactId: contact.id }) : undefined}
             hitSlop={8}
+            accessibilityLabel={contact ? `View ${displayName}'s contact details` : undefined}
+            accessibilityRole={contact ? 'button' : undefined}
           >
             <Text
               style={[typography.headline, styles.navTitle, { color: colors.label }]}
@@ -499,7 +501,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
 
       {/* Dismiss reaction picker on tap */}
       {selectedMsgId && (
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedMsgId(null)} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedMsgId(null)} accessibilityLabel="Dismiss" accessibilityRole="button" />
       )}
 
       {/* Message List */}

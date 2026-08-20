@@ -87,12 +87,12 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
         title={isEditMode ? 'Edit Contact' : 'New Contact'}
         largeTitle={false}
         leftButton={
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel="Cancel" accessibilityRole="button">
             <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
           </Pressable>
         }
         rightButton={
-          <Pressable onPress={handleDone} disabled={!canSave} hitSlop={8}>
+          <Pressable onPress={handleDone} disabled={!canSave} hitSlop={8} accessibilityLabel="Done" accessibilityRole="button">
             <Text
               style={[
                 typography.headline,

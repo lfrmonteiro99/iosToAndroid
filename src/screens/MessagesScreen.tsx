@@ -607,7 +607,7 @@ export function MessagesScreen() {
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Pressable onPress={() => setSearchQuery('')} hitSlop={8} accessibilityLabel="Clear search" accessibilityRole="button">
                 <Ionicons name="close-circle" size={16} color={colors.systemGray} />
               </Pressable>
             )}
@@ -654,6 +654,8 @@ export function MessagesScreen() {
             onPress={handleBulkMarkRead}
             disabled={selectedAddresses.size === 0 || !hasSelectedUnread}
             style={[styles.editToolbarAction, { opacity: (selectedAddresses.size === 0 || !hasSelectedUnread) ? 0.4 : 1 }]}
+            accessibilityLabel="Mark as Read"
+            accessibilityRole="button"
           >
             <Text style={[typography.body, { color: colors.systemBlue }]}>Mark as Read</Text>
           </Pressable>
@@ -661,6 +663,8 @@ export function MessagesScreen() {
             onPress={handleBulkDelete}
             disabled={selectedAddresses.size === 0}
             style={[styles.editToolbarAction, { opacity: selectedAddresses.size === 0 ? 0.4 : 1 }]}
+            accessibilityLabel="Delete selected"
+            accessibilityRole="button"
           >
             <Text style={[typography.body, { color: colors.systemRed }]}>Delete</Text>
           </Pressable>
