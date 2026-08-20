@@ -1,6 +1,6 @@
 import React from 'react';
 import { FlatList } from 'react-native';
-import { render, act } from '../../test-utils';
+import { render, act, fireEvent } from '../../test-utils';
 import { PhotosScreen } from '../PhotosScreen';
 import { CupertinoSkeleton } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
@@ -236,6 +236,65 @@ describe('PhotosScreen', () => {
 
     expect(queryByTestId('library-skeleton-loading')).toBeNull();
     expect(UNSAFE_getByType(FlatList).props.data).toHaveLength(3);
+  });
+
+  // ------------------------------------------------------------------
+  // Full-screen viewer paging
+  //
+  // The viewer used to hold a single asset, so the only way to reach the
+  // next photo was to back out to the grid and tap again. It now carries the
+  // list it was opened from and pages sideways through it.
+  // ------------------------------------------------------------------
+
+  async function openLibraryAt(index: number) {
+    mediaLibMock.getAssetsAsync.mockResolvedValue({
+      assets: [asset('1'), asset('2'), asset('3')],
+      endCursor: 'cursor-1',
+      hasNextPage: false,
+    });
+    const utils = render(<PhotosScreen navigation={mockNavigation} />);
+    await flush();
+    await act(async () => {
+      fireEvent.press(utils.getAllByLabelText('Photo')[index]);
+    });
+    await flush();
+    return utils;
+  }
+
+  it('opens the viewer on the photo that was tapped, not the first one', async () => {
+    const { UNSAFE_getByType, getByText } = await openLibraryAt(2);
+
+    // The whole list travels with the viewer, so the neighbours are reachable.
+    expect(UNSAFE_getByType(FlatList).props.data).toHaveLength(3);
+    // Third thumbnail tapped => opens at index 2, and says so.
+    expect(UNSAFE_getByType(FlatList).props.initialScrollIndex).toBe(2);
+    expect(getByText('3 of 3')).toBeTruthy();
+  });
+
+  it('renders the viewer as a horizontal pager so photos can be swiped', async () => {
+    const { UNSAFE_getByType } = await openLibraryAt(0);
+
+    const pager = UNSAFE_getByType(FlatList);
+    expect(pager.props.horizontal).toBe(true);
+    expect(pager.props.pagingEnabled).toBe(true);
+    // Without getItemLayout, initialScrollIndex cannot resolve and the viewer
+    // silently opens on the first photo regardless of what was tapped.
+    expect(typeof pager.props.getItemLayout).toBe('function');
+  });
+
+  it('advances the counter when the pager scrolls to the next photo', async () => {
+    const { UNSAFE_getByType, getByText } = await openLibraryAt(0);
+    expect(getByText('1 of 3')).toBeTruthy();
+
+    const pager = UNSAFE_getByType(FlatList);
+    const pageWidth = pager.props.getItemLayout(null, 1).offset;
+
+    await act(async () => {
+      pager.props.onMomentumScrollEnd({ nativeEvent: { contentOffset: { x: pageWidth } } });
+    });
+    await flush();
+
+    expect(getByText('2 of 3')).toBeTruthy();
   });
 
   it('does not update state when the asset fetch resolves after unmount', async () => {
