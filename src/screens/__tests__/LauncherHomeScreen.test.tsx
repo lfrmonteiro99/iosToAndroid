@@ -330,3 +330,114 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
     expect(queryAllByLabelText('Open Samsung Phone')).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #434: the last home page used to be a tap-through placeholder ("App
+// Library" / "Tap to open all apps") that pushed a separate stack screen.
+// On iOS the App Library IS the last page — swiping past the last app page
+// must show it already filled in, no extra tap.
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen last page is the App Library itself (#434)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  // Mirrors the #438 describe block above: LauncherHomeScreen renders only
+  // a loading spinner while `isLoading` is true, and the real AppsProvider
+  // stays in that state synchronously in tests (its load is async, jest's
+  // render() does not await it) — so any test asserting on real page
+  // content must bypass the provider like this, or it fails for the wrong
+  // reason (stuck on the loading spinner) instead of the one under test.
+  function mockLoadedApps(over: Partial<ReturnType<typeof AppsStore.useApps>> = {}) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve()),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      ...over,
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  // A MESMA APP NA GRELHA E NA BIBLIOTECA.
+  //
+  // Com a biblioteca a ser a ultima pagina do MESMO ScrollView, uma app que esteja
+  // na grelha do home E em "Recently Added" fica renderizada duas vezes na mesma
+  // arvore. Sem desambiguacao, ambas expoem `Open <nome>` e uma query por esse
+  // label passa a devolver dois nos: quebra os testes e, mais grave, deixa o
+  // TalkBack com dois botoes indistinguiveis que fazem coisas diferentes.
+  //
+  // O mock por omissao tem `recentApps: []`, portanto NUNCA exercita este caminho:
+  // os testes do caminho feliz passariam com a desambiguacao removida.
+  it('nao duplica o label de acessibilidade quando a app esta na grelha e em Recently Added', () => {
+    const app = { name: 'Chrome', packageName: 'com.android.chrome', icon: '', isSystem: false };
+    mockLoadedApps({
+      apps: [app],
+      nonDockApps: [app],   // grelha do home
+      // `recentApps` e ordenado por `launchedAt` e cruzado contra `apps` pelo
+      // packageName (AppLibraryScreen.tsx:355-364) — sem o timestamp a app nao
+      // chega a "Recently Added" e o teste passaria sem exercitar nada.
+      recentApps: [{ ...app, launchedAt: Date.now() }],
+      recentPackages: [app.packageName],
+    } as Partial<ReturnType<typeof AppsStore.useApps>>);
+
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+
+    // O que importa: o label da GRELHA continua unico. Sem a desambiguacao os
+    // nos da biblioteca partilhariam `Open Chrome` e isto daria 3.
+    expect(queryAllByLabelText('Open Chrome')).toHaveLength(1);
+
+    // A biblioteca renderiza a app em mais do que uma seccao ("Recently Added" e
+    // "Suggestions"), todas sob o sufixo proprio. Nao se afirma um numero exacto
+    // — isso prenderia o teste ao layout da biblioteca em vez de a colisao de
+    // labels, que e o que esta em causa. Afirma-se que existem e que estao todas
+    // desambiguadas.
+    const naBiblioteca = queryAllByLabelText('Open Chrome, App Library');
+    expect(naBiblioteca.length).toBeGreaterThan(0);
+  });
+
+  it('shows the App Library search bar directly on mount, with no tap required', () => {
+    mockLoadedApps();
+    const { getByPlaceholderText } = render(<LauncherHomeScreen />);
+    expect(getByPlaceholderText('App Library')).toBeTruthy();
+  });
+
+  it('shows the Categories section directly, without navigating anywhere first', () => {
+    mockLoadedApps();
+    const { getByText } = render(<LauncherHomeScreen />);
+    expect(getByText('Categories')).toBeTruthy();
+  });
+
+  it('does not render the old "Tap to open all apps" placeholder anymore', () => {
+    mockLoadedApps();
+    const { queryByText } = render(<LauncherHomeScreen />);
+    expect(queryByText('Tap to open all apps')).toBeNull();
+  });
+
+  it('does not render the old placeholder "Open App Library" tap target anymore', () => {
+    mockLoadedApps();
+    const { queryByLabelText } = render(<LauncherHomeScreen />);
+    expect(queryByLabelText('Open App Library')).toBeNull();
+  });
+
+  it('the embedded library is the real interactive component, not a static copy: typing into its search bar filters results', () => {
+    mockLoadedApps();
+    const { getByPlaceholderText, getByText, queryByText } = render(<LauncherHomeScreen />);
+    // "Categories" heading is only shown outside search mode; typing switches
+    // to the search-results view, proving the search bar is wired to real
+    // state inside the embedded component, not just visually present.
+    expect(getByText('Categories')).toBeTruthy();
+    fireEvent.changeText(getByPlaceholderText('App Library'), 'zzz-no-such-app');
+    expect(queryByText('Categories')).toBeNull();
+  });
+});
