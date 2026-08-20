@@ -5,10 +5,10 @@ import {
   StyleSheet,
   Pressable,
   StatusBar,
-  SafeAreaView,
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
@@ -288,6 +288,7 @@ function CalcButton({
 
 export function CalculatorScreen() {
   useTheme();
+  const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
@@ -662,7 +663,7 @@ export function CalculatorScreen() {
         : 70;
 
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
       {/* History panel overlay */}
@@ -776,7 +777,7 @@ export function CalculatorScreen() {
       <View
         style={[
           styles.grid,
-          { paddingHorizontal: gap, paddingBottom: gap, gap },
+          { paddingHorizontal: gap, paddingBottom: gap + insets.bottom, gap },
           isLandscape && { flexDirection: 'row' },
         ]}
       >
@@ -821,7 +822,7 @@ export function CalculatorScreen() {
           ))}
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

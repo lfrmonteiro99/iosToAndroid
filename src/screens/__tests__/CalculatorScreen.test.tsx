@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions } from 'react-native';
+import { Dimensions, View } from 'react-native';
 import Decimal from 'decimal.js';
 import { render, fireEvent } from '../../test-utils';
 import { CalculatorScreen } from '../CalculatorScreen';
@@ -386,5 +386,23 @@ describe('CalculatorScreen', () => {
       expect(calledOnNegativeInput).toBe(true);
       spy.mockRestore();
     });
+  });
+
+  it('applies safe-area insets: paddingTop on root and paddingBottom on button grid', () => {
+    // Red: before fix, root was SafeAreaView (no paddingTop), grid had paddingBottom: gap only.
+    // After fix, root View carries paddingTop: 44 and grid carries paddingBottom: gap + 34.
+    // Global jest.setup mock returns { top: 44, right: 0, bottom: 34, left: 0 }.
+    const { UNSAFE_queryAllByType } = render(<CalculatorScreen />);
+    const views = UNSAFE_queryAllByType(View);
+
+    const rootStyles: unknown[] = Array.isArray(views[0].props.style) ? views[0].props.style : [views[0].props.style];
+    expect(rootStyles).toContainEqual(expect.objectContaining({ paddingTop: 44 }));
+
+    // Portrait gap = 12; insets.bottom = 34 → expected paddingBottom = 46
+    const hasBottomInset = views.some((v) => {
+      const styleArr: unknown[] = Array.isArray(v.props.style) ? v.props.style : [v.props.style];
+      return styleArr.some((s) => s && typeof s === 'object' && (s as Record<string, number>).paddingBottom === 46);
+    });
+    expect(hasBottomInset).toBe(true);
   });
 });
