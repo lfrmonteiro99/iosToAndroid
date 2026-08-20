@@ -73,6 +73,7 @@ function EnableAssistiveTouch() {
 
 function makeNavigationRef() {
   return {
+    isReady: () => true,
     getCurrentRoute: () => ({ name: 'HomeMain', key: 'home', params: undefined }),
     addListener: jest.fn(() => () => {}),
     navigate: jest.fn(),
@@ -108,6 +109,61 @@ const advance = (ms: number) => {
     jest.advanceTimersByTime(ms);
   });
 };
+
+describe('AssistiveTouch antes do NavigationContainer estar pronto', () => {
+  it('não lê a rota (nem dispara o erro not-initialized) enquanto isReady() é false', () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    // Espelha o comportamento real de createNavigationContainerRef: chamar
+    // qualquer método (exceto addListener/isReady) antes do container montar
+    // dispara console.error(NOT_INITIALIZED_ERROR).
+    const getCurrentRoute = jest.fn(() => {
+      console.error(
+        "The 'navigation' object hasn't been initialized yet. This might happen if you don't have a navigator mounted, or if the navigator hasn't finished mounting.",
+      );
+      return undefined;
+    });
+    const navigationRef = {
+      isReady: jest.fn(() => false),
+      getCurrentRoute,
+      addListener: jest.fn(() => () => {}),
+      navigate: jest.fn(),
+    } as unknown as NavigationContainerRefWithCurrent<RootStackParamList>;
+
+    renderAssistiveTouch(navigationRef);
+
+    expect(getCurrentRoute).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
+describe('AssistiveTouch esconde-se em rotas fullscreen', () => {
+  const BUTTON_LABEL = 'AssistiveTouch button';
+
+  function makeReadyRef(routeName: string) {
+    return {
+      isReady: () => true,
+      getCurrentRoute: () => ({ name: routeName, key: routeName, params: undefined }),
+      addListener: jest.fn(() => () => {}),
+      navigate: jest.fn(),
+    } as unknown as NavigationContainerRefWithCurrent<RootStackParamList>;
+  }
+
+  it('não renderiza o botão quando a rota actual é Camera', () => {
+    const { queryByLabelText } = renderAssistiveTouch(makeReadyRef('Camera'));
+    expect(queryByLabelText(BUTTON_LABEL)).toBeNull();
+  });
+
+  it('não renderiza o botão quando a rota actual é CallScreen', () => {
+    const { queryByLabelText } = renderAssistiveTouch(makeReadyRef('CallScreen'));
+    expect(queryByLabelText(BUTTON_LABEL)).toBeNull();
+  });
+
+  it('renderiza o botão numa rota normal', () => {
+    const { queryByLabelText } = renderAssistiveTouch(makeReadyRef('HomeMain'));
+    expect(queryByLabelText(BUTTON_LABEL)).toBeTruthy();
+  });
+});
 
 describe('AssistiveTouch menu backdrop', () => {
   beforeEach(() => {

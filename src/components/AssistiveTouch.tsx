@@ -101,10 +101,11 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   } = useAssistiveTouch();
 
   // ── Current route (for context menu + auto-hide) ──────────────────────────
-  const [currentRoute, setCurrentRoute] = useState<string | undefined>(
-    () => navigationRef.getCurrentRoute()?.name,
-  );
+  // Starts undefined: reading getCurrentRoute() before the NavigationContainer
+  // has mounted logs React Navigation's "not initialized" console error.
+  const [currentRoute, setCurrentRoute] = useState<string | undefined>(undefined);
   useEffect(() => {
+    if (navigationRef.isReady()) setCurrentRoute(navigationRef.getCurrentRoute()?.name);
     const unsub = navigationRef.addListener('state', () => {
       setCurrentRoute(navigationRef.getCurrentRoute()?.name);
     });
