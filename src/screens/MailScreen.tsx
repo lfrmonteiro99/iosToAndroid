@@ -24,6 +24,7 @@ import {
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
+import { avatarColorForName } from '../utils/avatarColor';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -63,12 +64,6 @@ function getInitials(name: string): string {
   return parts.map(p => p[0] || '').join('').toUpperCase().slice(0, 2);
 }
 
-const AVATAR_COLORS = ['#007AFF', '#5856D6', '#FF9500', '#34C759', '#FF3B30', '#AF52DE', '#5AC8FA', '#FF2D55'];
-function avatarColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
 
 export function MailScreen({ navigation, route }: { navigation: AppNavigationProp; route?: { params?: { composeTo?: string; composeSubject?: string; composeBody?: string } } }) {
   const { theme, typography } = useTheme();
@@ -217,7 +212,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80 }}>
           <Text style={[typography.title2, { color: colors.label, marginBottom: 12 }]}>{selectedEmail.subject}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-            <View style={[styles.avatar, { backgroundColor: avatarColor(selectedEmail.from) }]}>
+            <View style={[styles.avatar, { backgroundColor: avatarColorForName(selectedEmail.from) }]}>
               <Text style={[typography.callout, styles.avatarText]}>{getInitials(selectedEmail.from)}</Text>
             </View>
             <View style={{ marginLeft: 12, flex: 1 }}>
@@ -322,7 +317,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
               onPress={() => handleOpenEmail(item)}
             >
               {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: colors.systemBlue }]} />}
-              <View style={[styles.avatar, { backgroundColor: avatarColor(item.from) }]}>
+              <View style={[styles.avatar, { backgroundColor: avatarColorForName(item.from) }]}>
                 <Text style={[typography.callout, styles.avatarText]}>{getInitials(item.from)}</Text>
               </View>
               <View style={styles.emailContent}>

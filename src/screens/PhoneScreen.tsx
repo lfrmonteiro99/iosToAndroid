@@ -23,6 +23,7 @@ import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
+import { avatarColorForName } from '../utils/avatarColor';
 
 const getLauncher = async () => {
   try {
@@ -44,16 +45,6 @@ function getFullName(contact: DeviceContact): string {
   return [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.phone;
 }
 
-const AVATAR_COLORS = [
-  '#007AFF', '#34C759', '#FF9500', '#FF2D55',
-  '#AF52DE', '#5AC8FA', '#5856D6', '#FF3B30',
-  '#30B0C7', '#32ADE6',
-];
-
-function avatarColor(contact: DeviceContact): string {
-  const seed = contact.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return AVATAR_COLORS[seed % AVATAR_COLORS.length];
-}
 
 
 const KEYPAD_ROWS = [
@@ -67,7 +58,7 @@ const KEYPAD_ROWS = [
 
 function ContactAvatar({ contact, size = 40 }: { contact: DeviceContact; size?: number }) {
   const initials = getInitials(contact);
-  const bg = avatarColor(contact);
+  const bg = avatarColorForName(getFullName(contact));
   return (
     <View
       style={[
