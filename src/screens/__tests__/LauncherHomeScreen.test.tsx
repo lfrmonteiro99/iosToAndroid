@@ -1,6 +1,13 @@
 import React from 'react';
-import { render } from '../../test-utils';
-import { LauncherHomeScreen, NonAndroidFallback, computeWallpaperTranslateX, PARALLAX_OVERHANG } from '../LauncherHomeScreen';
+import { render, fireEvent } from '../../test-utils';
+import {
+  LauncherHomeScreen,
+  NonAndroidFallback,
+  computeWallpaperTranslateX,
+  PARALLAX_OVERHANG,
+  BUILT_IN_APP_ANDROID_ALIASES,
+  BUILT_IN_DUPLICATE_PACKAGES,
+} from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
 
@@ -210,5 +217,116 @@ describe('NonAndroidFallback battery widget', () => {
 
     expect(queryByText('72%')).toBeNull();
     expect(getByText('41%')).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #438: built-in apps rendered twice — the internal built-in icon plus the real
+// Android app with the same label (one goes to the internal screen, the other
+// launches e.g. the Google Dialer).
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  function mockApps(allApps: AppsStore.InstalledApp[], dock: string[] = []) {
+    const dockApps = allApps.filter((a) => dock.includes(a.packageName));
+    const nonDockApps = allApps.filter((a) => !dock.includes(a.packageName));
+    const launchApp = jest.fn(() => Promise.resolve());
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: allApps,
+      homeApps: [],
+      dockApps,
+      nonDockApps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp,
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+    return { launchApp };
+  }
+
+  const realApp = (name: string, packageName: string): AppsStore.InstalledApp => ({
+    name,
+    packageName,
+    icon: '',
+    isSystem: true,
+  });
+
+  const GOOGLE_DUPES = [
+    realApp('Phone', 'com.google.android.dialer'),
+    realApp('Messages', 'com.google.android.apps.messaging'),
+    realApp('Calendar', 'com.google.android.calendar'),
+  ];
+
+  it('renders each built-in label exactly once when the Google equivalents are installed', () => {
+    mockApps(GOOGLE_DUPES);
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+
+    for (const label of ['Open Phone', 'Open Messages', 'Open Calendar']) {
+      expect(queryAllByLabelText(label)).toHaveLength(1);
+    }
+  });
+
+  it('does not render the real Google packages at all (they are excluded, not relabelled)', () => {
+    mockApps(GOOGLE_DUPES);
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+    // 3 built-ins would become 6 icons if the real apps came through.
+    const total = ['Open Phone', 'Open Messages', 'Open Calendar']
+      .reduce((n, label) => n + queryAllByLabelText(label).length, 0);
+    expect(total).toBe(3);
+  });
+
+  it('keeps built-ins visible exactly once when NO real Android duplicates are installed', () => {
+    mockApps([]);
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+    expect(queryAllByLabelText('Open Phone')).toHaveLength(1);
+    expect(queryAllByLabelText('Open Weather')).toHaveLength(1);
+  });
+
+  it('still shows third-party apps that have no built-in equivalent', () => {
+    mockApps([realApp('Chess Deluxe', 'com.example.chess'), ...GOOGLE_DUPES]);
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+    expect(queryAllByLabelText('Open Chess Deluxe')).toHaveLength(1);
+  });
+
+  it('does not duplicate a built-in that lives in the dock', () => {
+    // Built-in in dock + real Android equivalent installed: the built-in must
+    // appear once (dock) and the real app not at all.
+    const builtInPhone = realApp('Phone', 'com.iostoandroid.phone');
+    mockApps([builtInPhone, ...GOOGLE_DUPES], ['com.iostoandroid.phone']);
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+    expect(queryAllByLabelText('Open Phone')).toHaveLength(1);
+  });
+
+  it('routes the surviving Phone icon to the internal screen, never launchApp', () => {
+    const { launchApp } = mockApps(GOOGLE_DUPES);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+    fireEvent.press(getByLabelText('Open Phone'));
+    expect(launchApp).not.toHaveBeenCalled();
+  });
+
+  it('the alias map only covers built-in packages and never lists a com.iostoandroid.* package as a duplicate', () => {
+    for (const [builtIn, aliases] of Object.entries(BUILT_IN_APP_ANDROID_ALIASES)) {
+      expect(builtIn.startsWith('com.iostoandroid.')).toBe(true);
+      for (const alias of aliases) {
+        expect(alias.startsWith('com.iostoandroid.')).toBe(false);
+        expect(BUILT_IN_DUPLICATE_PACKAGES.has(alias)).toBe(true);
+      }
+    }
+  });
+
+  it('leaves an unlisted OEM dialer visible (the filter is an explicit alias list, not a heuristic)', () => {
+    mockApps([realApp('Samsung Phone', 'com.samsung.android.dialer')]);
+    const { queryAllByLabelText } = render(<LauncherHomeScreen />);
+    expect(queryAllByLabelText('Open Samsung Phone')).toHaveLength(1);
   });
 });

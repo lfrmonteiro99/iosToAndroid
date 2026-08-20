@@ -108,6 +108,37 @@ const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.calculator': 'Calculator',
 };
 
+// Known Android packages that duplicate a built-in app (issue #438).
+//
+// The home screen shows a virtual icon for every entry of BUILT_IN_APPS, which
+// opens the internal iOS-style screen. The real Android app that serves the
+// same function has a different packageName, so it used to pass through the
+// grid filter untouched and render a second icon with the SAME label that
+// launched an external app instead — one "Phone" going to the internal screen,
+// another going to the Google Dialer.
+//
+// Product decision (issue #438, option 1): the Android duplicate is hidden from
+// the home screen grid. This is an explicit alias list, not a heuristic: dialer
+// / messaging package names vary by OEM, so unlisted equivalents are simply not
+// deduped rather than being guessed at. The App Library (AppLibraryScreen) is
+// unaffected and keeps listing everything that is installed.
+export const BUILT_IN_APP_ANDROID_ALIASES: Record<string, readonly string[]> = {
+  'com.iostoandroid.phone': ['com.google.android.dialer', 'com.android.dialer'],
+  'com.iostoandroid.messages': ['com.google.android.apps.messaging', 'com.android.messaging'],
+  'com.iostoandroid.contacts': ['com.google.android.contacts', 'com.android.contacts'],
+  'com.iostoandroid.settings': ['com.android.settings'],
+  'com.iostoandroid.clock': ['com.google.android.deskclock', 'com.android.deskclock'],
+  'com.iostoandroid.camera': ['com.google.android.GoogleCamera', 'com.android.camera2'],
+  'com.iostoandroid.photos': ['com.google.android.apps.photos'],
+  'com.iostoandroid.calendar': ['com.google.android.calendar', 'com.android.calendar'],
+  'com.iostoandroid.calculator': ['com.google.android.calculator', 'com.android.calculator2'],
+};
+
+// Flat set of every Android package that duplicates a built-in app.
+export const BUILT_IN_DUPLICATE_PACKAGES: ReadonlySet<string> = new Set(
+  Object.values(BUILT_IN_APP_ANDROID_ALIASES).flat(),
+);
+
 // Icon config for virtual (built-in) apps rendered in dock/grid
 const VIRTUAL_ICON_CONFIG: Record<string, {
   icon: keyof typeof Ionicons.glyphMap;
@@ -823,8 +854,10 @@ export function LauncherHomeScreen() {
       items.push({ type: 'folder', folder });
     }
 
-    // Add real installed apps (not in dock, not in folders)
+    // Add real installed apps (not in dock, not in folders, and not an Android
+    // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438)
     for (const app of nonDockApps) {
+      if (BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName)) continue;
       if (!appsInFolders.has(app.packageName)) {
         items.push({ type: 'app', app });
       }
