@@ -49,6 +49,15 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1073741824).toFixed(2)} GB`;
 }
 
+// Lower precision for derived/estimated values so the formatting itself signals uncertainty.
+function formatBytesRough(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1073741824) return `${Math.round(bytes / 1048576)} MB`;
+  return `${(bytes / 1073741824).toFixed(1)} GB`;
+}
+
 export function StorageScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
@@ -84,11 +93,11 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
   const totalBytes = parseFloat(storage.totalGB) * 1073741824 || 1;
 
   const categories = [
-    { label: 'Apps', color: CATEGORY_COLORS.apps, bytes: totalAppBytes, fraction: totalAppBytes / totalBytes },
-    { label: 'Photos & Media', color: CATEGORY_COLORS.photos, bytes: estimatedPhotosBytes, fraction: estimatedPhotosBytes / totalBytes },
-    { label: 'Messages', color: CATEGORY_COLORS.messages, bytes: estimatedMessagesBytes, fraction: estimatedMessagesBytes / totalBytes },
-    { label: 'System', color: CATEGORY_COLORS.system, bytes: estimatedSystemBytes, fraction: estimatedSystemBytes / totalBytes },
-    { label: 'Other', color: CATEGORY_COLORS.other, bytes: estimatedOtherBytes, fraction: estimatedOtherBytes / totalBytes },
+    { label: 'Apps', color: CATEGORY_COLORS.apps, bytes: totalAppBytes, fraction: totalAppBytes / totalBytes, estimated: false },
+    { label: 'Photos & Media', color: CATEGORY_COLORS.photos, bytes: estimatedPhotosBytes, fraction: estimatedPhotosBytes / totalBytes, estimated: true },
+    { label: 'Messages', color: CATEGORY_COLORS.messages, bytes: estimatedMessagesBytes, fraction: estimatedMessagesBytes / totalBytes, estimated: true },
+    { label: 'System', color: CATEGORY_COLORS.system, bytes: estimatedSystemBytes, fraction: estimatedSystemBytes / totalBytes, estimated: true },
+    { label: 'Other', color: CATEGORY_COLORS.other, bytes: estimatedOtherBytes, fraction: estimatedOtherBytes / totalBytes, estimated: false },
   ];
 
   const freeFraction = Math.max(0, 1 - categories.reduce((sum, c) => sum + c.fraction, 0));
@@ -142,7 +151,10 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
 
         {/* Category breakdown */}
         <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
-          <CupertinoListSection header="Categories">
+          <CupertinoListSection
+            header="Categories"
+            footer="Photos, Messages & System values are estimates based on typical usage patterns."
+          >
             {categories.map((cat) => (
               <CupertinoListTile
                 key={cat.label}
@@ -151,7 +163,9 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
                   <View style={styles.trailingRow}>
                     <View style={[styles.dot, { backgroundColor: cat.color }]} />
                     <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                      {formatBytes(cat.bytes)}
+                      {cat.estimated
+                        ? `${formatBytesRough(cat.bytes)} (est.)`
+                        : formatBytes(cat.bytes)}
                     </Text>
                   </View>
                 }
