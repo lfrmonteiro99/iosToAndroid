@@ -91,7 +91,14 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   const [loadingLibrary, setLoadingLibrary] = useState(false);
 
   // ---- Full-screen viewer state ----
-  const [selectedAsset, setSelectedAsset] = useState<MediaLibrary.Asset | null>(null);
+  // The viewer carries the list it was opened from, so it can page sideways
+  // through that list. Holding only the asset (as it did) left no way to reach
+  // the neighbours without backing out to the grid.
+  const [viewer, setViewer] = useState<{ assets: MediaLibrary.Asset[]; index: number } | null>(null);
+  const openViewer = useCallback(
+    (assets: MediaLibrary.Asset[], index: number) => setViewer({ assets, index }),
+    []
+  );
 
   // ---- For You tab state ----
   const [forYouAssets, setForYouAssets] = useState<MediaLibrary.Asset[]>([]);
@@ -387,18 +394,54 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
   // ==================================================================
   // Full-screen photo viewer
   // ==================================================================
-  if (selectedAsset) {
+  if (viewer) {
+    const current = viewer.assets[viewer.index];
     return (
       <View style={[styles.fullView, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.fullTopBar}>
-          <Pressable onPress={() => setSelectedAsset(null)} accessibilityLabel="Back" accessibilityRole="button">
+          <Pressable onPress={() => setViewer(null)} accessibilityLabel="Back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={28} color="#fff" />
           </Pressable>
-          <Pressable onPress={() => handleShare(selectedAsset)} accessibilityLabel="Share photo" accessibilityRole="button">
+          {viewer.assets.length > 1 ? (
+            <Text style={styles.fullCounter}>
+              {viewer.index + 1} of {viewer.assets.length}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => current && handleShare(current)}
+            accessibilityLabel="Share photo"
+            accessibilityRole="button"
+          >
             <Ionicons name="share-outline" size={24} color="#fff" />
           </Pressable>
         </View>
-        <Image source={{ uri: selectedAsset.uri }} style={styles.fullImage} resizeMode="contain" />
+        <FlatList
+          data={viewer.assets}
+          keyExtractor={(item) => item.id}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          initialScrollIndex={viewer.index}
+          // Every page is exactly one screen wide, so the offset is arithmetic —
+          // without this, initialScrollIndex cannot resolve and the viewer opens
+          // on the first photo instead of the tapped one.
+          getItemLayout={(_, i) => ({
+            length: SCREEN_WIDTH,
+            offset: SCREEN_WIDTH * i,
+            index: i,
+          })}
+          onMomentumScrollEnd={(e) => {
+            const next = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+            if (next !== viewer.index) setViewer({ ...viewer, index: next });
+          }}
+          renderItem={({ item }) => (
+            <Image
+              source={{ uri: item.uri }}
+              style={{ width: SCREEN_WIDTH, height: '100%' }}
+              resizeMode="contain"
+            />
+          )}
+        />
       </View>
     );
   }
@@ -443,8 +486,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
             numColumns={COLS}
             columnWrapperStyle={{ gap: GRID_GAP }}
             contentContainerStyle={{ gap: GRID_GAP, padding: GRID_GAP, paddingBottom: insets.bottom + 90 }}
-            renderItem={({ item }) => (
-              <Pressable onPress={() => setSelectedAsset(item)} accessibilityLabel="Photo" accessibilityRole="button">
+            renderItem={({ item, index }) => (
+              <Pressable onPress={() => openViewer(albumAssets, index)} accessibilityLabel="Photo" accessibilityRole="button">
                 <Image source={{ uri: item.uri }} style={styles.thumb} />
               </Pressable>
             )}
@@ -574,8 +617,8 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
                 typography={typography}
               />
             }
-            renderItem={({ item }) => (
-              <Pressable onPress={() => setSelectedAsset(item)} accessibilityLabel="Photo" accessibilityRole="button">
+            renderItem={({ item, index }) => (
+              <Pressable onPress={() => openViewer(libraryAssets, index)} accessibilityLabel="Photo" accessibilityRole="button">
                 <Image source={{ uri: item.uri }} style={styles.thumb} />
               </Pressable>
             )}
@@ -596,7 +639,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
           colors={colors}
           typography={typography}
           insets={insets}
-          onSelectAsset={setSelectedAsset}
+          onSelectAsset={openViewer}
         />
       ) : (
         // ============================================================
@@ -690,7 +733,7 @@ interface ForYouTabProps {
   colors: CupertinoColors;
   typography: typeof Typography;
   insets: { bottom: number };
-  onSelectAsset: (asset: MediaLibrary.Asset) => void;
+  onSelectAsset: (assets: MediaLibrary.Asset[], index: number) => void;
 }
 
 function ForYouTab({ assets, loading, colors, typography, insets, onSelectAsset }: ForYouTabProps) {
@@ -728,8 +771,8 @@ function ForYouTab({ assets, loading, colors, typography, insets, onSelectAsset 
             Featured Photos
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {featured.map((asset) => (
-              <Pressable key={asset.id} onPress={() => onSelectAsset(asset)} style={styles.featuredCard} accessibilityLabel={`Featured photo from ${new Date(asset.creationTime).toLocaleDateString()}`} accessibilityRole="button">
+            {featured.map((asset, index) => (
+              <Pressable key={asset.id} onPress={() => onSelectAsset(featured, index)} style={styles.featuredCard} accessibilityLabel={`Featured photo from ${new Date(asset.creationTime).toLocaleDateString()}`} accessibilityRole="button">
                 <Image source={{ uri: asset.uri }} style={styles.featuredImage} />
                 <Text style={[typography.caption1, styles.featuredLabel]} numberOfLines={1}>
                   {new Date(asset.creationTime).toLocaleDateString()}
@@ -774,7 +817,7 @@ interface MemorySectionProps {
   assets: MediaLibrary.Asset[];
   colors: CupertinoColors;
   typography: typeof Typography;
-  onSelectAsset: (asset: MediaLibrary.Asset) => void;
+  onSelectAsset: (assets: MediaLibrary.Asset[], index: number) => void;
 }
 
 function MemorySection({ title, assets, colors, typography, onSelectAsset }: MemorySectionProps) {
@@ -786,8 +829,10 @@ function MemorySection({ title, assets, colors, typography, onSelectAsset }: Mem
         {title}
       </Text>
       <View style={[styles.grid, { paddingHorizontal: GRID_GAP }]}>
-        {assets.slice(0, 9).map((asset) => (
-          <Pressable key={asset.id} onPress={() => onSelectAsset(asset)} accessibilityLabel="Photo" accessibilityRole="button">
+        {/* Only nine thumbs are shown, but the viewer pages through the whole
+            section — swiping past the ninth continues instead of dead-ending. */}
+        {assets.slice(0, 9).map((asset, index) => (
+          <Pressable key={asset.id} onPress={() => onSelectAsset(assets, index)} accessibilityLabel="Photo" accessibilityRole="button">
             <Image source={{ uri: asset.uri }} style={styles.thumb} />
           </Pressable>
         ))}
@@ -982,6 +1027,7 @@ const styles = StyleSheet.create({
   fullView: { flex: 1, backgroundColor: '#000' },
   fullTopBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   fullImage: { flex: 1 },
+  fullCounter: { color: '#fff', fontSize: 15, fontWeight: '600' },
 
   // For You tab
   sectionContainer: { marginTop: 20 },
