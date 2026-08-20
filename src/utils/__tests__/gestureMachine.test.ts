@@ -6,6 +6,7 @@ import {
   commitForPanel,
   commitForNC,
   commitForSpotlight,
+  commitForTodayView,
 } from '../gestureMachine';
 import type { CommitPredicate } from '../gestureMachine';
 import { gestureConfig } from '../gestureConfig';
@@ -195,5 +196,34 @@ describe('commitForSpotlight', () => {
 
   it('returns none when below all thresholds', () => {
     expect(commitForSpotlight(pred({ progress: 0, velocity: 0 }))).toBe('none');
+  });
+});
+
+// #455: TodayViewScreen was registered in RootStackParamList and rendered in
+// TabNavigator with a `slide_from_left` transition, but nothing in the app
+// ever called `navigate('TodayView')` — the gesture the transition was built
+// for was never wired up (see LauncherHomeScreen.tsx `todayViewGesture`).
+// This is the pure commit predicate for the right-swipe-on-first-page gesture
+// that now reaches it. Distance-only: it commits solely on how far the finger
+// travelled, with no velocity component.
+describe('commitForTodayView', () => {
+  it('returns distance once translationX reaches todayViewCommitDp (progress >= 1)', () => {
+    expect(commitForTodayView(pred({ progress: 1 }))).toBe('distance');
+  });
+
+  it('returns none for a partial drag that never reaches the commit distance', () => {
+    expect(commitForTodayView(pred({ progress: 0.5 }))).toBe('none');
+  });
+
+  it('returns none for no movement at all', () => {
+    expect(commitForTodayView(pred({ progress: 0, velocity: 0 }))).toBe('none');
+  });
+
+  it('returns none for a leftward drag (negative progress), never committing on the wrong direction', () => {
+    expect(commitForTodayView(pred({ progress: -1 }))).toBe('none');
+  });
+
+  it('is not swayed by velocity alone — this gesture only commits on distance', () => {
+    expect(commitForTodayView(pred({ progress: 0, velocity: 999 }))).toBe('none');
   });
 });
