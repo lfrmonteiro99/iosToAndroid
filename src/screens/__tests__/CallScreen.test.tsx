@@ -80,90 +80,42 @@ describe('CallScreen', () => {
     });
   });
 
-  describe('mute toggle', () => {
-    it('pressing Mute switches the icon from mic to mic-off', () => {
-      const { getByLabelText, UNSAFE_getByProps, UNSAFE_queryByProps } = renderCall({
-        number: '+15551234567',
-        name: 'Jane Doe',
-      });
-
-      expect(UNSAFE_getByProps({ name: 'mic' })).toBeTruthy();
-      expect(UNSAFE_queryByProps({ name: 'mic-off' })).toBeNull();
-
-      fireEvent.press(getByLabelText('Mute'));
-
-      expect(UNSAFE_getByProps({ name: 'mic-off' })).toBeTruthy();
-      expect(UNSAFE_queryByProps({ name: 'mic' })).toBeNull();
-    });
-
-    it('pressing Mute twice returns to the unmuted icon', () => {
-      const { getByLabelText, UNSAFE_getByProps, UNSAFE_queryByProps } = renderCall({
-        number: '+15551234567',
-        name: 'Jane Doe',
-      });
-
-      const mute = getByLabelText('Mute');
-      fireEvent.press(mute);
-      fireEvent.press(mute);
-
-      expect(UNSAFE_getByProps({ name: 'mic' })).toBeTruthy();
-      expect(UNSAFE_queryByProps({ name: 'mic-off' })).toBeNull();
-    });
-
-    it('toggling Mute does not affect the Speaker icon', () => {
-      const { getByLabelText, UNSAFE_getByProps } = renderCall({
+  describe('mute and speaker controls are inert (disabled)', () => {
+    it('pressing Mute does not switch the mic icon', () => {
+      // Red step: broken code (with isMuted state + toggleMute) renders mic-off after press.
+      // Fixed code (disabled button, no state) keeps the icon as mic.
+      const { getByLabelText, UNSAFE_queryByProps } = renderCall({
         number: '+15551234567',
         name: 'Jane Doe',
       });
 
       fireEvent.press(getByLabelText('Mute'));
 
-      expect(UNSAFE_getByProps({ name: 'volume-medium' })).toBeTruthy();
+      expect(UNSAFE_queryByProps({ name: 'mic-off' })).toBeNull();
+    });
+
+    it('pressing Speaker does not switch the speaker icon', () => {
+      // Red step mirror: broken code renders volume-high after press; fixed code does not.
+      const { getByLabelText, UNSAFE_queryByProps } = renderCall({
+        number: '+15551234567',
+        name: 'Jane Doe',
+      });
+
+      fireEvent.press(getByLabelText('Speaker'));
+
+      expect(UNSAFE_queryByProps({ name: 'volume-high' })).toBeNull();
+    });
+
+    it('Mute and Speaker buttons report disabled accessibility state', () => {
+      const { getByLabelText } = renderCall({ number: '+15551234567', name: 'Jane Doe' });
+      expect(getByLabelText('Mute').props.accessibilityState?.disabled).toBe(true);
+      expect(getByLabelText('Speaker').props.accessibilityState?.disabled).toBe(true);
     });
   });
 
-  describe('speaker toggle', () => {
-    it('pressing Speaker switches the icon from volume-medium to volume-high', () => {
-      const { getByLabelText, UNSAFE_getByProps, UNSAFE_queryByProps } = renderCall({
-        number: '+15551234567',
-        name: 'Jane Doe',
-      });
-
-      expect(UNSAFE_getByProps({ name: 'volume-medium' })).toBeTruthy();
-      expect(UNSAFE_queryByProps({ name: 'volume-high' })).toBeNull();
-
-      fireEvent.press(getByLabelText('Speaker'));
-
-      expect(UNSAFE_getByProps({ name: 'volume-high' })).toBeTruthy();
-      expect(UNSAFE_queryByProps({ name: 'volume-medium' })).toBeNull();
-    });
-
-    it('pressing Speaker twice returns to the non-speaker icon', () => {
-      const { getByLabelText, UNSAFE_getByProps, UNSAFE_queryByProps } = renderCall({
-        number: '+15551234567',
-        name: 'Jane Doe',
-      });
-
-      const speaker = getByLabelText('Speaker');
-      fireEvent.press(speaker);
-      fireEvent.press(speaker);
-
-      expect(UNSAFE_getByProps({ name: 'volume-medium' })).toBeTruthy();
-      expect(UNSAFE_queryByProps({ name: 'volume-high' })).toBeNull();
-    });
-
-    it('pressing Mute and Speaker both flips both icons independently', () => {
-      const { getByLabelText, UNSAFE_getByProps } = renderCall({
-        number: '+15551234567',
-        name: 'Jane Doe',
-      });
-
-      fireEvent.press(getByLabelText('Mute'));
-      fireEvent.press(getByLabelText('Speaker'));
-
-      expect(UNSAFE_getByProps({ name: 'mic-off' })).toBeTruthy();
-      expect(UNSAFE_getByProps({ name: 'volume-high' })).toBeTruthy();
-    });
+  it('shows disclosure text that audio controls are managed by the system phone', () => {
+    const { getByText } = renderCall({ number: '+15551234567', name: 'Jane Doe' });
+    expect(getByText(/audio controls unavailable/i)).toBeTruthy();
   });
 
   describe('end call', () => {

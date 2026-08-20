@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -53,19 +53,22 @@ interface ControlButtonProps {
   label: string;
   onPress: () => void;
   active?: boolean;
+  disabled?: boolean;
 }
 
-function ControlButton({ icon, label, onPress, active }: ControlButtonProps) {
+function ControlButton({ icon, label, onPress, active, disabled }: ControlButtonProps) {
   const { typography } = useTheme();
   return (
     <Pressable
-      style={[styles.controlBtn, active && styles.controlBtnActive]}
-      onPress={onPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.15)', radius: 35 }}
+      style={[styles.controlBtn, active && styles.controlBtnActive, disabled && styles.controlBtnDisabled]}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      android_ripple={disabled ? null : { color: 'rgba(255,255,255,0.15)', radius: 35 }}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
     >
-      <Ionicons name={icon} size={28} color="#ffffff" />
+      <Ionicons name={icon} size={28} color={disabled ? 'rgba(255,255,255,0.35)' : '#ffffff'} />
       <Text style={[typography.tabLabel, styles.controlLabel]}>{label}</Text>
     </Pressable>
   );
@@ -85,9 +88,6 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
   const insets = useSafeAreaInsets();
   const { number, name } = route.params;
   const displayName = name || number || 'Unknown';
-
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSpeaker, setIsSpeaker] = useState(false);
 
   // Pulsing animation while the call is being placed
   const pulseScale = useSharedValue(1);
@@ -156,19 +156,6 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
     navigation.goBack();
   }, [navigation]);
 
-  const toggleMute = useCallback(async () => {
-    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setIsMuted((v) => !v);
-    // Note: mute/speaker toggle the visual state only.
-    // The native Android dialer handles actual call audio routing.
-  }, []);
-
-  const toggleSpeaker = useCallback(async () => {
-    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setIsSpeaker((v) => !v);
-  }, []);
-
-
   return (
     <LinearGradient
       colors={['#1a1a2e', '#16213e']}
@@ -192,6 +179,11 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
 
         {/* Status — honest label: native dialer handles the actual call */}
         <Text style={[styles.callStatus, { fontSize: 14 * textScale }]}>Call Initiated</Text>
+
+        {/* Disclosure — call and audio controls are managed by the system */}
+        <Text style={[typography.caption2, styles.systemDisclosure]}>
+          Call managed by system phone — audio controls unavailable
+        </Text>
       </View>
 
       {/* ------------------------------------------------------------------ */}
@@ -200,16 +192,16 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
       <View style={styles.controlsGrid}>
         <View style={styles.controlsRow}>
           <ControlButton
-            icon={isMuted ? 'mic-off' : 'mic'}
+            icon="mic"
             label="Mute"
-            onPress={toggleMute}
-            active={isMuted}
+            onPress={() => {}}
+            disabled
           />
           <ControlButton
-            icon={isSpeaker ? 'volume-high' : 'volume-medium'}
+            icon="volume-medium"
             label="Speaker"
-            onPress={toggleSpeaker}
-            active={isSpeaker}
+            onPress={() => {}}
+            disabled
           />
         </View>
         <Text style={[typography.caption2, styles.audioHint]}>Audio controlled by system dialer</Text>
@@ -277,6 +269,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.55)',
     fontWeight: '400',
   },
+  systemDisclosure: {
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginTop: 12,
+    paddingHorizontal: 16,
+  },
 
   // Controls grid
   controlsGrid: {
@@ -299,6 +297,9 @@ const styles = StyleSheet.create({
   },
   controlBtnActive: {
     backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  controlBtnDisabled: {
+    opacity: 0.38,
   },
   controlLabel: {
     color: 'rgba(255,255,255,0.7)',
