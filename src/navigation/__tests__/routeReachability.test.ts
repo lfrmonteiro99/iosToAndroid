@@ -76,7 +76,14 @@ describe('every registered route has a discoverable entry point (#442)', () => {
   //    navigated to. Re-scoped out of #442 into #455, which owns the product
   //    decision (edge gesture vs. icon vs. removal). Remove from this list
   //    when #455 lands.
-  const KNOWN_PRE_EXISTING_GAPS = ['Maps', 'TodayView'];
+  //  - 'AppLibrary': became a gap on main, not here. #434/#458 turned the last
+  //    home page into the App Library rendered *inline* via the shared
+  //    `AppLibraryContent` (LauncherHomeScreen.tsx:1222), so nothing navigates
+  //    to the `AppLibrary` stack route any more — only the screen registration
+  //    in TabNavigator.tsx:137 and the type in types.ts:59 are left. Reproduced
+  //    with this issue's fix both applied and reverted, so it is not caused by
+  //    #442; unrelated and unowned, flagged here rather than silenced.
+  const KNOWN_PRE_EXISTING_GAPS = ['AppLibrary', 'Maps', 'TodayView'];
 
   const registeredRoutes = readRegisteredRoutes();
   const corpus = buildUsageCorpus();
@@ -91,9 +98,19 @@ describe('every registered route has a discoverable entry point (#442)', () => {
     expect(unreachable.slice().sort()).toEqual(KNOWN_PRE_EXISTING_GAPS.slice().sort());
   });
 
-  it('Notes, Reminders and Mail (this issue) each have an entry point now', () => {
-    for (const route of ['Notes', 'Reminders', 'Mail']) {
-      expect(hasEntryPoint(corpus, route)).toBe(true);
-    }
-  });
+  // There is deliberately NO `expect(hasEntryPoint(corpus, 'Notes')).toBe(true)`
+  // case here. An earlier revision had one, and it was wrong twice over:
+  //
+  //  1. It was vacuous. It passed with the #442 fix fully reverted, because
+  //     SpotlightSearchScreen.tsx already contains literal `navigate('Notes')`
+  //     / `('Reminders')` / `('Mail')` calls — the corpus matched those, not
+  //     the new BUILT_IN_APPS entries. A green tick there proved nothing about
+  //     this issue's acceptance while reading as if it did.
+  //  2. It was redundant. The assertion above already pins the unreachable set
+  //     to exactly ['Maps', 'TodayView']; any route outside that list having no
+  //     entry point fails there first, so the two could never fail apart.
+  //
+  // What actually proves the #442 acceptance is the rendered interaction test —
+  // src/screens/__tests__/LauncherHomeScreen.entryPoints.test.tsx — which mounts
+  // the real LauncherHomeScreen, finds the icons, and presses them.
 });
