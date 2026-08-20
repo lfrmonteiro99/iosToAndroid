@@ -53,6 +53,17 @@ describe('CupertinoNavigationBar', () => {
     expect(getByText('Large Title')).toBeTruthy();
   });
 
+  it('large title Text has numberOfLines={1} to prevent overflow clipping', () => {
+    // Red: before fix, large title had no numberOfLines prop.
+    // After fix, numberOfLines={1} prevents the text from wrapping into the overflow:hidden container.
+    const { getAllByText } = render(
+      <CupertinoNavigationBar title="Very Long Title That Would Wrap" largeTitle />,
+    );
+    // Static variant (no children) + largeTitle=true: only one Text element renders the title
+    const largeTitleElement = getAllByText('Very Long Title That Would Wrap')[0];
+    expect(largeTitleElement.props.numberOfLines).toBe(1);
+  });
+
   it('does not render large title when largeTitle={false}', () => {
     const { queryByText } = render(
       <CupertinoNavigationBar title="Test" largeTitle={false} />,

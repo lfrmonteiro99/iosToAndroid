@@ -20,9 +20,6 @@ interface CupertinoNavigationBarProps {
   contentContainerStyle?: ViewStyle;
 }
 
-const LARGE_TITLE_HEIGHT = 52;
-const COLLAPSE_THRESHOLD = LARGE_TITLE_HEIGHT;
-
 export function CupertinoNavigationBar({
   title,
   largeTitle = true,
@@ -34,6 +31,9 @@ export function CupertinoNavigationBar({
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  // Derived from typography so it scales with Dynamic Type. paddingTop(4) + paddingBottom(8) from styles.largeTitleContainer.
+  const largeTitleHeight = typography.largeTitle.lineHeight + 12;
+  const collapseThreshold = largeTitleHeight;
   const scrollY = useSharedValue(0);
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -47,13 +47,13 @@ export function CupertinoNavigationBar({
     if (!largeTitle) return {};
     const opacity = interpolate(
       scrollY.value,
-      [0, COLLAPSE_THRESHOLD * 0.6, COLLAPSE_THRESHOLD],
+      [0, collapseThreshold * 0.6, collapseThreshold],
       [1, 0.5, 0],
       Extrapolation.CLAMP,
     );
     const translateY = interpolate(
       scrollY.value,
-      [0, COLLAPSE_THRESHOLD],
+      [0, collapseThreshold],
       [0, -10],
       Extrapolation.CLAMP,
     );
@@ -65,7 +65,7 @@ export function CupertinoNavigationBar({
     if (!largeTitle) return { opacity: 1 };
     const opacity = interpolate(
       scrollY.value,
-      [COLLAPSE_THRESHOLD * 0.7, COLLAPSE_THRESHOLD],
+      [collapseThreshold * 0.7, collapseThreshold],
       [0, 1],
       Extrapolation.CLAMP,
     );
@@ -77,8 +77,8 @@ export function CupertinoNavigationBar({
     if (!largeTitle) return { height: 0 };
     const height = interpolate(
       scrollY.value,
-      [0, COLLAPSE_THRESHOLD],
-      [LARGE_TITLE_HEIGHT, 0],
+      [0, collapseThreshold],
+      [largeTitleHeight, 0],
       Extrapolation.CLAMP,
     );
     return { height, overflow: 'hidden' as const };
@@ -116,7 +116,7 @@ export function CupertinoNavigationBar({
         </BlurView>
         {largeTitle && (
           <View style={[styles.largeTitleContainer, { backgroundColor: colors.systemGroupedBackground }]}>
-            <Text style={[typography.largeTitle, { color: colors.label }]}>{title}</Text>
+            <Text style={[typography.largeTitle, { color: colors.label }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{title}</Text>
           </View>
         )}
       </View>
@@ -135,7 +135,7 @@ export function CupertinoNavigationBar({
         contentContainerStyle={contentContainerStyle}
       >
         {/* Spacer for the nav bar + large title */}
-        <View style={{ height: insets.top + 44 + (largeTitle ? LARGE_TITLE_HEIGHT : 0) }} />
+        <View style={{ height: insets.top + 44 + (largeTitle ? largeTitleHeight : 0) }} />
         {children}
       </Animated.ScrollView>
 
@@ -175,7 +175,7 @@ export function CupertinoNavigationBar({
               largeTitleContainerStyle,
             ]}
           >
-            <Animated.Text style={[typography.largeTitle, { color: colors.label }, largeTitleStyle]}>
+            <Animated.Text style={[typography.largeTitle, { color: colors.label }, largeTitleStyle]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
               {title}
             </Animated.Text>
           </Animated.View>
