@@ -22,6 +22,7 @@ import Animated, {
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
+import { useTheme } from '../theme/ThemeContext';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,6 +56,7 @@ interface ControlButtonProps {
 }
 
 function ControlButton({ icon, label, onPress, active }: ControlButtonProps) {
+  const { typography } = useTheme();
   return (
     <Pressable
       style={[styles.controlBtn, active && styles.controlBtnActive]}
@@ -64,7 +66,7 @@ function ControlButton({ icon, label, onPress, active }: ControlButtonProps) {
       accessibilityLabel={label}
     >
       <Ionicons name={icon} size={28} color="#ffffff" />
-      <Text style={styles.controlLabel}>{label}</Text>
+      <Text style={[typography.tabLabel, styles.controlLabel]}>{label}</Text>
     </Pressable>
   );
 }
@@ -79,6 +81,7 @@ interface CallScreenProps {
 }
 
 export function CallScreen({ navigation, route }: CallScreenProps) {
+  const { typography, textScale } = useTheme();
   const insets = useSafeAreaInsets();
   const { number, name } = route.params;
   const displayName = name || number || 'Unknown';
@@ -179,16 +182,16 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
       <View style={styles.contactSection}>
         {/* Avatar — pulses when in calling/incoming state */}
         <Animated.View style={[styles.avatarCircle, pulseAnimStyle]}>
-          <Text style={styles.avatarInitials}>{getInitials(displayName)}</Text>
+          <Text style={[styles.avatarInitials, { fontSize: 36 * textScale }]}>{getInitials(displayName)}</Text>
         </Animated.View>
 
         {/* Name */}
-        <Text style={styles.callerName} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[typography.title1, styles.callerName]} numberOfLines={1} adjustsFontSizeToFit>
           {displayName}
         </Text>
 
         {/* Status — honest label: native dialer handles the actual call */}
-        <Text style={styles.callStatus}>Call Initiated</Text>
+        <Text style={[styles.callStatus, { fontSize: 14 * textScale }]}>Call Initiated</Text>
       </View>
 
       {/* ------------------------------------------------------------------ */}
@@ -209,7 +212,7 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
             active={isSpeaker}
           />
         </View>
-        <Text style={styles.audioHint}>Audio controlled by system dialer</Text>
+        <Text style={[typography.caption2, styles.audioHint]}>Audio controlled by system dialer</Text>
       </View>
 
       {/* ------------------------------------------------------------------ */}
@@ -260,13 +263,11 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     color: '#ffffff',
-    fontSize: 36,
     fontWeight: '300',
     letterSpacing: 1,
   },
   callerName: {
     color: '#ffffff',
-    fontSize: 28,
     fontWeight: '300',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -274,7 +275,6 @@ const styles = StyleSheet.create({
   },
   callStatus: {
     color: 'rgba(255,255,255,0.55)',
-    fontSize: 14,
     fontWeight: '400',
   },
 
@@ -302,13 +302,11 @@ const styles = StyleSheet.create({
   },
   controlLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
     fontWeight: '500',
     marginTop: 2,
   },
   audioHint: {
     color: 'rgba(255,255,255,0.35)',
-    fontSize: 11,
     textAlign: 'center',
     marginTop: 12,
   },

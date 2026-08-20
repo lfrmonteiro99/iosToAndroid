@@ -44,7 +44,7 @@ const DOCK_LABELS: Record<string, string> = {
 export function LauncherSettingsScreen() {
   const navigation = useNavigation<AppNavigationProp>();
   const themeCtx = useTheme();
-  const { theme, typography, isDark, toggleTheme } = themeCtx;
+  const { theme, typography, isDark, toggleTheme, textScale } = themeCtx;
   const { colors } = theme;
   const { settings, update, reset: resetSettings } = useSettings();
   const { dockApps } = useApps();
@@ -377,7 +377,7 @@ export function LauncherSettingsScreen() {
               {pinStep === 'current' ? 'Default passcode is 1234' : 'Must be exactly 4 digits'}
             </Text>
             <TextInput
-              style={[styles.pinInput, { color: colors.label, borderColor: colors.separator, backgroundColor: colors.systemBackground }]}
+              style={[styles.pinInput, { color: colors.label, borderColor: colors.separator, backgroundColor: colors.systemBackground, fontSize: 18 * textScale }]}
               value={pinInput}
               onChangeText={setPinInput}
               keyboardType="number-pad"
@@ -450,7 +450,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 18,
     textAlign: 'center',
     marginBottom: 20,
     letterSpacing: 8,

@@ -195,7 +195,7 @@ function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }
 // ---------------------------------------------------------------------------
 
 export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { apps, launchApp } = useApps();
@@ -406,7 +406,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Ionicons name="globe-outline" size={24} color="#fff" />
             </View>
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]}>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>
                 Search Web for &ldquo;{item.query}&rdquo;
               </Text>
             </View>
@@ -420,7 +420,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           >
             <AppIcon app={item.app} size={40} />
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.app.name}</Text>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>{item.app.name}</Text>
             </View>
           </Pressable>
         );
@@ -434,9 +434,9 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Ionicons name="person-circle-outline" size={36} color={colors.systemGray} />
             </View>
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
               {item.phone ? (
-                <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>{item.phone}</Text>
+                <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>{item.phone}</Text>
               ) : null}
             </View>
           </Pressable>
@@ -451,8 +451,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Ionicons name="document-text-outline" size={22} color="#000" />
             </View>
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.title}</Text>
-              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Notes</Text>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>{item.title}</Text>
+              <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>Notes</Text>
             </View>
           </Pressable>
         );
@@ -466,8 +466,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Ionicons name="mail-outline" size={22} color="#fff" />
             </View>
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.subject}</Text>
-              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Mail · {item.sender}</Text>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.subject}</Text>
+              <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>Mail · {item.sender}</Text>
             </View>
           </Pressable>
         );
@@ -481,8 +481,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
             </View>
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.title}</Text>
-              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>Reminders</Text>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>Reminders</Text>
             </View>
           </Pressable>
         );
@@ -496,8 +496,8 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Ionicons name="settings-outline" size={24} color={colors.systemGray} />
             </View>
             <View style={styles.resultTextWrap}>
-              <Text style={[styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
-              <Text style={[styles.resultSubtitle, { color: colors.secondaryLabel }]}>
+              <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>{item.name}</Text>
+              <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>
                 Settings &gt; {item.name}
               </Text>
             </View>
@@ -510,7 +510,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[styles.sectionHeader, { backgroundColor: colors.systemGroupedBackground }]}>
-      <Text style={[styles.sectionHeaderText, { color: colors.secondaryLabel }]}>
+      <Text style={[typography.footnote, styles.sectionHeaderText, { color: colors.secondaryLabel }]}>
         {section.title}
       </Text>
     </View>
@@ -528,9 +528,9 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           accessibilityLabel="Back"
         >
           <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
-          <Text style={[styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
+          <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
         </Pressable>
-        <Text style={[styles.navTitle, { color: colors.label }]}>Search</Text>
+        <Text style={[typography.body, styles.navTitle, { color: colors.label }]}>Search</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -549,9 +549,9 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
         /* Search history */
         <View style={styles.historyContainer}>
           <View style={styles.historyHeader}>
-            <Text style={[styles.historyTitle, { color: colors.label }]}>Recent Searches</Text>
+            <Text style={[typography.title3, styles.historyTitle, { color: colors.label }]}>Recent Searches</Text>
             <Pressable onPress={handleClearHistory}>
-              <Text style={[styles.historyClear, { color: colors.systemBlue }]}>Clear</Text>
+              <Text style={[typography.callout, styles.historyClear, { color: colors.systemBlue }]}>Clear</Text>
             </Pressable>
           </View>
           {history.map((item, index) => (
@@ -568,7 +568,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               ]}
             >
               <Ionicons name="time-outline" size={18} color={colors.secondaryLabel} />
-              <Text style={[styles.historyText, { color: colors.label }]}>{item}</Text>
+              <Text style={[typography.callout, styles.historyText, { color: colors.label }]}>{item}</Text>
             </Pressable>
           ))}
         </View>
@@ -596,7 +596,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: colors.secondaryLabel }]}>No Results</Text>
+              <Text style={[typography.body, styles.emptyText, { color: colors.secondaryLabel }]}>No Results</Text>
             </View>
           }
         />
@@ -628,11 +628,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   backLabel: {
-    fontSize: 17,
     fontWeight: '400',
   },
   navTitle: {
-    fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.3,
   },
@@ -647,7 +645,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   sectionHeaderText: {
-    fontSize: 13,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -664,11 +661,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resultTitle: {
-    fontSize: 16,
     fontWeight: '400',
   },
   resultSubtitle: {
-    fontSize: 13,
     fontWeight: '400',
     marginTop: 2,
   },
@@ -691,12 +686,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   historyTitle: {
-    fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
   historyClear: {
-    fontSize: 16,
     fontWeight: '400',
   },
   historyRow: {
@@ -706,7 +699,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   historyText: {
-    fontSize: 16,
     fontWeight: '400',
   },
   // Empty
@@ -716,7 +708,6 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   emptyText: {
-    fontSize: 17,
     fontWeight: '500',
   },
 });

@@ -27,7 +27,7 @@ function getBatteryIcon(level: number, isCharging: boolean): 'battery-full-outli
 }
 
 export function BatteryScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography, spacing, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
@@ -57,7 +57,7 @@ export function BatteryScreen({ navigation }: { navigation: AppNavigationProp })
         {/* Battery level display */}
         <View style={[styles.batteryDisplay, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
           <Ionicons name={batteryIcon} size={64} color={batteryColor} />
-          <Text style={[styles.batteryPercent, { color: batteryColor }]}>
+          <Text style={[styles.batteryPercent, { color: batteryColor, fontSize: 48 * textScale }]}>
             {batteryLevel}%
           </Text>
           <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: 4 }]}>
@@ -112,7 +112,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   batteryPercent: {
-    fontSize: 48,
     fontWeight: '700',
     lineHeight: 56,
   },

@@ -1,6 +1,28 @@
 import React from 'react';
+import { Pressable, Text } from 'react-native';
 import { render, fireEvent } from '../../test-utils';
 import { CallScreen } from '../CallScreen';
+import { useSettings } from '../../store/SettingsStore';
+
+function getEffectiveFontSize(element: { props: { style: unknown } }): number {
+  const styles = Array.isArray(element.props.style) ? element.props.style : [element.props.style];
+  let fontSize = 0;
+  for (const s of styles) {
+    if (s && typeof s === 'object' && 'fontSize' in (s as object)) {
+      fontSize = (s as { fontSize: number }).fontSize;
+    }
+  }
+  return fontSize;
+}
+
+function SetTextSize({ index }: { index: number }) {
+  const { update } = useSettings();
+  return (
+    <Pressable testID="set-text-size" onPress={() => update('textSizeIndex', index)}>
+      <Text>resize</Text>
+    </Pressable>
+  );
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const navigation = { navigate: jest.fn(), goBack: jest.fn() } as any;
@@ -171,5 +193,26 @@ describe('CallScreen', () => {
     expect(getByLabelText('Mute')).toBeTruthy();
     expect(getByLabelText('Speaker')).toBeTruthy();
     expect(getByLabelText('End Call')).toBeTruthy();
+  });
+});
+
+describe('CallScreen Dynamic Type', () => {
+  it('avatar initials fontSize scales with textSizeIndex (textScale multiplication)', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <SetTextSize index={3} />
+        <CallScreen
+          navigation={navigation}
+          route={{ params: { number: '+15551234567', name: 'Jane Doe' } } as never}
+        />
+      </>,
+    );
+
+    const defaultFontSize = getEffectiveFontSize(getByText('JD'));
+
+    fireEvent.press(getByTestId('set-text-size'));
+
+    const scaledFontSize = getEffectiveFontSize(getByText('JD'));
+    expect(scaledFontSize).toBeGreaterThan(defaultFontSize);
   });
 });

@@ -113,7 +113,7 @@ interface CategoryCardProps {
 }
 
 const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, cardWidth }: CategoryCardProps) {
-  const { theme } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const iconSize = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
 
@@ -143,12 +143,12 @@ const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, ca
         })}
       </View>
       <Text
-        style={[styles.categoryTitle, { color: colors.label }]}
+        style={[typography.subhead, styles.categoryTitle, { color: colors.label }]}
         numberOfLines={1}
       >
         {title}
       </Text>
-      <Text style={[styles.categoryCount, { color: colors.secondaryLabel }]}>
+      <Text style={[typography.caption1, styles.categoryCount, { color: colors.secondaryLabel }]}>
         {apps.length} app{apps.length !== 1 ? 's' : ''}
       </Text>
     </Pressable>
@@ -168,7 +168,7 @@ interface CategoryDetailProps {
 }
 
 function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: CategoryDetailProps) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, typography, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -187,7 +187,7 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         {/* Header */}
         <View style={[styles.modalHeader, { paddingTop: insets.top + 16, borderBottomColor: colors.separator }]}>
-          <Text style={[styles.modalTitle, { color: colors.label }]}>{title}</Text>
+          <Text style={[styles.modalTitle, { color: colors.label, fontSize: 18 * textScale }]}>{title}</Text>
           <Pressable onPress={onClose} style={styles.modalCloseBtn} accessibilityLabel="Close">
             <Ionicons name="close-circle" size={28} color={colors.systemGray2} />
           </Pressable>
@@ -206,7 +206,7 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
               accessibilityRole="button"
             >
               <AppIcon app={item} size={iconSize} />
-              <Text style={[styles.modalAppLabel, { color: colors.label }]} numberOfLines={2}>
+              <Text style={[typography.caption2, styles.modalAppLabel, { color: colors.label }]} numberOfLines={2}>
                 {item.name}
               </Text>
             </Pressable>
@@ -228,7 +228,7 @@ const AppStrip = React.memo(function AppStrip({
   apps: InstalledApp[];
   onLaunch: (pkg: string) => void;
 }) {
-  const { theme } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
   const stripIconSize = 62;
 
@@ -243,7 +243,7 @@ const AppStrip = React.memo(function AppStrip({
           accessibilityRole="button"
         >
           <AppIcon app={app} size={stripIconSize} />
-          <Text style={[styles.stripLabel, { color: colors.label }]} numberOfLines={2}>
+          <Text style={[typography.caption2, styles.stripLabel, { color: colors.label }]} numberOfLines={2}>
             {app.name}
           </Text>
         </Pressable>
@@ -263,7 +263,7 @@ const SearchResults = React.memo(function SearchResults({
   apps: InstalledApp[];
   onLaunch: (pkg: string) => void;
 }) {
-  const { theme } = useTheme();
+  const { theme, typography } = useTheme();
   const { colors } = theme;
 
   return (
@@ -282,7 +282,7 @@ const SearchResults = React.memo(function SearchResults({
           accessibilityRole="button"
         >
           <AppIcon app={item} size={46} />
-          <Text style={[styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
+          <Text style={[typography.callout, styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
         </Pressable>
       )}
     />
@@ -294,8 +294,9 @@ const SearchResults = React.memo(function SearchResults({
 // ---------------------------------------------------------------------------
 
 function SectionHeader({ title, colors }: { title: string; colors: CupertinoColors }) {
+  const { typography } = useTheme();
   return (
-    <Text style={[styles.sectionHeader, { color: colors.label }]}>{title}</Text>
+    <Text style={[typography.title3, styles.sectionHeader, { color: colors.label }]}>{title}</Text>
   );
 }
 
@@ -304,7 +305,7 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 // ---------------------------------------------------------------------------
 
 export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, typography } = useTheme();
   const { colors } = theme;
   const { apps, launchApp, recentApps } = useApps();
   const insets = useSafeAreaInsets();
@@ -386,9 +387,9 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
           accessibilityLabel="Back"
         >
           <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
-          <Text style={[styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
+          <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
         </Pressable>
-        <Text style={[styles.navTitle, { color: colors.label }]}>App Library</Text>
+        <Text style={[typography.body, styles.navTitle, { color: colors.label }]}>App Library</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -483,11 +484,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   backLabel: {
-    fontSize: 17,
     fontWeight: '400',
   },
   navTitle: {
-    fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.3,
   },
@@ -500,7 +499,6 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   sectionHeader: {
-    fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.4,
     marginBottom: 10,
@@ -525,7 +523,6 @@ const styles = StyleSheet.create({
     width: 72,
   },
   stripLabel: {
-    fontSize: 11,
     fontWeight: '400',
     marginTop: 5,
     textAlign: 'center',
@@ -550,12 +547,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   categoryTitle: {
-    fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   categoryCount: {
-    fontSize: 12,
     fontWeight: '400',
     marginTop: 2,
   },
@@ -568,7 +563,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   searchRowLabel: {
-    fontSize: 16,
     fontWeight: '400',
   },
 
@@ -585,7 +579,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   modalTitle: {
-    fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
     flex: 1,
@@ -602,7 +595,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   modalAppLabel: {
-    fontSize: 11,
     fontWeight: '400',
     textAlign: 'center',
     marginTop: 5,
