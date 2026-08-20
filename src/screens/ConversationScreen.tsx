@@ -10,6 +10,7 @@ import {
   Platform,
   PermissionsAndroid,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,7 +22,7 @@ import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
-import { useDevice, DeviceSms } from '../store/DeviceStore';
+import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoTextField, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
@@ -152,13 +153,47 @@ interface ConversationScreenProps {
 }
 
 export function ConversationScreen({ navigation, route }: ConversationScreenProps) {
-  const { address } = route.params;
+  const { address: initialAddress } = route.params;
 
   const { theme, typography, spacing } = useTheme();
   const { colors, dark } = theme;
   const insets = useSafeAreaInsets();
   const device = useDevice();
   const alert = useAlert();
+
+  // Composing a new message navigates here with an empty address (no recipient
+  // chosen yet — see MessagesScreen/LauncherHomeScreen "compose" actions). Track
+  // the chosen recipient locally so the rest of the screen (message filtering,
+  // draft key, send target) can keep treating `address` as the effective one.
+  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(initialAddress || null);
+  const [recipientQuery, setRecipientQuery] = useState('');
+  const address = selectedRecipient ?? '';
+  const isChoosingRecipient = address === '';
+
+  const recipientSuggestions = useMemo(() => {
+    const q = recipientQuery.trim().toLowerCase();
+    if (!q) return [];
+    const qDigits = q.replace(/\D/g, '');
+    return device.contacts.filter((c) => {
+      const name = `${c.firstName} ${c.lastName}`.toLowerCase();
+      const nameMatch = name.includes(q);
+      const phoneMatch = qDigits.length > 0 && c.phone.replace(/\D/g, '').includes(qDigits);
+      return nameMatch || phoneMatch;
+    }).slice(0, 5);
+  }, [recipientQuery, device.contacts]);
+
+  const handleSelectRecipient = useCallback((c: DeviceContact) => {
+    setSelectedRecipient(c.phone);
+    setRecipientQuery('');
+  }, []);
+
+  const handleSubmitRecipient = useCallback(() => {
+    const trimmed = recipientQuery.trim();
+    if (trimmed) {
+      setSelectedRecipient(trimmed);
+      setRecipientQuery('');
+    }
+  }, [recipientQuery]);
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -252,12 +287,17 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     [address, device.contacts],
   );
 
-  const displayName = contact
-    ? `${contact.firstName} ${contact.lastName}`.trim()
-    : address;
+  const displayName = isChoosingRecipient
+    ? 'New Message'
+    : contact
+      ? `${contact.firstName} ${contact.lastName}`.trim()
+      : address;
 
-  // Filter messages for this address (including local image messages)
+  // Filter messages for this address (including local image messages).
+  // Guard the empty (no recipient chosen yet) case explicitly so it can never
+  // accidentally match a stray message with an empty/undefined address.
   const rawMessages = useMemo(() => {
+    if (!address) return [] as DeviceSms[];
     const deviceMsgs = device.messages
       .filter((m) => m.address === address)
       .sort((a, b) => {
@@ -317,6 +357,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   }, [alert, addImageMessage]);
 
   const handleCall = useCallback(async () => {
+    if (!address) return;
     const mod = await getLauncher();
     if (mod) {
       try {
@@ -331,6 +372,14 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text || isSending) return;
+
+    // Reject before touching permissions or the native bridge — a missing
+    // recipient isn't a permissions problem, and the bridge would otherwise
+    // just return false, surfacing a misleading "check permissions" alert.
+    if (!address) {
+      alert('No Recipient', 'Choose a contact or enter a phone number before sending.');
+      return;
+    }
 
     // Ensure SEND_SMS permission is granted BEFORE hitting the native module
     // so the user gets a system prompt instead of a silent failure.
@@ -490,14 +539,63 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             <Pressable
               onPress={handleCall}
               hitSlop={8}
+              disabled={isChoosingRecipient}
               accessibilityRole="button"
               accessibilityLabel={`Call ${displayName}`}
             >
-              <Ionicons name="call-outline" size={22} color={colors.systemBlue} />
+              <Ionicons
+                name="call-outline"
+                size={22}
+                color={isChoosingRecipient ? colors.systemGray3 : colors.systemBlue}
+              />
             </Pressable>
           </View>
         </View>
       </BlurView>
+
+      {/* Recipient picker — shown while composing a new message (no address yet) */}
+      {isChoosingRecipient && (
+        <View
+          style={[
+            styles.recipientRow,
+            { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+          ]}
+        >
+          <Text style={[typography.body, { color: colors.secondaryLabel }]}>To:</Text>
+          <TextInput
+            style={[typography.body, styles.recipientInput, { color: colors.label }]}
+            placeholder="Name or phone number"
+            placeholderTextColor={colors.systemGray}
+            value={recipientQuery}
+            onChangeText={setRecipientQuery}
+            onSubmitEditing={handleSubmitRecipient}
+            autoFocus
+            returnKeyType="done"
+            accessibilityLabel="Recipient"
+          />
+        </View>
+      )}
+      {isChoosingRecipient && recipientSuggestions.length > 0 && (
+        <View style={[styles.suggestionsList, { backgroundColor: colors.systemBackground }]}>
+          {recipientSuggestions.map((c) => {
+            const name = `${c.firstName} ${c.lastName}`.trim();
+            return (
+              <Pressable
+                key={c.id}
+                onPress={() => handleSelectRecipient(c)}
+                style={[styles.suggestionRow, { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Send to ${name || c.phone}`}
+              >
+                <Text style={[typography.body, { color: colors.label }]}>{name || c.phone}</Text>
+                {!!name && (
+                  <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>{c.phone}</Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {/* Dismiss reaction picker on tap */}
       {selectedMsgId && (
@@ -622,6 +720,24 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  recipientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  recipientInput: {
+    flex: 1,
+    paddingVertical: 0,
+  },
+  suggestionsList: {
+    maxHeight: 220,
+  },
+  suggestionRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   dateSeparator: {
     alignItems: 'center',

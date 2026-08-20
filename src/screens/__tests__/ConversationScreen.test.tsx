@@ -1,8 +1,22 @@
 import React from 'react';
+import { PermissionsAndroid } from 'react-native';
 import { render, fireEvent, waitFor } from '../../test-utils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConversationScreen } from '../ConversationScreen';
-import { DeviceContext, type DeviceContextValue } from '../../store/DeviceStore';
+import { DeviceContext, type DeviceContextValue, type DeviceContact } from '../../store/DeviceStore';
+
+// useAlert() resolves to a no-op in AllProviders (test-utils does not mount
+// AlertProvider), so alert() calls are invisible to assertions by default.
+// Mock it here to capture what ConversationScreen tells the user.
+const mockAlert = jest.fn();
+jest.mock('../../components', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const actual = jest.requireActual('../../components');
+  return { ...actual, useAlert: () => mockAlert };
+});
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const launcherMock = require('../../__mocks__/launcherModule').default;
 
 // Mock MessageBubble so we can count how many times it renders.
 // ConversationScreen imports MessageBubble from ./MessageBubble; this mock
@@ -28,6 +42,41 @@ jest.mock('../MessageBubble', () => {
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
 const mockRoute = { params: { address: '+15551234567' } };
+const mockComposeRoute = { params: { address: '' } };
+
+const CONTACTS: DeviceContact[] = [
+  { id: 'c1', firstName: 'Ana', lastName: 'Silva', phone: '+351911111111' },
+  { id: 'c2', firstName: 'Bruno', lastName: 'Costa', phone: '+351922222222' },
+];
+
+function deviceCtxWith(overrides: Partial<DeviceContextValue>): DeviceContextValue {
+  return {
+    messages: [],
+    contacts: [],
+    battery: { level: 0.72, isCharging: false },
+    brightness: 0.5,
+    volume: 0.5,
+    wifi: { enabled: true, ssid: 'TestWifi', rssi: -50, linkSpeed: 0, ip: '192.168.1.100', networks: [] },
+    wifiError: false,
+    bluetooth: { enabled: true, name: 'TestDevice', address: '', pairedDevices: [] },
+    bluetoothError: false,
+    storage: { totalGB: '128', usedGB: '89', freeGB: '39', usedPercentage: 70 },
+    storageError: false,
+    network: { isConnected: true, isWifi: true, isCellular: false },
+    weather: { temp: 22, condition: 'Sunny', icon: 'sunny', city: 'Test City' },
+    notificationAccessGranted: false,
+    isReady: true,
+    refresh: jest.fn(() => Promise.resolve()),
+    setBrightness: jest.fn(() => Promise.resolve()),
+    setVolume: jest.fn(() => Promise.resolve()),
+    toggleWifi: jest.fn(() => Promise.resolve()),
+    toggleBluetooth: jest.fn(() => Promise.resolve()),
+    openSystemPanel: jest.fn(() => Promise.resolve()),
+    requestContactsPermission: jest.fn(() => Promise.resolve(false)),
+    requestSmsPermission: jest.fn(() => Promise.resolve(false)),
+    ...overrides,
+  };
+}
 
 // Stateful in-memory AsyncStorage mock: setItem persists so a subsequent
 // getItem returns what was written — unlike the stateless default mock.
@@ -212,5 +261,116 @@ describe('ConversationScreen', () => {
     // Sanity: input value reflects the last keystroke.
     const input = getByPlaceholderText('Message') as unknown as { props: { value: string } };
     expect(input.props.value).toBe('Hel');
+  });
+});
+
+describe('ConversationScreen — compose new message (#439)', () => {
+  let checkSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    // Spies through to the real (mocked-native) implementation — just gives
+    // us call-history assertions on top of the existing behaviour.
+    checkSpy = jest.spyOn(PermissionsAndroid, 'check');
+  });
+
+  it('shows a recipient field when opened with no address', () => {
+    const { getByLabelText, getByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockComposeRoute as never} />
+    );
+    expect(getByLabelText('Recipient')).toBeTruthy();
+    expect(getByText('New Message')).toBeTruthy();
+  });
+
+  it('does NOT show a recipient field for an existing conversation (no regression)', () => {
+    const { queryByLabelText, getByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+    expect(queryByLabelText('Recipient')).toBeNull();
+    expect(getByText('+15551234567')).toBeTruthy();
+  });
+
+  it('filters contact suggestions by typed name and selects one as the recipient', () => {
+    const { getByLabelText, getByText, queryByLabelText, queryByText } = render(
+      <DeviceContext.Provider value={deviceCtxWith({ contacts: CONTACTS })}>
+        <ConversationScreen navigation={mockNavigation as never} route={mockComposeRoute as never} />
+      </DeviceContext.Provider>
+    );
+
+    fireEvent.changeText(getByLabelText('Recipient'), 'ana');
+
+    expect(getByText('Ana Silva')).toBeTruthy();
+    expect(queryByText('Bruno Costa')).toBeNull();
+
+    fireEvent.press(getByText('Ana Silva'));
+
+    // Field disappears once a recipient is chosen, and the nav title updates.
+    expect(queryByLabelText('Recipient')).toBeNull();
+    expect(getByText('Ana Silva')).toBeTruthy();
+  });
+
+  it('accepts a typed phone number as the recipient on submit, without a matching contact', () => {
+    const { getByLabelText, queryByLabelText, getByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockComposeRoute as never} />
+    );
+
+    const recipientField = getByLabelText('Recipient');
+    fireEvent.changeText(recipientField, '+351933333333');
+    fireEvent(recipientField, 'submitEditing');
+
+    expect(queryByLabelText('Recipient')).toBeNull();
+    expect(getByText('+351933333333')).toBeTruthy();
+  });
+
+  it('refuses to send without a recipient, with a message that does not blame permissions', async () => {
+    const { getByPlaceholderText, getByLabelText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockComposeRoute as never} />
+    );
+
+    fireEvent.changeText(getByPlaceholderText('Message'), 'Hello there');
+
+    fireEvent.press(getByLabelText('Send message'));
+
+    // waitFor (not a fixed microtask flush) so the assertion only passes once
+    // the async handleSend chain has genuinely settled — a fixed flush can look
+    // green just because it ran out of ticks before reaching the bridge call.
+    // Filtered by title: AppsStore also calls useAlert() in this tree (an
+    // unrelated "Could not load apps" background alert unmocked in this test
+    // env), so a raw call-count assertion on the shared mock would be noise.
+    await waitFor(() => {
+      expect(mockAlert.mock.calls.some(([title]) => title === 'No Recipient')).toBe(true);
+    }, { timeout: 2000 });
+
+    expect(launcherMock.sendSms).not.toHaveBeenCalled();
+    // The guard must short-circuit before the native SEND_SMS permission
+    // negotiation even starts — a missing recipient isn't a permissions problem.
+    expect(checkSpy).not.toHaveBeenCalled();
+    const [, message] = mockAlert.mock.calls.find(([title]) => title === 'No Recipient')!;
+    expect(String(message)).not.toMatch(/permission/i);
+    expect(String(message)).not.toBe('Could not send message. Check permissions and try again.');
+  });
+
+  it('sends to the chosen recipient once one has been picked (compose → pick → send)', async () => {
+    const { getByLabelText, getByText, getByPlaceholderText } = render(
+      <DeviceContext.Provider value={deviceCtxWith({ contacts: CONTACTS })}>
+        <ConversationScreen navigation={mockNavigation as never} route={mockComposeRoute as never} />
+      </DeviceContext.Provider>
+    );
+
+    fireEvent.changeText(getByLabelText('Recipient'), 'bruno');
+    fireEvent.press(getByText('Bruno Costa'));
+    fireEvent.changeText(getByPlaceholderText('Message'), 'Hey Bruno');
+
+    fireEvent.press(getByLabelText('Send message'));
+
+    // Reaching the real SEND_SMS permission negotiation (a genuine, spy-able
+    // side effect, unlike the native launcher bridge behind a dynamic import()
+    // that this Jest environment cannot execute — see PR description) proves
+    // the picked recipient cleared the "No Recipient" guard and the send
+    // attempt proceeded, exactly as it does for a pre-existing conversation.
+    await waitFor(() => {
+      expect(checkSpy).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.SEND_SMS);
+    }, { timeout: 2000 });
+
+    expect(mockAlert.mock.calls.some(([title]) => title === 'No Recipient')).toBe(false);
   });
 });
