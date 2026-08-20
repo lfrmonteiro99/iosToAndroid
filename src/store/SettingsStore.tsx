@@ -51,8 +51,6 @@ export interface SettingsState {
   lowPowerMode: boolean;
   batteryPercentage: boolean;
   locationServices: boolean;
-  analyticsEnabled: boolean;
-  personalizedAds: boolean;
   wallpaperIndex: number;
   reduceMotion: boolean;
   boldText: boolean;
@@ -108,8 +106,6 @@ export const DEFAULT_SETTINGS: SettingsState = {
   lowPowerMode: false,
   batteryPercentage: true,
   locationServices: true,
-  analyticsEnabled: false,
-  personalizedAds: false,
   wallpaperIndex: 0,
   reduceMotion: false,
   boldText: false,

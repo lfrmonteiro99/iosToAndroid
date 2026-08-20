@@ -31,7 +31,6 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
 
   const alert = useAlert();
 
-  const [allowTracking, setAllowTracking] = useState(false);
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [requestingPermissions, setRequestingPermissions] = useState(false);
@@ -70,7 +69,9 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
 
   const totalPermissions = PERMISSION_CATEGORIES.length;
   const grantedCount = PERMISSION_CATEGORIES.filter(
-    (p) => permissions[p.key] === true
+    (p) => p.key === 'location'
+      ? settings.locationServices && permissions[p.key] === true
+      : permissions[p.key] === true
   ).length;
 
   return (
@@ -138,22 +139,6 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
           </CupertinoListSection>
         </View>
 
-        {/* Tracking */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Tracking">
-            <CupertinoListTile
-              title="Allow Apps to Request to Track"
-              trailing={
-                <CupertinoSwitch
-                  value={allowTracking}
-                  onValueChange={setAllowTracking}
-                />
-              }
-              showChevron={false}
-            />
-          </CupertinoListSection>
-        </View>
-
         {/* App Privacy with real permission status */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16, paddingBottom: 6, paddingTop: 22 }]}>
@@ -170,6 +155,8 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
           </View>
           <CupertinoListSection>
             {PERMISSION_CATEGORIES.map((item) => {
+              // Location row is gated by the Location Services toggle above
+              const locationDisabled = item.key === 'location' && !settings.locationServices;
               const isGranted = permissions[item.key] === true;
               const hasData = item.key in permissions;
               return (
@@ -183,7 +170,11 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
                   }}
                   trailing={
                     <View style={styles.trailingRow}>
-                      {hasData ? (
+                      {locationDisabled ? (
+                        <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                          Disabled by user
+                        </Text>
+                      ) : hasData ? (
                         <>
                           <View
                             style={[
@@ -234,32 +225,6 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
                 />
               );
             })}
-          </CupertinoListSection>
-        </View>
-
-        {/* Analytics & Improvements */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Analytics & Improvements">
-            <CupertinoListTile
-              title="Share Analytics"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.analyticsEnabled}
-                  onValueChange={(v) => update('analyticsEnabled', v)}
-                />
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Personalized Ads"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.personalizedAds}
-                  onValueChange={(v) => update('personalizedAds', v)}
-                />
-              }
-              showChevron={false}
-            />
           </CupertinoListSection>
         </View>
 
