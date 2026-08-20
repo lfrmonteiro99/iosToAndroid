@@ -44,15 +44,16 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
     const wasActive = settings.focusMode !== 'off';
     const willBeActive = mode.key !== 'off';
 
-    // NOTE: Actual notification silencing requires native Android integration
-    // (NotificationManager.setInterruptionFilter or similar). Here we only
-    // update the in-app focus state and inform the user of the simulated effect.
+    // App.tsx's notification listener reads focusMode from a ref before showing
+    // any banner, so banners are actually suppressed inside the launcher when
+    // focus is active. System-level DND (NotificationManager.setInterruptionFilter)
+    // is out of scope — we only gate the launcher's own banner UI.
     update('focusMode', mode.key);
 
     if (!wasActive && willBeActive) {
       alert(
         'Focus Mode Active',
-        `${mode.label} is ON. Notifications will be silenced.`,
+        `${mode.label} is ON. Notifications are hidden inside the launcher.`,
       );
     } else if (wasActive && !willBeActive) {
       alert('Focus Mode Disabled', 'Focus mode disabled. Notifications restored.');

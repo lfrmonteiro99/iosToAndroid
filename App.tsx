@@ -27,11 +27,14 @@ import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
 import { suppressAutoLock } from './src/utils/permissions';
-import { onBridgeError } from './modules/launcher-module/src';
+import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
+import { useSettings } from './src/store/SettingsStore';
+import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
 
 function AppContent() {
   const { isDark } = useTheme();
   const device = useDevice();
+  const { settings } = useSettings();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [isLocked, setIsLocked] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
@@ -43,6 +46,11 @@ function AppContent() {
   // IDs of native notifications we've already surfaced as banners — prevents
   // re-showing the same notification on every poll cycle.
   const seenNotifIds = useRef<Set<string>>(new Set());
+
+  // Mirror of settings.focusMode kept in a ref so the notification listener
+  // callback (registered once) always reads the current value without stale closure.
+  const focusModeRef = useRef(settings.focusMode ?? 'off');
+  useEffect(() => { focusModeRef.current = settings.focusMode ?? 'off'; }, [settings.focusMode]);
 
   // Pending auto-lock timer. We don't lock the instant the app goes to
   // background — a permission dialog, the system HOME intent fired by our
@@ -158,34 +166,16 @@ function AppContent() {
 
     (async () => {
       try {
-        const mod = (await import('./modules/launcher-module/src')).default;
-        const access = await mod.isNotificationAccessGranted();
+        const access = await LauncherModule.isNotificationAccessGranted();
         if (!access) return;
 
         // Initial paint: hydrate seenNotifIds with current list so the first
         // event-driven banner is genuinely new.
-        const initial = await mod.getNotifications();
+        const initial = await LauncherModule.getNotifications();
         for (const n of initial) seenNotifIds.current.add(n.id);
 
-        const { addNotificationListener } = await import('./modules/launcher-module/src');
         unsub = addNotificationListener((n) => {
-          if (!n || seenNotifIds.current.has(n.id)) return;
-          // Cap the seen set to avoid unbounded growth.
-          if (seenNotifIds.current.size > 200) {
-            const first = seenNotifIds.current.values().next().value;
-            if (first) seenNotifIds.current.delete(first);
-          }
-          seenNotifIds.current.add(n.id);
-          if (n.title || n.text) {
-            setBanner({
-              id: `notif-${n.id}`,
-              appName: (n.packageName || '').split('.').pop() || 'App',
-              iconName: 'notifications',
-              iconColor: '#5856D6',
-              title: n.title,
-              body: n.text,
-            });
-          }
+          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner);
         });
       } catch { /* ignore */ }
     })();
