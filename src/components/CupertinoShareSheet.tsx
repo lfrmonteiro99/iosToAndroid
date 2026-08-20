@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { BorderRadius } from '../theme/CupertinoTheme';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ const styles = StyleSheet.create({
   previewCard: {
     marginHorizontal: 16,
     marginBottom: 16,
-    borderRadius: 12,
+    borderRadius: BorderRadius.medium,
     padding: 12,
   },
   optionsScroll: {
@@ -200,7 +201,7 @@ const styles = StyleSheet.create({
   optionIconWrap: {
     width: 52,
     height: 52,
-    borderRadius: 14,
+    borderRadius: BorderRadius.card14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,

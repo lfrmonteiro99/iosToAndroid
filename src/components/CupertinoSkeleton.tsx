@@ -25,7 +25,8 @@ export function CupertinoSkeleton({
   borderRadius = 4,
   style,
 }: CupertinoSkeletonProps) {
-  const { isDark } = useTheme();
+  const { theme } = useTheme();
+  const { colors } = theme;
   const reduceMotion = useGestureReduceMotion();
   const opacity = useSharedValue(reduceMotion ? 0.5 : 0.3);
 
@@ -45,7 +46,7 @@ export function CupertinoSkeleton({
     opacity: opacity.value,
   }));
 
-  const bgColor = isDark ? '#3A3A3C' : '#D1D1D6';
+  const bgColor = colors.systemGray4;
 
   return (
     <Animated.View

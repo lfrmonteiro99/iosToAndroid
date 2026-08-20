@@ -6,6 +6,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { AnimationConfig, BorderRadius } from '../theme/CupertinoTheme';
 import { hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
@@ -39,7 +40,7 @@ export function CupertinoSegmentedControl({
       animatedWidth.value = segWidth;
       translateX.value = reduceMotion
         ? selectedIndex * segWidth
-        : withSpring(selectedIndex * segWidth, { damping: 20, stiffness: 300 });
+        : withSpring(selectedIndex * segWidth, AnimationConfig.defaultSpring);
     }
   }, [selectedIndex, segWidth, reduceMotion, translateX, animatedWidth]);
 
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 2,
     bottom: 2,
-    borderRadius: 7,
+    borderRadius: BorderRadius.tag,
   },
   segment: {
     flex: 1,

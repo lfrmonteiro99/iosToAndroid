@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { BorderRadius } from '../theme/CupertinoTheme';
 
 interface CupertinoTextFieldProps extends TextInputProps {
   clearButton?: boolean;
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
+    borderRadius: BorderRadius.input,
     paddingHorizontal: 12,
     minHeight: 44,
   },

@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { BorderRadius } from '../theme/CupertinoTheme';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface AlertAction {
@@ -81,7 +82,7 @@ export function CupertinoAlertDialog({
             styles.dialog,
             {
               backgroundColor: dialogBg,
-              borderRadius: 14,
+              borderRadius: BorderRadius.card14,
             },
             dialogStyle,
           ]}

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { BorderRadius } from '../theme/CupertinoTheme';
 
 // ─── ListTile ────────────────────────────────────────────────
 
@@ -179,7 +180,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 29,
     height: 29,
-    borderRadius: 7,
+    borderRadius: BorderRadius.tag,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

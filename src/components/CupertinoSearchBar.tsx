@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { BorderRadius } from '../theme/CupertinoTheme';
 
 interface CupertinoSearchBarProps extends Omit<TextInputProps, 'style'> {
   value: string;
@@ -128,7 +129,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
+    borderRadius: BorderRadius.input,
     height: 36,
     paddingHorizontal: 8,
   },

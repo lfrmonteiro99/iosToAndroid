@@ -255,6 +255,10 @@ export const BorderRadius = {
   large: 16,
   extraLarge: 20,
   pill: 9999,
+  // Named tokens for recurrent values that don't fit the standard scale
+  tag: 7,       // small list section corners, chip sub-elements
+  input: 10,    // search bars, text fields
+  card14: 14,   // dialog containers, sheet list items
 } as const;
 
 // iOS-style Shadows (soft, not Material elevation)
@@ -286,6 +290,14 @@ export const Shadows = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 20,
     elevation: 8,
+  },
+  // Stronger drop shadow for interactive thumbs (sliders, switches)
+  thumb: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
 

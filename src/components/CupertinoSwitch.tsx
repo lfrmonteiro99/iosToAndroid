@@ -8,6 +8,7 @@ import Animated, {
   interpolateColor,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { AnimationConfig, Shadows } from '../theme/CupertinoTheme';
 import { hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
@@ -39,7 +40,7 @@ export function CupertinoSwitch({
     const target = value ? 1 : 0;
     progress.value = reduceMotion
       ? withTiming(target, { duration: 150 })
-      : withSpring(target, { damping: 20, stiffness: 300 });
+      : withSpring(target, AnimationConfig.defaultSpring);
     // Shared values are stable refs; reduceMotion is a reactive dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, reduceMotion]);
@@ -105,10 +106,6 @@ const styles = StyleSheet.create({
     height: THUMB_SIZE,
     borderRadius: THUMB_SIZE / 2,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    ...Shadows.thumb,
   },
 });
