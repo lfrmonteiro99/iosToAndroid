@@ -1,12 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
-// #442: TodayViewScreen was registered in TabNavigator and typed in
-// RootStackParamList, but nothing in the app ever navigated to it — it was
-// dead code, reachable only by a deep link the app doesn't even configure
-// (no `scheme` in app.json). Notes/Reminders/Mail had the opposite problem:
-// they *were* reachable, but only through Spotlight search results that
-// require pre-existing data to exist (see the issue's escalation comment).
+// #442: Notes, Reminders and Mail were registered in TabNavigator and typed
+// in RootStackParamList, but the only way in was a Spotlight result built by
+// filtering *existing* notes/reminders by title — on a clean install there was
+// nothing to match, so the screens could never be opened (see the issue's
+// escalation comment).
 //
 // This is a static-analysis guard, not a rendering test: it parses the
 // registered route names out of TabNavigator.tsx and greps the rest of src/
@@ -15,7 +14,7 @@ import path from 'path';
 // table like `BUILT_IN_APPS`/the Settings screen list — `key: 'X'` — or an
 // `initialRouteName`). It cannot prove a route is reachable in the way a
 // rendered interaction test can (that's what
-// LauncherHomeScreen.entryPoints.test.tsx does for the four routes this
+// LauncherHomeScreen.entryPoints.test.tsx does for the three routes this
 // issue is actually about) — it can only catch the specific shape of this
 // bug again: a screen added to the navigator with no textual trace of any
 // code ever trying to reach it.
@@ -65,13 +64,19 @@ function hasEntryPoint(corpus: string, route: string): boolean {
 }
 
 describe('every registered route has a discoverable entry point (#442)', () => {
-  // Pre-existing, unrelated to #442: MapsScreen is registered and typed but
-  // has no caller anywhere (confirmed by hand — the only "Maps" text in the
-  // app is a `title="Maps"` JSX prop and code comments, not a navigation
-  // call). It is a separate bug with the same shape as this issue; fixing it
-  // is out of scope here (see PR description). Documented explicitly instead
-  // of silently excluded so this allowlist can't grow without a comment.
-  const KNOWN_PRE_EXISTING_GAPS = ['Maps'];
+  // Known gaps with the same shape as this issue, both explicitly out of
+  // scope here. Documented rather than silently excluded so this allowlist
+  // can't grow without a comment naming who owns each entry.
+  //
+  //  - 'Maps': MapsScreen is registered and typed but has no caller anywhere
+  //    (confirmed by hand — the only "Maps" text in the app is a
+  //    `title="Maps"` JSX prop and code comments, not a navigation call).
+  //    Pre-existing, unrelated to #442, no owning issue yet.
+  //  - 'TodayView': registered with a `slide_from_left` transition and never
+  //    navigated to. Re-scoped out of #442 into #455, which owns the product
+  //    decision (edge gesture vs. icon vs. removal). Remove from this list
+  //    when #455 lands.
+  const KNOWN_PRE_EXISTING_GAPS = ['Maps', 'TodayView'];
 
   const registeredRoutes = readRegisteredRoutes();
   const corpus = buildUsageCorpus();
@@ -86,8 +91,8 @@ describe('every registered route has a discoverable entry point (#442)', () => {
     expect(unreachable.slice().sort()).toEqual(KNOWN_PRE_EXISTING_GAPS.slice().sort());
   });
 
-  it('Notes, Reminders, Mail and TodayView (this issue) each have an entry point now', () => {
-    for (const route of ['Notes', 'Reminders', 'Mail', 'TodayView']) {
+  it('Notes, Reminders and Mail (this issue) each have an entry point now', () => {
+    for (const route of ['Notes', 'Reminders', 'Mail']) {
       expect(hasEntryPoint(corpus, route)).toBe(true);
     }
   });

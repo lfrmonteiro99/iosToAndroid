@@ -1,20 +1,23 @@
 import React from 'react';
 import { render, fireEvent, within } from '../../test-utils';
 import { Ionicons } from '@expo/vector-icons';
-import { gestureConfig } from '../../utils/gestureConfig';
 import * as AppsStore from '../../store/AppsStore';
+import { LauncherHomeScreen } from '../LauncherHomeScreen';
 
-// #442: Notes, Reminders, Mail and TodayView were fully implemented screens
-// with zero reachable entry points — Notes/Reminders/Mail had no home-screen
-// icon (only reachable through Spotlight search results that require
-// pre-existing data, per the issue's escalation comment), and TodayView had
-// no entry point at all despite being registered with a `slide_from_left`
-// transition that was clearly meant for a swipe gesture. These tests exercise
-// the real fix: the actual `BUILT_IN_APPS`/`VIRTUAL_ICON_CONFIG` entries and
-// the real `todayViewGesture` wired into LauncherHomeScreen — not a
-// reimplementation of the routing/commit logic.
+// #442: Notes, Reminders and Mail were fully implemented screens with no
+// home-screen icon — the only door was a Spotlight result built by filtering
+// *existing* notes/reminders by title, so on a clean install there was
+// nothing to match and nothing to tap (see the issue's escalation comment).
+// These tests exercise the real fix: the actual `BUILT_IN_APPS` /
+// `VIRTUAL_ICON_CONFIG` entries wired into LauncherHomeScreen, not a
+// reimplementation of the routing logic.
+//
+// TodayView is deliberately NOT covered here — it was re-scoped out of #442
+// into #455, which owns the product decision about how it should be reached.
 
 const mockNavigate = jest.fn();
+const mockLaunchApp = jest.fn(() => Promise.resolve());
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     navigate: mockNavigate,
@@ -26,74 +29,10 @@ jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-// jest.setup.js mocks react-native-gesture-handler with a Gesture API that
-// discards every callback passed to it, so a real swipe could never be
-// simulated. This file re-mocks the module and records every `Gesture.Pan()`
-// call (tagged by which axis it configures) so the test can reach in and
-// fire the captured `onEnd` directly — the same technique already
-// established in AssistiveTouch.test.tsx. The `mock` prefix on the array is
-// required: jest.mock factories may only close over `mock*`-named bindings.
-const mockPanRecords: Array<{
-  axis?: 'x' | 'y';
-  enabled?: unknown;
-  onEnd?: (e: { translationX: number; translationY: number }) => void;
-}> = [];
-
-jest.mock('react-native-gesture-handler', () => {
-  const chain = (record: Record<string, unknown>) => {
-    const g: Record<string, unknown> = {};
-    [
-      'onUpdate', 'onBegin', 'onFinalize', 'minDistance', 'simultaneousWithExternalGesture',
-      'withRef', 'onChange', 'onStart', 'onTouchesBegan', 'onTouchesMove', 'onTouchesUp',
-      'onTouchesCancelled', 'hitSlop', 'maxPointers', 'minPointers', 'averageTouches',
-      'failOffsetX', 'failOffsetY',
-    ].forEach((m) => { g[m] = () => g; });
-    g.activeOffsetX = () => { record.axis = 'x'; return g; };
-    g.activeOffsetY = () => { record.axis = 'y'; return g; };
-    g.enabled = (v: unknown) => { record.enabled = v; return g; };
-    g.onEnd = (fn: unknown) => { record.onEnd = fn; return g; };
-    return g;
-  };
-  return {
-    GestureHandlerRootView: 'View',
-    GestureDetector: 'View',
-    Gesture: {
-      Pan: () => {
-        const record: Record<string, unknown> = { enabled: true };
-        mockPanRecords.push(record as never);
-        return chain(record);
-      },
-      Tap: () => chain({}),
-      LongPress: () => chain({}),
-      Fling: () => chain({}),
-      Exclusive: (...gs: unknown[]) => gs[0],
-      Simultaneous: (...gs: unknown[]) => gs[0],
-      Race: (...gs: unknown[]) => gs[0],
-    },
-    Swipeable: 'View',
-    DrawerLayout: 'View',
-    State: {},
-    PanGestureHandler: 'View',
-    TapGestureHandler: 'View',
-    FlatList: 'FlatList',
-    ScrollView: 'ScrollView',
-  };
-});
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { LauncherHomeScreen } = require('../LauncherHomeScreen');
-
-function lastHorizontalPan() {
-  for (let i = mockPanRecords.length - 1; i >= 0; i--) {
-    if (mockPanRecords[i].axis === 'x') return mockPanRecords[i];
-  }
-  throw new Error('no horizontal (activeOffsetX) pan gesture captured');
-}
-
 // AppsStore starts with isLoading: true until the native app list resolves
 // (AppsStore.tsx:89), and the screen renders only a spinner while loading —
 // every test here needs the loaded state to see the grid at all.
-function mockLoadedApps() {
+function mockLoadedApps(overrides: Partial<ReturnType<typeof AppsStore.useApps>> = {}) {
   jest.spyOn(AppsStore, 'useApps').mockReturnValue({
     apps: [],
     homeApps: [],
@@ -103,7 +42,7 @@ function mockLoadedApps() {
     recentApps: [],
     isLoading: false,
     refreshApps: jest.fn(() => Promise.resolve()),
-    launchApp: jest.fn(() => Promise.resolve()),
+    launchApp: mockLaunchApp,
     addToHome: jest.fn(),
     removeFromHome: jest.fn(),
     addToDock: jest.fn(),
@@ -112,12 +51,13 @@ function mockLoadedApps() {
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    ...overrides,
   } as ReturnType<typeof AppsStore.useApps>);
 }
 
 beforeEach(() => {
   mockNavigate.mockClear();
-  mockPanRecords.length = 0;
+  mockLaunchApp.mockClear();
   mockLoadedApps();
 });
 
@@ -168,41 +108,43 @@ describe('LauncherHomeScreen built-in icons for Notes, Reminders, Mail (#442)', 
     fireEvent.press(getByLabelText('Open Notes'));
     expect(mockNavigate).toHaveBeenCalledWith('Notes');
   });
-});
 
-describe('LauncherHomeScreen TodayView reachable via right-swipe on the first page (#442)', () => {
-  it('navigates to TodayView once the right-swipe reaches the commit distance', () => {
-    render(<LauncherHomeScreen />);
-    const pan = lastHorizontalPan();
-    expect(pan.onEnd).toBeTruthy();
-    pan.onEnd!({ translationX: gestureConfig.todayViewCommitDp, translationY: 0 });
-    expect(mockNavigate).toHaveBeenCalledWith('TodayView');
+  it('routes to the internal screen twice on a double tap, never to a different route', () => {
+    // Double-tapping an icon is a recurring defect shape in this repo: the
+    // second press must resolve through the same BUILT_IN_APPS entry, not
+    // fall through to launchApp (which would try to start a nonexistent
+    // Android package called com.iostoandroid.notes).
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+    const icon = getByLabelText('Open Notes');
+    fireEvent.press(icon);
+    fireEvent.press(icon);
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).toHaveBeenNthCalledWith(1, 'Notes');
+    expect(mockNavigate).toHaveBeenNthCalledWith(2, 'Notes');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
   });
 
-  it('does not navigate for a short drag that never reaches the commit distance', () => {
-    render(<LauncherHomeScreen />);
-    const pan = lastHorizontalPan();
-    pan.onEnd!({ translationX: gestureConfig.todayViewCommitDp / 2, translationY: 0 });
-    expect(mockNavigate).not.toHaveBeenCalledWith('TodayView');
+  it('still launches real Android apps externally — adding the 3 entries did not internalise everything', () => {
+    // The inverse of the fix: a package that is NOT in BUILT_IN_APPS must
+    // keep going through launchApp, so widening the table cannot have
+    // silently swallowed every third-party icon into navigate().
+    mockLoadedApps({
+      nonDockApps: [{ name: 'YT Music', packageName: 'com.google.android.apps.youtube.music', icon: '', isSystem: false }],
+    });
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+    fireEvent.press(getByLabelText('Open YT Music'));
+    expect(mockLaunchApp).toHaveBeenCalledWith('com.google.android.apps.youtube.music');
+    expect(mockNavigate).not.toHaveBeenCalledWith('Notes');
   });
 
-  it('does not navigate for a drag in the wrong direction (leftward)', () => {
-    render(<LauncherHomeScreen />);
-    const pan = lastHorizontalPan();
-    pan.onEnd!({ translationX: -gestureConfig.todayViewCommitDp, translationY: 0 });
-    expect(mockNavigate).not.toHaveBeenCalledWith('TodayView');
-  });
-
-  it('does not navigate when there is no movement at all', () => {
-    render(<LauncherHomeScreen />);
-    const pan = lastHorizontalPan();
-    pan.onEnd!({ translationX: 0, translationY: 0 });
-    expect(mockNavigate).not.toHaveBeenCalledWith('TodayView');
-  });
-
-  it('the gesture starts enabled on the first home page', () => {
-    render(<LauncherHomeScreen />);
-    const pan = lastHorizontalPan();
-    expect(pan.enabled).toBe(true);
+  it('shows Notes only once when it already sits in the dock (no duplicate grid icon — #438)', () => {
+    // The grid builds its virtual icons from BUILT_IN_APPS and skips anything
+    // already in the dock. Adding Notes to that table must not produce two
+    // "Open Notes" targets for a user who docked it.
+    mockLoadedApps({
+      dockApps: [{ name: 'Notes', packageName: 'com.iostoandroid.notes', icon: '', isSystem: false }],
+    });
+    const { getAllByLabelText } = render(<LauncherHomeScreen />);
+    expect(getAllByLabelText('Open Notes')).toHaveLength(1);
   });
 });

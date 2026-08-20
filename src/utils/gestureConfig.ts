@@ -53,9 +53,6 @@ export const gestureConfig = {
   spotlightCommitDp: 32,
   spotlightCommitVelocity: 0.55,
 
-  // Today View (right-swipe reveal from the first home page — #442)
-  todayViewCommitDp: 64,
-
   // Swipe row actions
   swipeActionRevealDp: 10,
   swipeActionFirstExposedDp: 64,

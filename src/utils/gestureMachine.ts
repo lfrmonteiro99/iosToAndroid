@@ -148,13 +148,3 @@ export const commitForSpotlight = (p: CommitPredicate): CommitReason => {
   if (p.velocity >= gestureConfig.spotlightCommitVelocity) return 'velocity';
   return 'none';
 };
-
-// Distance-only on purpose: unlike the other panels, this gesture only fires
-// on the first home page and has no bounce-back affordance to recover from a
-// mis-fired velocity flick, so it commits solely on how far the finger
-// travelled (see LauncherHomeScreen.tsx `todayViewGesture`).
-export const commitForTodayView = (p: CommitPredicate): CommitReason => {
-  'worklet';
-  if (p.progress >= 1) return 'distance';
-  return 'none';
-};
