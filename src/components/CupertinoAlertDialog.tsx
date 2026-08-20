@@ -143,7 +143,6 @@ export function CupertinoAlertDialog({
                 <Text
                   style={[
                     typography.body,
-                    { fontSize: 17 },
                     getActionTextStyle(action),
                   ]}
                 >

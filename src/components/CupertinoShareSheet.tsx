@@ -138,7 +138,7 @@ export function CupertinoShareSheet({ visible, onClose, title, url, text }: Cupe
                 <View style={[styles.optionIconWrap, { backgroundColor: option.iconBg }]}>
                   <Ionicons name={option.icon} size={24} color="#fff" />
                 </View>
-                <Text style={[styles.optionLabel, { color: colors.label }]}>{option.label}</Text>
+                <Text style={[typography.caption2, styles.optionLabel, { color: colors.label }]}>{option.label}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -206,7 +206,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   optionLabel: {
-    fontSize: 11,
     fontWeight: '400',
     textAlign: 'center',
   },
