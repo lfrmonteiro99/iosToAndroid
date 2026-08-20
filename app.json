@@ -59,7 +59,7 @@
         "android.permission.USE_EXACT_ALARM"
       ],
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": true
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
