@@ -506,7 +506,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
       default:
         return null;
     }
-  }, [colors, handleResultPress]);
+  }, [colors, handleResultPress, typography]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[styles.sectionHeader, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -514,7 +514,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
         {section.title}
       </Text>
     </View>
-  ), [colors]);
+  ), [colors, typography]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.systemGroupedBackground }]}>

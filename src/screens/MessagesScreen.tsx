@@ -116,6 +116,7 @@ const ConversationRow = React.memo(function ConversationRow({
   onSelect,
   hasUnread,
 }: ConversationRowProps) {
+  const { textScale } = useTheme();
   const contact = findContactByPhone(conversation.address, contacts);
   const displayName = contact
     ? `${contact.firstName} ${contact.lastName}`.trim()
@@ -248,7 +249,7 @@ const ConversationRow = React.memo(function ConversationRow({
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export function MessagesScreen() {
-  const { theme, typography, spacing, textScale } = useTheme();
+  const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<AppNavigationProp>();

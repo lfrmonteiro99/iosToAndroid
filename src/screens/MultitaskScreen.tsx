@@ -80,7 +80,7 @@ interface RecentAppCardProps {
 }
 
 function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps) {
-  const { typography, textScale } = useTheme();
+  const { typography } = useTheme();
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
 
