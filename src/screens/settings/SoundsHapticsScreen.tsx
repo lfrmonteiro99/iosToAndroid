@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useDevice } from '../../store/DeviceStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -20,30 +21,25 @@ const TEXT_TONES = ['Note (Default)', 'Aurora', 'Bamboo', 'Chord', 'Circles', 'C
 
 const RINGTONE_STORAGE_KEY = '@iostoandroid/ringtone';
 const TEXT_TONE_STORAGE_KEY = '@iostoandroid/text_tone';
-const SYSTEM_HAPTICS_STORAGE_KEY = '@iostoandroid/system_haptics';
 
 export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { volume, setVolume } = useDevice();
   const [showRingtonePicker, setShowRingtonePicker] = useState(false);
   const [showTextTonePicker, setShowTextTonePicker] = useState(false);
-  const [systemHaptics, setSystemHaptics] = useState(true);
-  // Local ringtone/text tone state (backed by AsyncStorage)
   const [ringtone, setRingtone] = useState(settings.ringtone || 'Reflection');
   const [textTone, setTextTone] = useState(settings.textTone || 'Note');
 
-  // Load persisted values on mount
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem(RINGTONE_STORAGE_KEY),
       AsyncStorage.getItem(TEXT_TONE_STORAGE_KEY),
-      AsyncStorage.getItem(SYSTEM_HAPTICS_STORAGE_KEY),
-    ]).then(([rt, tt, haptics]) => {
+    ]).then(([rt, tt]) => {
       if (rt) { setRingtone(rt); update('ringtone', rt); }
       if (tt) { setTextTone(tt); update('textTone', tt); }
-      if (haptics !== null) setSystemHaptics(haptics !== 'false');
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -60,11 +56,6 @@ export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationP
     update('textTone', t);
     AsyncStorage.setItem(TEXT_TONE_STORAGE_KEY, t).catch(() => {});
     setShowTextTonePicker(false);
-  };
-
-  const handleSystemHapticsToggle = (val: boolean) => {
-    setSystemHaptics(val);
-    AsyncStorage.setItem(SYSTEM_HAPTICS_STORAGE_KEY, val ? 'true' : 'false').catch(() => {});
   };
 
   return (
@@ -86,14 +77,17 @@ export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationP
       >
         {/* Ringtone & Vibration section */}
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Ringtone & Vibration">
+          <CupertinoListSection
+            header="Ringtone & Vibration"
+            footer="Ringtone and text tone playback depends on Android app audio permissions. Sounds play through the Notification channel."
+          >
             {/* Volume slider */}
             <View style={styles.sliderRow}>
               <Ionicons name="volume-low-outline" size={20} color={colors.secondaryLabel} />
               <View style={styles.sliderTrack}>
                 <CupertinoSlider
-                  value={settings.volume}
-                  onValueChange={(v) => update('volume', v)}
+                  value={volume}
+                  onValueChange={setVolume}
                   minimumValue={0}
                   maximumValue={1}
                 />
@@ -128,38 +122,8 @@ export function SoundsHapticsScreen({ navigation }: { navigation: AppNavigationP
               title="System Haptics"
               trailing={
                 <CupertinoSwitch
-                  value={systemHaptics}
-                  onValueChange={handleSystemHapticsToggle}
-                />
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Vibration"
-              trailing={
-                <CupertinoSwitch
                   value={settings.vibration}
                   onValueChange={(v) => update('vibration', v)}
-                />
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Keyboard Clicks"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.keyboardClicks}
-                  onValueChange={(v) => update('keyboardClicks', v)}
-                />
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Lock Sound"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.lockSound}
-                  onValueChange={(v) => update('lockSound', v)}
                 />
               }
               showChevron={false}
