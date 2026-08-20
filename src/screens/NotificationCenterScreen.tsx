@@ -453,10 +453,10 @@ export function NotificationCenterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+export const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
   },
   panel: {
     flex: 1,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(32,32,36,0.92)',
   },
   notifCardHeader: {
     flexDirection: 'row',
@@ -548,11 +548,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   notifTitleRead: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.65)',
   },
   notifTime: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.55)',
     flexShrink: 0,
   },
   notifBody: {
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   notifBodyRead: {
-    color: 'rgba(255,255,255,0.45)',
+    color: 'rgba(255,255,255,0.6)',
   },
   showMoreButton: {
     alignSelf: 'center',
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 17,
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.65)',
     fontWeight: '500',
   },
   accessCard: {
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(32,32,36,0.92)',
     marginTop: 16,
   },
   accessTitle: {
