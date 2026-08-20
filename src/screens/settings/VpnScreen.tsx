@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { Platform, View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../theme/ThemeContext';
@@ -12,12 +13,31 @@ import {
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 import { hapticImpact } from '../../utils/haptics';
+import LauncherModule from '../../../modules/launcher-module/src';
 
 export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { openSystemPanel } = useDevice();
+
+  const [isVpn, setIsVpn] = useState<boolean | null>(null);
+
+  const loadVpnStatus = useCallback(async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      const info = await LauncherModule.getNetworkInfo();
+      setIsVpn(info.isVpn);
+    } catch { /* ignore — module unavailable */ }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadVpnStatus(); }, [loadVpnStatus]));
+
+  const statusLabel = isVpn === null
+    ? 'Checking...'
+    : isVpn
+      ? 'Connected'
+      : 'Not Connected';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -54,7 +74,7 @@ export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
               title="Status"
               trailing={
                 <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  Not Configured
+                  {statusLabel}
                 </Text>
               }
               showChevron={false}
@@ -68,17 +88,6 @@ export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
             <CupertinoListTile
               title="Add VPN Configuration..."
               leading={{ name: 'add-circle-outline', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
-              onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); openSystemPanel('vpn'); }}
-            />
-          </CupertinoListSection>
-        </View>
-
-        {/* Open System Settings */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection>
-            <CupertinoListTile
-              title="Open VPN Settings"
-              leading={{ name: 'open-outline', color: '#FFF', backgroundColor: colors.systemBlue }}
               onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); openSystemPanel('vpn'); }}
             />
           </CupertinoListSection>
