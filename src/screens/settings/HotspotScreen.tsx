@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Modal, TextInput, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import {
   CupertinoButton,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+import LauncherModule from '../../../modules/launcher-module/src';
 
 function generatePassword(): string {
   // Generate a readable 12-char password
@@ -31,6 +32,10 @@ export function HotspotScreen({ navigation }: { navigation: AppNavigationProp })
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState(settings.hotspotPassword || '');
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleHotspotPress = useCallback(() => {
+    LauncherModule.openSystemSettings('hotspot');
+  }, []);
 
   const handleSavePassword = () => {
     if (newPassword.length < 8) {
@@ -62,16 +67,12 @@ export function HotspotScreen({ navigation }: { navigation: AppNavigationProp })
         showsVerticalScrollIndicator={false}
       >
         <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection footer="Allow other devices to connect to your hotspot. Enabling requires an active Android tethering permission.">
+          <CupertinoListSection footer="Android restricts hotspot control to system apps. Tap to open the Android hotspot panel where you can enable or disable tethering.">
             <CupertinoListTile
               title="Personal Hotspot"
-              trailing={
-                <CupertinoSwitch
-                  value={settings.hotspotEnabled}
-                  onValueChange={(v) => update('hotspotEnabled', v)}
-                />
-              }
-              showChevron={false}
+              subtitle="Managed by Android"
+              showChevron
+              onPress={handleHotspotPress}
             />
           </CupertinoListSection>
         </View>
@@ -97,25 +98,6 @@ export function HotspotScreen({ navigation }: { navigation: AppNavigationProp })
           </CupertinoListSection>
         </View>
 
-        {settings.hotspotEnabled && (
-          <View style={{ paddingHorizontal: spacing.md }}>
-            <CupertinoListSection
-              header="Connected Devices"
-              footer="The connected-device count is only available when the OS provides it."
-            >
-              <CupertinoListTile
-                title="No Devices Connected"
-                leading={{
-                  name: 'laptop-outline',
-                  color: '#FFFFFF',
-                  backgroundColor: colors.systemGray,
-                }}
-                showChevron={false}
-              />
-            </CupertinoListSection>
-          </View>
-        )}
-
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection
             footer="Maximize Compatibility allows older devices to connect. This may reduce Wi-Fi performance."
@@ -134,7 +116,7 @@ export function HotspotScreen({ navigation }: { navigation: AppNavigationProp })
         </View>
 
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          Sharing cellular data as a hotspot is restricted by Android to system apps. Your settings here configure the iOS-style display only; the actual tethering toggle is handled by the system if you enable it at the top.
+          Tapping Personal Hotspot opens the Android tethering panel. Password and compatibility preferences are saved locally for when you enable tethering there.
         </Text>
       </ScrollView>
 

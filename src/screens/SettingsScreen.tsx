@@ -90,7 +90,7 @@ export function SettingsScreen() {
       case 'airplane': return settings.airplaneMode ? 'On' : undefined;
       case 'wifi': return device.wifi.enabled ? device.wifi.ssid || 'On' : 'Off';
       case 'bluetooth': return device.bluetooth.enabled ? device.bluetooth.name || 'On' : 'Off';
-      case 'hotspot': return settings.hotspotEnabled ? 'On' : 'Off';
+      case 'hotspot': return undefined;
       case 'focus': return settings.focusMode !== 'off' ? settings.focusMode.charAt(0).toUpperCase() + settings.focusMode.slice(1) : undefined;
       case 'screentime': return settings.screenTimeEnabled ? 'On' : 'Off';
       case 'battery': return settings.lowPowerMode ? 'Low Power' : undefined;
