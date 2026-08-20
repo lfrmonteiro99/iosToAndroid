@@ -43,9 +43,34 @@ fi
 
 # The issue comes from the closing keyword in the body, which the implementer always
 # writes.
+#
+# DUAS FONTES, NÃO UMA. O corpo é a primeira, mas falha em dois casos reais:
+#
+#   1. Keyword noutra língua. O regex só tinha as inglesas e este repo escreve em
+#      português — um PR com "Fecha #446" não casava. Aconteceu no PR #451:
+#      integrado em main, mas o #446 ficou em qa:review e aberto, órfão no quadro.
+#   2. PR criado à mão, sem keyword nenhuma.
+#
+# Em ambos o reviewer registava "issue ligado: nenhum" e seguia — aprovava,
+# integrava, e o issue nunca era fechado nem marcado qa:done. Falha silenciosa: o
+# trabalho entra em main e o quadro continua a dizer que está por fazer.
+#
+# O nome do branch é a segunda fonte. `qa/issue-N` é a convenção que o
+# implement.sh já usa e que o pick_pr já exige para sequer olhar para o PR —
+# informação fiável e sempre presente.
 ISSUE=$(printf '%s' "$PR_INFO" | jq -r '.body' \
-  | grep -oiE '(Fixes|Closes|Resolves)[[:space:]]+#[0-9]+' \
+  | grep -oiE '(Fixes|Closes|Resolves|Fecha|Fecham|Resolve|Corrige)[[:space:]]+#[0-9]+' \
   | grep -oE '[0-9]+' | head -1 || true)
+
+if [ -z "$ISSUE" ]; then
+  BRANCH_ISSUE=$(printf '%s' "$PR_INFO" | jq -r '.headRefName // ""' \
+    | grep -oE '^qa/issue-[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+  if [ -n "$BRANCH_ISSUE" ]; then
+    ISSUE="$BRANCH_ISSUE"
+    log "corpo sem keyword de fecho — issue #$ISSUE deduzido do branch"
+  fi
+fi
+
 log "issue ligado: ${ISSUE:-nenhum}"
 
 # Tier from the linked issue, but FLOORED AT MED.
