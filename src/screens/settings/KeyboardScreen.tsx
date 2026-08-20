@@ -145,7 +145,7 @@ export function KeyboardScreen({ navigation }: { navigation: AppNavigationProp }
                 backgroundColor: colors.systemGray,
               }}
               showChevron
-              onPress={() => openSystemPanel('input_method')}
+              onPress={() => openSystemPanel('keyboard')}
             />
           </CupertinoListSection>
         </View>
