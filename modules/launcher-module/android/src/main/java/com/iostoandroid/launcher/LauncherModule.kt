@@ -74,7 +74,13 @@ class LauncherModule : Module() {
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
+            // queryIntentActivities returns one entry per launcher activity, not per
+            // package: an app registering several (Google also registers "Voice Search")
+            // would yield repeated packageNames. launchApp resolves a single activity per
+            // package via getLaunchIntentForPackage, so the extra entries are not
+            // separately launchable — keep the first activity of each package.
             val activities = pm.queryIntentActivities(mainIntent, 0)
+                .distinctBy { it.activityInfo.packageName }
 
             activities.map { resolveInfo ->
                 val appInfo = resolveInfo.activityInfo.applicationInfo
@@ -539,7 +545,11 @@ class LauncherModule : Module() {
                 val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                     addCategory(Intent.CATEGORY_LAUNCHER)
                 }
+                // One entry per launcher activity would report the same package twice
+                // (see getInstalledApps), and StorageScreen sums totalBytes across
+                // entries — double-counting a package inflates the Apps total.
                 val activities = pm.queryIntentActivities(mainIntent, 0)
+                    .distinctBy { it.activityInfo.packageName }
 
                 val appStats = activities.map { resolveInfo ->
                     val packageName = resolveInfo.activityInfo.packageName
