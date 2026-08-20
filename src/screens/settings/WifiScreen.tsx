@@ -66,7 +66,6 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [pendingNetwork, setPendingNetwork] = useState<ScannedNetwork | null>(null);
 
   const scanNetworks = useCallback(async () => {
-    // eslint-disable-next-line no-console
     setScanning(true);
     try {
       const mod = getLauncher();
