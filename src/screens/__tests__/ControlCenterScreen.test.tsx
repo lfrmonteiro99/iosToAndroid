@@ -51,4 +51,19 @@ describe('ControlCenterScreen', () => {
     // Should not throw — state toggling works
     expect(wifi).toBeTruthy();
   });
+
+  it('does not render a Screen Rec tile', () => {
+    const { queryByText, queryByLabelText } = render(
+      <ControlCenterScreen navigation={navigation} />,
+    );
+    expect(queryByText('Screen Rec')).toBeNull();
+    expect(queryByLabelText('Open Screen Recording')).toBeNull();
+  });
+
+  it('renders Screen Mirroring tile', () => {
+    const { getByLabelText } = render(
+      <ControlCenterScreen navigation={navigation} />,
+    );
+    expect(getByLabelText('Screen Mirroring')).toBeTruthy();
+  });
 });

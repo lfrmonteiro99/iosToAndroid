@@ -537,21 +537,6 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 accessibilityLabel={flashlightOn ? 'Turn off torch' : 'Turn on torch'}
               />
               <ShortcutButton
-                iconName="radio-button-on"
-                label="Screen Rec"
-                textScale={textScale}
-                onPress={async () => {
-                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  const mod = await getLauncher();
-                  if (mod) {
-                    await mod.openSystemSettings('cast');
-                  } else {
-                    alert('Screen Recording', 'Could not open screen recorder settings.');
-                  }
-                }}
-                accessibilityLabel="Open Screen Recording"
-              />
-              <ShortcutButton
                 iconName="calculator-outline"
                 label="Calculator"
                 textScale={textScale}
