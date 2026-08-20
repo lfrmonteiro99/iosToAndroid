@@ -286,7 +286,7 @@ export function NotificationCenterScreen() {
                     {/* App name header */}
                     <View style={styles.groupHeader}>
                       {group.appIcon ? (
-                        <Image source={{ uri: `data:image/png;base64,${group.appIcon}` }} style={styles.appIcon} />
+                        <Image source={{ uri: group.appIcon }} style={styles.appIcon} />
                       ) : (
                         <View style={styles.appIconFallback}>
                           <Ionicons name="apps" size={14} color="#FFFFFF" />

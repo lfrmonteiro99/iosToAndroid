@@ -164,7 +164,7 @@ function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }
   if (app.icon) {
     return (
       <Image
-        source={{ uri: `data:image/png;base64,${app.icon}` }}
+        source={{ uri: app.icon }}
         style={{ width: size, height: size, borderRadius: radius }}
         resizeMode="cover"
       />

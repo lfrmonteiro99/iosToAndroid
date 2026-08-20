@@ -4,6 +4,13 @@ import { Platform } from 'react-native';
 export interface InstalledApp {
   name: string;
   packageName: string;
+  /**
+   * A COMPLETE data URI — `data:image/png;base64,<payload>` — already prefixed by
+   * `LauncherModule.drawableToBase64` on the Kotlin side. Pass it straight to
+   * `<Image source={{ uri: app.icon }} />`; prefixing it again yields a
+   * double-prefixed URI that silently renders nothing.
+   * Empty string when the icon could not be loaded.
+   */
   icon: string;
   isSystem: boolean;
 }
