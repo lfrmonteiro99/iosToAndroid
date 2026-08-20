@@ -314,6 +314,7 @@ class LauncherModule : Module() {
                 val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
                 val adapter = btManager?.adapter
                 if (adapter == null || !adapter.isEnabled) return@AsyncFunction false
+                BluetoothDiscoveryReceiver.clear()
                 BluetoothDiscoveryReceiver.register(context)
                 if (adapter.isDiscovering) {
                     adapter.cancelDiscovery()
