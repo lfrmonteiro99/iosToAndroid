@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   SharedValue,
   useAnimatedStyle,
@@ -13,6 +14,7 @@ interface SpotlightRevealProps {
 }
 
 export function SpotlightReveal({ progress }: SpotlightRevealProps) {
+  const insets = useSafeAreaInsets();
   // Animated affordance: search field that slides in from above
   const fieldStyle = useAnimatedStyle(() => {
     'worklet';
@@ -46,7 +48,7 @@ export function SpotlightReveal({ progress }: SpotlightRevealProps) {
       {/* Search field affordance — preview only, real field is on SpotlightSearchScreen */}
       <Animated.View
         pointerEvents="none"
-        style={[styles.fieldHolder, fieldStyle]}
+        style={[styles.fieldHolder, { top: insets.top + 24 }, fieldStyle]}
         accessibilityLabel="Spotlight Search"
         importantForAccessibility="no-hide-descendants"
       >
@@ -67,7 +69,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: '10%',
     right: '10%',
-    top: 80,
     zIndex: 21,
     alignItems: 'center',
   },

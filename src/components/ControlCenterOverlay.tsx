@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function ControlCenterOverlay({ zone, onCommit }: Props) {
+  const insets = useSafeAreaInsets();
   const reduceMotion = useGestureReduceMotion();
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
@@ -116,7 +118,7 @@ export function ControlCenterOverlay({ zone, onCommit }: Props) {
 
       {/* Sliding preview sheet — visual only, hidden from screen readers */}
       <Animated.View
-        style={[styles.sheet, sheetStyle]}
+        style={[styles.sheet, { paddingTop: insets.top + 12 }, sheetStyle]}
         pointerEvents="none"
         accessible={false}
         importantForAccessibility="no-hide-descendants"
@@ -168,7 +170,6 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     alignItems: 'center',
-    paddingTop: 12,
   },
   handle: {
     width: 36,

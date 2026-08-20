@@ -310,7 +310,7 @@ function WorldClockTab() {
 
   return (
     <View style={styles.tabContent}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}>
         {cities.map((wc) => (
           <CupertinoSwipeableRow
             key={wc.timezone}
@@ -637,7 +637,7 @@ function AlarmTab() {
 
   return (
     <View style={styles.tabContent}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}>
         {alarms.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="alarm-outline" size={48} color={colors.tertiaryLabel} />
