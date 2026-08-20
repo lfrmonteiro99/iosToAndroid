@@ -238,6 +238,37 @@ diz isso explicitamente no veredicto em vez de a inventares.
 EOF
 }
 
+# ── 0. Hermes (Nous) — motor alternativo, escolhido explicitamente ─────────
+#
+# NÃO é um degrau da ladder: é um motor à parte, pedido por AGENT_ENGINE=hermes.
+# A razão é o paralelismo. A ladder existe para degradar quando a subscrição
+# Claude seca; o Hermes serve para correr um SEGUNDO implementador ao mesmo
+# tempo que o Claude, num slot próprio (AGENT_SLOT=hermes) e portanto com o seu
+# próprio lock. Metê-lo como degrau faria dele um substituto em vez de um par.
+#
+# `--yolo` é o equivalente ao --permission-mode acceptEdits do Claude Code: sem
+# ele o hermes pára à espera de aprovação e o agente morre no timeout sem
+# produzir veredicto — o mesmo modo de falha que o `< /dev/null` do ollama
+# resolveu. Não há --allowedTools equivalente; o isolamento vem do worktree.
+if [ "${AGENT_ENGINE:-}" = "hermes" ]; then
+  if ! command -v hermes >/dev/null 2>&1; then
+    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas o hermes não está no PATH" >&2
+    exit 1
+  fi
+  HERMES_MODEL="${HERMES_MODEL:-${AGENT_HERMES_MODEL:-}}"
+  USED="hermes/${HERMES_MODEL:-default}"
+  if [ -n "$HERMES_MODEL" ]; then
+    run_harness "hermes" "$HERMES_MODEL" \
+      hermes -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
+  else
+    run_harness "hermes" "default" \
+      hermes -z "$PROMPT" --yolo --cli
+  fi
+  RC=$?
+  echo "$USED" > "$LOCK_PREFIX.$AGENT_SLOT.engine" 2>/dev/null || true
+  exit "$RC"
+fi
+
 # ── 1. Subscription (claude CLI) ───────────────────────────────────────────
 if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && command -v claude >/dev/null 2>&1; then
   USED="claude/$CLAUDE_MODEL"

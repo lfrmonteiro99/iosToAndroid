@@ -190,7 +190,10 @@ fi
 
 rm -f "$VERDICT_FILE"
 agent_log_header "$LOG_DIR/implement-$ISSUE.log" "implement #$ISSUE modelo=$MODEL"
-AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
+# O slot é o que separa os locks do run-agent.sh, e por isso é o que permite dois
+# implementadores em simultâneo. O orquestrador lança o par Hermes com
+# TEAM_SLOT=hermes AGENT_ENGINE=hermes; sem override fica tudo em 'main', como antes.
+AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="${AGENT_ENGINE:-}" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${IMPLEMENT_TIMEOUT:-2700}" \
   >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
 
@@ -265,10 +268,28 @@ TESTS=$(printf '%s' "$TESTS" | sanitize_closing_keywords)
 # real work and lied about why.
 #
 # Work exists if the tree is dirty OR the branch differs from the base.
+#
+# O PADRÃO TEM DE ESTAR ANCORADO. A versão anterior usava
+# `grep -vE '(^.. )?(node_modules|android/|ios/|\.expo/)'`, em que o prefixo de
+# estado é OPCIONAL e portanto nada ancora a alternação ao início do caminho:
+# `android/` passava a casar em qualquer posição da linha. O efeito é que
+# `modules/launcher-module/android/src/main/java/.../X.kt` — código-fonte do
+# módulo nativo — era filtrado como se fosse a pasta `android/` gerada pelo
+# `expo prebuild`.
+#
+# Consequência medida no #435: o agente escreveu Kotlin real (um deduper novo,
+# duas chamadas alteradas, seis testes), o grep comeu tudo, DIRTY saiu vazio, e o
+# harness rejeitou como "sem alterações reais no código" — DUAS rondas seguidas,
+# contando rejeições que empurram o issue para o tier forte. Qualquer issue cujo
+# fix seja apenas nativo era impossível de entregar.
+#
+# Ancorar ao início do caminho (com o prefixo de 3 caracteres do --porcelain
+# opcional) resolve: só a `android/` de topo é ignorada, a do módulo passa.
+IGNORE_RE='^(..[ ])?(node_modules|android|ios|\.expo)/'
 DIRTY=$(git -C "$WT" status --porcelain 2>/dev/null \
-  | grep -vE '(^.. )?(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+  | grep -vE "$IGNORE_RE" | head -1 || true)
 BRANCH_WORK=$(git -C "$WT" diff --name-only "origin/$BASE_BRANCH...HEAD" 2>/dev/null \
-  | grep -vE '^(node_modules|android/|ios/|\.expo/)' | head -1 || true)
+  | grep -vE '^(node_modules|android|ios|\.expo)/' | head -1 || true)
 CHANGED="${DIRTY:-$BRANCH_WORK}"
 
 log "outcome=$OUTCOME árvore=${DIRTY:+suja}${DIRTY:-limpa} branch=${BRANCH_WORK:+com trabalho}${BRANCH_WORK:-vazio}"
