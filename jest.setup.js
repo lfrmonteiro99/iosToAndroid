@@ -300,6 +300,11 @@ jest.mock('./modules/launcher-module/src', () => ({
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
+    getInstalledKeyboards: jest.fn(() => Promise.resolve([])),
+    getRingtone: jest.fn(() => Promise.resolve('')),
+    canWriteSystemSettings: jest.fn(() => Promise.resolve(false)),
+    openWriteSettingsAccess: jest.fn(() => Promise.resolve(true)),
+    setRingtone: jest.fn(() => Promise.resolve(false)),
   },
 }));
 

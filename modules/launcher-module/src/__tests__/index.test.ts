@@ -49,6 +49,31 @@ function loadBridge() {
   return mod!;
 }
 
+describe('requireNativeModule try/catch hardening', () => {
+  beforeAll(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterAll(() => {
+    (console.error as jest.Mock).mockRestore();
+  });
+
+  it('exports the stub (not undefined) when requireNativeModule throws on Android', async () => {
+    const { requireNativeModule } = jest.requireMock('expo') as { requireNativeModule: jest.Mock };
+    requireNativeModule.mockImplementationOnce(() => { throw new Error('module not found'); });
+
+    let mod: typeof import('../index');
+    jest.isolateModules(() => { mod = jest.requireActual('../index'); });
+
+    // The module must export a callable default (the stub), never crash at import time.
+    expect(mod!.default).toBeDefined();
+    // Stub methods resolve to their default values without throwing.
+    await expect(mod!.default.getInstalledApps()).resolves.toEqual([]);
+    await expect(mod!.default.getInstalledKeyboards()).resolves.toEqual([]);
+    await expect(mod!.default.getRingtone()).resolves.toBe('');
+    await expect(mod!.default.canWriteSystemSettings()).resolves.toBe(false);
+  });
+});
+
 describe('LauncherModule bridge error reporting', () => {
   let mod: typeof import('../index');
   let listener: jest.Mock;
