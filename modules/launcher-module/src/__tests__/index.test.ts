@@ -74,13 +74,9 @@ describe('LauncherModule bridge error reporting', () => {
   });
 
   it('reports getWifiInfo failures to onBridgeError listeners', async () => {
-    await expect(mod.default.getWifiInfo()).resolves.toEqual({
-      enabled: false,
-      ssid: '',
-      rssi: 0,
-      linkSpeed: 0,
-      ip: '',
-    });
+    // After #371: getWifiInfo returns null on bridge error (not the default object)
+    // so callers can distinguish failure from "Wi-Fi off"
+    await expect(mod.default.getWifiInfo()).resolves.toBeNull();
     expect(listener).toHaveBeenCalledWith('getWifiInfo', expect.any(Error));
   });
 

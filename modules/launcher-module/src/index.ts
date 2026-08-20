@@ -147,14 +147,14 @@ interface LauncherModuleType {
   goHome(): Promise<boolean>;
   uninstallApp(packageName: string): Promise<boolean>;
   // Wi-Fi
-  getWifiInfo(): Promise<WifiInfo>;
+  getWifiInfo(): Promise<WifiInfo | null>;
   setWifiEnabled(enabled: boolean): Promise<boolean>;
   isLocationEnabled(): Promise<boolean>;
   getWifiNetworks(): Promise<WifiNetwork[]>;
   joinWifiNetwork(ssid: string, password: string, security: string): Promise<boolean>;
   forgetWifiNetwork(ssid: string): Promise<boolean>;
   // Bluetooth
-  getBluetoothInfo(): Promise<BluetoothInfo>;
+  getBluetoothInfo(): Promise<BluetoothInfo | null>;
   setBluetoothEnabled(enabled: boolean): Promise<boolean>;
   startBluetoothDiscovery(): Promise<boolean>;
   stopBluetoothDiscovery(): Promise<boolean>;
@@ -162,7 +162,7 @@ interface LauncherModuleType {
   pairBluetoothDevice(address: string): Promise<boolean>;
   unpairBluetoothDevice(address: string): Promise<boolean>;
   // Storage
-  getStorageInfo(): Promise<StorageInfo>;
+  getStorageInfo(): Promise<StorageInfo | null>;
   // SMS
   getRecentMessages(limit: number): Promise<SmsMessage[]>;
   // Volume
@@ -171,7 +171,7 @@ interface LauncherModuleType {
   // System settings
   openSystemSettings(panel: string): Promise<boolean>;
   // Network
-  getNetworkInfo(): Promise<NetworkInfo>;
+  getNetworkInfo(): Promise<NetworkInfo | null>;
   // Carrier
   getCarrierInfo(): Promise<CarrierInfo>;
   // App Storage Stats
@@ -304,7 +304,7 @@ function createBridgedModule(): LauncherModuleType {
     },
     getWifiInfo: async () => {
       try { return await nativeModule.getWifiInfo(); }
-      catch (e) { console.error('LauncherModule.getWifiInfo failed:', e); reportBridgeError('getWifiInfo', e); return { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }; }
+      catch (e) { console.error('LauncherModule.getWifiInfo failed:', e); reportBridgeError('getWifiInfo', e); return null; }
     },
     setWifiEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setWifiEnabled(enabled); }
@@ -328,7 +328,7 @@ function createBridgedModule(): LauncherModuleType {
     },
     getBluetoothInfo: async () => {
       try { return await nativeModule.getBluetoothInfo(); }
-      catch (e) { console.error('LauncherModule.getBluetoothInfo failed:', e); reportBridgeError('getBluetoothInfo', e); return { enabled: false, name: '', address: '', pairedDevices: [] }; }
+      catch (e) { console.error('LauncherModule.getBluetoothInfo failed:', e); reportBridgeError('getBluetoothInfo', e); return null; }
     },
     setBluetoothEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setBluetoothEnabled(enabled); }
@@ -356,7 +356,7 @@ function createBridgedModule(): LauncherModuleType {
     },
     getStorageInfo: async () => {
       try { return await nativeModule.getStorageInfo(); }
-      catch (e) { console.error('LauncherModule.getStorageInfo failed:', e); reportBridgeError('getStorageInfo', e); return { totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }; }
+      catch (e) { console.error('LauncherModule.getStorageInfo failed:', e); reportBridgeError('getStorageInfo', e); return null; }
     },
     getRecentMessages: async (limit: number) => {
       try { return await nativeModule.getRecentMessages(limit); }
@@ -376,7 +376,7 @@ function createBridgedModule(): LauncherModuleType {
     },
     getNetworkInfo: async () => {
       try { return await nativeModule.getNetworkInfo(); }
-      catch (e) { console.error('LauncherModule.getNetworkInfo failed:', e); reportBridgeError('getNetworkInfo', e); return { isConnected: false, isWifi: false, isCellular: false, isVpn: false }; }
+      catch (e) { console.error('LauncherModule.getNetworkInfo failed:', e); reportBridgeError('getNetworkInfo', e); return null; }
     },
     getCarrierInfo: async () => {
       try { return await nativeModule.getCarrierInfo(); }

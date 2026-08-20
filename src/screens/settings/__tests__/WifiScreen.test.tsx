@@ -23,19 +23,25 @@ jest.mock('../../../../modules/launcher-module/src', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const launcherMock = (jest.requireMock('../../../../modules/launcher-module/src') as { default: Record<string, jest.Mock> }).default;
 
+const mockUseDevice = jest.fn();
+
 jest.mock('../../../store/DeviceStore', () => ({
-  useDevice: () => ({
-    wifi: { enabled: true, ssid: '', rssi: 0, linkSpeed: 0, ip: '' },
-    toggleWifi: jest.fn(),
-    openSystemPanel: jest.fn(),
-  }),
+  useDevice: () => mockUseDevice(),
   DeviceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DeviceContext: null,
 }));
 
+const baseDeviceValue = {
+  wifi: { enabled: true, ssid: '', rssi: 0, linkSpeed: 0, ip: '' },
+  wifiError: false,
+  toggleWifi: jest.fn(),
+  openSystemPanel: jest.fn(),
+};
+
 describe('WifiScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseDevice.mockReturnValue(baseDeviceValue);
     launcherMock.isLocationEnabled.mockResolvedValue(true);
     launcherMock.getWifiNetworks.mockResolvedValue([]);
   });
@@ -57,5 +63,19 @@ describe('WifiScreen', () => {
     await waitFor(() => {
       expect(queryByText(/Turn on Location/i)).toBeNull();
     }, { timeout: 3000 });
+  });
+
+  it('shows error tile when wifiError is true', () => {
+    // Red: before fix, wifiError was not read by WifiScreen (field didn't exist).
+    // After fix, WifiScreen renders an error tile when DeviceStore signals a bridge failure.
+    mockUseDevice.mockReturnValue({ ...baseDeviceValue, wifiError: true });
+    const { getByText } = render(<WifiScreen navigation={mockNavigation} />);
+    expect(getByText(/Could not load Wi-Fi status/i)).toBeTruthy();
+  });
+
+  it('does not show error tile when wifiError is false', () => {
+    mockUseDevice.mockReturnValue({ ...baseDeviceValue, wifiError: false });
+    const { queryByText } = render(<WifiScreen navigation={mockNavigation} />);
+    expect(queryByText(/Could not load Wi-Fi status/i)).toBeNull();
   });
 });
