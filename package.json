@@ -1,6 +1,6 @@
 {
   "name": "iostoandroid",
-  "version": "1.14.5",
+  "version": "1.14.6",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
