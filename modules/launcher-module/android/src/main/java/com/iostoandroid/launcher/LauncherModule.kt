@@ -41,9 +41,7 @@ import java.util.Locale
 class LauncherModule : Module() {
     companion object {
         var flashlightState = false
-        private val PHONE_REGEX = Regex("^[+0-9*#(). -]{1,20}$")
-
-        @Volatile private var instance: LauncherModule? = null
+@Volatile private var instance: LauncherModule? = null
 
         /**
          * Called by [NotificationService] to forward notification events to JavaScript.
@@ -652,7 +650,7 @@ class LauncherModule : Module() {
 
         AsyncFunction("makeCall") { number: String ->
             val clean = number.trim()
-            if (!PHONE_REGEX.matches(clean)) {
+            if (!PhoneNumberValidator.isValidShape(clean)) {
                 return@AsyncFunction false
             }
             val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${Uri.encode(clean)}"))
