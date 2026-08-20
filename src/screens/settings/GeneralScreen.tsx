@@ -49,9 +49,11 @@ export function GeneralScreen({ navigation }: { navigation: AppNavigationProp })
             <CupertinoListTile
               title="Software Update"
               trailing={
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>1</Text>
-                </View>
+                settings.updateAvailable ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>1</Text>
+                  </View>
+                ) : undefined
               }
               onPress={() => navigation.navigate('SoftwareUpdate')}
             />

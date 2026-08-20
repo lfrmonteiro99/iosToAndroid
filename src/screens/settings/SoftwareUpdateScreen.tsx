@@ -51,11 +51,13 @@ export function SoftwareUpdateScreen({ navigation }: { navigation: AppNavigation
       const tag: string = data.tag_name ?? '';
       setLatestVersion(tag);
       setCheckedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      setCheckState(semverGt(tag, APP_VERSION) ? 'updateAvailable' : 'upToDate');
+      const hasUpdate = semverGt(tag, APP_VERSION);
+      setCheckState(hasUpdate ? 'updateAvailable' : 'upToDate');
+      update('updateAvailable', hasUpdate);
     } catch {
       setCheckState('error');
     }
-  }, []);
+  }, [update]);
 
   const statusCard = () => {
     if (checkState === 'checking') {
