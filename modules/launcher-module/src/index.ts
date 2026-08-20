@@ -149,6 +149,7 @@ interface LauncherModuleType {
   // Wi-Fi
   getWifiInfo(): Promise<WifiInfo>;
   setWifiEnabled(enabled: boolean): Promise<boolean>;
+  isLocationEnabled(): Promise<boolean>;
   getWifiNetworks(): Promise<WifiNetwork[]>;
   joinWifiNetwork(ssid: string, password: string, security: string): Promise<boolean>;
   forgetWifiNetwork(ssid: string): Promise<boolean>;
@@ -220,6 +221,7 @@ const stub: LauncherModuleType = {
   uninstallApp: async () => false,
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
+  isLocationEnabled: async () => true,
   getWifiNetworks: async () => [],
   joinWifiNetwork: async () => false,
   forgetWifiNetwork: async () => false,
@@ -307,6 +309,10 @@ function createBridgedModule(): LauncherModuleType {
     setWifiEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setWifiEnabled(enabled); }
       catch (e) { console.error('LauncherModule.setWifiEnabled failed:', e); reportBridgeError('setWifiEnabled', e); return false; }
+    },
+    isLocationEnabled: async () => {
+      try { return await nativeModule.isLocationEnabled(); }
+      catch (e) { console.error('LauncherModule.isLocationEnabled failed:', e); reportBridgeError('isLocationEnabled', e); return true; }
     },
     getWifiNetworks: async () => {
       try { return await nativeModule.getWifiNetworks(); }

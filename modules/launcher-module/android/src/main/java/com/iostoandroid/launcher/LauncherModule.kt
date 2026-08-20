@@ -252,6 +252,17 @@ class LauncherModule : Module() {
             } catch (e: Exception) { false }
         }
 
+        AsyncFunction("isLocationEnabled") {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            @Suppress("DEPRECATION")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                lm.isLocationEnabled
+            } else {
+                lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                        lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+            }
+        }
+
         AsyncFunction("getWifiNetworks") {
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             val results = wifiManager.scanResults ?: emptyList()

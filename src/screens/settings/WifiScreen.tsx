@@ -14,6 +14,7 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+import launcherModule from '../../../modules/launcher-module/src';
 
 interface ScannedNetwork {
   ssid: string;
@@ -23,14 +24,7 @@ interface ScannedNetwork {
   isSecure: boolean;
 }
 
-const getLauncher = async () => {
-  if (Platform.OS !== 'android') return null;
-  try {
-    return (await import('../../../modules/launcher-module/src')).default;
-  } catch {
-    return null;
-  }
-};
+const getLauncher = () => (Platform.OS === 'android' ? launcherModule : null);
 
 function getSignalBars(level: number): number {
   if (level > -50) return 3;
@@ -63,6 +57,7 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [scannedNetworks, setScannedNetworks] = useState<ScannedNetwork[]>([]);
   const [scanning, setScanning] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(true);
   const [joinSsid, setJoinSsid] = useState('');
   const [joinPassword, setJoinPassword] = useState('');
   const [joinSecurity, setJoinSecurity] = useState<'WPA2' | 'WPA3' | 'Open'>('WPA2');
@@ -71,10 +66,17 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [pendingNetwork, setPendingNetwork] = useState<ScannedNetwork | null>(null);
 
   const scanNetworks = useCallback(async () => {
+    // eslint-disable-next-line no-console
     setScanning(true);
     try {
-      const mod = await getLauncher();
+      const mod = getLauncher();
       if (!mod) return;
+      const locEnabled = await mod.isLocationEnabled().catch(() => true);
+      setLocationEnabled(locEnabled);
+      if (!locEnabled) {
+        setScannedNetworks([]);
+        return;
+      }
       const networks = await mod.getWifiNetworks().catch(() => []);
       // Deduplicate by SSID and keep the strongest signal for each
       const seen = new Map<string, ScannedNetwork>();
@@ -128,7 +130,7 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
       (async () => {
         setConnecting(true);
         try {
-          const mod = await getLauncher();
+          const mod = getLauncher();
           if (!mod) return;
           const ok = await mod.joinWifiNetwork(network.ssid, '', 'Open');
           if (ok) {
@@ -151,7 +153,7 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
     }
     setConnecting(true);
     try {
-      const mod = await getLauncher();
+      const mod = getLauncher();
       if (!mod) return;
       const ok = await mod.joinWifiNetwork(pendingNetwork.ssid, joinPassword, joinSecurity);
       if (ok) {
@@ -300,6 +302,12 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
                     Scanning for networks...
                   </Text>
                 </View>
+              ) : !locationEnabled ? (
+                <CupertinoListTile
+                  title="Turn on Location to scan for networks"
+                  subtitle="Wi-Fi scanning requires Location Services to be enabled in Android Settings."
+                  showChevron={false}
+                />
               ) : scannedNetworks.length === 0 ? (
                 <CupertinoListTile
                   title="No networks found"
