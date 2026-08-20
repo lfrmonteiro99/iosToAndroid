@@ -88,8 +88,13 @@ export const PARALLAX_OVERHANG = 20;
 export function computeWallpaperTranslateX(
   scrollX: number,
   maxScrollX: number,
-  overhang: number = PARALLAX_OVERHANG,
+  overhang: number,
 ): number {
+  // A directiva é OBRIGATÓRIA: esta função é chamada de dentro de um
+  // useAnimatedStyle, que corre na thread de UI. Sem ela o Reanimated rebenta com
+  // "Tried to synchronously call a non-worklet function on the UI thread" e a app
+  // não chega sequer a mostrar o ecrã inicial.
+  'worklet';
   const progress = Math.min(1, Math.max(0, scrollX / Math.max(1, maxScrollX)));
   return overhang * (1 - 2 * progress);
 }
@@ -758,7 +763,7 @@ export function LauncherHomeScreen() {
   const scrollX = useSharedValue(0);
   const maxScrollX = useSharedValue(1);
   const wallpaperAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: computeWallpaperTranslateX(scrollX.value, maxScrollX.value) }],
+    transform: [{ translateX: computeWallpaperTranslateX(scrollX.value, maxScrollX.value, PARALLAX_OVERHANG) }],
   }));
 
   // Custom wallpaper URI (loaded from AsyncStorage when wallpaperIndex === 6)
