@@ -70,7 +70,9 @@ export function QuickSwitchHomeBar() {
 
   const pan = Gesture.Pan()
     .enabled(recentApps.length > 0)
+    // ×1 (10 dp): strict horizontal gate — any drift wider than ±10dp activates the gesture
     .activeOffsetX([-gestureConfig.axisLockDp, gestureConfig.axisLockDp])
+    // ×2 (20 dp): fail if vertical drift exceeds ±20dp, matching home-bar layout tolerance
     .failOffsetY([-gestureConfig.axisLockDp * 2, gestureConfig.axisLockDp * 2])
     .onBegin(() => {
       'worklet';

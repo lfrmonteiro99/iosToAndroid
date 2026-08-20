@@ -1,3 +1,6 @@
+/** Milliseconds of inactivity after which the home indicator / assistive touch fades */
+export const IDLE_DIM_MS = 2500;
+
 export const gestureConfig = {
   // Zones (all dp = React Native px)
   bottomZoneHeightDp: 28,
