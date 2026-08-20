@@ -60,24 +60,56 @@ function AppContent() {
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoLockDelay = resolveAutoLockDelay(settings.autoLock);
 
-  // Surface native bridge errors as notification banners
+  // Methods called on a tight poll or continuous listener — never banner them
+  // (getRecentMessages: every 30 s in DeviceStore setInterval)
+  const BANNER_SUPPRESSED = useRef(new Set(['getRecentMessages'])).current;
+  const SILENCE_MS = 30_000;
+  const lastErrorTime = useRef<Record<string, number>>({});
+
+  const ERROR_LABELS: Record<string, string> = {
+    getWifiInfo: 'Não foi possível ler o estado do Wi-Fi',
+    getWifiNetworks: 'Não foi possível listar redes Wi-Fi',
+    forgetWifiNetwork: 'Não foi possível esquecer a rede Wi-Fi',
+    setWifiEnabled: 'Não foi possível alterar o estado do Wi-Fi',
+    getBluetoothInfo: 'Não foi possível ler o estado do Bluetooth',
+    setBluetoothEnabled: 'Não foi possível alterar o estado do Bluetooth',
+    getStorageInfo: 'Não foi possível ler o armazenamento',
+    getVolume: 'Não foi possível ler o volume',
+    setVolume: 'Não foi possível alterar o volume',
+    getCallLog: 'Não foi possível ler o registo de chamadas',
+    makeCall: 'Não foi possível efectuar a chamada',
+    sendSms: 'Não foi possível enviar a mensagem',
+    requestAllPermissions: 'Não foi possível pedir permissões',
+    checkPermissions: 'Não foi possível verificar permissões',
+    getCalendarEvents: 'Não foi possível ler o calendário',
+    getNotifications: 'Não foi possível ler as notificações',
+    getInstalledApps: 'Não foi possível ler as aplicações instaladas',
+    launchApp: 'Não foi possível abrir a aplicação',
+    getNetworkInfo: 'Não foi possível ler o estado da rede',
+    getNowPlaying: 'Não foi possível ler a música atual',
+  };
+
+  // Surface native bridge errors as notification banners (deny-list + anti-spam)
   useEffect(() => {
     const unsub = onBridgeError((method, error) => {
+      if (BANNER_SUPPRESSED.has(method)) return;
+
+      const now = Date.now();
+      if (now - (lastErrorTime.current[method] ?? 0) < SILENCE_MS) return;
+      lastErrorTime.current[method] = now;
+
       const msg = error instanceof Error ? error.message : String(error);
-      // Only show banners for user-facing operations
-      if (['makeCall', 'sendSms', 'requestAllPermissions'].includes(method)) {
-        setBanner({
-          id: `error-${Date.now()}`,
-          appName: 'System',
-          iconName: 'warning-outline',
-          iconColor: '#FF9500',
-          title: `${method} failed`,
-          body: msg || 'An error occurred. Please try again.',
-        });
-      }
+      setBanner({
+        id: `error-${now}`,
+        appName: 'System',
+        iconName: 'warning-outline',
+        iconColor: '#FF9500',
+        title: ERROR_LABELS[method] ?? `${method} falhou`,
+        body: msg || 'Ocorreu um erro. Tente novamente.',
+      });
     });
     return unsub;
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Immersive mode — hide system bars globally so all screens benefit
   useEffect(() => {
