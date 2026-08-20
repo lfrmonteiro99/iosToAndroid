@@ -1,6 +1,7 @@
 import React from 'react';
 import { render } from '../../test-utils';
-import { LauncherHomeScreen } from '../LauncherHomeScreen';
+import { LauncherHomeScreen, NonAndroidFallback } from '../LauncherHomeScreen';
+import * as DeviceStore from '../../store/DeviceStore';
 
 describe('LauncherHomeScreen', () => {
   it('renders without crashing', () => {
@@ -86,5 +87,22 @@ describe('LauncherHomeScreen clock interval cleanup (H7)', () => {
 
     setIntervalSpy.mockRestore();
     clearIntervalSpy.mockRestore();
+  });
+});
+
+describe('NonAndroidFallback battery widget', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('shows device.battery.level instead of the 72% literal', () => {
+    // Red step: broken code always renders '72%'; fixed code uses device.battery.level.
+    // With level=0.41 → Math.round(0.41 * 100) = 41 → widget shows '41%', never '72%'.
+    jest.spyOn(DeviceStore, 'useDevice').mockReturnValue({
+      battery: { level: 0.41, isCharging: false },
+    } as ReturnType<typeof DeviceStore.useDevice>);
+
+    const { getByText, queryByText } = render(<NonAndroidFallback />);
+
+    expect(queryByText('72%')).toBeNull();
+    expect(getByText('41%')).toBeTruthy();
   });
 });

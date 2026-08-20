@@ -278,7 +278,7 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
                 backgroundColor: colors.systemGreen,
               }}
               showChevron={false}
-              onPress={() => hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {})}
+              onPress={() => alert('Offload Unused Apps', 'This feature is not available on Android. To manage apps, use the App Manager in your Android system settings.')}
             />
           </CupertinoListSection>
         </View>
