@@ -194,7 +194,7 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
             <CupertinoListTile
               title="Carrier"
               trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                <Text numberOfLines={1} style={[typography.body, { color: colors.secondaryLabel, flexShrink: 1 }]}>
                   {carrierName}
                 </Text>
               }
@@ -209,7 +209,7 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
               title="Network Type"
               trailing={
                 <View style={styles.trailingRow}>
-                  <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600', marginRight: 6 }]}>
+                  <Text numberOfLines={1} style={[typography.body, { color: colors.systemBlue, fontWeight: '600', marginRight: 6, flexShrink: 1 }]}>
                     {networkType}
                   </Text>
                   <SignalBars level={signalLevel} color={colors.systemGreen} />
@@ -242,7 +242,7 @@ export function CellularScreen({ navigation }: { navigation: AppNavigationProp }
               <CupertinoListTile
                 title="SIM Operator"
                 trailing={
-                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  <Text numberOfLines={1} style={[typography.body, { color: colors.secondaryLabel, flexShrink: 1 }]}>
                     {simOperator}
                   </Text>
                 }

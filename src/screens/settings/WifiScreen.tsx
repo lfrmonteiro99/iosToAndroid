@@ -448,7 +448,7 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
             <Text style={[typography.headline, { color: colors.label, textAlign: 'center' }]}>
               Enter password for
             </Text>
-            <Text style={[typography.subhead, { color: colors.label, textAlign: 'center', fontWeight: '600' }]}>
+            <Text numberOfLines={1} style={[typography.subhead, { color: colors.label, textAlign: 'center', fontWeight: '600' }]}>
               {pendingNetwork?.ssid ?? ''}
             </Text>
             <TextInput

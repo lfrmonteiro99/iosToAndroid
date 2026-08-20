@@ -68,6 +68,7 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
             >
               <Ionicons name={iconName} size={25} color={color} />
               <Text
+                numberOfLines={1}
                 style={[
                   typography.tabLabel,
                   { color, marginTop: 2 },

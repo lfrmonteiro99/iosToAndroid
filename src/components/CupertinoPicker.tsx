@@ -113,9 +113,6 @@ export function CupertinoPicker({
         contentContainerStyle={{ paddingVertical: 0 }}
       />
 
-      {/* Top/bottom fade gradients */}
-      <View style={[styles.fadeTop, { height: paddingItems * itemHeight }]} pointerEvents="none" />
-      <View style={[styles.fadeBottom, { height: paddingItems * itemHeight }]} pointerEvents="none" />
     </View>
   );
 }
@@ -135,17 +132,5 @@ const styles = StyleSheet.create({
     right: 0,
     borderRadius: 8,
     zIndex: 0,
-  },
-  fadeTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
-  fadeBottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
   },
 });
