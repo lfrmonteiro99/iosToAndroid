@@ -565,30 +565,6 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                 onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); launchCamera(); }}
                 accessibilityLabel="Open Camera"
               />
-              <ShortcutButton
-                iconName="share-social-outline"
-                label="Nearby Share"
-                textScale={textScale}
-                onPress={async () => {
-                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  const mod = await getLauncher();
-                  if (mod) {
-                    try {
-                      // Try to open Nearby Share system panel; fall back to general settings
-                      await mod.openSystemSettings('nearby_share');
-                    } catch {
-                      try {
-                        await mod.openSystemSettings('settings');
-                      } catch {
-                        alert('Nearby Share', 'Opening Nearby Share...');
-                      }
-                    }
-                  } else {
-                    alert('Nearby Share', 'Opening Nearby Share...');
-                  }
-                }}
-                accessibilityLabel="Open Nearby Share"
-              />
             </View>
           </View>
 

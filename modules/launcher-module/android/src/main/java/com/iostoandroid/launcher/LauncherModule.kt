@@ -444,7 +444,10 @@ class LauncherModule : Module() {
                 "cellular" -> Settings.ACTION_NETWORK_OPERATOR_SETTINGS
                 "data_roaming" -> Settings.ACTION_DATA_ROAMING_SETTINGS
                 "appinfo" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                else -> Settings.ACTION_SETTINGS
+                // ACTION_APN_SETTINGS opens the APN editor. On carrier-locked ROMs it may
+                // start a no-op activity; the outer try/catch already falls back gracefully.
+                "apn" -> Settings.ACTION_APN_SETTINGS
+                else -> { android.util.Log.w("LauncherModule", "openSystemSettings: unknown panel '$panel'"); Settings.ACTION_SETTINGS }
             }
             try {
                 val intent = if (panel == "appinfo") {
