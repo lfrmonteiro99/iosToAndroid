@@ -58,6 +58,7 @@ export interface SettingsState {
   biometricUnlock: boolean;
   showSearchLabel: boolean;
   automaticUpdates: boolean;
+  updateAvailable: boolean;
   scheduledSummaryIdx: number;
 }
 
@@ -113,6 +114,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   biometricUnlock: true,
   showSearchLabel: true,
   automaticUpdates: true,
+  updateAvailable: false,
   scheduledSummaryIdx: 0,
 };
 
