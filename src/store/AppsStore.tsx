@@ -68,6 +68,9 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.photos': { name: 'Photos', packageName: 'com.iostoandroid.photos', icon: '', isSystem: false },
   'com.iostoandroid.calendar': { name: 'Calendar', packageName: 'com.iostoandroid.calendar', icon: '', isSystem: false },
   'com.iostoandroid.calculator': { name: 'Calculator', packageName: 'com.iostoandroid.calculator', icon: '', isSystem: false },
+  'com.iostoandroid.notes': { name: 'Notes', packageName: 'com.iostoandroid.notes', icon: '', isSystem: false },
+  'com.iostoandroid.reminders': { name: 'Reminders', packageName: 'com.iostoandroid.reminders', icon: '', isSystem: false },
+  'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
 };
 
 // Default dock apps — our built-in screens
