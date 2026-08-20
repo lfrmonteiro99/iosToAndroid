@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <View style={[styles.container, { backgroundColor: bg }]}>
           {this.state.recovering ? (
             <>
-              <ActivityIndicator size="large" color={SystemColors.light.accent} style={styles.spinner} />
+              <ActivityIndicator size="large" color={SystemColors[isDark ? 'dark' : 'light'].accent} style={styles.spinner} />
               <Text style={[styles.title, { color: textColor }]}>Recovering...</Text>
               <Text style={[styles.message, { color: secondaryColor }]}>
                 The launcher encountered an error and is restarting automatically.
@@ -82,7 +82,7 @@ export class ErrorBoundary extends Component<Props, State> {
             {this.state.error?.message || 'An unexpected error occurred'}
           </Text>
           {!exhausted && (
-            <Pressable style={styles.button} onPress={this.handleReset}>
+            <Pressable style={[styles.button, { backgroundColor: SystemColors[isDark ? 'dark' : 'light'].accent }]} onPress={this.handleReset}>
               <Text style={styles.buttonText}>Try Again</Text>
             </Pressable>
           )}
@@ -122,7 +122,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   button: {
-    backgroundColor: SystemColors.light.accent,
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: 9999,

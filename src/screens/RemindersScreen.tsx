@@ -195,12 +195,14 @@ interface CheckboxProps {
 }
 
 function Checkbox({ checked, color, onToggle }: CheckboxProps) {
+  const { theme } = useTheme();
+  const { colors } = theme;
   return (
     <Pressable onPress={onToggle} hitSlop={8} style={styles.checkbox}>
       <View
         style={[
           styles.checkboxOuter,
-          { borderColor: checked ? color : '#C7C7CC' },
+          { borderColor: checked ? color : colors.systemGray3 },
           checked && { backgroundColor: color, borderColor: color },
         ]}
       >
@@ -974,7 +976,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
       {/* Create List Modal */}
       <Modal visible={showCreateListModal} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
             <Pressable onPress={() => { setShowCreateListModal(false); setNewListName(''); }}>
               <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Cancel</Text>
             </Pressable>
@@ -1015,7 +1017,7 @@ export function RemindersScreen({ navigation }: { navigation: AppNavigationProp 
       {/* Edit Reminder Modal */}
       <Modal visible={editingReminder !== null} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modalContainer, { backgroundColor: colors.systemBackground }]}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
             <Pressable onPress={() => setEditingReminder(null)}>
               <Text style={[typography.body, { color: REMINDERS_ACCENT }]}>Cancel</Text>
             </Pressable>
@@ -1302,7 +1304,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#C6C6C8',
   },
   modalInput: {
     borderBottomWidth: StyleSheet.hairlineWidth,
