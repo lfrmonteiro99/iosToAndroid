@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface AlertAction {
   label: string;
@@ -31,21 +32,22 @@ export function CupertinoAlertDialog({
 }: CupertinoAlertDialogProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useGestureReduceMotion();
 
   const scale = useSharedValue(1.2);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      scale.value = withSpring(1, { damping: 25, stiffness: 500 });
+      scale.value = reduceMotion ? withTiming(1, { duration: 150 }) : withSpring(1, { damping: 25, stiffness: 500 });
       opacity.value = withTiming(1, { duration: 200 });
     } else {
       scale.value = withTiming(1.2, { duration: 150 });
       opacity.value = withTiming(0, { duration: 150 });
     }
-    // Shared values are stable refs; only respond to visible changes
+    // Shared values are stable refs; reduceMotion is a reactive dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, reduceMotion]);
 
   const dialogStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

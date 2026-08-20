@@ -8,6 +8,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 // ─── Base Skeleton ─────────────────────────────────────────────────────────
 
@@ -25,15 +26,20 @@ export function CupertinoSkeleton({
   style,
 }: CupertinoSkeletonProps) {
   const { isDark } = useTheme();
-  const opacity = useSharedValue(0.3);
+  const reduceMotion = useGestureReduceMotion();
+  const opacity = useSharedValue(reduceMotion ? 0.5 : 0.3);
 
   React.useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(0.7, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true,
-    );
-  }, [opacity]);
+    if (reduceMotion) {
+      opacity.value = 0.5;
+    } else {
+      opacity.value = withRepeat(
+        withTiming(0.7, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    }
+  }, [reduceMotion, opacity]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

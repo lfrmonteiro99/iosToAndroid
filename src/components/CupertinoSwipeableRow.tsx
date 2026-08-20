@@ -10,6 +10,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 
 export interface SwipeAction {
   label: string;
@@ -37,8 +38,16 @@ export function CupertinoSwipeableRow({
   onOpen,
 }: CupertinoSwipeableRowProps) {
   const { typography } = useTheme();
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
   const translateX = useSharedValue(0);
   const contextX = useSharedValue(0);
+
+  // Sync reduceMotion into shared value so worklets can read it
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
 
   // Always hold the latest onOpen so gesture doesn't capture a stale ref
   const onOpenRef = useRef(onOpen);
@@ -47,11 +56,11 @@ export function CupertinoSwipeableRow({
   // Close this row when parent signals another row is now open
   useEffect(() => {
     if (isOpen === false) {
-      translateX.value = withSpring(0, SPRING_CONFIG);
+      translateX.value = reduceMotion ? 0 : withSpring(0, SPRING_CONFIG);
     }
-    // Shared values are stable refs; only respond to isOpen changes
+    // Shared values are stable refs; reduceMotion is a reactive dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, reduceMotion]);
 
   const maxTrailing = trailingActions.length * ACTION_WIDTH;
   const maxLeading = leadingActions.length * ACTION_WIDTH;
@@ -80,22 +89,24 @@ export function CupertinoSwipeableRow({
       }
     })
     .onEnd((e) => {
+      'worklet';
       const velocity = e.velocityX;
+      const rm = reduceMotionShared.value;
       // Decide snap position
       if (velocity < -500 && trailingActions.length > 0) {
-        translateX.value = withSpring(-maxTrailing, SPRING_CONFIG);
+        translateX.value = settle(-maxTrailing, SPRING_CONFIG, rm);
         runOnJS(triggerHaptic)();
       } else if (velocity > 500 && leadingActions.length > 0) {
-        translateX.value = withSpring(maxLeading, SPRING_CONFIG);
+        translateX.value = settle(maxLeading, SPRING_CONFIG, rm);
         runOnJS(triggerHaptic)();
       } else if (translateX.value < -maxTrailing / 2) {
-        translateX.value = withSpring(-maxTrailing, SPRING_CONFIG);
+        translateX.value = settle(-maxTrailing, SPRING_CONFIG, rm);
         runOnJS(triggerHaptic)();
       } else if (translateX.value > maxLeading / 2) {
-        translateX.value = withSpring(maxLeading, SPRING_CONFIG);
+        translateX.value = settle(maxLeading, SPRING_CONFIG, rm);
         runOnJS(triggerHaptic)();
       } else {
-        translateX.value = withSpring(0, SPRING_CONFIG);
+        translateX.value = settle(0, SPRING_CONFIG, rm);
       }
     });
 
@@ -104,7 +115,7 @@ export function CupertinoSwipeableRow({
   }));
 
   const handleActionPress = (action: SwipeAction) => {
-    translateX.value = withSpring(0, SPRING_CONFIG);
+    translateX.value = reduceMotion ? 0 : withSpring(0, SPRING_CONFIG);
     action.onPress();
   };
 

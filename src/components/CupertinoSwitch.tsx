@@ -4,10 +4,12 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
   interpolateColor,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticSelection } from '../utils/haptics';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface CupertinoSwitchProps {
   value: boolean;
@@ -29,17 +31,18 @@ export function CupertinoSwitch({
 }: CupertinoSwitchProps) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useGestureReduceMotion();
 
   const progress = useSharedValue(value ? 1 : 0);
 
   useEffect(() => {
-    progress.value = withSpring(value ? 1 : 0, {
-      damping: 20,
-      stiffness: 300,
-    });
-    // Shared values are stable refs; only respond to value changes
+    const target = value ? 1 : 0;
+    progress.value = reduceMotion
+      ? withTiming(target, { duration: 150 })
+      : withSpring(target, { damping: 20, stiffness: 300 });
+    // Shared values are stable refs; reduceMotion is a reactive dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [value, reduceMotion]);
 
   const onColor = trackColor?.true ?? colors.systemGreen;
   const offColor = trackColor?.false ?? colors.systemGray4;
