@@ -8,7 +8,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
-import { SettingsProvider } from './src/store/SettingsStore';
+import { SettingsProvider, useSettings } from './src/store/SettingsStore';
 import { ContactsProvider } from './src/store/ContactsStore';
 import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
@@ -28,7 +28,6 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
 import { suppressAutoLock } from './src/utils/permissions';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
-import { useSettings } from './src/store/SettingsStore';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
 
 function AppContent() {
@@ -49,8 +48,8 @@ function AppContent() {
 
   // Mirror of settings.focusMode kept in a ref so the notification listener
   // callback (registered once) always reads the current value without stale closure.
-  const focusModeRef = useRef(settings.focusMode ?? 'off');
-  useEffect(() => { focusModeRef.current = settings.focusMode ?? 'off'; }, [settings.focusMode]);
+  const focusModeRef = useRef(settings.focusMode);
+  useEffect(() => { focusModeRef.current = settings.focusMode; }, [settings.focusMode]);
 
   // Pending auto-lock timer. We don't lock the instant the app goes to
   // background — a permission dialog, the system HOME intent fired by our
