@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Modal, Pressable, TouchableOpacity } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
@@ -44,10 +45,12 @@ export function DateTimeScreen({ navigation }: { navigation: AppNavigationProp }
   const { settings, update } = useSettings();
   const [showTimezoneModal, setShowTimezoneModal] = useState(false);
   const [selectedTimezone, setSelectedTimezone] = useState<string | null>(null);
+  const [now, setNow] = useState(new Date());
 
-  const now = new Date();
   const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const displayedTimezone = selectedTimezone ?? detectedTimezone;
+
+  useFocusEffect(useCallback(() => { setNow(new Date()); }, []));
 
   useEffect(() => {
     AsyncStorage.getItem(TIMEZONE_KEY).then((tz) => {
@@ -133,28 +136,47 @@ export function DateTimeScreen({ navigation }: { navigation: AppNavigationProp }
         </View>
 
         {/* Current date/time display */}
-        <View style={{ paddingHorizontal: spacing.md }}>
-          <CupertinoListSection header="Current Date & Time">
-            <CupertinoListTile
-              title="Date"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {now.toLocaleDateString()}
-                </Text>
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Time"
-              trailing={
-                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                  {now.toLocaleTimeString()}
-                </Text>
-              }
-              showChevron={false}
-            />
-          </CupertinoListSection>
-        </View>
+        {(() => {
+          const tz = !settings.dateTimeAutomatic && selectedTimezone ? selectedTimezone : undefined;
+          let dateStr: string;
+          let timeStr: string;
+          try {
+            dateStr = new Intl.DateTimeFormat('en-US', { timeZone: tz, dateStyle: 'full' }).format(now);
+            timeStr = new Intl.DateTimeFormat('en-US', {
+              timeZone: tz,
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: !settings.use24Hour,
+            }).format(now);
+          } catch {
+            dateStr = now.toLocaleDateString();
+            timeStr = now.toLocaleTimeString();
+          }
+          return (
+            <View style={{ paddingHorizontal: spacing.md }}>
+              <CupertinoListSection header="Current Date & Time">
+                <CupertinoListTile
+                  title="Date"
+                  trailing={
+                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                      {dateStr}
+                    </Text>
+                  }
+                  showChevron={false}
+                />
+                <CupertinoListTile
+                  title="Time"
+                  trailing={
+                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                      {timeStr}
+                    </Text>
+                  }
+                  showChevron={false}
+                />
+              </CupertinoListSection>
+            </View>
+          );
+        })()}
 
         {/* Calendar format */}
         <View style={{ paddingHorizontal: spacing.md }}>
