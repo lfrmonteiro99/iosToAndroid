@@ -21,7 +21,7 @@ import type { AppNavigationProp } from '../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
-import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } from '../components';
+import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow, CupertinoNavigationBar } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
@@ -540,10 +540,12 @@ export function MessagesScreen() {
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
 
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <View style={styles.headerTopRow}>
-          {editMode ? (
+      {/* Navigation bar */}
+      <CupertinoNavigationBar
+        title="Messages"
+        largeTitle={true}
+        leftButton={
+          editMode ? (
             <Pressable
               onPress={toggleEditMode}
               hitSlop={8}
@@ -562,40 +564,36 @@ export function MessagesScreen() {
             >
               <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
             </Pressable>
-          )}
+          )
+        }
+        rightButton={
+          !editMode ? (
+            <View style={styles.headerRight}>
+              <Pressable
+                onPress={toggleEditMode}
+                hitSlop={8}
+                style={{ marginRight: 16 }}
+                accessibilityRole="button"
+                accessibilityLabel="Edit conversations"
+              >
+                <Text style={[typography.body, { color: colors.systemBlue }]}>Edit</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleComposePress}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Compose new message"
+              >
+                <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
+              </Pressable>
+            </View>
+          ) : undefined
+        }
+      />
 
-          <View style={styles.headerRight}>
-            {!editMode && (
-              <>
-                <Pressable
-                  onPress={toggleEditMode}
-                  hitSlop={8}
-                  style={{ marginRight: 16 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Edit conversations"
-                >
-                  <Text style={[typography.body, { color: colors.systemBlue }]}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleComposePress}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Compose new message"
-                >
-                  <Ionicons name="create-outline" size={24} color={colors.systemBlue} />
-                </Pressable>
-              </>
-            )}
-          </View>
-        </View>
-
-        {/* Large title */}
-        <Text style={[typography.largeTitle, styles.largeTitle, { color: colors.label }]}>
-          Messages
-        </Text>
-
-        {/* Search bar */}
-        {!editMode && (
+      {/* Search bar */}
+      {!editMode && (
+        <View style={styles.searchBarWrap}>
           <View style={[styles.searchBar, { backgroundColor: colors.systemGray5 }]}>
             <Ionicons name="search" size={16} color={colors.systemGray} style={{ marginRight: 6 }} />
             <TextInput
@@ -614,8 +612,8 @@ export function MessagesScreen() {
               </Pressable>
             )}
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* List or loading */}
       {!device.isReady ? (
@@ -676,16 +674,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 44,
-  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -695,10 +683,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: -8,
   },
-  largeTitle: {
-    fontWeight: '700',
-    letterSpacing: 0.41,
-    marginBottom: 8,
+  searchBarWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
   },
   searchBar: {
     flexDirection: 'row',
