@@ -218,7 +218,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
           <Text style={[typography.title2, { color: colors.label, marginBottom: 12 }]}>{selectedEmail.subject}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
             <View style={[styles.avatar, { backgroundColor: avatarColor(selectedEmail.from) }]}>
-              <Text style={styles.avatarText}>{getInitials(selectedEmail.from)}</Text>
+              <Text style={[typography.callout, styles.avatarText]}>{getInitials(selectedEmail.from)}</Text>
             </View>
             <View style={{ marginLeft: 12, flex: 1 }}>
               <Text style={[typography.headline, { color: colors.label }]}>{selectedEmail.from}</Text>
@@ -292,7 +292,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
           !demoBannerDismissed ? (
             <View style={[styles.demoBanner]}>
               <Ionicons name="information-circle-outline" size={20} color="#92400e" style={{ marginRight: 8 }} />
-              <Text style={styles.demoBannerText}>
+              <Text style={[typography.footnote, styles.demoBannerText]}>
                 Demo Mode — These are sample emails. This app does not send or receive real mail.
               </Text>
               <Pressable onPress={dismissDemoBanner} hitSlop={8} style={{ marginLeft: 8 }}>
@@ -323,7 +323,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
             >
               {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: colors.systemBlue }]} />}
               <View style={[styles.avatar, { backgroundColor: avatarColor(item.from) }]}>
-                <Text style={styles.avatarText}>{getInitials(item.from)}</Text>
+                <Text style={[typography.callout, styles.avatarText]}>{getInitials(item.from)}</Text>
               </View>
               <View style={styles.emailContent}>
                 <View style={styles.emailHeader}>
@@ -359,7 +359,7 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
           </View>
           <ScrollView contentContainerStyle={{ padding: 16 }}>
             <TextInput
-              style={[styles.composeField, { color: colors.label, borderBottomColor: colors.separator }]}
+              style={[typography.callout, styles.composeField, { color: colors.label, borderBottomColor: colors.separator }]}
               placeholder="To:"
               placeholderTextColor={colors.secondaryLabel}
               value={composeTo}
@@ -368,14 +368,14 @@ export function MailScreen({ navigation, route }: { navigation: AppNavigationPro
               autoCapitalize="none"
             />
             <TextInput
-              style={[styles.composeField, { color: colors.label, borderBottomColor: colors.separator }]}
+              style={[typography.callout, styles.composeField, { color: colors.label, borderBottomColor: colors.separator }]}
               placeholder="Subject:"
               placeholderTextColor={colors.secondaryLabel}
               value={composeSubject}
               onChangeText={setComposeSubject}
             />
             <TextInput
-              style={[styles.composeBody, { color: colors.label }]}
+              style={[typography.callout, styles.composeBody, { color: colors.label }]}
               placeholder="Write your email..."
               placeholderTextColor={colors.secondaryLabel}
               value={composeBody}
@@ -405,20 +405,19 @@ const styles = StyleSheet.create({
   },
   demoBannerText: {
     flex: 1,
-    fontSize: 13,
     color: '#92400e',
     lineHeight: 18,
   },
   emailRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', left: 4, top: '50%' },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  avatarText: { color: '#fff', fontWeight: '600' },
   emailContent: { flex: 1, marginLeft: 12 },
   emailHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   separator: { height: StyleSheet.hairlineWidth },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 120 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 },
   composeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  composeField: { fontSize: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  composeBody: { fontSize: 16, minHeight: 200, paddingTop: 12 },
+  composeField: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  composeBody: { minHeight: 200, paddingTop: 12 },
 });

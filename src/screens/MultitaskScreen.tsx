@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { useApps, InstalledApp, RecentApp } from '../store/AppsStore';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
+import { useTheme } from '../theme/ThemeContext';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -79,6 +80,7 @@ interface RecentAppCardProps {
 }
 
 function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps) {
+  const { typography } = useTheme();
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
 
@@ -139,7 +141,7 @@ function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps
             </View>
 
             {/* App name on card */}
-            <Text style={styles.cardAppName} numberOfLines={1}>
+            <Text style={[typography.subhead, styles.cardAppName]} numberOfLines={1}>
               {app.name}
             </Text>
           </View>
@@ -160,10 +162,10 @@ function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps
             </View>
           )}
           <View style={styles.appInfoText}>
-            <Text style={styles.appInfoName} numberOfLines={1}>
+            <Text style={[typography.footnote, styles.appInfoName]} numberOfLines={1}>
               {app.name}
             </Text>
-            <Text style={styles.appInfoTime} numberOfLines={1}>
+            <Text style={[typography.caption2, styles.appInfoTime]} numberOfLines={1}>
               {timeSince(launchedAt)}
             </Text>
           </View>
@@ -183,6 +185,7 @@ interface RecentEntry {
 }
 
 export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp }) {
+  const { typography, textScale } = useTheme();
   const insets = useSafeAreaInsets();
   const { apps, recentApps, removeFromRecents, clearRecents } = useApps();
 
@@ -233,15 +236,15 @@ export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp 
 
       {/* Header */}
       <View style={[styles.header, { marginTop: insets.top + 12 }]}>
-        <Text style={styles.headerTitle}>Recents</Text>
+        <Text style={[typography.body, styles.headerTitle]}>Recents</Text>
         {(entries.length > 0 || showClearedNotice) && (
           <Pressable onPress={handleClearAll} style={styles.clearAllButton} accessibilityLabel="Clear all recent apps" accessibilityRole="button">
-            <Text style={styles.clearAllText}>Clear All</Text>
+            <Text style={[styles.clearAllText, { fontSize: 14 * textScale }]}>Clear All</Text>
           </Pressable>
         )}
       </View>
       {showClearedNotice && (
-        <Text style={styles.clearedNotice}>
+        <Text style={[typography.caption1, styles.clearedNotice]}>
           Recent apps cleared from this view. Background processes are managed by Android.
         </Text>
       )}
@@ -249,8 +252,8 @@ export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp 
       {entries.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="apps-outline" size={56} color="rgba(255,255,255,0.3)" />
-          <Text style={styles.emptyTitle}>No Recent Apps</Text>
-          <Text style={styles.emptySubtitle}>Apps you use will appear here</Text>
+          <Text style={[styles.emptyTitle, { fontSize: 18 * textScale }]}>No Recent Apps</Text>
+          <Text style={[styles.emptySubtitle, { fontSize: 14 * textScale }]}>Apps you use will appear here</Text>
         </View>
       ) : (
         <ScrollView
@@ -299,7 +302,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#ffffff',
-    fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.3,
   },
@@ -311,12 +313,10 @@ const styles = StyleSheet.create({
   },
   clearAllText: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
     fontWeight: '500',
   },
   clearedNotice: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
     fontWeight: '400',
     textAlign: 'center',
     paddingHorizontal: 32,
@@ -392,7 +392,6 @@ const styles = StyleSheet.create({
 
   cardAppName: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 15,
     fontWeight: '400',
     letterSpacing: -0.3,
   },
@@ -437,12 +436,10 @@ const styles = StyleSheet.create({
   },
   appInfoName: {
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
     fontWeight: '500',
   },
   appInfoTime: {
     color: 'rgba(255,255,255,0.4)',
-    fontSize: 11,
     fontWeight: '400',
     marginTop: 1,
   },
@@ -455,13 +452,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 18,
     fontWeight: '500',
     marginTop: 4,
   },
   emptySubtitle: {
     color: 'rgba(255,255,255,0.3)',
-    fontSize: 14,
     fontWeight: '400',
   },
 });

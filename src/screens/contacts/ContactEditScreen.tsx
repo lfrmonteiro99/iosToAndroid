@@ -139,7 +139,7 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
           />
         </CupertinoListSection>
         {firstNameEmpty && lastName.length > 0 && (
-          <Text style={styles.validationError}>First name is required</Text>
+          <Text style={[typography.caption1, styles.validationError]}>First name is required</Text>
         )}
 
         {/* Phone section */}
@@ -155,7 +155,7 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
           />
         </CupertinoListSection>
         {phoneInvalid && (
-          <Text style={styles.validationError}>Enter a valid phone number (at least 7 digits)</Text>
+          <Text style={[typography.caption1, styles.validationError]}>Enter a valid phone number (at least 7 digits)</Text>
         )}
 
         {/* Email section */}
@@ -173,7 +173,7 @@ export function ContactEditScreen({ navigation, route }: ContactEditScreenProps)
           />
         </CupertinoListSection>
         {emailInvalid && (
-          <Text style={styles.validationError}>Invalid email address</Text>
+          <Text style={[typography.caption1, styles.validationError]}>Invalid email address</Text>
         )}
 
         {/* Company section */}
@@ -225,7 +225,6 @@ const styles = StyleSheet.create({
   },
   validationError: {
     color: '#FF3B30',
-    fontSize: 12,
     marginTop: 4,
     marginBottom: 4,
     marginHorizontal: 4,

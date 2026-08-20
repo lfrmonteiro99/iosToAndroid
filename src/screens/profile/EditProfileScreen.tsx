@@ -94,7 +94,7 @@ export function EditProfileScreen({ navigation }: { navigation: AppNavigationPro
           />
         </CupertinoListSection>
         {emailError && (
-          <Text style={styles.emailError}>Invalid email format</Text>
+          <Text style={[typography.caption1, styles.emailError]}>Invalid email format</Text>
         )}
 
         <CupertinoListSection header="Bio">
@@ -129,7 +129,6 @@ const styles = StyleSheet.create({
   },
   emailError: {
     color: '#FF3B30',
-    fontSize: 12,
     marginTop: 4,
     marginHorizontal: 20,
   },

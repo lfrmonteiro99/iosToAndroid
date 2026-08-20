@@ -116,6 +116,7 @@ const ConversationRow = React.memo(function ConversationRow({
   onSelect,
   hasUnread,
 }: ConversationRowProps) {
+  const { textScale } = useTheme();
   const contact = findContactByPhone(conversation.address, contacts);
   const displayName = contact
     ? `${contact.firstName} ${contact.lastName}`.trim()
@@ -169,7 +170,7 @@ const ConversationRow = React.memo(function ConversationRow({
       {/* Avatar */}
       <View style={[styles.avatar, { backgroundColor: bgColor }]}>
         {contact ? (
-          <Text style={styles.avatarInitials}>{getInitials(contact)}</Text>
+          <Text style={[styles.avatarInitials, { fontSize: 19 * textScale }]}>{getInitials(contact)}</Text>
         ) : (
           <Ionicons name="person-outline" size={22} color="#FFFFFF" />
         )}
@@ -195,7 +196,7 @@ const ConversationRow = React.memo(function ConversationRow({
           </Text>
           {!editMode && (
             <View style={styles.dateChevronRow}>
-              <Text style={[typography.subhead, { color: colors.secondaryLabel, fontSize: 15 }]}>
+              <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>
                 {conversation.lastMessage.dateFormatted}
               </Text>
               <Ionicons
@@ -598,7 +599,7 @@ export function MessagesScreen() {
         </View>
 
         {/* Large title */}
-        <Text style={[styles.largeTitle, { color: colors.label }]}>
+        <Text style={[typography.largeTitle, styles.largeTitle, { color: colors.label }]}>
           Messages
         </Text>
 
@@ -607,7 +608,7 @@ export function MessagesScreen() {
           <View style={[styles.searchBar, { backgroundColor: colors.systemGray5 }]}>
             <Ionicons name="search" size={16} color={colors.systemGray} style={{ marginRight: 6 }} />
             <TextInput
-              style={[styles.searchInput, { color: colors.label }]}
+              style={[typography.body, styles.searchInput, { color: colors.label }]}
               placeholder="Search"
               placeholderTextColor={colors.systemGray}
               value={searchQuery}
@@ -704,7 +705,6 @@ const styles = StyleSheet.create({
     marginLeft: -8,
   },
   largeTitle: {
-    fontSize: 34,
     fontWeight: '700',
     letterSpacing: 0.41,
     marginBottom: 8,
@@ -718,7 +718,6 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 17,
     paddingVertical: 0,
   },
 
@@ -762,7 +761,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   avatarInitials: {
-    fontSize: 19,
     fontWeight: '600',
     color: '#FFFFFF',
   },

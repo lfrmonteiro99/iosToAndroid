@@ -287,7 +287,7 @@ function CalcButton({
 // ---------------------------------------------------------------------------
 
 export function CalculatorScreen() {
-  useTheme();
+  const { typography, textScale } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -671,18 +671,18 @@ export function CalculatorScreen() {
         <View style={styles.historyOverlay}>
           <View style={styles.historyPanel}>
             <View style={styles.historyHeader}>
-              <Text style={styles.historyTitle}>History</Text>
+              <Text style={[typography.title3, styles.historyTitle]}>History</Text>
               <Pressable
                 onPress={() => setShowHistory(false)}
                 accessibilityLabel="Close history"
                 accessibilityRole="button"
               >
-                <Text style={styles.historyClose}>✕</Text>
+                <Text style={[typography.title3, styles.historyClose]}>✕</Text>
               </Pressable>
             </View>
             <ScrollView style={styles.historyScroll}>
               {history.length === 0 ? (
-                <Text style={styles.historyEmpty}>No calculations yet</Text>
+                <Text style={[typography.callout, styles.historyEmpty]}>No calculations yet</Text>
               ) : (
                 history.map((entry, idx) => (
                   <Pressable
@@ -695,10 +695,10 @@ export function CalculatorScreen() {
                       pressed && { backgroundColor: '#2C2C2E' },
                     ]}
                   >
-                    <Text style={styles.historyExpression}>
+                    <Text style={[styles.historyExpression, { fontSize: 14 * textScale }]}>
                       {entry.expression}
                     </Text>
-                    <Text style={styles.historyResult}>= {entry.result}</Text>
+                    <Text style={[styles.historyResult, { fontSize: 18 * textScale }]}>= {entry.result}</Text>
                   </Pressable>
                 ))
               )}
@@ -710,7 +710,7 @@ export function CalculatorScreen() {
                 accessibilityLabel="Clear all history"
                 accessibilityRole="button"
               >
-                <Text style={styles.clearHistoryText}>Clear History</Text>
+                <Text style={[typography.callout, styles.clearHistoryText]}>Clear History</Text>
               </Pressable>
             )}
           </View>
@@ -720,7 +720,7 @@ export function CalculatorScreen() {
       {/* Top bar with memory indicator and history toggle */}
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
-          {hasMemory && <Text style={styles.memoryIndicator}>M</Text>}
+          {hasMemory && <Text style={[styles.memoryIndicator, { fontSize: 14 * textScale }]}>M</Text>}
           {isLandscape && (
             <Pressable
               onPress={() => setIsDeg(!isDeg)}
@@ -728,7 +728,7 @@ export function CalculatorScreen() {
               accessibilityLabel={isDeg ? 'Switch to radians' : 'Switch to degrees'}
               accessibilityRole="button"
             >
-              <Text style={styles.degRadText}>{isDeg ? 'DEG' : 'RAD'}</Text>
+              <Text style={[typography.footnote, styles.degRadText]}>{isDeg ? 'DEG' : 'RAD'}</Text>
             </Pressable>
           )}
         </View>
@@ -738,14 +738,14 @@ export function CalculatorScreen() {
           accessibilityRole="button"
           style={styles.historyToggle}
         >
-          <Text style={styles.historyIcon}>🕐</Text>
+          <Text style={[typography.title3, styles.historyIcon]}>🕐</Text>
         </Pressable>
       </View>
 
       {/* Display */}
       <View style={[styles.displayArea, isLandscape && { paddingBottom: 8 }]}>
         {parenDepth > 0 && (
-          <Text style={styles.parenIndicator}>
+          <Text style={[styles.parenIndicator, { fontSize: 18 * textScale }]}>
             {'('.repeat(parenDepth)}
           </Text>
         )}
@@ -853,7 +853,6 @@ const styles = StyleSheet.create({
 
   memoryIndicator: {
     color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '600',
     opacity: 0.7,
   },
@@ -867,7 +866,6 @@ const styles = StyleSheet.create({
 
   degRadText: {
     color: '#FF9F0A',
-    fontSize: 13,
     fontWeight: '600',
   },
 
@@ -876,7 +874,6 @@ const styles = StyleSheet.create({
   },
 
   historyIcon: {
-    fontSize: 20,
   },
 
   displayArea: {
@@ -893,7 +890,6 @@ const styles = StyleSheet.create({
 
   parenIndicator: {
     color: '#FF9F0A',
-    fontSize: 18,
     fontWeight: '400',
     alignSelf: 'flex-end',
     marginBottom: 2,
@@ -946,13 +942,11 @@ const styles = StyleSheet.create({
 
   historyTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
     fontWeight: '600',
   },
 
   historyClose: {
     color: '#A5A5A5',
-    fontSize: 20,
     padding: 4,
   },
 
@@ -962,7 +956,6 @@ const styles = StyleSheet.create({
 
   historyEmpty: {
     color: '#A5A5A5',
-    fontSize: 16,
     textAlign: 'center',
     paddingVertical: 24,
   },
@@ -976,12 +969,10 @@ const styles = StyleSheet.create({
 
   historyExpression: {
     color: '#A5A5A5',
-    fontSize: 14,
   },
 
   historyResult: {
     color: '#FFFFFF',
-    fontSize: 18,
     fontWeight: '500',
     marginTop: 2,
   },
@@ -996,7 +987,6 @@ const styles = StyleSheet.create({
 
   clearHistoryText: {
     color: '#FF453A',
-    fontSize: 16,
     fontWeight: '500',
   },
 });

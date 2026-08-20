@@ -42,7 +42,7 @@ const APP_BAR_COLORS = [
 ];
 
 export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, typography, spacing } = useTheme();
+  const { theme, typography, spacing, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
@@ -194,7 +194,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp
               <View style={{ paddingHorizontal: spacing.md }}>
                 <CupertinoListSection header="Today">
                   <View style={styles.dailyAverageCard}>
-                    <Text style={[styles.dailyAverageTime, { color: colors.label }]}>
+                    <Text style={[styles.dailyAverageTime, { color: colors.label, fontSize: 48 * textScale }]}>
                       {todayData ? formatMinutes(todayData.totalMinutes) : '0m'}
                     </Text>
                     <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
@@ -253,7 +253,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp
               <View style={{ paddingHorizontal: spacing.md }}>
                 <CupertinoListSection header="Weekly Average">
                   <View style={styles.dailyAverageCard}>
-                    <Text style={[styles.weeklyAverageTime, { color: colors.label }]}>
+                    <Text style={[styles.weeklyAverageTime, { color: colors.label, fontSize: 36 * textScale }]}>
                       {formatMinutes(weeklyAvgMinutes)}
                     </Text>
                     <Text style={[typography.caption1, { color: colors.secondaryLabel }]}>
@@ -349,13 +349,11 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   dailyAverageTime: {
-    fontSize: 48,
     fontWeight: '300',
     letterSpacing: -1,
     lineHeight: 56,
   },
   weeklyAverageTime: {
-    fontSize: 36,
     fontWeight: '300',
     letterSpacing: -0.5,
     lineHeight: 44,

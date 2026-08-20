@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SystemColors } from '../theme/CupertinoTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import type { LauncherModuleType } from '../../modules/launcher-module/src';
 
@@ -73,6 +74,7 @@ const PERMISSIONS = [
 ];
 
 export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
+  const { typography, textScale } = useTheme();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -160,10 +162,10 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
                 <Ionicons name="phone-portrait" size={72} color="#FFFFFF" />
               </BlurView>
             </View>
-            <Text style={styles.pageTitle}>Welcome to{'\n'}iOS Launcher</Text>
-            <Text style={styles.pageSubtitle}>Transform your Android into iOS</Text>
+            <Text style={[typography.largeTitle, styles.pageTitle]}>Welcome to{'\n'}iOS Launcher</Text>
+            <Text style={[typography.body, styles.pageSubtitle]}>Transform your Android into iOS</Text>
             <Pressable style={styles.primaryButton} onPress={() => goToPage(1)}>
-              <Text style={styles.primaryButtonText}>Get Started</Text>
+              <Text style={[typography.body, styles.primaryButtonText]}>Get Started</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -171,8 +173,8 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         {/* ── Page 2: Permissions ───────────────────────────────────────── */}
         <View style={styles.page}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
-            <Text style={styles.pageTitle}>Permissions</Text>
-            <Text style={styles.pageSubtitle}>We need a few permissions to give you the full experience</Text>
+            <Text style={[typography.largeTitle, styles.pageTitle]}>Permissions</Text>
+            <Text style={[typography.body, styles.pageSubtitle]}>We need a few permissions to give you the full experience</Text>
             <View style={styles.permList}>
               {PERMISSIONS.map(perm => (
                 <View key={perm.label} style={styles.permRow}>
@@ -180,8 +182,8 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
                     <Ionicons name={perm.icon} size={22} color="#FFFFFF" />
                   </View>
                   <View style={styles.permText}>
-                    <Text style={styles.permLabel}>{perm.label}</Text>
-                    <Text style={styles.permDesc}>{perm.description}</Text>
+                    <Text style={[typography.subhead, styles.permLabel]}>{perm.label}</Text>
+                    <Text style={[typography.footnote, styles.permDesc]}>{perm.description}</Text>
                   </View>
                 </View>
               ))}
@@ -189,11 +191,11 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
             {permissionError && (
               <View style={styles.errorContainer}>
                 <Ionicons name="warning-outline" size={18} color="#FF453A" />
-                <Text style={styles.errorText}>{permissionError}</Text>
+                <Text style={[typography.footnote, styles.errorText]}>{permissionError}</Text>
               </View>
             )}
             <Pressable style={styles.primaryButton} onPress={handleGrantPermissions}>
-              <Text style={styles.primaryButtonText}>
+              <Text style={[typography.body, styles.primaryButtonText]}>
                 {permissionError ? 'Try Again' : 'Grant Permissions'}
               </Text>
             </Pressable>
@@ -214,15 +216,15 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
                 />
               </BlurView>
             </View>
-            <Text style={styles.pageTitle}>Set as Default{'\n'}Launcher</Text>
-            <Text style={styles.pageSubtitle}>
+            <Text style={[typography.largeTitle, styles.pageTitle]}>Set as Default{'\n'}Launcher</Text>
+            <Text style={[typography.body, styles.pageSubtitle]}>
               To get the full experience, set this app as your home launcher
             </Text>
             <Pressable style={styles.primaryButton} onPress={handleSetLauncher}>
-              <Text style={styles.primaryButtonText}>Set Now</Text>
+              <Text style={[typography.body, styles.primaryButtonText]}>Set Now</Text>
             </Pressable>
             <Pressable onPress={() => goToPage(3)} hitSlop={12} style={{ marginTop: 16 }}>
-              <Text style={styles.skipText}>Skip</Text>
+              <Text style={[typography.subhead, styles.skipText]}>Skip</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -233,8 +235,8 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
             <View style={styles.checkCircle}>
               <Ionicons name="checkmark" size={72} color="#FFFFFF" />
             </View>
-            <Text style={styles.pageTitle}>{"You're All Set!"}</Text>
-            <Text style={styles.pageSubtitle}>Your iOS experience starts now</Text>
+            <Text style={[typography.largeTitle, styles.pageTitle]}>{"You're All Set!"}</Text>
+            <Text style={[typography.body, styles.pageSubtitle]}>Your iOS experience starts now</Text>
 
             {/* Permission status summary */}
             {Object.keys(permissionResults).length > 0 && (
@@ -246,14 +248,14 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
                       size={18}
                       color={granted ? '#30D158' : '#FF453A'}
                     />
-                    <Text style={styles.permStatusLabel}>{key}</Text>
+                    <Text style={[styles.permStatusLabel, { fontSize: 14 * textScale }]}>{key}</Text>
                   </View>
                 ))}
               </View>
             )}
 
             <Pressable style={styles.primaryButton} onPress={handleDone}>
-              <Text style={styles.primaryButtonText}>Start</Text>
+              <Text style={[typography.body, styles.primaryButtonText]}>Start</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -326,7 +328,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pageTitle: {
-    fontSize: 34,
     fontWeight: '700',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -334,7 +335,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   pageSubtitle: {
-    fontSize: 17,
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     lineHeight: 24,
@@ -351,12 +351,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
     fontWeight: '600',
   },
   skipText: {
     color: 'rgba(255,255,255,0.55)',
-    fontSize: 15,
     fontWeight: '500',
   },
   permList: {
@@ -385,13 +383,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   permLabel: {
-    fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   permDesc: {
-    fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
   },
   errorContainer: {
@@ -405,7 +401,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontSize: 13,
     color: '#FF453A',
   },
   permSummary: {
@@ -423,7 +418,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   permStatusLabel: {
-    fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
     textTransform: 'capitalize',
   },
