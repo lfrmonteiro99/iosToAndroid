@@ -39,6 +39,7 @@ interface RecentLocation {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = '@iostoandroid/maps_recents';
+const DEMO_BANNER_KEY = '@iostoandroid/maps_demo_dismissed';
 const MAPS_ACCENT = '#007AFF';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -194,6 +195,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [selectedLocation, setSelectedLocation] = useState<RecentLocation | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
 
   // ── Persistence ─────────────────────────────────────────────
 
@@ -207,7 +209,10 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(DEMO_BANNER_KEY),
+    ]).then(([raw, bannerRaw]) => {
       if (cancelled) return;
       if (raw) {
         try {
@@ -215,9 +220,15 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
           setRecents(parsed.sort((a, b) => b.timestamp - a.timestamp));
         } catch { /* ignore */ }
       }
+      if (bannerRaw !== 'true') setDemoBannerDismissed(false);
       setLoaded(true);
     }).catch(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
+  }, []);
+
+  const dismissDemoBanner = useCallback(() => {
+    setDemoBannerDismissed(true);
+    AsyncStorage.setItem(DEMO_BANNER_KEY, 'true');
   }, []);
 
   // ── Location ────────────────────────────────────────────────
@@ -333,6 +344,19 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   const renderListHeader = () => (
     <View>
+      {/* Demo banner */}
+      {!demoBannerDismissed && (
+        <View style={styles.demoBanner}>
+          <Ionicons name="information-circle-outline" size={20} color="#92400e" style={{ marginRight: 8 }} />
+          <Text style={styles.demoBannerText}>
+            Demo Mode — The map is illustrative only. No geolocation, route calculation, or GPS data is used. Recent searches are stored locally.
+          </Text>
+          <Pressable onPress={dismissDemoBanner} hitSlop={8} style={{ marginLeft: 8 }} accessibilityLabel="Dismiss demo banner">
+            <Ionicons name="close" size={18} color="#92400e" />
+          </Pressable>
+        </View>
+      )}
+
       {/* Search bar */}
       <View style={[styles.searchContainer, { paddingHorizontal: spacing.md }]}>
         <CupertinoSearchBar
@@ -550,6 +574,23 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  demoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    margin: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+  },
+  demoBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400e',
+    lineHeight: 18,
   },
   searchContainer: {
     paddingVertical: 8,
