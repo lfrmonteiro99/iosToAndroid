@@ -68,7 +68,7 @@ Key Expo modules in use: `expo-battery`, `expo-blur`, `expo-brightness`, `expo-c
 │   ├── navigation/                 # TabNavigator + route typings
 │   ├── store/                      # React Context stores
 │   ├── theme/                      # ThemeContext + CupertinoTheme
-│   ├── hooks/                      # e.g. useScaledFontSize
+│   ├── hooks/                      # custom React hooks
 │   ├── utils/                      # contacts, haptics, wallpapers
 │   └── __mocks__/                  # Test mocks
 ├── docs/                           # Gap analyses, background actions plan, delegation audit
