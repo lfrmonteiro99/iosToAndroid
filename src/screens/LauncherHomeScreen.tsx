@@ -35,6 +35,7 @@ import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
+import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
@@ -625,6 +626,14 @@ export function LauncherHomeScreen() {
     navigation.navigate(screen as any);
   }, [navigation]);
 
+  // The App Library is now the last page of this same pager (#434), so
+  // reaching it from a gesture means scrolling to the end of the ScrollView,
+  // not pushing a stack screen — `scrollToEnd` needs no page-count math and
+  // stays correct as apps are added/removed.
+  const scrollToLibraryPage = useCallback(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
   // Vertical swipe gesture on the home body:
   //   up   → App Drawer
   //   down → Spotlight (progress tracked into spotlightProgress; navigate on commit)
@@ -669,10 +678,11 @@ export function LauncherHomeScreen() {
       'worklet';
       const { translationY, velocityY } = event;
 
-      // Up-swipe → App Library
+      // Up-swipe → App Library (now the last page of this pager, not a
+      // separate screen — see scrollToLibraryPage above)
       if (translationY < -60 && velocityY < -200) {
         spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
-        runOnJS(navigateTo)('AppLibrary');
+        runOnJS(scrollToLibraryPage)();
         return;
       }
 
@@ -1227,18 +1237,12 @@ export function LauncherHomeScreen() {
           </View>
         ))}
 
-        {/* App Library page — always the last swipeable page */}
-        <Pressable
-          key="app-library"
-          style={[styles.page, styles.appLibraryPage]}
-          onPress={() => navigation.navigate('AppLibrary')}
-          accessibilityLabel="Open App Library"
-          accessibilityRole="button"
-        >
-          <Ionicons name="grid" size={52} color="rgba(255,255,255,0.7)" />
-          <Text style={[styles.appLibraryText, { fontSize: 22 * textScale }]}>App Library</Text>
-          <Text style={[styles.appLibrarySubtext, { fontSize: 14 * textScale }]}>Tap to open all apps</Text>
-        </Pressable>
+        {/* App Library page — the App Library IS the last swipeable page
+            (#434), rendered inline via the shared AppLibraryContent instead
+            of a tap-through placeholder. */}
+        <View key="app-library" style={[styles.page, styles.appLibraryPage]}>
+          <AppLibraryContent />
+        </View>
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
@@ -1615,24 +1619,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // App Library page
+  // App Library page — no horizontal padding: AppLibraryContent lays out its
+  // own edge-to-edge search bar/grid exactly like the standalone screen does.
   appLibraryPage: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  appLibraryText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 22,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  appLibrarySubtext: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 14,
-    fontWeight: '400',
+    paddingHorizontal: 0,
   },
 
   // Fallback

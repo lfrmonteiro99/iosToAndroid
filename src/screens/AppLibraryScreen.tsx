@@ -203,7 +203,7 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
             <Pressable
               onPress={() => { onLaunch(item.packageName); onClose(); }}
               style={[styles.modalAppCell, { width: cellW }]}
-              accessibilityLabel={`Open ${item.name}`}
+              accessibilityLabel={`Open ${item.name}, App Library`}
               accessibilityRole="button"
             >
               <AppIcon app={item} size={iconSize} />
@@ -240,7 +240,7 @@ const AppStrip = React.memo(function AppStrip({
           key={app.packageName}
           onPress={() => onLaunch(app.packageName)}
           style={styles.stripItem}
-          accessibilityLabel={`Open ${app.name}`}
+          accessibilityLabel={`Open ${app.name}, App Library`}
           accessibilityRole="button"
         >
           <AppIcon app={app} size={stripIconSize} />
@@ -287,7 +287,7 @@ const SearchResults = React.memo(function SearchResults({
         <Pressable
           onPress={() => onLaunch(item.packageName)}
           style={({ pressed }) => [styles.searchRow, { opacity: pressed ? 0.7 : 1 }]}
-          accessibilityLabel={`Open ${item.name}`}
+          accessibilityLabel={`Open ${item.name}, App Library`}
           accessibilityRole="button"
         >
           <AppIcon app={item} size={46} />
@@ -313,8 +313,14 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 // Main Screen
 // ---------------------------------------------------------------------------
 
-export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, isDark, typography } = useTheme();
+// Shared body of the App Library: search bar, Recently Added / Suggestions
+// strips, category grid and the category detail modal. Rendered both by the
+// `AppLibrary` stack route (AppLibraryScreen, below) and directly as the last
+// page of the paginated home screen (LauncherHomeScreen) — see issue #434.
+// Keeping this in one place means the two call sites can't drift apart the
+// way twin overlays did in #384.
+export function AppLibraryContent() {
+  const { theme } = useTheme();
   const { colors } = theme;
   const { apps, launchApp, recentApps } = useApps();
   const insets = useSafeAreaInsets();
@@ -386,24 +392,6 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
 
   return (
     <View style={[styles.root, { backgroundColor: colors.systemGroupedBackground }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-
-      {/* Navigation bar */}
-      <CupertinoNavigationBar
-        title="App Library"
-        largeTitle={false}
-        leftButton={
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-            accessibilityLabel="Back"
-          >
-            <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
-            <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
-          </Pressable>
-        }
-      />
-
       {/* Search bar */}
       <View style={styles.searchBarWrap}>
         <CupertinoSearchBar
@@ -473,11 +461,44 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
 }
 
 // ---------------------------------------------------------------------------
+// Stack route wrapper — nav bar + back button, then the shared content
+// ---------------------------------------------------------------------------
+
+export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp }) {
+  const { theme, isDark, typography } = useTheme();
+  const { colors } = theme;
+
+  return (
+    <View style={styles.screenRoot}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <CupertinoNavigationBar
+        title="App Library"
+        largeTitle={false}
+        leftButton={
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
+            <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
+          </Pressable>
+        }
+      />
+      <AppLibraryContent />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   root: {
+    flex: 1,
+  },
+  screenRoot: {
     flex: 1,
   },
   backBtn: {
