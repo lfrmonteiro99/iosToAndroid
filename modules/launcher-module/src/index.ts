@@ -137,6 +137,12 @@ export interface DailyScreenTime {
   topApps: ScreenTimeApp[];
 }
 
+export interface InstalledKeyboard {
+  id: string;
+  label: string;
+  enabled: boolean;
+}
+
 interface LauncherModuleType {
   // Apps
   getInstalledApps(): Promise<InstalledApp[]>;
@@ -205,11 +211,23 @@ interface LauncherModuleType {
   // Permissions
   requestAllPermissions(): Promise<boolean>;
   checkPermissions(): Promise<Record<string, boolean>>;
+  // Keyboards
+  getInstalledKeyboards(): Promise<InstalledKeyboard[]>;
+  // Ringtone
+  getRingtone(): Promise<string>;
+  canWriteSystemSettings(): Promise<boolean>;
+  openWriteSettingsAccess(): Promise<boolean>;
+  setRingtone(uri: string): Promise<boolean>;
 }
 
 const isAndroid = Platform.OS === 'android';
 
-const nativeModule = isAndroid ? requireNativeModule('LauncherModule') : null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- requireNativeModule returns an opaque native object; typing it as any is required for property access
+let nativeModule: any = null;
+if (isAndroid) {
+  try { nativeModule = requireNativeModule('LauncherModule'); }
+  catch (e) { console.error('LauncherModule unavailable, using stub', e); }
+}
 
 const stub: LauncherModuleType = {
   getInstalledApps: async () => [],
@@ -252,6 +270,11 @@ const stub: LauncherModuleType = {
   sendSms: async () => false,
   requestAllPermissions: async () => false,
   checkPermissions: async () => ({}),
+  getInstalledKeyboards: async () => [],
+  getRingtone: async () => '',
+  canWriteSystemSettings: async () => false,
+  openWriteSettingsAccess: async () => false,
+  setRingtone: async () => false,
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
   mediaPrev: async () => false,
@@ -469,6 +492,26 @@ function createBridgedModule(): LauncherModuleType {
     getTodayScreenTime: async () => {
       try { return await nativeModule.getTodayScreenTime(); }
       catch (e) { console.error('LauncherModule.getTodayScreenTime failed:', e); reportBridgeError('getTodayScreenTime', e); return { totalMinutes: 0, topApps: [] }; }
+    },
+    getInstalledKeyboards: async () => {
+      try { return await nativeModule.getInstalledKeyboards(); }
+      catch (e) { console.error('LauncherModule.getInstalledKeyboards failed:', e); reportBridgeError('getInstalledKeyboards', e); return []; }
+    },
+    getRingtone: async () => {
+      try { return await nativeModule.getRingtone(); }
+      catch (e) { console.error('LauncherModule.getRingtone failed:', e); reportBridgeError('getRingtone', e); return ''; }
+    },
+    canWriteSystemSettings: async () => {
+      try { return await nativeModule.canWriteSystemSettings(); }
+      catch (e) { console.error('LauncherModule.canWriteSystemSettings failed:', e); reportBridgeError('canWriteSystemSettings', e); return false; }
+    },
+    openWriteSettingsAccess: async () => {
+      try { return await nativeModule.openWriteSettingsAccess(); }
+      catch (e) { console.error('LauncherModule.openWriteSettingsAccess failed:', e); reportBridgeError('openWriteSettingsAccess', e); return false; }
+    },
+    setRingtone: async (uri: string) => {
+      try { return await nativeModule.setRingtone(uri); }
+      catch (e) { console.error('LauncherModule.setRingtone failed:', e); reportBridgeError('setRingtone', e); return false; }
     },
   };
 }

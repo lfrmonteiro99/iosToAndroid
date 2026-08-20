@@ -977,6 +977,59 @@ class LauncherModule : Module() {
             perms
         }
 
+        // ── Keyboards ────────────────────────────────────────────────────
+
+        AsyncFunction("getInstalledKeyboards") {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            val enabled = imm.enabledInputMethodList.map { it.id }.toSet()
+            imm.inputMethodList.map { imi ->
+                mapOf("id" to imi.id, "label" to imi.loadLabel(context.packageManager).toString(), "enabled" to enabled.contains(imi.id))
+            }
+        }
+
+        // ── Ringtone ─────────────────────────────────────────────────────
+
+        AsyncFunction("getRingtone") {
+            val uri = android.media.RingtoneManager.getActualDefaultRingtoneUri(
+                context, android.media.RingtoneManager.TYPE_RINGTONE
+            )
+            uri?.toString() ?: ""
+        }
+
+        AsyncFunction("canWriteSystemSettings") {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                android.provider.Settings.System.canWrite(context)
+            } else {
+                true
+            }
+        }
+
+        AsyncFunction("openWriteSettingsAccess") {
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                android.net.Uri.parse("package:${context.packageName}")
+            )
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        }
+
+        AsyncFunction("setRingtone") { uri: String ->
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
+                !android.provider.Settings.System.canWrite(context)
+            ) {
+                return@AsyncFunction false
+            }
+            try {
+                android.media.RingtoneManager.setActualDefaultRingtoneUri(
+                    context,
+                    android.media.RingtoneManager.TYPE_RINGTONE,
+                    android.net.Uri.parse(uri)
+                )
+                true
+            } catch (e: Exception) { false }
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────────
 
         OnDestroy {
