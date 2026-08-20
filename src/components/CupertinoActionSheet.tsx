@@ -11,6 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticImpact } from '../utils/haptics';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface ActionSheetOption {
   label: string;
@@ -38,21 +39,26 @@ export function CupertinoActionSheet({
   const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const reduceMotion = useGestureReduceMotion();
 
   const translateY = useSharedValue(400);
   const backdropOpacity = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 25, stiffness: 300 });
+      translateY.value = reduceMotion
+        ? withTiming(0, { duration: 180 })
+        : withSpring(0, { damping: 25, stiffness: 300 });
       backdropOpacity.value = withTiming(1, { duration: 250 });
     } else {
-      translateY.value = withSpring(400, { damping: 25, stiffness: 300 });
+      translateY.value = reduceMotion
+        ? withTiming(400, { duration: 150 })
+        : withSpring(400, { damping: 25, stiffness: 300 });
       backdropOpacity.value = withTiming(0, { duration: 200 });
     }
-    // Shared values are stable refs; only respond to visible changes
+    // Shared values are stable refs; reduceMotion is a reactive dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, reduceMotion]);
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],

@@ -9,6 +9,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface CupertinoActivityIndicatorProps {
   size?: 'small' | 'large';
@@ -24,6 +25,7 @@ export function CupertinoActivityIndicator({
   animating = true,
 }: CupertinoActivityIndicatorProps) {
   const { theme } = useTheme();
+  const reduceMotion = useGestureReduceMotion();
   const indicatorColor = color ?? theme.colors.systemGray;
 
   const dimension = size === 'large' ? 36 : 20;
@@ -33,7 +35,7 @@ export function CupertinoActivityIndicator({
   const rotation = useSharedValue(0);
 
   useEffect(() => {
-    if (animating) {
+    if (animating && !reduceMotion) {
       rotation.value = withRepeat(
         withTiming(360, { duration: 1000, easing: Easing.linear }),
         -1,
@@ -41,9 +43,10 @@ export function CupertinoActivityIndicator({
       );
     } else {
       cancelAnimation(rotation);
+      rotation.value = 0;
     }
     return () => cancelAnimation(rotation);
-  }, [animating, rotation]);
+  }, [animating, reduceMotion, rotation]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],

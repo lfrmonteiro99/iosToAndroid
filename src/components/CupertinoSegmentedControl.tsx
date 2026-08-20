@@ -7,6 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticSelection } from '../utils/haptics';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 interface CupertinoSegmentedControlProps {
   values: string[];
@@ -21,6 +22,7 @@ export function CupertinoSegmentedControl({
 }: CupertinoSegmentedControlProps) {
   const { theme, typography, shadows } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useGestureReduceMotion();
 
   const translateX = useSharedValue(0);
   const animatedWidth = useSharedValue(0);
@@ -35,12 +37,11 @@ export function CupertinoSegmentedControl({
   useEffect(() => {
     if (segWidth > 0) {
       animatedWidth.value = segWidth;
-      translateX.value = withSpring(selectedIndex * segWidth, {
-        damping: 20,
-        stiffness: 300,
-      });
+      translateX.value = reduceMotion
+        ? selectedIndex * segWidth
+        : withSpring(selectedIndex * segWidth, { damping: 20, stiffness: 300 });
     }
-  }, [selectedIndex, segWidth, translateX, animatedWidth]);
+  }, [selectedIndex, segWidth, reduceMotion, translateX, animatedWidth]);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     setContainerWidth(event.nativeEvent.layout.width);

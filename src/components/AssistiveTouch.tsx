@@ -22,6 +22,7 @@ import {
 } from '../store/AssistiveTouchStore';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
+import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -77,6 +78,8 @@ interface AssistiveTouchProps {
 export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const reduceMotion = useGestureReduceMotion();
+  const reduceMotionShared = useSharedValue(reduceMotion);
   const {
     enabled,
     idleOpacity,
@@ -112,19 +115,23 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   const hiddenForFullscreen = autoHideFullscreen && !!currentRoute && FULLSCREEN_ROUTES.has(currentRoute);
   const visible = enabled && !temporarilyHidden && !hiddenForFullscreen;
 
+  // Sync reduceMotion into shared value so worklets can read it
+  useEffect(() => {
+    reduceMotionShared.value = reduceMotion;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
+
   // ── Drag position (shared values for smooth dragging) ─────────────────────
   const translateX = useSharedValue(edge === 'right' ? SCREEN_W - size - 8 : 8);
   const translateY = useSharedValue(Math.min(position.y, SCREEN_H - size - insets.bottom - 40));
 
   // Re-snap to stored edge when edge prop changes (after settings reset)
   useEffect(() => {
-    translateX.value = withSpring(
-      edge === 'right' ? SCREEN_W - size - 8 : 8,
-      SNAP_SPRING,
-    );
-    // Shared values are stable refs; translateX identity doesn't drive re-runs
+    const targetX = edge === 'right' ? SCREEN_W - size - 8 : 8;
+    translateX.value = reduceMotion ? targetX : withSpring(targetX, SNAP_SPRING);
+    // Shared values are stable refs; reduceMotion and translateX identity don't drive re-runs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edge, size]);
+  }, [edge, size, reduceMotion]);
 
   // ── Idle dim ──────────────────────────────────────────────────────────────
   const opacity = useSharedValue(1);
@@ -164,10 +171,12 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     setFullyOpen(false);
     if (fullyOpenTimer.current) clearTimeout(fullyOpenTimer.current);
     fullyOpenTimer.current = setTimeout(() => setFullyOpen(true), 150);
-    menuScale.value = withSpring(1, { damping: 14, stiffness: 220 });
+    menuScale.value = reduceMotion
+      ? withTiming(1, { duration: 150 })
+      : withSpring(1, { damping: 14, stiffness: 220 });
     menuOpacity.value = withTiming(1, { duration: 160 });
     wake();
-  }, [menuScale, menuOpacity, wake, hapticFeedback]);
+  }, [menuScale, menuOpacity, wake, hapticFeedback, reduceMotion]);
 
   const closeMenu = useCallback(() => {
     menuScale.value = withTiming(0, { duration: 150 });
@@ -270,12 +279,13 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     })
     .onEnd(() => {
       'worklet';
+      const rm = reduceMotionShared.value;
       // Magnetic snap to nearest horizontal edge
       const snapLeft = 8;
       const snapRight = SCREEN_W - size - 8;
       const center = translateX.value + size / 2;
       const targetX = center < SCREEN_W / 2 ? snapLeft : snapRight;
-      translateX.value = withSpring(targetX, SNAP_SPRING);
+      translateX.value = settle(targetX, SNAP_SPRING, rm);
 
       // Clamp Y inside safe area
       const minY = insets.top + 8;
@@ -283,7 +293,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       let targetY = translateY.value;
       if (targetY < minY) targetY = minY;
       if (targetY > maxY) targetY = maxY;
-      translateY.value = withSpring(targetY, SNAP_SPRING);
+      translateY.value = settle(targetY, SNAP_SPRING, rm);
 
       runOnJS(persistPosition)(targetX, targetY);
       runOnJS(snapHaptic)();

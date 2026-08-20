@@ -14,6 +14,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticNotification } from '../utils/haptics';
+import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 
 export interface BannerNotification {
   id: string;
@@ -35,6 +36,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useGestureReduceMotion();
 
   const translateY = useSharedValue(-150);
   const scale = useSharedValue(0.95);
@@ -60,8 +62,13 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
     if (notification) {
       hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
       opacity.value = 1;
-      translateY.value = withSpring(0, { damping: 22, stiffness: 350, mass: 0.8 });
-      scale.value = withSpring(1, { damping: 22, stiffness: 350 });
+      if (reduceMotion) {
+        translateY.value = withTiming(0, { duration: 150 });
+        scale.value = withTiming(1, { duration: 150 });
+      } else {
+        translateY.value = withSpring(0, { damping: 22, stiffness: 350, mass: 0.8 });
+        scale.value = withSpring(1, { damping: 22, stiffness: 350 });
+      }
 
       // Auto-dismiss after 5s (iOS style)
       timerRef.current = setTimeout(dismiss, 5000);
@@ -72,7 +79,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         }
       };
     }
-  }, [notification, translateY, scale, opacity, dismiss]);
+  }, [notification, reduceMotion, translateY, scale, opacity, dismiss]);
 
   // Swipe UP to dismiss (iOS gesture)
   const swipeGesture = Gesture.Pan()
