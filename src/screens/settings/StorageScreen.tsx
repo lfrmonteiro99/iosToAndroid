@@ -62,7 +62,7 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { storage } = useDevice();
+  const { storage, storageError } = useDevice();
 
   const [appStats, setAppStats] = useState<AppStorageStat[]>([]);
   const alert = useAlert();
@@ -120,6 +120,19 @@ export function StorageScreen({ navigation }: { navigation: AppNavigationProp })
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Bridge error tile */}
+        {storageError && (
+          <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+            <CupertinoListSection>
+              <CupertinoListTile
+                title="Could not load storage information"
+                subtitle="An error occurred reading from the system. Pull to refresh."
+                showChevron={false}
+              />
+            </CupertinoListSection>
+          </View>
+        )}
+
         {/* Color-coded storage bar */}
         <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
           <View style={styles.storageBarRow}>

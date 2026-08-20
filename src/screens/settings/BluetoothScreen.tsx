@@ -59,7 +59,7 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { bluetooth, toggleBluetooth, refresh } = useDevice();
+  const { bluetooth, bluetoothError, toggleBluetooth, refresh } = useDevice();
   const alert = useAlert();
 
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
@@ -187,6 +187,19 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
             />
           </CupertinoListSection>
         </View>
+
+        {/* Bridge error tile */}
+        {bluetoothError && (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <CupertinoListSection>
+              <CupertinoListTile
+                title="Could not load Bluetooth status"
+                subtitle="An error occurred reading from the system. Pull to refresh."
+                showChevron={false}
+              />
+            </CupertinoListSection>
+          </View>
+        )}
 
         {bluetooth.enabled && (
           <>

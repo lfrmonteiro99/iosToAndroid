@@ -73,8 +73,11 @@ interface DeviceState {
   brightness: number;
   volume: number;
   wifi: DeviceWifi;
+  wifiError: boolean;
   bluetooth: DeviceBluetooth;
+  bluetoothError: boolean;
   storage: DeviceStorage;
+  storageError: boolean;
   network: { isConnected: boolean; isWifi: boolean; isCellular: boolean };
   messages: DeviceSms[];
   contacts: DeviceContact[];
@@ -103,8 +106,11 @@ const DEFAULT_STATE: DeviceState = {
   brightness: 0.5,
   volume: 0.5,
   wifi: { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '', networks: [] },
+  wifiError: false,
   bluetooth: { enabled: false, name: '', address: '', pairedDevices: [] },
+  bluetoothError: false,
   storage: { totalGB: '0', usedGB: '0', freeGB: '0', usedPercentage: 0 },
+  storageError: false,
   network: { isConnected: false, isWifi: false, isCellular: false },
   messages: [],
   contacts: [],
@@ -158,55 +164,67 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     } catch { return DEFAULT_STATE.network; }
   }, []);
 
-  const loadWifi = useCallback(async () => {
+  const loadWifi = useCallback(async (): Promise<{ wifi: DeviceWifi; wifiError: boolean }> => {
     const mod = await getLauncherModule();
-    if (!mod) return DEFAULT_STATE.wifi;
+    if (!mod) return { wifi: DEFAULT_STATE.wifi, wifiError: false };
     try {
       const [info, networks] = await Promise.all([
         mod.getWifiInfo(),
         mod.getWifiNetworks().catch(() => []),
       ]);
+      if (info === null) return { wifi: DEFAULT_STATE.wifi, wifiError: true };
       return {
-        enabled: info.enabled,
-        ssid: info.ssid,
-        rssi: info.rssi,
-        linkSpeed: info.linkSpeed ?? 0,
-        ip: info.ip,
-        networks: networks.map((n: { ssid: string; level: number; isSecure: boolean }) => ({
-          ssid: n.ssid, level: n.level, isSecure: n.isSecure,
-        })),
+        wifi: {
+          enabled: info.enabled,
+          ssid: info.ssid,
+          rssi: info.rssi,
+          linkSpeed: info.linkSpeed ?? 0,
+          ip: info.ip,
+          networks: networks.map((n: { ssid: string; level: number; isSecure: boolean }) => ({
+            ssid: n.ssid, level: n.level, isSecure: n.isSecure,
+          })),
+        },
+        wifiError: false,
       };
-    } catch { return DEFAULT_STATE.wifi; }
+    } catch { return { wifi: DEFAULT_STATE.wifi, wifiError: false }; }
   }, [getLauncherModule]);
 
-  const loadBluetooth = useCallback(async () => {
+  const loadBluetooth = useCallback(async (): Promise<{ bluetooth: DeviceBluetooth; bluetoothError: boolean }> => {
     const mod = await getLauncherModule();
-    if (!mod) return DEFAULT_STATE.bluetooth;
+    if (!mod) return { bluetooth: DEFAULT_STATE.bluetooth, bluetoothError: false };
     try {
       const info = await mod.getBluetoothInfo();
+      if (info === null) return { bluetooth: DEFAULT_STATE.bluetooth, bluetoothError: true };
       return {
-        enabled: info.enabled,
-        name: info.name,
-        address: info.address ?? '',
-        pairedDevices: info.pairedDevices.map((d: { name: string; address: string; type: number }) => ({
-          name: d.name, address: d.address, type: d.type ?? 0,
-        })),
+        bluetooth: {
+          enabled: info.enabled,
+          name: info.name,
+          address: info.address ?? '',
+          pairedDevices: info.pairedDevices.map((d: { name: string; address: string; type: number }) => ({
+            name: d.name, address: d.address, type: d.type ?? 0,
+          })),
+        },
+        bluetoothError: false,
       };
-    } catch { return DEFAULT_STATE.bluetooth; }
+    } catch { return { bluetooth: DEFAULT_STATE.bluetooth, bluetoothError: false }; }
   }, [getLauncherModule]);
 
-  const loadStorage = useCallback(async () => {
+  const loadStorage = useCallback(async (): Promise<{ storage: DeviceStorage; storageError: boolean }> => {
     const mod = await getLauncherModule();
-    if (!mod) return DEFAULT_STATE.storage;
+    if (!mod) return { storage: DEFAULT_STATE.storage, storageError: false };
     try {
       const info = await mod.getStorageInfo();
+      if (info === null) return { storage: DEFAULT_STATE.storage, storageError: true };
       return {
-        totalGB: info.totalGB,
-        usedGB: info.usedGB,
-        freeGB: info.freeGB,
-        usedPercentage: info.usedPercentage,
+        storage: {
+          totalGB: info.totalGB,
+          usedGB: info.usedGB,
+          freeGB: info.freeGB,
+          usedPercentage: info.usedPercentage,
+        },
+        storageError: false,
       };
-    } catch { return DEFAULT_STATE.storage; }
+    } catch { return { storage: DEFAULT_STATE.storage, storageError: false }; }
   }, [getLauncherModule]);
 
   const loadMessages = useCallback(async () => {
@@ -282,12 +300,15 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [getLauncherModule]);
 
   const refresh = useCallback(async () => {
-    const [battery, brightness, volume, network, wifi, bluetooth, storage, messages, contacts, weather, notificationAccessGranted] = await Promise.all([
+    const [battery, brightness, volume, network, wifiResult, bluetoothResult, storageResult, messages, contacts, weather, notificationAccessGranted] = await Promise.all([
       loadBattery(), loadBrightness(), loadVolume(), loadNetwork(), loadWifi(),
       loadBluetooth(), loadStorage(), loadMessages(), loadContacts(), loadWeather(), loadNotificationAccess(),
     ]);
     setState({
-      battery, brightness, volume, wifi, bluetooth, storage, network, messages, contacts, weather, notificationAccessGranted, isReady: true,
+      battery, brightness, volume, network, messages, contacts, weather, notificationAccessGranted, isReady: true,
+      wifi: wifiResult.wifi, wifiError: wifiResult.wifiError,
+      bluetooth: bluetoothResult.bluetooth, bluetoothError: bluetoothResult.bluetoothError,
+      storage: storageResult.storage, storageError: storageResult.storageError,
     });
   }, [loadBattery, loadBrightness, loadVolume, loadNetwork, loadWifi, loadBluetooth, loadStorage, loadMessages, loadContacts, loadWeather, loadNotificationAccess]);
 
@@ -360,8 +381,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       await mod.openSystemSettings('wifi').catch(() => {});
     }
     // Re-read real state after the action (whether toggled directly or via system panel)
-    const wifi = await loadWifi();
-    setState(prev => ({ ...prev, wifi }));
+    const { wifi, wifiError } = await loadWifi();
+    setState(prev => ({ ...prev, wifi, wifiError }));
   }, [getLauncherModule, state.wifi.enabled, loadWifi]);
 
   const toggleBluetooth = useCallback(async () => {
@@ -375,8 +396,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       await mod.openSystemSettings('bluetooth').catch(() => {});
     }
     // Re-read real state after the action
-    const bluetooth = await loadBluetooth();
-    setState(prev => ({ ...prev, bluetooth }));
+    const { bluetooth, bluetoothError } = await loadBluetooth();
+    setState(prev => ({ ...prev, bluetooth, bluetoothError }));
   }, [getLauncherModule, state.bluetooth.enabled, loadBluetooth]);
 
   const openSystemPanel = useCallback(async (panel: string) => {

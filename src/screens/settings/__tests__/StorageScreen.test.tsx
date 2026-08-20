@@ -42,19 +42,28 @@ const mockStorage = {
   usedPercentage: 15.6,
 };
 
+const mockUseDevice = jest.fn();
+
 jest.mock('../../../store/DeviceStore', () => ({
-  useDevice: () => ({
-    openSystemPanel: jest.fn(),
-    storage: mockStorage,
-    settings: {},
-  }),
+  useDevice: () => mockUseDevice(),
   DeviceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DeviceContext: null,
 }));
 
+const baseDeviceValue = {
+  openSystemPanel: jest.fn(),
+  storage: mockStorage,
+  storageError: false,
+  settings: {},
+};
+
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn() };
 
 describe('StorageScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseDevice.mockReturnValue(baseDeviceValue);
+  });
   it('renders without crashing', () => {
     const { toJSON } = render(<StorageScreen navigation={mockNavigation as never} />);
     expect(toJSON()).toBeTruthy();
@@ -93,5 +102,18 @@ describe('StorageScreen', () => {
         expect(text).toMatch(/^\d+(\.\d)? GB \(est\.\)$/);
       }
     });
+  });
+
+  it('shows error tile when storageError is true', () => {
+    // Red: before fix, storageError did not exist. After fix, error tile appears.
+    mockUseDevice.mockReturnValue({ ...baseDeviceValue, storageError: true });
+    const { getByText } = render(<StorageScreen navigation={mockNavigation as never} />);
+    expect(getByText(/Could not load storage information/i)).toBeTruthy();
+  });
+
+  it('does not show error tile when storageError is false', () => {
+    mockUseDevice.mockReturnValue({ ...baseDeviceValue, storageError: false });
+    const { queryByText } = render(<StorageScreen navigation={mockNavigation as never} />);
+    expect(queryByText(/Could not load storage information/i)).toBeNull();
   });
 });

@@ -51,7 +51,7 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { wifi, toggleWifi } = useDevice();
+  const { wifi, wifiError, toggleWifi } = useDevice();
   const alert = useAlert();
 
   const [scannedNetworks, setScannedNetworks] = useState<ScannedNetwork[]>([]);
@@ -208,6 +208,18 @@ export function WifiScreen({ navigation }: { navigation: AppNavigationProp }) {
             />
           </CupertinoListSection>
         </View>
+
+        {wifiError && (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <CupertinoListSection>
+              <CupertinoListTile
+                title="Could not load Wi-Fi status"
+                subtitle="An error occurred reading from the system. Pull down to try again."
+                showChevron={false}
+              />
+            </CupertinoListSection>
+          </View>
+        )}
 
         {/* Current Network Card */}
         {wifi.enabled && wifi.ssid ? (

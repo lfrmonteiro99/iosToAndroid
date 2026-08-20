@@ -27,6 +27,7 @@ export function VpnScreen({ navigation }: { navigation: AppNavigationProp }) {
     if (Platform.OS !== 'android') return;
     try {
       const info = await LauncherModule.getNetworkInfo();
+      if (info === null) return;
       setIsVpn(info.isVpn);
     } catch { /* ignore — module unavailable */ }
   }, []);
