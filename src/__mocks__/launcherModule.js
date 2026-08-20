@@ -1,5 +1,8 @@
 module.exports = {
   __esModule: true,
+  // Named exports used by App.tsx (notification listener) and onBridgeError handler
+  addNotificationListener: jest.fn(() => jest.fn()),
+  onBridgeError: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
