@@ -293,12 +293,42 @@ const stub: LauncherModuleType = {
   getTodayScreenTime: async () => ({ totalMinutes: 0, topApps: [] }),
 };
 
+/**
+ * Collapses a launcher list to one entry per packageName, keeping the first.
+ *
+ * Both getInstalledApps and getAppStorageStats are built from PackageManager's
+ * queryIntentActivities, which yields one entry per launcher activity rather
+ * than per package — an app registering several (Google also registers "Voice
+ * Search") arrives as repeated packageNames. Consumers key React lists by
+ * packageName and StorageScreen sums totalBytes per entry, so duplicates both
+ * collide as keys and inflate the Apps storage total.
+ *
+ * The native side dedupes at the source too; this keeps existing installs
+ * correct when the JS bundle updates ahead of the native binary.
+ */
+function dedupeByPackageName<T extends { packageName?: string }>(items: T[]): T[] {
+  // A malformed payload is passed through untouched rather than coerced, so a
+  // native contract break stays visible to the caller instead of becoming [].
+  if (!Array.isArray(items)) return items;
+
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const packageName = item?.packageName;
+    // An entry without a usable packageName is malformed native data, not a
+    // duplicate: collapsing those together would silently drop real apps.
+    if (typeof packageName !== 'string' || packageName === '') return true;
+    if (seen.has(packageName)) return false;
+    seen.add(packageName);
+    return true;
+  });
+}
+
 function createBridgedModule(): LauncherModuleType {
   if (!nativeModule) return stub;
 
   return {
     getInstalledApps: async () => {
-      try { return await nativeModule.getInstalledApps(); }
+      try { return dedupeByPackageName<InstalledApp>(await nativeModule.getInstalledApps()); }
       catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {
@@ -413,7 +443,7 @@ function createBridgedModule(): LauncherModuleType {
       catch (e) { console.error('LauncherModule.getCarrierInfo failed:', e); reportBridgeError('getCarrierInfo', e); return { carrierName: '', networkType: 'Unknown', signalStrength: 0, isRoaming: false, phoneNumber: '', simOperator: '' }; }
     },
     getAppStorageStats: async () => {
-      try { return await nativeModule.getAppStorageStats(); }
+      try { return dedupeByPackageName<AppStorageStat>(await nativeModule.getAppStorageStats()); }
       catch (e) { console.error('LauncherModule.getAppStorageStats failed:', e); reportBridgeError('getAppStorageStats', e); return []; }
     },
     setFlashlight: async (enabled: boolean) => {

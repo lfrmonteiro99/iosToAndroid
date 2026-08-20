@@ -282,3 +282,117 @@ describe('LauncherModule notification listeners (event-driven, #196)', () => {
     expect(addListener).toHaveBeenCalledTimes(2);
   });
 });
+
+// PackageManager.queryIntentActivities yields one entry per launcher activity,
+// not one per package, so an app registering several (Google also registers
+// "Voice Search") reaches JS as repeated packageNames. Consumers key React
+// lists by packageName (AppLibraryScreen, MultitaskScreen, StorageScreen, …)
+// and StorageScreen sums totalBytes per entry, so duplicates both collide as
+// keys and inflate the Apps storage total.
+describe('deduplication of launcher entries by packageName', () => {
+  const GOOGLE = 'com.google.android.googlequicksearchbox';
+
+  const app = (name: string, packageName: string) => ({
+    name, packageName, icon: '', isSystem: true,
+  });
+  const stat = (appName: string, packageName: string, totalBytes: number) => ({
+    packageName, appName, totalBytes, cacheBytes: 0,
+  });
+
+  function bridgeReturning(method: string, value: unknown) {
+    mockNativeModule = makeNativeModule(false, {
+      [method]: jest.fn(() => Promise.resolve(value)),
+    });
+    return loadBridge();
+  }
+
+  it('collapses two launcher activities of the same package into one app, keeping the first', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      app('Google', GOOGLE),
+      app('Voice Search', GOOGLE),
+    ]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps).toHaveLength(1);
+    expect(apps[0].name).toBe('Google');
+  });
+
+  it('collapses three or more launcher activities of the same package into one app', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      app('Google', GOOGLE),
+      app('Voice Search', GOOGLE),
+      app('Google Lens', GOOGLE),
+    ]);
+
+    await expect(mod.default.getInstalledApps()).resolves.toHaveLength(1);
+  });
+
+  it('keeps every distinct package and preserves the native ordering', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      app('Camera', 'com.android.camera'),
+      app('Google', GOOGLE),
+      app('Settings', 'com.android.settings'),
+    ]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps.map(a => a.packageName)).toEqual([
+      'com.android.camera', GOOGLE, 'com.android.settings',
+    ]);
+  });
+
+  it('keeps the first occurrence of each package when a duplicate sits mid-list', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      app('Camera', 'com.android.camera'),
+      app('Google', GOOGLE),
+      app('Voice Search', GOOGLE),
+      app('Settings', 'com.android.settings'),
+    ]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps.map(a => a.name)).toEqual(['Camera', 'Google', 'Settings']);
+  });
+
+  it('returns an empty list unchanged', async () => {
+    const mod = bridgeReturning('getInstalledApps', []);
+
+    await expect(mod.default.getInstalledApps()).resolves.toEqual([]);
+  });
+
+  it('dedupes getAppStorageStats so a duplicated package is not counted twice', async () => {
+    const mod = bridgeReturning('getAppStorageStats', [
+      stat('Google', GOOGLE, 500),
+      stat('Voice Search', GOOGLE, 500),
+    ]);
+
+    const stats = await mod.default.getAppStorageStats();
+
+    expect(stats).toHaveLength(1);
+    // StorageScreen sums totalBytes across entries to size the "Apps" category;
+    // before the fix this reported 1000 bytes for a 500-byte package.
+    expect(stats.reduce((sum, s) => sum + s.totalBytes, 0)).toBe(500);
+  });
+
+  it('keeps entries whose packageName is missing or empty instead of collapsing them together', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      app('No package', ''),
+      app('Also no package', ''),
+    ]);
+
+    // An unkeyable entry is malformed native data, not a duplicate — dropping it
+    // would hide the problem, so both survive.
+    await expect(mod.default.getInstalledApps()).resolves.toHaveLength(2);
+  });
+
+  it('still reports bridge errors and falls back to an empty list when the native call rejects', async () => {
+    const errors: string[] = [];
+    mockNativeModule = makeNativeModule(true);
+    const mod = loadBridge();
+    mod.onBridgeError((method) => { errors.push(method); });
+
+    await expect(mod.default.getInstalledApps()).resolves.toEqual([]);
+    expect(errors).toContain('getInstalledApps');
+  });
+});
