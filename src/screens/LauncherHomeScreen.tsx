@@ -112,6 +112,9 @@ const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.photos': 'Photos',
   'com.iostoandroid.calendar': 'Calendar',
   'com.iostoandroid.calculator': 'Calculator',
+  'com.iostoandroid.notes': 'Notes',
+  'com.iostoandroid.reminders': 'Reminders',
+  'com.iostoandroid.mail': 'Mail',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -162,6 +165,9 @@ const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.photos': { icon: 'images', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
   'com.iostoandroid.calendar': { icon: 'calendar', bg: '#FF3B30', gradient: ['#FF3B30', '#FF2D55'], iconSize: 34 },
   'com.iostoandroid.calculator': { icon: 'calculator', bg: '#1C1C1E', gradient: ['#636366', '#1C1C1E'], iconSize: 34 },
+  'com.iostoandroid.notes': { icon: 'document-text', bg: '#FFCC00', gradient: ['#FFD60A', '#FFB300'], iconSize: 32 },
+  'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
+  'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
 };
 
 // ---------------------------------------------------------------------------
