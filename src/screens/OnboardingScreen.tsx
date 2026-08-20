@@ -33,7 +33,7 @@ const getLauncher = async () => {
   }
 };
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OnboardingScreenProps {
   onDone: () => void;
@@ -153,101 +153,109 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         }}
       >
         {/* ── Page 1: Welcome ──────────────────────────────────────────── */}
-        <View style={[styles.page, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
-          <View style={styles.iconWrap}>
-            <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
-              <Ionicons name="phone-portrait" size={72} color="#FFFFFF" />
-            </BlurView>
-          </View>
-          <Text style={styles.pageTitle}>Welcome to{'\n'}iOS Launcher</Text>
-          <Text style={styles.pageSubtitle}>Transform your Android into iOS</Text>
-          <Pressable style={styles.primaryButton} onPress={() => goToPage(1)}>
-            <Text style={styles.primaryButtonText}>Get Started</Text>
-          </Pressable>
+        <View style={styles.page}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
+            <View style={styles.iconWrap}>
+              <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
+                <Ionicons name="phone-portrait" size={72} color="#FFFFFF" />
+              </BlurView>
+            </View>
+            <Text style={styles.pageTitle}>Welcome to{'\n'}iOS Launcher</Text>
+            <Text style={styles.pageSubtitle}>Transform your Android into iOS</Text>
+            <Pressable style={styles.primaryButton} onPress={() => goToPage(1)}>
+              <Text style={styles.primaryButtonText}>Get Started</Text>
+            </Pressable>
+          </ScrollView>
         </View>
 
         {/* ── Page 2: Permissions ───────────────────────────────────────── */}
-        <View style={[styles.page, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
-          <Text style={styles.pageTitle}>Permissions</Text>
-          <Text style={styles.pageSubtitle}>We need a few permissions to give you the full experience</Text>
-          <View style={styles.permList}>
-            {PERMISSIONS.map(perm => (
-              <View key={perm.label} style={styles.permRow}>
-                <View style={styles.permIconWrap}>
-                  <Ionicons name={perm.icon} size={22} color="#FFFFFF" />
-                </View>
-                <View style={styles.permText}>
-                  <Text style={styles.permLabel}>{perm.label}</Text>
-                  <Text style={styles.permDesc}>{perm.description}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-          {permissionError && (
-            <View style={styles.errorContainer}>
-              <Ionicons name="warning-outline" size={18} color="#FF453A" />
-              <Text style={styles.errorText}>{permissionError}</Text>
-            </View>
-          )}
-          <Pressable style={styles.primaryButton} onPress={handleGrantPermissions}>
-            <Text style={styles.primaryButtonText}>
-              {permissionError ? 'Try Again' : 'Grant Permissions'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* ── Page 3: Default Launcher ─────────────────────────────────── */}
-        <View style={[styles.page, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
-          <View style={styles.iconWrap}>
-            <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
-              <Ionicons name="phone-portrait-outline" size={64} color="#FFFFFF" />
-              <Ionicons
-                name="square"
-                size={22}
-                color="#FFFFFF"
-                style={styles.homeButtonIcon}
-              />
-            </BlurView>
-          </View>
-          <Text style={styles.pageTitle}>Set as Default{'\n'}Launcher</Text>
-          <Text style={styles.pageSubtitle}>
-            To get the full experience, set this app as your home launcher
-          </Text>
-          <Pressable style={styles.primaryButton} onPress={handleSetLauncher}>
-            <Text style={styles.primaryButtonText}>Set Now</Text>
-          </Pressable>
-          <Pressable onPress={() => goToPage(3)} hitSlop={12} style={{ marginTop: 16 }}>
-            <Text style={styles.skipText}>Skip</Text>
-          </Pressable>
-        </View>
-
-        {/* ── Page 4: Ready ─────────────────────────────────────────────── */}
-        <View style={[styles.page, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
-          <View style={styles.checkCircle}>
-            <Ionicons name="checkmark" size={72} color="#FFFFFF" />
-          </View>
-          <Text style={styles.pageTitle}>{"You're All Set!"}</Text>
-          <Text style={styles.pageSubtitle}>Your iOS experience starts now</Text>
-
-          {/* Permission status summary */}
-          {Object.keys(permissionResults).length > 0 && (
-            <View style={styles.permSummary}>
-              {Object.entries(permissionResults).map(([key, granted]) => (
-                <View key={key} style={styles.permStatusRow}>
-                  <Ionicons
-                    name={granted ? 'checkmark-circle' : 'close-circle'}
-                    size={18}
-                    color={granted ? '#30D158' : '#FF453A'}
-                  />
-                  <Text style={styles.permStatusLabel}>{key}</Text>
+        <View style={styles.page}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
+            <Text style={styles.pageTitle}>Permissions</Text>
+            <Text style={styles.pageSubtitle}>We need a few permissions to give you the full experience</Text>
+            <View style={styles.permList}>
+              {PERMISSIONS.map(perm => (
+                <View key={perm.label} style={styles.permRow}>
+                  <View style={styles.permIconWrap}>
+                    <Ionicons name={perm.icon} size={22} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.permText}>
+                    <Text style={styles.permLabel}>{perm.label}</Text>
+                    <Text style={styles.permDesc}>{perm.description}</Text>
+                  </View>
                 </View>
               ))}
             </View>
-          )}
+            {permissionError && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="warning-outline" size={18} color="#FF453A" />
+                <Text style={styles.errorText}>{permissionError}</Text>
+              </View>
+            )}
+            <Pressable style={styles.primaryButton} onPress={handleGrantPermissions}>
+              <Text style={styles.primaryButtonText}>
+                {permissionError ? 'Try Again' : 'Grant Permissions'}
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </View>
 
-          <Pressable style={styles.primaryButton} onPress={handleDone}>
-            <Text style={styles.primaryButtonText}>Start</Text>
-          </Pressable>
+        {/* ── Page 3: Default Launcher ─────────────────────────────────── */}
+        <View style={styles.page}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
+            <View style={styles.iconWrap}>
+              <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
+                <Ionicons name="phone-portrait-outline" size={64} color="#FFFFFF" />
+                <Ionicons
+                  name="square"
+                  size={22}
+                  color="#FFFFFF"
+                  style={styles.homeButtonIcon}
+                />
+              </BlurView>
+            </View>
+            <Text style={styles.pageTitle}>Set as Default{'\n'}Launcher</Text>
+            <Text style={styles.pageSubtitle}>
+              To get the full experience, set this app as your home launcher
+            </Text>
+            <Pressable style={styles.primaryButton} onPress={handleSetLauncher}>
+              <Text style={styles.primaryButtonText}>Set Now</Text>
+            </Pressable>
+            <Pressable onPress={() => goToPage(3)} hitSlop={12} style={{ marginTop: 16 }}>
+              <Text style={styles.skipText}>Skip</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+
+        {/* ── Page 4: Ready ─────────────────────────────────────────────── */}
+        <View style={styles.page}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
+            <View style={styles.checkCircle}>
+              <Ionicons name="checkmark" size={72} color="#FFFFFF" />
+            </View>
+            <Text style={styles.pageTitle}>{"You're All Set!"}</Text>
+            <Text style={styles.pageSubtitle}>Your iOS experience starts now</Text>
+
+            {/* Permission status summary */}
+            {Object.keys(permissionResults).length > 0 && (
+              <View style={styles.permSummary}>
+                {Object.entries(permissionResults).map(([key, granted]) => (
+                  <View key={key} style={styles.permStatusRow}>
+                    <Ionicons
+                      name={granted ? 'checkmark-circle' : 'close-circle'}
+                      size={18}
+                      color={granted ? '#30D158' : '#FF453A'}
+                    />
+                    <Text style={styles.permStatusLabel}>{key}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Pressable style={styles.primaryButton} onPress={handleDone}>
+              <Text style={styles.primaryButtonText}>Start</Text>
+            </Pressable>
+          </ScrollView>
         </View>
       </ScrollView>
     </LinearGradient>
@@ -281,11 +289,13 @@ const styles = StyleSheet.create({
   page: {
     width: SCREEN_WIDTH,
     flex: 1,
-    alignItems: 'center',
+  },
+  pageContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 32,
     gap: 16,
-    minHeight: SCREEN_HEIGHT,
   },
   iconWrap: {
     marginBottom: 8,
