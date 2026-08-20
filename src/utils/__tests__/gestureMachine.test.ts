@@ -198,7 +198,6 @@ describe('commitForSpotlight', () => {
     expect(commitForSpotlight(pred({ progress: 0, velocity: 0 }))).toBe('none');
   });
 });
-});
 
 // #455: TodayViewScreen was registered in RootStackParamList and rendered in
 // TabNavigator with a `slide_from_left` transition, but nothing in the app

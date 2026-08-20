@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render } from '../../test-utils';
 import { gestureConfig } from '../../utils/gestureConfig';
 import * as AppsStore from '../../store/AppsStore';
 
