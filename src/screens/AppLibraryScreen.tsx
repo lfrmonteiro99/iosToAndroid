@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
@@ -275,6 +276,13 @@ const SearchResults = React.memo(function SearchResults({
       ItemSeparatorComponent={() => (
         <View style={{ height: 1, backgroundColor: colors.separator, marginLeft: 66 }} />
       )}
+      ListEmptyComponent={
+        <CupertinoEmptyState
+          icon="search-outline"
+          title="No Results"
+          message="No apps match your search."
+        />
+      }
       renderItem={({ item }) => (
         <Pressable
           onPress={() => onLaunch(item.packageName)}
@@ -381,18 +389,20 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Navigation bar */}
-      <View style={[styles.navBar, { paddingTop: insets.top + 8, borderBottomColor: colors.separator }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
-          <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
-        </Pressable>
-        <Text style={[typography.body, styles.navTitle, { color: colors.label }]}>App Library</Text>
-        <View style={styles.backBtn} />
-      </View>
+      <CupertinoNavigationBar
+        title="App Library"
+        largeTitle={false}
+        leftButton={
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.systemBlue} />
+            <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
+          </Pressable>
+        }
+      />
 
       {/* Search bar */}
       <View style={styles.searchBarWrap}>
@@ -470,14 +480,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -486,10 +488,6 @@ const styles = StyleSheet.create({
   },
   backLabel: {
     fontWeight: '400',
-  },
-  navTitle: {
-    fontWeight: '600',
-    letterSpacing: -0.3,
   },
   searchBarWrap: {
     paddingHorizontal: 12,

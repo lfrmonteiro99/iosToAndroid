@@ -25,6 +25,7 @@ import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow } fro
 import { findContactByPhone } from '../utils/contacts';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
+import { avatarColorForName } from '../utils/avatarColor';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -70,16 +71,6 @@ function getInitials(contact: DeviceContact): string {
 }
 
 const AVATAR_SIZE = 48;
-const AVATAR_COLORS = [
-  '#FF3B30', '#FF9500', '#FFCC00', '#34C759',
-  '#5AC8FA', '#007AFF', '#5856D6', '#AF52DE', '#FF2D55',
-];
-
-function avatarColor(address: string): string {
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) hash = address.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
 
 // ─── Conversation Row ────────────────────────────────────────────────────────
 
@@ -121,7 +112,7 @@ const ConversationRow = React.memo(function ConversationRow({
   const displayName = contact
     ? `${contact.firstName} ${contact.lastName}`.trim()
     : conversation.address;
-  const bgColor = contact ? avatarColor(contact.id) : avatarColor(conversation.address);
+  const bgColor = avatarColorForName(displayName);
 
   const trailingActions = editMode ? [] : [
     { label: 'Delete', color: '#FF3B30', onPress: onDelete },
