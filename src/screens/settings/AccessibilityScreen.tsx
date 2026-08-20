@@ -21,11 +21,10 @@ const A11Y_KEYS = {
   textscale: '@iostoandroid/a11y_textscale',
   bold: '@iostoandroid/a11y_bold',
   reduceMotion: '@iostoandroid/a11y_reduce_motion',
-  contrast: '@iostoandroid/a11y_contrast',
 } as const;
 
 export function AccessibilityScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, typography, spacing, textScale } = useTheme();
+  const { theme, typography, spacing, textScale, highContrast, setHighContrast } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
@@ -39,7 +38,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
   const [largerTextScale, setLargerTextScale] = useState(1.0);
   const [boldTextLocal, setBoldTextLocal] = useState(false);
   const [reduceMotionLocal, setReduceMotionLocal] = useState(false);
-  const [highContrast, setHighContrast] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getMany(Object.values(A11Y_KEYS)).then((map) => {
@@ -50,7 +48,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
       }
       if (map[A11Y_KEYS.bold] !== null) setBoldTextLocal(map[A11Y_KEYS.bold] === 'true');
       if (map[A11Y_KEYS.reduceMotion] !== null) setReduceMotionLocal(map[A11Y_KEYS.reduceMotion] === 'true');
-      if (map[A11Y_KEYS.contrast] !== null) setHighContrast(map[A11Y_KEYS.contrast] === 'true');
     });
   }, []);
 
@@ -79,10 +76,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
     AsyncStorage.setItem(A11Y_KEYS.reduceMotion, String(v));
   }, [update]);
 
-  const toggleHighContrast = useCallback((v: boolean) => {
-    setHighContrast(v);
-    AsyncStorage.setItem(A11Y_KEYS.contrast, String(v));
-  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -129,7 +122,7 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               trailing={
                 <CupertinoSwitch
                   value={highContrast}
-                  onValueChange={toggleHighContrast}
+                  onValueChange={setHighContrast}
                 />
               }
               showChevron={false}
