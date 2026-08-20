@@ -702,13 +702,27 @@ class LauncherModule : Module() {
         // ── SMS Send ─────────────────────────────────────────────────────
 
         AsyncFunction("sendSms") { address: String, body: String ->
-            try {
-                val smsManager = android.telephony.SmsManager.getDefault()
-                smsManager.sendTextMessage(address, null, body, null, null)
-                true
-            } catch (e: Exception) {
-                false
+            SmsRequestValidator.validate(address, body)?.let { reason -> throw Exception(reason) }
+            if (!hasPermission(android.Manifest.permission.SEND_SMS)) {
+                throw Exception("SMS não enviado: permissão SEND_SMS não concedida")
             }
+
+            val smsManager =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.getSystemService(android.telephony.SmsManager::class.java)
+                        ?: throw Exception("SMS não enviado: sem SmsManager (dispositivo sem telefonia)")
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.telephony.SmsManager.getDefault()
+                }
+
+            val parts = smsManager.divideMessage(body)
+            if (parts.size > 1) {
+                smsManager.sendMultipartTextMessage(address, null, parts, null, null)
+            } else {
+                smsManager.sendTextMessage(address, null, body, null, null)
+            }
+            true
         }
 
         // ── Calendar ─────────────────────────────────────────────────────
