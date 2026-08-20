@@ -201,6 +201,7 @@ const styles = StyleSheet.create({
   trailingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
   },
   section: {
     marginBottom: 20,

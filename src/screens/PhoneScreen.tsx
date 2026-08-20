@@ -381,7 +381,6 @@ function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[
       ItemSeparatorComponent={() => (
         <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />
       )}
-      getItemLayout={(_, index) => ({ length: 60, offset: 60 * index, index })}
       renderItem={({ item }) => (
         <Pressable
           onPress={() => handleCall(item.phone, getFullName(item))}

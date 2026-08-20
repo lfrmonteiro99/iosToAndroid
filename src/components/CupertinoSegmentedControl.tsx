@@ -86,6 +86,7 @@ export function CupertinoSegmentedControl({
           }}
         >
           <Text
+            numberOfLines={1}
             style={[
               typography.subhead,
               {

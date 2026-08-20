@@ -144,6 +144,7 @@ export function CupertinoAlertDialog({
                 }}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     typography.body,
                     getActionTextStyle(action),
@@ -171,7 +172,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   dialog: {
-    width: 270,
+    width: '80%',
+    maxWidth: 270,
     overflow: 'hidden',
   },
   content: {
