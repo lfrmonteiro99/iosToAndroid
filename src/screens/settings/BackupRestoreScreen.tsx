@@ -22,6 +22,45 @@ import {
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 
+// Explicit allow-list derived from SettingsStore.tsx, ThemeContext.tsx, and
+// each settings screen that writes its own AsyncStorage keys.
+// Intentionally excludes non-settings data: messages, notes, contacts, reminders,
+// home layout, Spotlight history, and any future non-settings keys.
+const EXPORTABLE_KEYS = [
+  // Main settings blob (SettingsStore)
+  '@iostoandroid/settings',
+  // ThemeContext — display mode, accent colour, high-contrast
+  '@iostoandroid/theme_preference',
+  '@iostoandroid/accent_color',
+  '@iostoandroid/high_contrast',
+  // AccessibilityScreen — text scale, bold, reduce motion
+  '@iostoandroid/a11y_textscale',
+  '@iostoandroid/a11y_bold',
+  '@iostoandroid/a11y_reduce_motion',
+  // DisplayBrightnessScreen — night shift preference
+  '@iostoandroid/night_shift',
+  // KeyboardScreen — keyboard preferences
+  '@iostoandroid/kbd_autocap',
+  '@iostoandroid/kbd_autocorrect',
+  '@iostoandroid/kbd_clicks',
+  '@iostoandroid/kbd_predictive',
+  // CellularScreen — cellular and data-roaming preferences
+  '@iostoandroid/cellular_data',
+  '@iostoandroid/data_roaming',
+  // DateTimeScreen — timezone preference
+  '@iostoandroid/timezone',
+  // LanguageRegionScreen — locale preferences
+  '@iostoandroid/language',
+  '@iostoandroid/region',
+  // SoundsHapticsScreen — ringtone and text-tone labels
+  '@iostoandroid/ringtone',
+  '@iostoandroid/text_tone',
+  // WallpaperScreen — custom wallpaper URI
+  '@iostoandroid/custom_wallpaper',
+] as const;
+
+const EXPORTABLE_SET = new Set<string>(EXPORTABLE_KEYS);
+
 export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
@@ -32,16 +71,16 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
   const [importText, setImportText] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const alert = useAlert();
 
-  const handleExport = useCallback(async () => {
+  const doExport = useCallback(async () => {
     try {
       setBusy(true);
-      const keys = await AsyncStorage.getAllKeys();
-      const rawEntries = await AsyncStorage.getMany(keys);
+      const entries = await AsyncStorage.getMany([...EXPORTABLE_KEYS]);
       const backup: Record<string, string> = {};
-      for (const [k, v] of Object.entries(rawEntries)) {
+      for (const [k, v] of Object.entries(entries)) {
         if (v !== null) backup[k] = v;
       }
       const json = JSON.stringify(backup, null, 2);
@@ -56,6 +95,10 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     }
   }, [alert]);
 
+  const handleExport = useCallback(() => {
+    setShowExportConfirm(true);
+  }, []);
+
   const handleImportConfirm = useCallback(async () => {
     if (!importText.trim()) {
       alert('Error', 'Paste your backup JSON first.');
@@ -67,11 +110,13 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
       if (typeof data !== 'object' || Array.isArray(data)) {
         throw new Error('Expected a JSON object');
       }
-      const entries: Record<string, string> = {};
+      const filtered: Record<string, string> = {};
       for (const [k, v] of Object.entries(data)) {
-        entries[k] = String(v);
+        if (EXPORTABLE_SET.has(k)) {
+          filtered[k] = String(v);
+        }
       }
-      await AsyncStorage.setMany(entries);
+      await AsyncStorage.setMany(filtered);
       setShowImportModal(false);
       setImportText('');
       alert('Restored', 'Settings imported successfully. Restart the app to apply all changes.');
@@ -119,7 +164,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
           <CupertinoListSection>
             <CupertinoListTile
               title="Export Settings"
-              subtitle="Copy all settings to clipboard as JSON"
+              subtitle="Copy app preferences to clipboard as JSON"
               onPress={handleExport}
               trailing={busy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined}
             />
@@ -223,6 +268,25 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
           </View>
         </View>
       </Modal>
+
+      {/* Export Disclosure Dialog */}
+      <CupertinoAlertDialog
+        visible={showExportConfirm}
+        title="Export Settings"
+        message="This copies your app preferences (display, sounds, keyboard, accessibility, and similar settings) to the clipboard. The clipboard is readable by any app in the foreground."
+        actions={[
+          { label: 'Cancel', style: 'cancel', onPress: () => setShowExportConfirm(false) },
+          {
+            label: 'Export',
+            style: 'default',
+            onPress: () => {
+              setShowExportConfirm(false);
+              doExport();
+            },
+          },
+        ]}
+        onClose={() => setShowExportConfirm(false)}
+      />
 
       {/* Reset Confirm Dialog */}
       <CupertinoAlertDialog
