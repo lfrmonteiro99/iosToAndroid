@@ -243,7 +243,7 @@ Many settings screens appear functional but immediately open Android's native se
 
 2. **Color contrast**: The ControlCenter uses `rgba(255,255,255,0.5)` and `rgba(255,255,255,0.3)` for text/icons on dark backgrounds - may fail WCAG contrast ratios.
 
-3. **Dynamic type**: While `useScaledFontSize` hook exists, many screens use hardcoded `fontSize` values (CameraScreen, ControlCenter, TodayView).
+3. **Dynamic type**: Many screens use hardcoded `fontSize` values (CameraScreen, ControlCenter, TodayView) instead of the `typography` scale from `ThemeContext`.
 
 4. **Screen reader**: VoiceOver in Accessibility settings just opens Android accessibility panel - no in-app screen reader support.
 
