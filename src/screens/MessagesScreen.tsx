@@ -644,7 +644,7 @@ export function MessagesScreen() {
           contentContainerStyle={
             filtered.length === 0
               ? styles.emptyList
-              : { paddingBottom: editMode ? insets.bottom + 60 : 20 }
+              : { paddingBottom: editMode ? insets.bottom + 60 : insets.bottom + 20 }
           }
         />
       )}

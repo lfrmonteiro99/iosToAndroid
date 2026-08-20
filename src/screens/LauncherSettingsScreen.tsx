@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
@@ -46,6 +47,7 @@ export function LauncherSettingsScreen() {
   const themeCtx = useTheme();
   const { theme, typography, isDark, toggleTheme, textScale } = themeCtx;
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
   const { settings, update, reset: resetSettings } = useSettings();
   const { dockApps } = useApps();
   const { folders, deleteFolder } = useFolders();
@@ -224,7 +226,7 @@ export function LauncherSettingsScreen() {
       title="Launcher Settings"
       largeTitle
       rightButton={doneButton}
-      contentContainerStyle={{ paddingBottom: 40 }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
     >
       {/* ── Appearance ─────────────────────────────────────────── */}
       <CupertinoListSection header="Appearance">

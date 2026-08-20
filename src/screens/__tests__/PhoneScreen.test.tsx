@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { PhoneScreen } from '../PhoneScreen';
+import * as DeviceStore from '../../store/DeviceStore';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const mockNav = { goBack: jest.fn() } as any;
@@ -38,6 +39,19 @@ describe('PhoneScreen', () => {
     expect(getByText('0')).toBeTruthy();
     expect(getByText('*')).toBeTruthy();
     expect(getByText('#')).toBeTruthy();
+  });
+
+  it('contacts tab list uses insets.bottom (34) + 20 = 54 for paddingBottom', () => {
+    // jest.setup.js mocks useSafeAreaInsets → bottom: 34
+    // Provide one contact so ContactsTab renders the FlatList instead of the empty state
+    jest.spyOn(DeviceStore, 'useDevice').mockReturnValue({
+      contacts: [{ id: '1', firstName: 'Ana', lastName: 'Silva', phone: '+351910000001' }],
+    } as ReturnType<typeof DeviceStore.useDevice>);
+
+    const { getByText, getByTestId } = render(<PhoneScreen navigation={mockNav} />);
+    fireEvent.press(getByText('Contacts'));
+    const list = getByTestId('contacts-list');
+    expect(list.props.contentContainerStyle.paddingBottom).toBe(54);
   });
 
   it('keypad shows typed number', () => {

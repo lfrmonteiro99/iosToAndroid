@@ -152,6 +152,7 @@ const CallLogItem = React.memo(function CallLogItem({ call, isLast, colors, typo
 function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
   const { favorites, toggleFavorite, deviceFavoriteIds } = useContacts();
   const { contacts: deviceContacts } = useDevice();
 
@@ -199,7 +200,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
       data={allFavorites}
       keyExtractor={(item) => item.id}
       decelerationRate={0.998}
-      contentContainerStyle={{ paddingBottom: 20 }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       ItemSeparatorComponent={() => (
         <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />
       )}
@@ -243,6 +244,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
 function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [callLogLoading, setCallLogLoading] = useState(true);
@@ -314,7 +316,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
   }
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 20 }} decelerationRate={0.998}>
+    <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20 }} decelerationRate={0.998}>
       <View style={{ backgroundColor: colors.secondarySystemGroupedBackground }}>
         {callLog.map((call, idx) => (
           <CallLogItem
@@ -336,6 +338,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
 function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[]; onCall: (phone: string, name?: string) => void; isLoading?: boolean }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
 
   const sorted = useMemo(
     () =>
@@ -374,10 +377,11 @@ function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[
 
   return (
     <FlatList
+      testID="contacts-list"
       data={sorted}
       keyExtractor={(item) => item.id}
       decelerationRate={0.998}
-      contentContainerStyle={{ paddingBottom: 20 }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       ItemSeparatorComponent={() => (
         <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />
       )}

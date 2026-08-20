@@ -265,12 +265,13 @@ const SearchResults = React.memo(function SearchResults({
 }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
 
   return (
     <FlatList
       data={apps}
       keyExtractor={(item) => item.packageName}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32 }}
       ItemSeparatorComponent={() => (
         <View style={{ height: 1, backgroundColor: colors.separator, marginLeft: 66 }} />
       )}
