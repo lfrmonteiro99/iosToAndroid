@@ -27,6 +27,7 @@ import { LockScreen } from './src/screens/LockScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
 import { suppressAutoLock } from './src/utils/permissions';
+import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
 
@@ -57,7 +58,7 @@ function AppContent() {
   // background the activity for a fraction of a second. Only lock if we're
   // still backgrounded after a short grace period.
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const AUTO_LOCK_GRACE_MS = 5000;
+  const autoLockDelay = resolveAutoLockDelay(settings.autoLock);
 
   // Surface native bridge errors as notification banners
   useEffect(() => {
@@ -100,10 +101,12 @@ function AppContent() {
       if (state === 'background') {
         if (suppressAutoLock()) return; // a permission dialog is showing — ignore background
         if (lockTimer.current) clearTimeout(lockTimer.current);
-        lockTimer.current = setTimeout(() => {
-          setIsLocked(true);
-          lockTimer.current = null;
-        }, AUTO_LOCK_GRACE_MS);
+        if (autoLockDelay !== null) {
+          lockTimer.current = setTimeout(() => {
+            setIsLocked(true);
+            lockTimer.current = null;
+          }, autoLockDelay);
+        }
       } else if (state === 'active') {
         // Returning within the grace period — cancel pending lock.
         if (lockTimer.current) {
@@ -121,7 +124,7 @@ function AppContent() {
       sub.remove();
       if (lockTimer.current) clearTimeout(lockTimer.current);
     };
-  }, []);
+  }, [autoLockDelay]);
 
   // Monitor for new messages and show banner
   useEffect(() => {
