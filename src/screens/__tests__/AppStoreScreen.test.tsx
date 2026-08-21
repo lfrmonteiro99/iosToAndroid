@@ -8,7 +8,7 @@ import { CURATED_APPS } from '../../data/curatedApps';
 
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
-const mockLaunchApp = jest.fn(() => Promise.resolve());
+const mockLaunchApp = jest.fn(() => Promise.resolve(true));
 
 const nav = {
   navigate: mockNavigate,
