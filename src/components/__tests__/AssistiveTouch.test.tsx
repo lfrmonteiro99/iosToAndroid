@@ -71,6 +71,15 @@ function EnableAssistiveTouch() {
   return null;
 }
 
+/** Enables AssistiveTouch AND puts `siri` in the menu (it is not there by default). */
+function EnableWithSiri() {
+  const { update } = useAssistiveTouch();
+  useEffect(() => {
+    update({ enabled: true, menuItems: ['siri', 'spotlight'] });
+  }, [update]);
+  return null;
+}
+
 function makeNavigationRef() {
   return {
     isReady: () => true,
@@ -245,5 +254,48 @@ describe('AssistiveTouch menu backdrop', () => {
 
     advance(150); // o timer da abertura original dispararia nesta janela
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
+  });
+});
+
+describe('AssistiveTouch acção siri', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockTapRecords.length = 0;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function renderWithSiri(navigationRef = makeNavigationRef()) {
+    return {
+      navigationRef,
+      ...render(
+        <AssistiveTouchProvider>
+          <EnableWithSiri />
+          <AssistiveTouch navigationRef={navigationRef} />
+        </AssistiveTouchProvider>
+      ),
+    };
+  }
+
+  it('tocar em Siri navega para Siri, não para SpotlightSearch', () => {
+    const { navigationRef, getByLabelText } = renderWithSiri();
+    openMenu();
+    advance(150);
+
+    fireEvent.press(getByLabelText('Siri'));
+    expect(navigationRef.navigate).toHaveBeenCalledWith('Siri');
+    expect(navigationRef.navigate).not.toHaveBeenCalledWith('SpotlightSearch');
+  });
+
+  it('a acção Spotlight continua a navegar para SpotlightSearch', () => {
+    const { navigationRef, getByLabelText } = renderWithSiri();
+    openMenu();
+    advance(150);
+
+    fireEvent.press(getByLabelText('Spotlight'));
+    expect(navigationRef.navigate).toHaveBeenCalledWith('SpotlightSearch');
+    expect(navigationRef.navigate).not.toHaveBeenCalledWith('Siri');
   });
 });

@@ -229,7 +229,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
         case 'controlCenter':    navigate('ControlCenter'); break;
         case 'spotlight':        navigate('SpotlightSearch'); break;
         case 'settings':         navigate('Settings'); break;
-        case 'siri':             navigate('SpotlightSearch'); break; // best-available analogue
+        case 'siri':             navigate('Siri'); break;
         case 'screenshot':
           // No reliable programmatic screenshot API; briefly flash the screen
           // and let the user capture via power+volume. Treat as placeholder.

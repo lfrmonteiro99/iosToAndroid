@@ -25,6 +25,7 @@ export type RootStackParamList = {
   Calendar: undefined;
   Notes: undefined;
   Maps: undefined;
+  FindMy: undefined;
   Reminders: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
 
@@ -58,6 +59,7 @@ export type RootStackParamList = {
   ComponentsGallery: undefined;
   AppLibrary: undefined;
   SpotlightSearch: undefined;
+  Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
 };
