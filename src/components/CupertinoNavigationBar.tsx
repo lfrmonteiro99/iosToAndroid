@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -88,10 +88,9 @@ export function CupertinoNavigationBar({
   if (!children) {
     return (
       <View>
-        <BlurView
+        <GlassSurface
           intensity={80}
           tint={theme.dark ? 'dark' : 'light'}
-          experimentalBlurMethod="dimezisBlurView"
           style={[
             styles.bar,
             {
@@ -113,7 +112,7 @@ export function CupertinoNavigationBar({
             )}
             <View style={styles.rightSlot}>{rightButton}</View>
           </View>
-        </BlurView>
+        </GlassSurface>
         {largeTitle && (
           <View style={[styles.largeTitleContainer, { backgroundColor: colors.systemGroupedBackground }]}>
             <Text style={[typography.largeTitle, { color: colors.label }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{title}</Text>
@@ -141,10 +140,9 @@ export function CupertinoNavigationBar({
 
       {/* Fixed nav bar overlay */}
       <View style={[styles.fixedBar, { top: 0 }]}>
-        <BlurView
+        <GlassSurface
           intensity={80}
           tint={theme.dark ? 'dark' : 'light'}
-          experimentalBlurMethod="dimezisBlurView"
           style={[
             styles.bar,
             {
@@ -164,7 +162,7 @@ export function CupertinoNavigationBar({
             </Animated.Text>
             <View style={styles.rightSlot}>{rightButton}</View>
           </View>
-        </BlurView>
+        </GlassSurface>
 
         {/* Collapsing large title */}
         {largeTitle && (

@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -34,6 +33,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
+import { addHomePressedListener } from '../../modules/launcher-module/src';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
@@ -44,6 +44,7 @@ import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
   NotificationBanner,
+  GlassSurface,
   useAlert,
 } from '../components';
 import type { BannerNotification } from '../components';
@@ -178,6 +179,35 @@ function formatTime(date: Date): string {
   const h = date.getHours().toString().padStart(2, '0');
   const m = date.getMinutes().toString().padStart(2, '0');
   return `${h}:${m}`;
+}
+
+// ---------------------------------------------------------------------------
+// HOME button (#508)
+// ---------------------------------------------------------------------------
+
+// What Android's re-delivered HOME intent (onNewIntent, singleTask launchMode
+// — see plugins/withLauncherIntent.js) must reset once the launcher is
+// already in the foreground. Pure and exported so every starting state is
+// asserted directly, without mounting the screen or a real ScrollView.
+// The App Library is just the last page of this same pager (#434), not a
+// separate overlay, so it needs no case of its own: it's isOnFirstPage: false,
+// like any other non-first page.
+export interface HomePressState {
+  isFolderOpen: boolean;
+  isOnFirstPage: boolean;
+}
+
+export type HomePressAction =
+  | 'none'
+  | 'closeFolder'
+  | 'scrollToFirstPage'
+  | 'closeFolderAndScrollToFirstPage';
+
+export function resolveHomePressAction(state: HomePressState): HomePressAction {
+  if (state.isFolderOpen && !state.isOnFirstPage) return 'closeFolderAndScrollToFirstPage';
+  if (state.isFolderOpen) return 'closeFolder';
+  if (!state.isOnFirstPage) return 'scrollToFirstPage';
+  return 'none';
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +478,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <Pressable style={styles.folderOverlayBackdrop} onPress={onClose} accessibilityLabel="Dismiss" accessibilityRole="button">
         <Pressable onPress={e => e.stopPropagation()} importantForAccessibility="no">
-          <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
+          <GlassSurface intensity={60} tint="dark" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput
                 style={[styles.folderOverlayTitleInput, { fontSize: 17 * textScale }]}
@@ -477,7 +507,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                 />
               ))}
             </View>
-          </BlurView>
+          </GlassSurface>
         </Pressable>
       </Pressable>
     </Modal>
@@ -817,6 +847,28 @@ export function LauncherHomeScreen() {
   useEffect(() => {
     canSpotlightShared.value = canSpotlight;
   }, [canSpotlight, canSpotlightShared]);
+
+  // HOME button (#508): Android re-delivers the intent via onNewIntent
+  // (singleTask) instead of creating a new Activity, but nothing was
+  // listening — this reacts to the native "onHomePressed" event (emitted
+  // only for CATEGORY_HOME, see plugins/withLauncherIntent.js) the same way
+  // pressing HOME resets a real launcher: close whatever's open, land on the
+  // first page. Also lives above the early returns, for the same
+  // rules-of-hooks reason as canSpotlight above.
+  useEffect(() => {
+    return addHomePressedListener(() => {
+      const action = resolveHomePressAction({
+        isFolderOpen: openFolder !== null,
+        isOnFirstPage: currentPage === 0,
+      });
+      if (action === 'closeFolder' || action === 'closeFolderAndScrollToFirstPage') {
+        setOpenFolder(null);
+      }
+      if (action === 'scrollToFirstPage' || action === 'closeFolderAndScrollToFirstPage') {
+        scrollViewRef.current?.scrollTo({ x: 0, animated: true });
+      }
+    });
+  }, [openFolder, currentPage]);
 
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
@@ -1270,10 +1322,9 @@ export function LauncherHomeScreen() {
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
       <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
-        <BlurView
+        <GlassSurface
           intensity={90}
           tint="dark"
-          experimentalBlurMethod="dimezisBlurView"
           style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
@@ -1298,7 +1349,7 @@ export function LauncherHomeScreen() {
               <View key={`empty-${i}`} style={{ width: DOCK_CELL_WIDTH }} />
             ))}
           </View>
-        </BlurView>
+        </GlassSurface>
       </View>
 
       {/* ---------------------------------------------------------------- */}

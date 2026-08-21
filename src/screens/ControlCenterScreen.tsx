@@ -16,7 +16,6 @@ const getLauncher = async () => {
     return null; // Expected: module unavailable on non-Android
   }
 };
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -31,7 +30,7 @@ import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { SystemColors } from '../theme/CupertinoTheme';
-import { useAlert } from '../components';
+import { GlassSurface, useAlert } from '../components';
 import * as Haptics from 'expo-haptics';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticSelection, hapticImpact } from '../utils/haptics';
@@ -346,7 +345,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
         <Animated.View
           style={[styles.sheet, { paddingBottom: insets.bottom + 16 }, sheetStyle]}
         >
-          <BlurView intensity={80} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+          <GlassSurface intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
 
           {/* Drag handle */}
           <View style={styles.handle} />
@@ -402,7 +401,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
           {/* ------------------------------------------------------------ */}
           <View style={styles.section}>
             <View style={styles.musicCard}>
-              <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+              <GlassSurface intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.musicInner}>
                 <View style={styles.musicAlbumArt}>
                   <Ionicons name="musical-notes-outline" size={28} color="rgba(255,255,255,0.4)" />
@@ -571,7 +570,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
               accessibilityLabel="Screen Mirroring"
               accessibilityRole="button"
             >
-              <BlurView intensity={25} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+              <GlassSurface intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.mirrorInner}>
                 <Ionicons name="tv-outline" size={18} color="#ffffff" />
                 <Text style={[styles.mirrorLabel, { fontSize: 14 * textScale }]}>Screen Mirroring</Text>

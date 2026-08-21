@@ -9,7 +9,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -222,10 +222,9 @@ function NotificationGroupCard({
 
       {/* Collapsed: show only latest notification */}
       {!expanded && (
-        <BlurView
+        <GlassSurface
           intensity={40}
           tint="dark"
-          experimentalBlurMethod="dimezisBlurView"
           style={styles.groupNotifCard}
         >
           <Pressable
@@ -254,17 +253,16 @@ function NotificationGroupCard({
           >
             <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
           </Pressable>
-        </BlurView>
+        </GlassSurface>
       )}
 
       {/* Expanded: show all notifications */}
       {expanded &&
         group.notifications.map((item) => (
-          <BlurView
+          <GlassSurface
             key={item.id}
             intensity={40}
             tint="dark"
-            experimentalBlurMethod="dimezisBlurView"
             style={styles.groupNotifCard}
           >
             <Pressable
@@ -301,7 +299,7 @@ function NotificationGroupCard({
             >
               <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
             </Pressable>
-          </BlurView>
+          </GlassSurface>
         ))}
     </View>
   );
@@ -832,9 +830,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
             accessibilityLabel={flashlightOn ? 'Turn off flashlight' : 'Turn on flashlight'}
             accessibilityRole="button"
           >
-            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
+            <GlassSurface intensity={40} tint="dark" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
               <Ionicons name="flashlight" size={22} color={flashlightOn ? '#000' : '#fff'} />
-            </BlurView>
+            </GlassSurface>
           </Pressable>
 
           <View style={styles.swipeHintWrap}>
@@ -890,9 +888,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
             accessibilityLabel="Open camera"
             accessibilityRole="button"
           >
-            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
+            <GlassSurface intensity={40} tint="dark" style={styles.circleBlur}>
               <Ionicons name="camera-outline" size={22} color="#fff" />
-            </BlurView>
+            </GlassSurface>
           </Pressable>
         </View>
         )}

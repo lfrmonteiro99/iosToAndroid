@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -20,7 +19,7 @@ import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { Glass } from '../theme/CupertinoTheme';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
-import { useAlert } from '../components';
+import { GlassSurface, useAlert } from '../components';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 const getLauncher = async () => {
@@ -251,7 +250,7 @@ export function NotificationCenterScreen() {
 
         {/* No notification access */}
         {!hasAccess && (
-          <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.accessCard}>
+          <GlassSurface intensity={40} tint="dark" style={styles.accessCard}>
             <Ionicons name="notifications-off" size={28} color="#FFFFFF" style={{ marginBottom: 8 }} />
             <Text style={[styles.accessTitle, typography.headline]}>Notification Access Required</Text>
             <Text style={[styles.accessSubtitle, typography.subhead]}>
@@ -260,7 +259,7 @@ export function NotificationCenterScreen() {
             <Pressable style={[styles.accessButton, { backgroundColor: colors.accent }]} onPress={handleEnableAccess} accessibilityLabel="Enable Notification Access" accessibilityRole="button">
               <Text style={[styles.accessButtonText, typography.subhead, { fontWeight: '600' }]}>Enable Notification Access</Text>
             </Pressable>
-          </BlurView>
+          </GlassSurface>
         )}
 
         {/* Notification list */}
