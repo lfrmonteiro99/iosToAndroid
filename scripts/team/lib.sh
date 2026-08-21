@@ -32,6 +32,33 @@ VERDICT_DIR="${TEAM_VERDICT_DIR:-$HOME/Documentos/iostoandroid-verdicts}"
 # repo shows up as untracked content and eventually gets committed by accident.
 WT_ROOT="${TEAM_WT_ROOT:-$HOME/Documentos/iostoandroid-wt}"
 
+# AND NOW IT IS ENFORCED, because the comment above was true and unchecked.
+#
+# `wt_create` does `git -C "$TEAM_ROOT" worktree add "$wt"`, and git resolves a
+# RELATIVE path from ITS OWN cwd — which there is the repo root, not the shell's.
+# Confirmed empirically: from a shell outside the repo, `git -C repo worktree add
+# wt-rel` creates `repo/wt-rel`.
+#
+# So a relative WT_ROOT puts every worktree INSIDE the repo. They then show up as
+# untracked content and block any rebase/pull of the main working tree — which is
+# exactly what happened: `iosToAndroid/iostoandroid-wt/implement-510` appeared, and
+# a whole cleanup was needed to get the tree off 1.14.14 while the remote was 1.17.0.
+#
+# Two conditions, because absolute is not enough: `$HOME` unset yields
+# `/Documentos/iostoandroid-wt`, which is absolute and still wrong, and someone can
+# point WT_ROOT at a subdirectory of the repo with a full path.
+case "$WT_ROOT" in
+  /*) ;;
+  *) echo "FATAL: TEAM_WT_ROOT tem de ser um caminho ABSOLUTO (recebi '$WT_ROOT'). " \
+          "Um caminho relativo faz o git criar os worktrees DENTRO do repo." >&2
+     exit 1 ;;
+esac
+case "$WT_ROOT/" in
+  "$TEAM_ROOT"/*) echo "FATAL: TEAM_WT_ROOT ('$WT_ROOT') está dentro do repo" \
+                       "('$TEAM_ROOT'). Os worktrees têm de ser irmãos, nunca nested." >&2
+                  exit 1 ;;
+esac
+
 LOG_DIR="${TEAM_LOG_DIR:-/tmp/ios2android-team}"
 STATE_DIR="${TEAM_STATE_DIR:-$HOME/Documentos/iostoandroid-verdicts/state}"
 
