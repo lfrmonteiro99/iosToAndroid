@@ -267,6 +267,10 @@ jest.mock('@react-navigation/native-stack', () => ({
 // Mock the launcher native module
 jest.mock('./modules/launcher-module/src', () => ({
   __esModule: true,
+  // LauncherHomeScreen subscribes to this on mount (#508) — every test that
+  // renders it without a local jest.mock override (test-file jest.mock >
+  // setupFiles) needs a callable default here, or the effect throws.
+  addHomePressedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
