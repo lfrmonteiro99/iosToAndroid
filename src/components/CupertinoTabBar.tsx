@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -21,10 +21,9 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
   const insets = useSafeAreaInsets();
 
   return (
-    <BlurView
+    <GlassSurface
       intensity={80}
       tint={theme.dark ? 'dark' : 'light'}
-      experimentalBlurMethod="dimezisBlurView"
       style={[
         styles.container,
         {
@@ -80,7 +79,7 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
           );
         })}
       </View>
-    </BlurView>
+    </GlassSurface>
   );
 }
 

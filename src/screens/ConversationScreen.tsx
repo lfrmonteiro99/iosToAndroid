@@ -18,13 +18,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
-import { CupertinoTextField, useAlert } from '../components';
+import { CupertinoTextField, GlassSurface, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
@@ -493,10 +492,9 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     >
       <StatusBar style={dark ? 'light' : 'dark'} />
       {/* Nav Bar */}
-      <BlurView
+      <GlassSurface
         intensity={80}
         tint={dark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezisBlurView"
         style={[
           styles.navBar,
           {
@@ -551,7 +549,7 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             </Pressable>
           </View>
         </View>
-      </BlurView>
+      </GlassSurface>
 
       {/* Recipient picker — shown while composing a new message (no address yet) */}
       {isChoosingRecipient && (

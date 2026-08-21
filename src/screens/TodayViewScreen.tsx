@@ -8,7 +8,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -130,14 +130,14 @@ function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCard
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
       >
-        <BlurView intensity={55} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+        <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={styles.widgetContent}>{children}</View>
       </Pressable>
     );
   }
   return (
     <View style={[styles.widgetCard, style]}>
-      <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
+      <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={styles.widgetContent}>{children}</View>
     </View>
   );
@@ -672,7 +672,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
       <GestureDetector gesture={swipeLeftGesture}>
         <Animated.View style={[styles.panel, sheetStyle]}>
           {/* Translucent blur background */}
-          <BlurView intensity={70} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+          <GlassSurface intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
 
           <ScrollView
             contentContainerStyle={[
