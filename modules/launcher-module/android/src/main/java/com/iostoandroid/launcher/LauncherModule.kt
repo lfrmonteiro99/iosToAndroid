@@ -23,6 +23,11 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.StatFs
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
@@ -44,6 +49,7 @@ class LauncherModule : Module() {
     companion object {
         var flashlightState = false
 @Volatile private var instance: LauncherModule? = null
+@Volatile var activeRecognizer: SpeechRecognizer? = null
 
         /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
@@ -65,7 +71,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
@@ -987,6 +993,7 @@ class LauncherModule : Module() {
                 android.Manifest.permission.CALL_PHONE,
                 android.Manifest.permission.READ_SMS,
                 android.Manifest.permission.SEND_SMS,
+                android.Manifest.permission.RECORD_AUDIO,
                 android.Manifest.permission.CAMERA,
                 android.Manifest.permission.ACCESS_FINE_LOCATION,
                 android.Manifest.permission.READ_PHONE_STATE,
@@ -1078,6 +1085,89 @@ class LauncherModule : Module() {
             } catch (e: Exception) { false }
         }
 
+        // ── Speech recognition (Siri / voice-to-text) ────────────────────
+
+        // Reference to the in-flight recognizer so stopSpeechRecognition can
+        // tear it down. Guarded with @Volatile + synchronized because the
+        // recognition listener callbacks arrive on the main looper thread.
+        AsyncFunction("startSpeechRecognition") {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                val bundle = Bundle().apply {
+                    putString("error", "Speech recognition unavailable on this device")
+                }
+                sendEvent("onSpeechError", bundle)
+                return@AsyncFunction false
+            }
+            synchronized(this@LauncherModule) {
+                activeRecognizer?.destroy()
+                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                activeRecognizer = recognizer
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+                        val text = matches?.firstOrNull() ?: return
+                        val bundle = Bundle().apply { putString("text", text) }
+                        sendEvent("onSpeechPartialResult", bundle)
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+                        val text = matches?.firstOrNull() ?: return
+                        val bundle = Bundle().apply { putString("text", text) }
+                        sendEvent("onSpeechResult", bundle)
+                    }
+
+                    override fun onError(error: Int) {
+                        val bundle = Bundle().apply { putString("error", "SpeechRecognizer error $error") }
+                        sendEvent("onSpeechError", bundle)
+                    }
+                })
+            }
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            // startListening must run on the main looper; the bridge call may
+            // arrive on a different thread.
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                activeRecognizer?.startListening(intent)
+            } else {
+                Handler(Looper.getMainLooper()).post {
+                    activeRecognizer?.startListening(intent)
+                }
+            }
+            true
+        }
+
+        AsyncFunction("stopSpeechRecognition") {
+            synchronized(this@LauncherModule) {
+                val recognizer = activeRecognizer
+                activeRecognizer = null
+                if (recognizer == null) return@AsyncFunction false
+                try {
+                    recognizer.stopListening()
+                    recognizer.destroy()
+                } catch (_: Exception) {}
+                true
+            }
+        }
+
+        AsyncFunction("isSpeechRecognitionAvailable") {
+            SpeechRecognizer.isRecognitionAvailable(context)
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────────
 
         OnDestroy {
@@ -1090,6 +1180,8 @@ class LauncherModule : Module() {
                 )
             } catch (_: Exception) {}
             instance = null
+            try { activeRecognizer?.destroy() } catch (_: Exception) {}
+            activeRecognizer = null
         }
     }
 

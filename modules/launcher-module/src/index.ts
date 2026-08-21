@@ -232,6 +232,10 @@ interface LauncherModuleType {
   canWriteSystemSettings(): Promise<boolean>;
   openWriteSettingsAccess(): Promise<boolean>;
   setRingtone(uri: string): Promise<boolean>;
+  // Speech recognition (Siri / voice-to-text)
+  startSpeechRecognition(): Promise<boolean>;
+  stopSpeechRecognition(): Promise<boolean>;
+  isSpeechRecognitionAvailable(): Promise<boolean>;
 }
 
 const isAndroid = Platform.OS === 'android';
@@ -289,6 +293,9 @@ const stub: LauncherModuleType = {
   canWriteSystemSettings: async () => false,
   openWriteSettingsAccess: async () => false,
   setRingtone: async () => false,
+  startSpeechRecognition: async () => false,
+  stopSpeechRecognition: async () => false,
+  isSpeechRecognitionAvailable: async () => false,
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
   mediaPrev: async () => false,
@@ -557,6 +564,18 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.setRingtone(uri); }
       catch (e) { console.error('LauncherModule.setRingtone failed:', e); reportBridgeError('setRingtone', e); return false; }
     },
+    startSpeechRecognition: async () => {
+      try { return await nativeModule.startSpeechRecognition(); }
+      catch (e) { console.error('LauncherModule.startSpeechRecognition failed:', e); reportBridgeError('startSpeechRecognition', e); return false; }
+    },
+    stopSpeechRecognition: async () => {
+      try { return await nativeModule.stopSpeechRecognition(); }
+      catch (e) { console.error('LauncherModule.stopSpeechRecognition failed:', e); reportBridgeError('stopSpeechRecognition', e); return false; }
+    },
+    isSpeechRecognitionAvailable: async () => {
+      try { return await nativeModule.isSpeechRecognitionAvailable(); }
+      catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
+    },
   };
 }
 
@@ -638,5 +657,34 @@ export function addNotificationRemovedListener(
  */
 export function addHomePressedListener(listener: () => void): () => void {
   const sub = addModuleListener('onHomePressed', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to speech-to-text results as they are recognized.
+ * The callback receives the recognized text (string). Partial results arrive
+ * via onSpeechPartialResult; the final result via onSpeechResult.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechResultListener(
+  listener: (text: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechResult', (n: { text: string }) => {
+    listener(n.text);
+  });
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to speech-recognition errors emitted by the native recognizer.
+ * The callback receives the error message (string).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechErrorListener(
+  listener: (error: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechError', (n: { error: string }) => {
+    listener(n.error);
+  });
   return () => sub.remove();
 }
