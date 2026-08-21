@@ -7,6 +7,7 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import type { RootStackParamList } from './src/navigation/types';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { SettingsProvider, useSettings } from './src/store/SettingsStore';
 import { ContactsProvider } from './src/store/ContactsStore';
@@ -37,6 +38,19 @@ function AppContent() {
   const { settings } = useSettings();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [isLocked, setIsLocked] = useState(true);
+
+  // Inter / Inter Display (#474, sub-issue de #464 — substituto sancionado da
+  // SF Pro, cuja licença restringe o uso a mocks para SO Apple). Uma falha no
+  // carregamento não deve prender a app no splash: seguimos com a fonte de
+  // sistema em vez de ficar à espera indefinidamente.
+  // Metro exige require() literal para extrair assets estáticos (fontes/imagens)
+  // — import() não é resolvido pelo bundler para este caso.
+  const [fontsLoaded, fontError] = useFonts({
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    Inter: require('./assets/fonts/InterVariable.ttf'),
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    InterDisplay: require('./assets/fonts/InterDisplay-Regular.ttf'),
+  });
 
   // ── Botão físico de voltar na raiz ────────────────────────────────────────
   //
@@ -257,6 +271,7 @@ function AppContent() {
     return () => { if (unsub) unsub(); };
   }, [device.isReady, isLocked]);
 
+  if (!fontsLoaded && !fontError) return null;
   if (showOnboarding === null) return null;
 
   if (showOnboarding) {
