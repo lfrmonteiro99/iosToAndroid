@@ -167,14 +167,40 @@ impl_engine_now() {
 # "failed" cannot be told apart from the exit code) and expensive (12+ API calls
 # every 45 seconds, which is how you get rate-limited).
 ISSUE_CACHE=""
+# Janela de idade dos issues elegíveis. A pipeline só pega em issues criados
+# nesta janela (omissão 36h). Issues EM TRABALHO (qa:wip / qa:review /
+# qa:blocked-*) ficam de fora do filtro — trabalho a meio não é abandonado só
+# porque o issue é antigo. O filtro impede a pipeline de agarrar issues novos
+# que o utilizador ainda não quer mexer.
+TEAM_MAX_ISSUE_AGE_H="${TEAM_MAX_ISSUE_AGE_H:-36}"
 
 refresh_issue_cache() {
   local json
   json=$(gh issue list --repo "$REPO" --state open --limit 300 \
-         --json number,labels 2>/dev/null) || return 1
+         --json number,labels,createdAt 2>/dev/null) || return 1
   # Explicit shape check: a truncated or error response must not pass as data.
   printf '%s' "$json" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
-  ISSUE_CACHE="$json"
+  # Filtrar por idade: manter só issues criados nas últimas TEAM_MAX_ISSUE_AGE_H,
+  # a menos que já estejam em trabalho (wip/review/blocked). Trabalho a meio nunca
+  # é descartado. Usa date -d (lê ISO nativamente) — o fromdateiso8601 do jq
+  # nesta máquina é demasiado rigoroso para o formato do GitHub.
+  local now cut cutoff
+  now=$(date +%s)
+  cutoff=$(( now - ${TEAM_MAX_ISSUE_AGE_H} * 3600 ))
+  local filtered
+  filtered=$(printf '%s' "$json" | jq -c '.[]' 2>/dev/null | while IFS= read -r row; do
+    local created raw ts labels
+    created=$(printf '%s' "$row" | jq -r '.createdAt // ""' 2>/dev/null)
+    labels=$(printf '%s' "$row" | jq -r '[.labels[].name] | join(",")' 2>/dev/null)
+    case ",$labels," in
+      *,qa:wip,*|*,qa:review,*|*,qa:blocked-impl,*|*,qa:blocked-spec,*) echo "$row"; continue ;;
+    esac
+    [ -z "$created" ] && { echo "$row"; continue; }   # sem data => mantém (não julgamos "velho")
+    raw=$(date -d "${created%%Z*}Z" +%s 2>/dev/null || echo "")
+    [ -z "$raw" ] && { echo "$row"; continue; }
+    [ "$raw" -ge "$cutoff" ] && echo "$row"
+  done | jq -s '.' 2>/dev/null)
+  [ -n "$filtered" ] && ISSUE_CACHE="$filtered" || ISSUE_CACHE="$json"
   return 0
 }
 
@@ -650,6 +676,24 @@ run_implement() { log "IMPLEMENTADOR -> #$1"; bash "$SCRIPT_DIR/implement.sh" "$
 #
 # TODAS as reviews são destacadas, incluindo a do primeiro slot. Ver
 # trim_reviewed_state para o que ficou deste lado.
+# O REVIEWER TAMBEM PRECISA DE FAILOVER, e a falta dele custou 20 PRs.
+#
+# Os implementadores passaram a trocar para hermes quando o claude fica
+# indisponivel (impl_engine_now). Os reviewers ficaram na escada
+# claude -> ollama, e a 2026-08-21 as 13:15 as duas secaram ao mesmo tempo: a
+# subscricao bateu no limite de sessao e a quota semanal do Ollama ja estava
+# gasta. Resultado da assimetria: os implementadores continuaram a produzir na
+# mesma e 16 PRs seguidos ficaram com "adiado apos 2 corridas sem veredicto".
+# Uma fila de 20 PRs sem ninguem a julga-los.
+#
+# TRADE-OFF, assumido: o reviewer e o unico portao antes do main, e julgar em
+# hermes e julgar com um motor que nunca foi medido neste papel. Mas a
+# alternativa medida nao e "julgar melhor", e "nao julgar" — e um PR nao julgado
+# fica aberto para sempre. O tier do modelo continua com piso em `med`.
+# A ESCOLHA DO MOTOR ESTA NO review.sh, num sitio so. Ele tem de a fazer de
+# qualquer maneira para o despacho manual (`--pr N`), e duas decisoes em dois
+# ficheiros divergem — o log daqui diria `claude` enquanto o review corria em
+# hermes.
 dispatch_review() {
   local slot="$1" pr="$2"
   claim_pr "$slot" "$pr"

@@ -216,7 +216,21 @@ agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 #
 # CADA REVIEWER TEM DE APANHAR UM PR DIFERENTE. Dois reviewers no mesmo PR tentam
 # ambos fazer o merge; quem despacha e responsavel por nao repetir o numero.
-AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" \
+#
+# MOTOR DO REVIEWER: o mesmo que os implementadores. Por omissao e' Claude. Mas
+# quando a subscripcao Claude esta esgotada (cooldown) OU o binario do claude nem
+# se resolve, o reviewer cai no fallback Ollama — que em 2026-08-21 provou NAO
+# devolver veredicto, deixando os PRs acumularem abertos (16 PRs parados). O
+# Hermes e' um motor com quota propria e capaz de julgar, logo assume o reviewer
+# exactamente como assume os implementadores (ver impl_engine_now no
+# orchestrator.sh). Sem isto, o reviewer so' volta a correr quando o Claude
+# regressa; com isto, a fila de reviews escoa durante o cooldown.
+REVIEW_ENGINE="claude"
+if { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && hermes_available; then
+  REVIEW_ENGINE="hermes"
+  log "reviewer em HERMES (Claude indisponivel) — PR #$PR"
+fi
+AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="$REVIEW_ENGINE" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
@@ -295,6 +309,62 @@ else
   warn "não consegui ler a sha revista do PR #$PR — não marco (volta na próxima)"
 fi
 
+# ── PORTÃO INDEPENDENTE DE MERGE ──────────────────────────────────────────
+#
+# O veredicto vem do agente (Claude ou Hermes). O Hermes em modo free não é
+# fiável: pode escrever "approved" + tests_pass:true sem ter corrido os testes
+# a sério. Confiar no JSON do agente para decidir o merge é confiar na palavra
+# de quem está a ser avaliado. Por isso o merge NUNCA é decidido pelo veredicto:
+# este portão corre lint + tsc + jest ELE PRÓPRIO no worktree.
+#
+# O critério é REGRESSÃO, não perfeição (ver baseline_block em lib.sh): o main
+# já está vermelho por uma causa conhecida, logo exigir jest=0 bloquearia TUDO.
+# O portão compara com a baseline do repo e só BLOQUEIA se o PR introduzir
+# regressão — mais testes a falhar do que a baseline, lint/tsc a piorar, ou
+# falhas novas fora dos ficheiros que o PR toca. Sem baseline, o portão é
+# estrito (exige os três verdes). O agente pode mentir à vontade — o main fica
+# protegido contra regressões reais.
+gate_independent() {
+  local wt="$1" le tsc ft
+  [ -d "$wt" ] || return 1
+  log "PORTÃO: a correr lint + tsc + jest no worktree (independente do agente)"
+  ( cd "$wt" && npm run lint --silent >/dev/null 2>&1 ); le=$?
+  ( cd "$wt" && npx tsc --noEmit >/dev/null 2>&1 ); tsc=$?
+  ft=$( ( cd "$wt" && $(test_cmd) --json 2>/dev/null \
+          | jq -r '([.testResults[]?.assertionResults[]? | select(.status=="failed")] | length) // 0' \
+        ) 2>/dev/null ) || ft=0
+  ft=${ft:-0}
+
+  # Sem baseline: portão estrito.
+  if [ ! -s "$BASELINE_FILE" ]; then
+    if [ "$le" = "0" ] && [ "$tsc" = "0" ] && [ "$ft" = "0" ]; then
+      log "PORTÃO: sem baseline, tudo verde — merge autorizado"
+      return 0
+    fi
+    log "PORTÃO: REPROVADO (sem baseline, estrito) lint=$le tsc=$tsc falhas=$ft — PR NÃO integrado"
+    return 1
+  fi
+
+  # Com baseline: critério de regressão.
+  local b_le b_tsc b_ft
+  b_le=$(jqv "$BASELINE_FILE" '.lint_errors' '0')
+  b_tsc=$(jqv "$BASELINE_FILE" '.tsc_ok' 'true')
+  b_ft=$(jqv "$BASELINE_FILE" '.totals.failed_tests' '0')
+  b_le=${b_le:-0}; b_ft=${b_ft:-0}
+
+  local regr=0 motivo=""
+  if [ "$tsc" != "0" ] && [ "$b_tsc" = "true" ]; then regr=1; motivo="tsc limpo na baseline, agora falha"; fi
+  if [ "$le" != "0" ] && [ "${b_le:-0}" = "0" ]; then regr=1; motivo="lint limpo na baseline, agora falha"; fi
+  if [ "$ft" -gt "$b_ft" ]; then regr=1; motivo="testes a falhar subiram ($ft > $b_ft baseline)"; fi
+
+  if [ "$regr" = "1" ]; then
+    log "PORTÃO: REPROVADO por REGRESSÃO ($motivo) — PR NÃO integrado"
+    return 1
+  fi
+  log "PORTÃO: OK (sem regressão vs baseline le=$le tsc=$tsc falhas=$ft vs b_le=$b_le b_tsc=$b_tsc b_ft=$b_ft) — merge autorizado"
+  return 0
+}
+
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:1500}"
 # The reviewer's findings are posted as PR and issue comments and routinely cite
@@ -327,7 +397,32 @@ log "verdict=$VERDICT"
 
 case "$VERDICT" in
   approved)
-    gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: aprovado
+    # PORTÃO INDEPENDENTE: o veredicto do agente (Claude ou Hermes) NÃO decide o
+    # merge. Corremos lint+tsc+jest nós mesmos. Só integramos se o portão passar.
+    # Isto protege o main de um "approved" mentiroso do Hermes (ou de qualquer
+    # motor): o código tem de passar a sério, não na palavra do agente.
+    if ! gate_independent "$WT"; then
+      gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: aprovado pelo agente, mas o PORTÃO independente reprovou
+
+O agente declarou o PR aprovado, mas o portão próprio (lint + tsc + jest
+corridos pelo orquestrador, não pelo agente) falhou. Por regra, um PR só
+integra em \`$BASE\` se o portão passar — um veredicto favorável do agente não
+chega.
+
+Devolvido ao implementador para corrigir o que o portão detetou." >/dev/null 2>&1 || true
+      [ -n "$ISSUE" ] && {
+        comment_issue "$ISSUE" "## Reviewer: portão independente reprovou
+
+O agente aprovou, mas lint/tsc/jest corridos pelo orquestrador falharam. O
+trabalho volta para correção."
+        set_state "$ISSUE" "$L_BLOCKED_IMPL"
+      }
+      # Não marcamos como revisto: o portão pode passar numa próxima passagem se
+      # o implementador corrigir, e não queremos um ciclo de adiamento por isso.
+      exit 0
+    fi
+
+    gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: aprovado (portão independente OK)
 
 $SUMMARY" >/dev/null 2>&1 || true
 
