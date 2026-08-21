@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { migrateAsyncStorageKey } from './storage';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
+const APPS_INDEX_KEY = '@iostoandroid/apps_index';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
 const RECENTS_LEGACY_KEY = '@recent_apps';
 const MAX_RECENTS = 8;
@@ -25,6 +26,22 @@ export interface HomeApp {
 export interface RecentApp {
   packageName: string;
   launchedAt: number; // epoch ms
+}
+
+// Dynamic import to avoid crashing the module on non-Android. Falls back to a
+// synchronous require when dynamic import() is unavailable (e.g. Jest's VM
+// without --experimental-vm-modules) so moduleNameMapper mocks still apply in tests.
+async function getLauncherModule() {
+  try {
+    return (await import('../../modules/launcher-module/src')).default;
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src').default;
+    } catch {
+      return null;
+    }
+  }
 }
 
 interface AppsState {
@@ -142,61 +159,91 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(RECENTS_KEY, JSON.stringify([]));
   }, []);
 
+  // Resolves the final dock list: ensures our built-in apps are present (max 4),
+  // then drops any package that isn't installed (or a virtual built-in).
+  const resolveDock = useCallback((apps: InstalledApp[], savedDock: string[]) => {
+    let dockApps = savedDock;
+    for (const pkg of DEFAULT_DOCK) {
+      if (!dockApps.includes(pkg)) {
+        dockApps = [...dockApps.slice(0, 3), pkg]; // keep max 4, ensure built-in present
+      }
+    }
+    return dockApps.filter((pkg: string) =>
+      apps.some((app: InstalledApp) => app.packageName === pkg) || VIRTUAL_APPS_MAP[pkg]
+    ).slice(0, 4); // max 4 in dock
+  }, []);
+
   const loadApps = useCallback(async () => {
     if (Platform.OS !== 'android') {
       setState(prev => ({ ...prev, isLoading: false }));
       return;
     }
 
-    try {
-      // Dynamic import to avoid crash on non-Android
-      const LauncherModule = (await import('../../modules/launcher-module/src')).default;
+    const [savedLayout, cachedIndexRaw] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(APPS_INDEX_KEY),
+    ]);
 
-      const [apps, savedLayout, defaultStatus] = await Promise.all([
+    let dockApps = DEFAULT_DOCK;
+    let homeApps: HomeApp[] = [];
+    if (savedLayout) {
+      try {
+        const parsed = JSON.parse(savedLayout);
+        homeApps = parsed.homeApps || [];
+        // Only use saved dock if it contains our virtual apps (otherwise it's stale data)
+        const savedDock = parsed.dockApps || [];
+        const hasVirtualApps = DEFAULT_DOCK.some((pkg: string) => savedDock.includes(pkg));
+        dockApps = hasVirtualApps ? savedDock : DEFAULT_DOCK;
+      } catch { /* ignore */ }
+    }
+
+    // A cached index lets every arranque but the very first paint the grid
+    // immediately, without waiting on the native package scan below.
+    let cachedApps: InstalledApp[] | null = null;
+    if (cachedIndexRaw) {
+      try {
+        const parsed = JSON.parse(cachedIndexRaw);
+        if (Array.isArray(parsed)) cachedApps = parsed;
+      } catch (e) { logger.warn('AppsStore', 'failed to parse cached apps index', e); }
+    }
+
+    if (cachedApps) {
+      setState({
+        allApps: cachedApps,
+        homeApps,
+        dockApps: resolveDock(cachedApps, dockApps),
+        isLoading: false,
+      });
+    }
+
+    try {
+      const LauncherModule = await getLauncherModule();
+      if (!LauncherModule) throw new Error('LauncherModule unavailable');
+
+      const [apps, defaultStatus] = await Promise.all([
         LauncherModule.getInstalledApps(),
-        AsyncStorage.getItem(STORAGE_KEY),
         LauncherModule.isDefaultLauncher(),
       ]);
 
       setIsDefault(defaultStatus);
-
-      let dockApps = DEFAULT_DOCK;
-      let homeApps: HomeApp[] = [];
-
-      if (savedLayout) {
-        try {
-          const parsed = JSON.parse(savedLayout);
-          homeApps = parsed.homeApps || [];
-          // Only use saved dock if it contains our virtual apps (otherwise it's stale data)
-          const savedDock = parsed.dockApps || [];
-          const hasVirtualApps = DEFAULT_DOCK.some((pkg: string) => savedDock.includes(pkg));
-          dockApps = hasVirtualApps ? savedDock : DEFAULT_DOCK;
-        } catch { /* ignore */ }
-      }
-
-      // Ensure our built-in apps are always in the dock
-      for (const pkg of DEFAULT_DOCK) {
-        if (!dockApps.includes(pkg)) {
-          dockApps = [...dockApps.slice(0, 3), pkg]; // keep max 4, ensure built-in present
-        }
-      }
-
-      // Filter dock apps to only include installed or virtual ones
-      dockApps = dockApps.filter((pkg: string) =>
-        apps.some((app: InstalledApp) => app.packageName === pkg) || VIRTUAL_APPS_MAP[pkg]
-      ).slice(0, 4); // max 4 in dock
+      AsyncStorage.setItem(APPS_INDEX_KEY, JSON.stringify(apps));
 
       setState({
         allApps: apps,
         homeApps,
-        dockApps,
+        dockApps: resolveDock(apps, dockApps),
         isLoading: false,
       });
-    } catch {
-      alertRef.current('Error', 'Could not load apps. Please try again later.');
-      setState(prev => ({ ...prev, isLoading: false }));
+    } catch (e) {
+      logger.warn('AppsStore', 'background apps refresh failed', e);
+      // A cached index is already painted — keep it and refresh silently next time
+      // instead of surfacing an error for a scan the user isn't waiting on.
+      if (!cachedApps) {
+        alertRef.current('Error', 'Could not load apps. Please try again later.');
+        setState(prev => ({ ...prev, isLoading: false }));
+      }
     }
-  }, []);
+  }, [resolveDock]);
 
   useEffect(() => {
     loadApps();

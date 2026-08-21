@@ -5,10 +5,17 @@ export interface InstalledApp {
   name: string;
   packageName: string;
   /**
-   * A COMPLETE data URI — `data:image/png;base64,<payload>` — already prefixed by
-   * `LauncherModule.drawableToBase64` on the Kotlin side. Pass it straight to
+   * A COMPLETE URI, already prefixed on the Kotlin side — pass it straight to
    * `<Image source={{ uri: app.icon }} />`; prefixing it again yields a
    * double-prefixed URI that silently renders nothing.
+   *
+   * `getInstalledApps()` returns a `file://` URI pointing at a PNG cached
+   * under `context.filesDir/icons/<packageName>_<versionCode>.png`
+   * (LauncherModule.kt's `getInstalledApps` AsyncFunction + `IconCache`) — the
+   * icon is decoded from the launcher activity only once per app version, not
+   * on every app start. `getAppIcon(packageName)` still returns a one-off
+   * `data:image/png;base64,<payload>` (LauncherModule.kt's `drawableToBase64`),
+   * uncached, for on-demand single-icon lookups.
    * Empty string when the icon could not be loaded.
    */
   icon: string;
