@@ -68,24 +68,61 @@ CANDIDATES=$(printf '%s' "$ALL" | jq -r --arg qa "$ALL_QA_LABELS" '
   | select(($n | any(. as $x | $q | index($x)) | not) or ($n | index("qa:ready")))
   | .number')
 
+# Conjunto dos ABERTOS, da leitura que ja fizemos. Serve para decidir o estado dos
+# bloqueadores sem UMA CHAMADA POR BLOQUEADOR: um issue esta fechado se e so se nao
+# esta nesta lista. Zero chamadas extra.
+#
+# Um numero que nunca existiu tambem cai em "fechado". E aceitavel: um marcador a
+# apontar para um issue inexistente nao deve prender o dependente para sempre.
+OPEN_SET=" $(printf '%s' "$ALL" | jq -r '.[].number' | tr '\n' ' ')"
+
+# Cache do marcador, porque a primeira versao disto custava ~95s por ciclo: buscava o
+# corpo dos ~42 candidatos, todos os ciclos, para reler uma linha que nunca muda.
+# O ciclo do orquestrador dorme 45s, portanto o gate era mais lento que o ciclo.
+#
+# Aqui guarda-se "<issue>\t<bloqueadores>" ou "<issue>\t-" para quem nao tem marcador,
+# e so se busca o corpo de quem ainda nao esta em cache. Em regime permanente sao zero
+# fetches de corpo.
+#
+# Invalidacao: o marcador e escrito uma vez e nao muda. Se for preciso reescrever um,
+# apagar este ficheiro — e mais honesto que inventar um TTL.
+MARKER_CACHE="$STATE_DIR/blocked-markers.tsv"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+touch "$MARKER_CACHE" 2>/dev/null || true
+
+blockers_of() {   # ecoa os numeros dos bloqueadores, ou nada se nao houver marcador
+  local issue="$1" cached body line
+  cached=$(grep -m1 -P "^$issue\t" "$MARKER_CACHE" 2>/dev/null | cut -f2-)
+  if [ -n "$cached" ]; then
+    [ "$cached" = "-" ] && return 0
+    echo "$cached"; return 0
+  fi
+  body=$(gh issue view "$issue" --repo "$REPO" --json body -q .body 2>/dev/null) || return 1
+  line=$(printf '%s' "$body" | grep -m1 -E "$MARKER_RE" || true)
+  if [ -z "$line" ]; then
+    printf '%s\t-\n' "$issue" >> "$MARKER_CACHE" 2>/dev/null || true
+    return 0
+  fi
+  local nums
+  nums=$(printf '%s' "$line" | grep -oE '#[0-9]+' | tr -d '#' | tr '\n' ' ' | sed 's/ $//')
+  printf '%s\t%s\n' "$issue" "$nums" >> "$MARKER_CACHE" 2>/dev/null || true
+  echo "$nums"
+}
+
 promoted=0
 still=0
 parked=0
 
 for issue in $CANDIDATES; do
-  body=$(gh issue view "$issue" --repo "$REPO" --json body -q .body 2>/dev/null) || continue
-
-  line=$(printf '%s' "$body" | grep -m1 -E "$MARKER_RE" || true)
-  [ -n "$line" ] || continue          # sem marcador => não é nosso (ex.: epics)
-
-  blockers=$(printf '%s' "$line" | grep -oE '#[0-9]+' | tr -d '#')
-  [ -n "$blockers" ] || { warn "#$issue tem marcador sem números — a ignorar"; continue; }
+  blockers=$(blockers_of "$issue") || continue
+  [ -n "$blockers" ] || continue      # sem marcador => não é nosso (ex.: epics)
 
   open_blockers=""
   unreadable=0
   for b in $blockers; do
-    st=$(gh issue view "$b" --repo "$REPO" --json state -q .state 2>/dev/null) || { unreadable=1; break; }
-    [ "$st" = "CLOSED" ] || open_blockers="$open_blockers #$b"
+    case "$OPEN_SET" in
+      *" $b "*) open_blockers="$open_blockers #$b" ;;   # ainda aberto
+    esac
   done
 
   # Não confirmar não é o mesmo que estar fechado. Em dúvida, deixar parqueado.
