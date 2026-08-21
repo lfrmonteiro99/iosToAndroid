@@ -24,6 +24,18 @@ VERDICT_FILE="$VERDICT_DIR/implement-$ISSUE.json"
 PROMPT="/tmp/ios2a-implement-prompt-$ISSUE.txt"
 WT=""
 
+# REGISTA-TE COMO VIVO À CABEÇA.
+#
+# O lock do run-agent.sh só é tomado lá no fim, depois do worktree e do `npm ci`:
+# até lá o slot parece livre e o cleanup_stale do orquestrador apagava-me o
+# veredicto e removia-me o worktree por baixo. Foi o #442 — worktree "recriado
+# pelo menos 2 vezes", edits perdidos, issue de volta a qa:ready num ciclo
+# infinito. A tag é o nome do worktree, para que o cleanup possa decidir item a
+# item; o PID é a autoridade, portanto uma morte a SIGKILL não deixa reserva
+# obsoleta.
+inflight_register "implement-$ISSUE" "${TEAM_SLOT:-main}"
+trap 'inflight_release "implement-'"$ISSUE"'"' EXIT
+
 # The issue's own triage picks the tier: `haiku-ready` -> low, `sonnet-ready` -> med,
 # and repeated failure promotes to strong. resolve_models returns the pair, so the
 # difficulty class stays the same whether we are on the subscription or on the
@@ -186,13 +198,15 @@ fi
 } | sed -e "s|__VERDICT_PATH__|$VERDICT_FILE|g" \
         -e "s|__WORKDIR__|$WT|g" \
         -e "s|__BRANCH__|$BRANCH|g" \
-        -e "s|__BASE_BRANCH__|$BASE_BRANCH|g" > "$PROMPT"
+        -e "s|__BASE_BRANCH__|$BASE_BRANCH|g" \
+        -e "s|__TEST_CMD__|$(test_cmd)|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
 agent_log_header "$LOG_DIR/implement-$ISSUE.log" "implement #$ISSUE modelo=$MODEL"
-# O slot é o que separa os locks do run-agent.sh, e por isso é o que permite dois
-# implementadores em simultâneo. O orquestrador lança o par Hermes com
-# TEAM_SLOT=hermes AGENT_ENGINE=hermes; sem override fica tudo em 'main', como antes.
+# O slot é o que separa os locks do run-agent.sh, e por isso é o que permite N
+# implementadores em simultâneo. O orquestrador lança cada um com
+# TEAM_SLOT=implN e AGENT_ENGINE=claude|hermes; sem override fica em 'main', que
+# é o caminho do despacho explícito (`--issue N`).
 AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="${AGENT_ENGINE:-}" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${IMPLEMENT_TIMEOUT:-2700}" \
   >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
@@ -449,8 +463,11 @@ EXISTING_PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --base "$BASE_BRANCH" \
   --state open --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
 
 if [ -n "$EXISTING_PR" ]; then
-  gh pr edit "$EXISTING_PR" --repo "$REPO" \
-    --title "$SUMMARY (#$ISSUE)" --body "$PR_BODY" >/dev/null 2>&1 || true
+  # NAO `gh pr edit`: falha sempre com o erro dos Projects classic e o silencio
+  # deixava o corpo do PR a descrever a ronda anterior — ver update_pr_api.
+  if ! update_pr_api "$EXISTING_PR" "$SUMMARY (#$ISSUE)" "$PR_BODY"; then
+    warn "não consegui actualizar o corpo do PR #$EXISTING_PR — o reviewer vai ver a descrição antiga"
+  fi
   gh pr comment "$EXISTING_PR" --repo "$REPO" --body "## Implementador: retrabalho submetido
 
 $SUMMARY
@@ -470,6 +487,7 @@ O branch \`$BRANCH\` foi enviado mas o PR para \`$BASE_BRANCH\` não foi aberto.
     exit 1
   fi
   log "PR criado: #$PR_NUM ($REPO)"
+  health_stamp pr-created
 fi
 
 comment_issue "$ISSUE" "## Implementador: implementado

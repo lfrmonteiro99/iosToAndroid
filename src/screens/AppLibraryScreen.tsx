@@ -529,6 +529,16 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
             <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
           </Pressable>
         }
+        rightButton={
+          <Pressable
+            onPress={() => navigation.navigate('AppStore')}
+            style={styles.storeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="App Store"
+          >
+            <Ionicons name="bag-outline" size={22} color={colors.systemBlue} />
+          </Pressable>
+        }
       />
       <AppLibraryContent />
     </View>
@@ -554,6 +564,11 @@ const styles = StyleSheet.create({
   },
   backLabel: {
     fontWeight: '400',
+  },
+  storeBtn: {
+    minWidth: 70,
+    alignItems: 'flex-end',
+    paddingHorizontal: 4,
   },
   searchBarWrap: {
     paddingHorizontal: 12,

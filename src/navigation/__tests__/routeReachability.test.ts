@@ -78,6 +78,13 @@ describe('every registered route has a discoverable entry point (#455)', () => {
   //    (confirmed by hand — the only "Maps" text in the app is a
   //    `title="Maps"` JSX prop and code comments, not a navigation call).
   //    Pre-existing, unrelated to #455, no owning issue yet.
+  //  - 'FindMy': FindMyScreen (#263) is registered and typed in the stack
+  //    navigator only, matching the Maps convention. The launch grid's app
+  //    list is populated from real installed packages via the native
+  //    getInstalledApps() (LauncherModule.kt), and retrofitting a virtual
+  //    FindMy entry into that path is explicitly out of scope for #263. So it
+  //    has no in-app caller; the screen is reachable only via the registered
+  //    route. Documented gap, owned by #263.
   //  - 'AppLibrary': became a gap on main, not here. #434/#458 turned the last
   //    home page into the App Library rendered *inline* via the shared
   //    `AppLibraryContent`, so nothing navigates to the `AppLibrary` stack
@@ -89,7 +96,7 @@ describe('every registered route has a discoverable entry point (#455)', () => {
   // 'TodayView' used to be on this list (added by #442 when the work was
   // re-scoped out of it). #455 is that owning issue, and it has now landed —
   // hence its removal from the allowlist and the dedicated case below.
-  const KNOWN_PRE_EXISTING_GAPS = ['AppLibrary', 'Maps'];
+  const KNOWN_PRE_EXISTING_GAPS = ['AppLibrary', 'Maps', 'FindMy'];
 
   const registeredRoutes = readRegisteredRoutes();
   const corpus = buildUsageCorpus();
