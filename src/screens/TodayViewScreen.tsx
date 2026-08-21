@@ -125,9 +125,8 @@ function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCard
   if (onPress) {
     return (
       <Pressable
-        style={[styles.widgetCard, style]}
+        style={({ pressed }) => [styles.widgetCard, style, pressed && { opacity: 0.7 }]}
         onPress={onPress}
-        android_ripple={{ color: 'rgba(255,255,255,0.1)', borderless: false }}
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
       >

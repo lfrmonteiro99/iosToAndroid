@@ -453,9 +453,8 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
           {items.map((item) => (
             <Pressable
               key={item.id}
-              style={[styles.menuCell, { backgroundColor: cellBg }]}
+              style={({ pressed }) => [styles.menuCell, { backgroundColor: cellBg, opacity: pressed ? 0.65 : 1 }]}
               onPress={() => onPick(item)}
-              android_ripple={{ color: 'rgba(255,255,255,0.15)', borderless: true }}
               accessibilityRole="button"
               accessibilityLabel={item.label}
             >
