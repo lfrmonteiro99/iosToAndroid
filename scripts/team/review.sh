@@ -204,7 +204,15 @@ fi
 
 rm -f "$VERDICT_FILE"
 agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
-AGENT_SLOT=main CLAUDE_MODEL="$MODEL" \
+# Slot configuravel, como no implement.sh:196. Sem override fica em 'main', tal como
+# antes. Com TEAM_SLOT=rev2 corre um segundo reviewer em paralelo, no seu proprio
+# lock — necessario porque os implementadores produzem PRs mais depressa do que um
+# reviewer serial os consome: medido em 2026-08-21, ~7 slots de implementacao a
+# ~27min dao ~15 PR/h contra ~10 review/h (~5.6min cada), logo a fila cresce ~5 PR/h.
+#
+# CADA REVIEWER TEM DE APANHAR UM PR DIFERENTE. Dois reviewers no mesmo PR tentam
+# ambos fazer o merge; quem despacha e responsavel por nao repetir o numero.
+AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
