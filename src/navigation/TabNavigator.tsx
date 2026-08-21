@@ -49,6 +49,7 @@ import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouch
 import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
+import { AppStoreScreen } from '../screens/AppStoreScreen';
 import { SpotlightSearchScreen } from '../screens/SpotlightSearchScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
@@ -135,6 +136,7 @@ export function TabNavigator() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: slideAnimation }} />
       {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: slideAnimation }} />}
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
+      <Stack.Screen name="AppStore" component={AppStoreScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />

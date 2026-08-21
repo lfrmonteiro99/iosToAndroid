@@ -57,6 +57,7 @@ export type RootStackParamList = {
   EditProfile: undefined;
   ComponentsGallery: undefined;
   AppLibrary: undefined;
+  AppStore: undefined;
   SpotlightSearch: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
