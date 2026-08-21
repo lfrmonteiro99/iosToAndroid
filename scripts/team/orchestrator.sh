@@ -871,12 +871,15 @@ while true; do
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed
 
+  # OS REVIEWERS VÊM PRIMEIRO, e é por causa do orçamento de memória: quem for
+  # despachado primeiro fica com a folga. Rever é o que fecha issues e mete
+  # código em main — um implementador que espere um ciclo (45s) não custa nada,
+  # uma fila de PRs sem quem a reveja custa tudo. Cada um reserva o PR que
+  # apanha, para que o run_review bloqueante mais abaixo receba outro.
+  launch_reviewers_extra_if_needed
+
   # Implementadores: enche os slots livres enquanto houver memória e fila.
   launch_implementers_if_needed
-
-  # Reviewers extra, antes do review bloqueante: cada um reserva o PR que apanha,
-  # para que o run_review mais abaixo receba outro.
-  launch_reviewers_extra_if_needed
 
   DID=0
   [ "$DISPATCHED_IMPL" -gt 0 ] && DID=1
