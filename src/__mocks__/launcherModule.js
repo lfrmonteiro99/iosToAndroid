@@ -2,12 +2,16 @@ module.exports = {
   __esModule: true,
   // Named exports used by App.tsx (notification listener) and onBridgeError handler
   addNotificationListener: jest.fn(() => jest.fn()),
+  addPackageChangedListener: jest.fn(() => jest.fn()),
   onBridgeError: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
     getAppIcon: jest.fn(() => Promise.resolve('')),
+    getAppInfo: jest.fn(() => Promise.resolve(null)),
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
+    // #517: a instrumentação de cold start chama isto no arranque de App.tsx.
+    getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
     openLauncherSettings: jest.fn(() => Promise.resolve(true)),
     getWifiInfo: jest.fn(() => Promise.resolve({ enabled: true, ssid: 'TestWiFi', rssi: -50, ip: '192.168.1.100' })),
     setWifiEnabled: jest.fn(() => Promise.resolve(true)),
@@ -33,6 +37,9 @@ module.exports = {
     sendSms: jest.fn(() => Promise.resolve(true)),
     requestAllPermissions: jest.fn(() => Promise.resolve(true)),
     checkPermissions: jest.fn(() => Promise.resolve({})),
+    startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),

@@ -14,6 +14,7 @@ import {
   NativeScrollEvent,
   TextInput,
   Modal,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -54,13 +55,17 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
+import { AppLaunchOverlay } from '../components/AppLaunchOverlay';
+import type { LaunchBounds } from '../components/AppLaunchOverlay';
 import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { markGridVisible, markWarmStartBegin } from '../utils/perfMetrics';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
+import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -68,12 +73,15 @@ import { hapticImpact, hapticSelection } from '../utils/haptics';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const COLS = Math.min(4, Math.floor(SCREEN_WIDTH / 90));
+const GRID_GEOMETRY = computeLauncherGridGeometry(SCREEN_WIDTH);
+const COLS = GRID_GEOMETRY.cols;
 const ROWS = 6;
 const APPS_PER_PAGE = COLS * ROWS; // 24
-const ICON_SIZE = 60;
-const GRID_HORIZONTAL_PADDING = 16;
-const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
+// Derivados da largura do ecrã (§2) — ver src/utils/launcherGridGeometry.ts.
+export const ICON_SIZE = GRID_GEOMETRY.iconSize;
+export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
+export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
+const CELL_WIDTH = GRID_GEOMETRY.cellWidth;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
 // How far past the screen edge the wallpaper layer is oversized (see the
@@ -102,7 +110,7 @@ export function computeWallpaperTranslateX(
 }
 
 // Built-in app routing: packageName → navigation screen name
-const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
+export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.phone': 'Phone',
   'com.iostoandroid.messages': 'Messages',
   'com.iostoandroid.contacts': 'Contacts',
@@ -116,6 +124,7 @@ const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.notes': 'Notes',
   'com.iostoandroid.reminders': 'Reminders',
   'com.iostoandroid.mail': 'Mail',
+  'com.iostoandroid.browser': 'Browser',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -150,7 +159,7 @@ export const BUILT_IN_DUPLICATE_PACKAGES: ReadonlySet<string> = new Set(
 );
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
-const VIRTUAL_ICON_CONFIG: Record<string, {
+export const VIRTUAL_ICON_CONFIG: Record<string, {
   icon: keyof typeof Ionicons.glyphMap;
   bg: string;
   gradient?: [string, string];
@@ -169,6 +178,7 @@ const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.notes': { icon: 'document-text', bg: '#FFCC00', gradient: ['#FFD60A', '#FFB300'], iconSize: 32 },
   'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
+  'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
 };
 
 // ---------------------------------------------------------------------------
@@ -244,10 +254,25 @@ function DynamicIsland({ device, settings, textScale = 1 }: { device: ReturnType
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// How long AppIcon's measure() waits for measureInWindow's callback before
+// giving up (no expand animation) — measureInWindow is a real native
+// round-trip and, unlike the spring below, has no completion guarantee baked
+// into the API, so a launch must never hang on it (§6.3 "cuidados").
+const MEASURE_FALLBACK_MS = 50;
+
+// AppIcon hands the caller a *function* to measure its own on-screen bounds,
+// rather than measuring eagerly on every press. Built-in routes (Phone,
+// Settings, ...) never call it and navigate synchronously exactly as before —
+// only a real external-app launch pays for the native round-trip, and only
+// once the caller has already decided it needs one (#442 regression: routing
+// through a measurement first added a ~50ms tap delay ahead of every
+// navigation, built-in or not).
+type MeasureBounds = () => Promise<LaunchBounds | undefined>;
+
 interface AppIconProps {
   app: InstalledApp;
   cellWidth: number;
-  onPress: () => void;
+  onPress: (measure: MeasureBounds) => void;
   onLongPress: () => void;
   isJiggling?: boolean;
   onDelete?: () => void;
@@ -259,6 +284,31 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const iconRef = useRef<View>(null);
+
+  const measureBounds = useCallback<MeasureBounds>(() => new Promise((resolve) => {
+    const node = iconRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') {
+      resolve(undefined);
+      return;
+    }
+    let settled = false;
+    const fallback = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(undefined);
+    }, MEASURE_FALLBACK_MS);
+    node.measureInWindow((x, y, width, height) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      resolve({ x, y, width, height });
+    });
+  }), []);
+
+  const handlePress = useCallback(() => {
+    onPress(measureBounds);
+  }, [onPress, measureBounds]);
 
   useEffect(() => {
     if (isJiggling) {
@@ -296,8 +346,9 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
 
   return (
     <Pressable
+      ref={iconRef}
       style={[styles.appIconWrapper, { width: cellWidth }]}
-      onPress={isJiggling ? undefined : onPress}
+      onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress}
@@ -642,17 +693,63 @@ export function LauncherHomeScreen() {
     }
   }, [device.messages, navigation]);
 
-  // Unified app press handler — routes built-in apps to internal screens
-  const handleAppPress = useCallback((app: InstalledApp) => {
+  const reduceMotion = useGestureReduceMotion();
+
+  // Icon-expand transition state (#509, §6.3) — set when a non-built-in app is
+  // pressed with usable bounds; the overlay itself fires the real launch once
+  // its spring settles (see handleExpandComplete), never on a fixed timer.
+  const [launchTransition, setLaunchTransition] = useState<{
+    app: InstalledApp;
+    bounds: LaunchBounds;
+    phase: 'expand' | 'collapse';
+  } | null>(null);
+
+  // Fires exactly when the expand spring settles — this is the intent trigger
+  // point, not a setTimeout guess (§6.3). A failed launch collapses the
+  // overlay back to the icon instead of leaving it stuck full-screen.
+  const handleExpandComplete = useCallback(() => {
+    const pending = launchTransition;
+    if (!pending) return;
+    launchApp(pending.app.packageName).then((ok) => {
+      if (ok) {
+        setLaunchTransition(null);
+      } else {
+        setLaunchTransition((prev) => (prev ? { ...prev, phase: 'collapse' } : prev));
+      }
+    });
+  }, [launchTransition, launchApp]);
+
+  const handleCollapseComplete = useCallback(() => {
+    setLaunchTransition(null);
+  }, []);
+
+  // Unified app press handler — routes built-in apps to internal screens.
+  // `measure` is only invoked for a real external-app launch, never for a
+  // built-in route or a folder-modal launch (see AppIcon/MeasureBounds) — a
+  // built-in route stays exactly as synchronous as it always was.
+  const handleAppPress = useCallback((app: InstalledApp, measure?: MeasureBounds) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BUILT_IN_APPS routes all have undefined params; navigate overloads require params spec
       navigation.navigate(internalRoute as any);
-    } else {
-      launchApp(app.packageName);
+      return;
     }
-  }, [navigation, launchApp]);
+    // No measure fn (folder icons open inside a Modal — a separate native
+    // window that can't host a screen-spanning overlay) or reduceMotion:
+    // launch immediately, no expand, no measurement round-trip at all.
+    if (!measure || reduceMotion) {
+      launchApp(app.packageName);
+      return;
+    }
+    measure().then((bounds) => {
+      if (bounds) {
+        setLaunchTransition({ app, bounds, phase: 'expand' });
+      } else {
+        launchApp(app.packageName);
+      }
+    });
+  }, [navigation, launchApp, reduceMotion]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -677,7 +774,6 @@ export function LauncherHomeScreen() {
   const spotlightProgress = useSharedValue(0);
   const spotlightBuf = useVelocityBuffer();
   const spotlightT = useSharedValue(0);
-  const reduceMotion = useGestureReduceMotion();
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
     reduceMotionShared.value = reduceMotion;
@@ -855,8 +951,21 @@ export function LauncherHomeScreen() {
   // pressing HOME resets a real launcher: close whatever's open, land on the
   // first page. Also lives above the early returns, for the same
   // rules-of-hooks reason as canSpotlight above.
+  // Warm start (#517): a janela de medição abre quando o launcher volta a
+  // primeiro plano — quer por AppState (a Activity foi retomada) quer pela
+  // re-entrega do intent HOME — e fecha no próximo layout da grelha
+  // (markGridVisible). Não há aqui nenhuma alteração de comportamento: só
+  // marcas de tempo.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') markWarmStartBegin();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     return addHomePressedListener(() => {
+      markWarmStartBegin();
       const action = resolveHomePressAction({
         isFolderOpen: openFolder !== null,
         isOnFirstPage: currentPage === 0,
@@ -1261,7 +1370,18 @@ export function LauncherHomeScreen() {
       >
         {pages.map((pageItems, pageIndex) => (
           <View key={pageIndex} style={styles.page}>
-            <View style={styles.pageGrid}>
+            <View
+              testID={`launcher-page-grid-${pageIndex}`}
+              style={styles.pageGrid}
+              // Cold/warm start (#517) fecham AQUI, no primeiro layout da
+              // grelha da primeira página — o primeiro instante em que a
+              // grelha está de facto pintada. Medir no mount do ecrã daria um
+              // número falso: nesse momento o que se vê é o spinner do ramo
+              // `isLoading` acima. markGridVisible() é idempotente para o cold
+              // start, por isso re-layouts (rotação, duplo layout) não produzem
+              // segundas medições.
+              onLayout={pageIndex === 0 ? markGridVisible : undefined}
+            >
               {pageItems.map((item) => {
                 if (item.type === 'folder') {
                   return (
@@ -1282,7 +1402,7 @@ export function LauncherHomeScreen() {
                     app={item.app}
                     cellWidth={CELL_WIDTH}
                     textScale={textScale}
-                    onPress={() => handleAppPress(item.app)}
+                    onPress={(measure) => handleAppPress(item.app, measure)}
                     onLongPress={() => handleLongPress(item.app)}
                     isJiggling={isJiggling}
                     badge={badgeCounts[item.app.packageName]}
@@ -1334,7 +1454,7 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
-                onPress={() => handleAppPress(app)}
+                onPress={(measure) => handleAppPress(app, measure)}
                 onLongPress={() => handleLongPress(app)}
                 isJiggling={isJiggling}
                 badge={badgeCounts[app.packageName]}
@@ -1412,6 +1532,20 @@ export function LauncherHomeScreen() {
         notification={activeBanner}
         onDismiss={() => setActiveBanner(null)}
       />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* App-icon expand transition (#509, §6.3)                            */}
+      {/* ---------------------------------------------------------------- */}
+      {launchTransition && (
+        <AppLaunchOverlay
+          key={launchTransition.app.packageName}
+          icon={launchTransition.app.icon}
+          bounds={launchTransition.bounds}
+          phase={launchTransition.phase}
+          onExpandComplete={handleExpandComplete}
+          onCollapseComplete={handleCollapseComplete}
+        />
+      )}
       </Animated.View>
     </GestureDetector>
   );
@@ -1523,13 +1657,13 @@ const styles = StyleSheet.create({
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 13.5,
+    borderRadius: ICON_RADIUS,
     overflow: 'hidden',
   },
   appIconPlaceholder: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 13.5,
+    borderRadius: ICON_RADIUS,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',

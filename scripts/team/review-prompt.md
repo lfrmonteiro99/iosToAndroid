@@ -49,7 +49,7 @@ vai no contexto abaixo e nunca é truncada — usa-a.
    ```bash
    npm run lint
    npx tsc --noEmit
-   npm test
+   __TEST_CMD__
    ```
    **Se houver uma secção "LINHA DE BASE" mais abaixo, lê-a antes de julgares o
    resultado.** Diz-te o que já estava partido em `main` antes deste PR, e nesse

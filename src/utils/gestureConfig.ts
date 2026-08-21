@@ -74,6 +74,8 @@ export const gestureConfig = {
     homeSettle: { stiffness: 700, damping: 52, mass: 1 },
     switcherSettle: { stiffness: 620, damping: 48, mass: 1 },
     backSettle: { stiffness: 760, damping: 56, mass: 1 },
+    // App-icon expand transition (#509, §6.3) — tuned to settle in ~280ms.
+    appLaunch: { stiffness: 320, damping: 30, mass: 1 },
   },
 
   // Velocity window
