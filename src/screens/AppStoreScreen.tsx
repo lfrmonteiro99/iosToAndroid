@@ -16,6 +16,64 @@ import { useApps } from '../store/AppsStore';
 import { CURATED_APPS, type CuratedApp } from '../data/curatedApps';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+import type { InstalledApp } from '../store/AppsStore';
+
+// Segment labels live in one place — inserting/reordering a tab means
+// changing this array only, not the render branches below.
+const APP_STORE_SEGMENTS = ['Today', 'Search', 'Categories'] as const;
+
+// ---------------------------------------------------------------------------
+// Categories tab — keyword-based grouping, scoped to this file
+// ---------------------------------------------------------------------------
+
+// Same keyword-matching approach as AppLibraryScreen's own categorizer, kept
+// as an independent copy (deliberately not imported) because this screen's
+// catalog is CURATED_APPS + installed apps, not just installed apps — see
+// issue #252. Curated entries already carry a real `category`; this list
+// only classifies installed apps that aren't in CURATED_APPS.
+const INSTALLED_CATEGORY_KEYWORDS: { name: string; keywords: string[] }[] = [
+  {
+    name: 'Social Networking',
+    keywords: ['facebook', 'instagram', 'twitter', 'whatsapp', 'telegram', 'messenger', 'tiktok', 'snapchat', 'linkedin', 'reddit', 'discord'],
+  },
+  {
+    name: 'Entertainment',
+    keywords: ['youtube', 'netflix', 'disney', 'twitch', 'game', 'prime', 'hbo', 'hulu', 'podcast', 'radio', 'player'],
+  },
+  {
+    name: 'Music',
+    keywords: ['spotify', 'music', 'soundcloud'],
+  },
+  {
+    name: 'Productivity',
+    keywords: ['gmail', 'drive', 'docs', 'sheets', 'calendar', 'slack', 'teams', 'office', 'word', 'excel', 'outlook', 'notion', 'trello', 'asana', 'zoom', 'meet', 'todoist'],
+  },
+  {
+    name: 'Photo & Video',
+    keywords: ['camera', 'photo', 'gallery', 'video', 'vsco', 'lightroom'],
+  },
+  {
+    name: 'Utilities',
+    keywords: ['calculator', 'clock', 'files', 'settings', 'weather', 'maps', 'compass', 'flashlight', 'scanner', 'notes', 'reminder', 'translate', 'browser', 'chrome', 'firefox'],
+  },
+  {
+    name: 'Education',
+    keywords: ['duolingo', 'learn', 'course', 'school', 'study'],
+  },
+];
+
+function categorizeInstalledApp(app: InstalledApp): string {
+  const nameLower = app.name.toLowerCase();
+  const pkgLower = app.packageName.toLowerCase();
+  for (const cat of INSTALLED_CATEGORY_KEYWORDS) {
+    for (const kw of cat.keywords) {
+      if (nameLower.includes(kw) || pkgLower.includes(kw)) {
+        return cat.name;
+      }
+    }
+  }
+  return 'Other';
+}
 
 /** Play Store deep link for a single app listing. */
 export function playStoreUrl(packageName: string): string {
@@ -195,6 +253,38 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
     return Array.from(byPackage.values());
   }, [apps, query, installedPackages]);
 
+  // Grouped by category for the Categories tab: every CURATED_APPS entry
+  // under its declared category, plus installed apps not already in
+  // CURATED_APPS grouped by a local keyword match (categorizeInstalledApp).
+  // 'Other' always sorts last, same convention as AppLibraryScreen.
+  const categorySections = useMemo(() => {
+    const map: Record<string, CuratedApp[]> = {};
+    const curatedPackages = new Set(CURATED_APPS.map((c) => c.packageName));
+
+    for (const curated of CURATED_APPS) {
+      (map[curated.category] ??= []).push(curated);
+    }
+
+    for (const app of apps) {
+      if (curatedPackages.has(app.packageName)) continue;
+      const category = categorizeInstalledApp(app);
+      (map[category] ??= []).push({
+        packageName: app.packageName,
+        name: app.name,
+        category,
+        tagline: '',
+      });
+    }
+
+    return Object.keys(map)
+      .sort((a, b) => {
+        if (a === 'Other') return 1;
+        if (b === 'Other') return -1;
+        return a.localeCompare(b);
+      })
+      .map((name) => ({ name, items: map[name] }));
+  }, [apps]);
+
   return (
     <View style={styles.screenRoot}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
@@ -217,7 +307,7 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
 
       <View style={styles.segmentedWrap}>
         <CupertinoSegmentedControl
-          values={['Today', 'Search']}
+          values={[...APP_STORE_SEGMENTS]}
           selectedIndex={tabIndex}
           onChange={setTabIndex}
         />
@@ -246,7 +336,7 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
               />
             ))}
           </>
-        ) : (
+        ) : tabIndex === 1 ? (
           <>
             <CupertinoSearchBar value={query} onChangeText={setQuery} placeholder="Search Apps" />
             <Text
@@ -280,6 +370,25 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
                 Search on Play Store
               </Text>
             </Pressable>
+          </>
+        ) : (
+          <>
+            {categorySections.map((section) => (
+              <View key={section.name} style={styles.categorySection}>
+                <Text style={[typography.title3, styles.categorySectionTitle, { color: colors.label }]}>
+                  {section.name}
+                </Text>
+                {section.items.map((app) => (
+                  <AppRow
+                    key={app.packageName}
+                    app={app}
+                    installed={installedPackages.has(app.packageName)}
+                    onOpen={handleOpen}
+                    onGet={handleGet}
+                  />
+                ))}
+              </View>
+            ))}
           </>
         )}
       </ScrollView>
@@ -318,6 +427,13 @@ const styles = StyleSheet.create({
   sectionNote: {
     marginTop: 2,
     marginBottom: 12,
+  },
+  categorySection: {
+    marginBottom: 20,
+  },
+  categorySectionTitle: {
+    fontWeight: '700',
+    marginBottom: 10,
   },
   card: {
     flexDirection: 'row',
