@@ -31,6 +31,18 @@ import { suppressAutoLock } from './src/utils/permissions';
 import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
+import { markProcessStartFromAge } from './src/utils/perfMetrics';
+
+// Cold start (#517): a marca de origem é a idade do processo lida do lado
+// nativo, não o instante em que este módulo é avaliado — assim o número inclui
+// o arranque do processo e do runtime JS. Dispara no topo do módulo, antes de
+// qualquer render; se a resposta da bridge chegar depois do primeiro layout da
+// grelha, o registo fecha o cold start retroactivamente com o instante já
+// guardado (ver perfMetrics.markProcessStart). -1 (indisponível) não deixa
+// marca nenhuma, em vez de deixar um número errado.
+void LauncherModule.getProcessStartAgeMs()
+  .then(markProcessStartFromAge)
+  .catch(() => {});
 
 function AppContent() {
   const { isDark } = useTheme();
