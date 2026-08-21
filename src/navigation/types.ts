@@ -60,6 +60,7 @@ export type RootStackParamList = {
   ComponentsGallery: undefined;
   AppLibrary: undefined;
   AppStore: undefined;
+  AppStoreDetail: { packageName: string; name: string };
   SpotlightSearch: undefined;
   Siri: undefined;
   TodayView: undefined;

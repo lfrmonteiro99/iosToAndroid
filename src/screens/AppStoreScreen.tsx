@@ -104,17 +104,21 @@ function AppRow({
   installed,
   onOpen,
   onGet,
+  onPressCard,
 }: {
   app: CuratedApp;
   installed: boolean;
   onOpen: (packageName: string) => void;
   onGet: (packageName: string) => void;
+  onPressCard: (app: CuratedApp) => void;
 }) {
   const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
 
   return (
-    <View
+    <Pressable
+      onPress={() => onPressCard(app)}
+      accessibilityRole="button"
       style={[
         styles.card,
         {
@@ -150,7 +154,7 @@ function AppRow({
           {installed ? 'Open' : 'Get'}
         </Text>
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -159,6 +163,14 @@ function AppRow({
 // ---------------------------------------------------------------------------
 
 export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }) {
+  // O cartao abre o detalhe (#246). A rota so existe se estiver registada no
+  // TabNavigator E for navegada de algum sitio — este repo ja teve rotas
+  // registadas que ninguem alcancava.
+  const openDetail = React.useCallback(
+    (app: CuratedApp) =>
+      navigation.navigate('AppStoreDetail', { packageName: app.packageName, name: app.name }),
+    [navigation],
+  );
   const { theme, isDark, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -328,6 +340,7 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
 
             {CURATED_APPS.map((app) => (
               <AppRow
+                onPressCard={openDetail}
                 key={app.packageName}
                 app={app}
                 installed={installedPackages.has(app.packageName)}
@@ -348,6 +361,7 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
 
             {searchResults.map((app) => (
               <AppRow
+                onPressCard={openDetail}
                 key={app.packageName}
                 app={app}
                 installed={app.installed}
@@ -380,6 +394,7 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
                 </Text>
                 {section.items.map((app) => (
                   <AppRow
+                onPressCard={openDetail}
                     key={app.packageName}
                     app={app}
                     installed={installedPackages.has(app.packageName)}
