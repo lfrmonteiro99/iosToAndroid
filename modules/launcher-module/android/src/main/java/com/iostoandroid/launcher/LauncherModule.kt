@@ -12,6 +12,8 @@ import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Path
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
@@ -23,7 +25,9 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
+import android.os.SystemClock
 import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
@@ -66,7 +70,12 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged")
+
+        // Native view that reserves its own bounds against the Android system
+        // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
+        // left-edge catcher; no props, geometry comes from layout.
+        View(SystemGestureExclusionView::class) {}
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
@@ -107,12 +116,25 @@ class LauncherModule : Module() {
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                // GUARDA DE API, e não é defensiva por hábito: `ApplicationInfo.category`
+                // só existe a partir da API 26 e este módulo declara minSdkVersion 24
+                // (modules/launcher-module/android/build.gradle:13). Em API 24/25 o
+                // acesso ao campo lança NoSuchFieldError, o que rejeita a promise
+                // inteira do getInstalledApps — AppsStore.tsx apanha, alerta
+                // "Could not load apps", e o launcher fica sem uma única aplicação.
+                // O resto deste ficheiro usa a mesma guarda 15 vezes.
+                val category = if (CategoryMapper.isCategoryReadable(Build.VERSION.SDK_INT)) {
+                    CategoryMapper.categoryToString(appInfo.category)
+                } else {
+                    CategoryMapper.UNDEFINED
+                }
 
                 mapOf(
                     "name" to label,
                     "packageName" to packageName,
                     "icon" to icon,
-                    "isSystem" to isSystem
+                    "isSystem" to isSystem,
+                    "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
 
@@ -125,6 +147,41 @@ class LauncherModule : Module() {
             }
 
             apps
+        }
+
+        AsyncFunction("getAppInfo") { packageName: String ->
+            // Single-package equivalent of getInstalledApps: used to refresh only
+            // the package a PACKAGE_* broadcast named (#485) instead of rescanning
+            // every installed app. Returns null when the package is gone or has no
+            // launcher activity, so JS can drop the event.
+            try {
+                val pm = context.packageManager
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setPackage(packageName)
+                }
+                val resolveInfo = pm.queryIntentActivities(mainIntent, 0).firstOrNull()
+                if (resolveInfo == null) {
+                    null
+                } else {
+                    val appInfo = resolveInfo.activityInfo.applicationInfo
+                    val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
+                    val icon = try {
+                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName))
+                        val iconFile = File(iconsDir, fileName)
+                        if (!iconFile.exists()) {
+                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                        }
+                        "file://" + iconFile.absolutePath
+                    } catch (e: Exception) { "" }
+                    mapOf(
+                        "name" to resolveInfo.loadLabel(pm).toString(),
+                        "packageName" to packageName,
+                        "icon" to icon,
+                        "isSystem" to ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0)
+                    )
+                }
+            } catch (e: Exception) { null }
         }
 
         AsyncFunction("launchApp") { packageName: String ->
@@ -196,6 +253,26 @@ class LauncherModule : Module() {
             }
             context.startActivity(intent)
             true
+        }
+
+        // ── Performance (§7, #517) ───────────────────────────────────────
+
+        /**
+         * Idade do processo em milissegundos: quanto tempo passou desde que o
+         * Android começou a arrancar ESTE processo. É a base honesta do cold
+         * start — inclui o arranque do processo e do runtime, que uma marca
+         * feita em JS já não consegue ver.
+         *
+         * Devolve -1.0 quando a API não está disponível (< API 24), para o lado
+         * JS poder distinguir "sem medição" de "medição zero".
+         */
+        AsyncFunction("getProcessStartAgeMs") {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val age = SystemClock.uptimeMillis() - Process.getStartUptimeMillis()
+                if (age >= 0) age.toDouble() else -1.0
+            } else {
+                -1.0
+            }
         }
 
         // ── Wi-Fi ────────────────────────────────────────────────────────
@@ -1094,14 +1171,23 @@ class LauncherModule : Module() {
 
         // ── Lifecycle ────────────────────────────────────────────────────
 
+        OnCreate {
+            // Dynamic registration is mandatory: since API 26 the implicit
+            // PACKAGE_ADDED/REMOVED/REPLACED broadcasts are not delivered to
+            // receivers declared in the manifest.
+            try {
+                PackageChangeReceiver.register(appContext.reactContext ?: return@OnCreate)
+            } catch (_: Exception) {}
+        }
+
         OnDestroy {
             // Best-effort cleanup: unregister any lingering BroadcastReceivers and
             // clear the companion-object back-reference so NotificationService stops
             // routing events to a stale module instance.
             try {
-                BluetoothDiscoveryReceiver.unregister(
-                    appContext.reactContext ?: return@OnDestroy
-                )
+                val ctx = appContext.reactContext ?: return@OnDestroy
+                BluetoothDiscoveryReceiver.unregister(ctx)
+                PackageChangeReceiver.unregister(ctx)
             } catch (_: Exception) {}
             instance = null
         }
@@ -1175,12 +1261,61 @@ class LauncherModule : Module() {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             return drawable.bitmap
         }
+        // AdaptiveIconDrawable.draw() composites background+foreground using
+        // whatever mask the OS (or OEM launcher) has configured, so drawing it
+        // directly here would still yield a device-dependent shape — the exact
+        // inconsistency #484 exists to fix. Compose it ourselves instead; only
+        // fall back to the generic path below when the icon is malformed
+        // (composeAdaptiveIcon returns null, e.g. no background layer).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
+            composeAdaptiveIcon(drawable)?.let { return it }
+        }
         val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
         val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
+        return bitmap
+    }
+
+    /**
+     * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
+     * our own squircle mask, foreground layer scaled to
+     * [AdaptiveIconCompositor.FOREGROUND_SCALE] and centered on top. Returns
+     * null for a malformed icon with no background layer, so the caller falls
+     * back to the generic drawable-to-bitmap path.
+     *
+     * AdaptiveIconDrawable also exposes getMonochrome() (API 33+, used for
+     * themed/monochrome icons) — out of scope for #484, not handled here.
+     */
+    private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable): Bitmap? {
+        val background = drawable.background ?: return null
+        val foreground = drawable.foreground
+
+        val size = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 108
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat())
+        val maskPath = Path().apply {
+            moveTo(maskPoints[0].first, maskPoints[0].second)
+            maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
+            close()
+        }
+
+        canvas.save()
+        canvas.clipPath(maskPath)
+        background.setBounds(0, 0, size, size)
+        background.draw(canvas)
+        canvas.restore()
+
+        if (foreground != null) {
+            val bounds = AdaptiveIconCompositor.foregroundBounds(size)
+            foreground.setBounds(bounds.offset, bounds.offset, bounds.offset + bounds.scaledSize, bounds.offset + bounds.scaledSize)
+            foreground.draw(canvas)
+        }
+
         return bitmap
     }
 

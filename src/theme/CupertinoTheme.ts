@@ -160,79 +160,117 @@ export type AccentColorKey = keyof typeof AccentColors;
 
 export type CupertinoColors = typeof SystemColors.light;
 
-// iOS Typography Scale (SF Pro approximation)
+/**
+ * Famílias de texto da app. Os nomes são os que o Android tem registados em
+ * `ReactFontManager` — têm de bater certo com `expo.plugins["expo-font"]` no
+ * `app.json`, que é onde cada peso (400/500/600/700) é associado ao ficheiro
+ * estático correspondente. Sem esse mapa, `fontWeight` não faz nada de útil
+ * numa família custom no Android: o `ReactFontManager` só distingue NORMAL de
+ * BOLD (`nearestStyle`, ReactFontManager.kt:132-139), o 500/600 cai no ficheiro
+ * Regular e o ≥700 sai em Roboto. Ver o corpo do PR do #475.
+ */
+export const FontFamilies = { display: 'InterDisplay', text: 'Inter' } as const;
+
+export type FontFamily = (typeof FontFamilies)[keyof typeof FontFamilies];
+
+/** Ponto a partir do qual a Apple (e o Inter) troca Text por Display. Inclusivo. */
+export const DISPLAY_MIN_FONT_SIZE = 20;
+
+/**
+ * O corte óptico é do tamanho *renderizado*, não do tamanho de desenho: com o
+ * Dynamic Type ligado um `body` de 17pt pode ir aos 22pt, e aí a variante certa
+ * é a Display. Por isso o `scaleTypography` volta a passar por aqui depois de
+ * escalar, em vez de arrastar a família do token.
+ */
+export function fontFamilyForSize(fontSize: number): FontFamily {
+  return fontSize >= DISPLAY_MIN_FONT_SIZE ? FontFamilies.display : FontFamilies.text;
+}
+
+// iOS Typography Scale — Inter family with Display variant for sizes ≥20pt, Text variant for <20pt
 export const Typography = {
   largeTitle: {
     fontSize: 34,
     lineHeight: 41,
     fontWeight: '700' as const,
     letterSpacing: 0.41,
+    fontFamily: FontFamilies.display,
   },
   title1: {
     fontSize: 28,
     lineHeight: 34,
     fontWeight: '700' as const,
     letterSpacing: 0.36,
+    fontFamily: FontFamilies.display,
   },
   title2: {
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '700' as const,
-    letterSpacing: 0.35,
+    letterSpacing: -0.26,
+    fontFamily: FontFamilies.display,
   },
   title3: {
     fontSize: 20,
     lineHeight: 25,
     fontWeight: '600' as const,
-    letterSpacing: 0.38,
+    letterSpacing: -0.45,
+    fontFamily: FontFamilies.display,
   },
   headline: {
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '600' as const,
     letterSpacing: -0.41,
+    fontFamily: FontFamilies.text,
   },
   body: {
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '400' as const,
     letterSpacing: -0.41,
+    fontFamily: FontFamilies.text,
   },
   callout: {
     fontSize: 16,
     lineHeight: 21,
     fontWeight: '400' as const,
     letterSpacing: -0.32,
+    fontFamily: FontFamilies.text,
   },
   subhead: {
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '400' as const,
     letterSpacing: -0.24,
+    fontFamily: FontFamilies.text,
   },
   footnote: {
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '400' as const,
     letterSpacing: -0.08,
+    fontFamily: FontFamilies.text,
   },
   caption1: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '400' as const,
     letterSpacing: 0,
+    fontFamily: FontFamilies.text,
   },
   caption2: {
     fontSize: 11,
     lineHeight: 13,
     fontWeight: '400' as const,
     letterSpacing: 0.07,
+    fontFamily: FontFamilies.text,
   },
   tabLabel: {
     fontSize: 10,
     lineHeight: 12,
     fontWeight: '500' as const,
     letterSpacing: 0,
+    fontFamily: FontFamilies.text,
   },
 };
 
@@ -284,6 +322,18 @@ export const BorderRadius = {
   tag: 7,       // small list section corners, chip sub-elements
   input: 10,    // search bars, text fields
   card14: 14,   // dialog containers, sheet list items
+} as const;
+
+// Shape tokens with superellipse exponent n per context
+// n = exponent of the superellipse equation. Larger n = more square corners.
+// See src/theme/squircle.ts for rendering.
+export const Shape = {
+  icon:        { radiusRatio: 0.2237, n: 4.7 },  // radiusRatio of icon size, not absolute value; 0.2237 from pre-iOS 26 spec (pending aferição vs real capture — see §13)
+  card:        { radius: 10, n: 4.0 },
+  sheet:       { radius: 13, n: 4.0 },
+  button:      { radius: 10, n: 3.5 },
+  widgetSmall: { radius: 22, n: 4.5 },
+  dock:        { radius: 34, n: 4.2 },
 } as const;
 
 // iOS-style Shadows (soft, not Material elevation)

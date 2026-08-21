@@ -20,6 +20,13 @@ export interface InstalledApp {
    */
   icon: string;
   isSystem: boolean;
+  /**
+   * ApplicationInfo.category mapped to a stable string constant.
+   * Possible values: 'undefined', 'game', 'audio', 'video', 'image', 'social',
+   * 'news', 'maps', 'productivity', 'accessibility'.
+   * API 26+; older devices return 'undefined'.
+   */
+  category: string;
 }
 
 export interface WifiInfo {
@@ -162,9 +169,24 @@ interface LauncherModuleType {
   getInstalledApps(): Promise<InstalledApp[]>;
   launchApp(packageName: string): Promise<boolean>;
   getAppIcon(packageName: string): Promise<string>;
+  /**
+   * Single-package variant of getInstalledApps: resolves the launcher entry for
+   * one package, or null when the package is not installed or has no launcher
+   * activity. Used to refresh only the package a PACKAGE_* broadcast named,
+   * instead of rescanning every installed app.
+   */
+  getAppInfo(packageName: string): Promise<InstalledApp | null>;
   isDefaultLauncher(): Promise<boolean>;
   openLauncherSettings(): Promise<boolean>;
   goHome(): Promise<boolean>;
+  /**
+   * Idade do processo em ms. -1 quando indisponível (< API 24, fora de Android,
+   * ou erro na bridge) — nunca 0, para "sem medição" não passar por
+   * "instantâneo". Async como todos os métodos desta bridge, ainda que o lado
+   * nativo seja uma leitura de relógio: o contrato uniforme é o que o
+   * tratamento de erros (`onBridgeError`) e os seus testes assumem.
+   */
+  getProcessStartAgeMs(): Promise<number>;
   uninstallApp(packageName: string): Promise<boolean>;
   // Wi-Fi
   getWifiInfo(): Promise<WifiInfo | null>;
@@ -247,9 +269,11 @@ const stub: LauncherModuleType = {
   getInstalledApps: async () => [],
   launchApp: async () => false,
   getAppIcon: async () => '',
+  getAppInfo: async () => null,
   isDefaultLauncher: async () => false,
   openLauncherSettings: async () => false,
   goHome: async () => false,
+  getProcessStartAgeMs: async () => -1,
   uninstallApp: async () => false,
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
@@ -313,6 +337,25 @@ const stub: LauncherModuleType = {
  * The native side dedupes at the source too; this keeps existing installs
  * correct when the JS bundle updates ahead of the native binary.
  */
+// `InstalledApp.category` é declarado obrigatório, e uma declaração de tipo não
+// é uma garantia: o valor vem da ponte nativa. Falta em dois casos reais — um
+// dispositivo em API 24/25, onde o campo `ApplicationInfo.category` não existe, e
+// um APK com uma versão anterior deste módulo nativo instalada. Nesses casos o
+// consumidor recebia `undefined` num campo tipado como `string`, e o TypeScript
+// não avisa porque a fronteira nativa é `any`.
+//
+// Normaliza a AUSÊNCIA, não o valor: qualquer string que o nativo mande passa
+// intacta, incluindo categorias novas de APIs futuras. Coagir strings
+// desconhecidas para 'undefined' esconderia exactamente a informação nova.
+function withCategory<T extends { category?: unknown }>(items: T[]): T[] {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) =>
+    item && typeof item === 'object' && typeof (item as { category?: unknown }).category !== 'string'
+      ? { ...item, category: 'undefined' }
+      : item,
+  );
+}
+
 function dedupeByPackageName<T extends { packageName?: string }>(items: T[]): T[] {
   // A malformed payload is passed through untouched rather than coerced, so a
   // native contract break stays visible to the caller instead of becoming [].
@@ -335,7 +378,7 @@ function createBridgedModule(): LauncherModuleType {
 
   return {
     getInstalledApps: async () => {
-      try { return dedupeByPackageName<InstalledApp>(await nativeModule.getInstalledApps()); }
+      try { return dedupeByPackageName<InstalledApp>(withCategory(await nativeModule.getInstalledApps())); }
       catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {
@@ -352,6 +395,10 @@ function createBridgedModule(): LauncherModuleType {
     getAppIcon: async (packageName: string) => {
       try { return await nativeModule.getAppIcon(packageName); }
       catch (e) { console.error('LauncherModule.getAppIcon failed:', e); reportBridgeError('getAppIcon', e); return ''; }
+    },
+    getAppInfo: async (packageName: string) => {
+      try { return await nativeModule.getAppInfo(packageName); }
+      catch (e) { console.error('LauncherModule.getAppInfo failed:', e); reportBridgeError('getAppInfo', e); return null; }
     },
     isDefaultLauncher: async () => {
       try { return await nativeModule.isDefaultLauncher(); }
@@ -420,6 +467,12 @@ function createBridgedModule(): LauncherModuleType {
     unpairBluetoothDevice: async (address: string) => {
       try { return await nativeModule.unpairBluetoothDevice(address); }
       catch (e) { console.error('LauncherModule.unpairBluetoothDevice failed:', e); reportBridgeError('unpairBluetoothDevice', e); return false; }
+    },
+    getProcessStartAgeMs: async () => {
+      try {
+        const age = await nativeModule.getProcessStartAgeMs();
+        return typeof age === 'number' ? age : -1;
+      } catch (e) { reportBridgeError('getProcessStartAgeMs', e); return -1; }
     },
     getStorageInfo: async () => {
       try { return await nativeModule.getStorageInfo(); }
@@ -638,5 +691,27 @@ export function addNotificationRemovedListener(
  */
 export function addHomePressedListener(listener: () => void): () => void {
   const sub = addModuleListener('onHomePressed', listener);
+  return () => sub.remove();
+}
+
+export type PackageChangeAction = 'added' | 'removed' | 'replaced';
+
+export interface PackageChange {
+  action: PackageChangeAction;
+  packageName: string;
+}
+
+/**
+ * Subscribe to apps being installed, uninstalled or updated on the device.
+ * Backed by a dynamically registered BroadcastReceiver on the Kotlin side
+ * (PackageChangeReceiver) — implicit package broadcasts are not delivered to
+ * manifest-declared receivers since API 26, so the registration lives in the
+ * module's OnCreate/OnDestroy.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addPackageChangedListener(
+  listener: (change: PackageChange) => void,
+): () => void {
+  const sub = addModuleListener<PackageChange>('onPackageChanged', listener);
   return () => sub.remove();
 }

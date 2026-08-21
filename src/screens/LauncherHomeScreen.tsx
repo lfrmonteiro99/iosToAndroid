@@ -14,6 +14,7 @@ import {
   NativeScrollEvent,
   TextInput,
   Modal,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -60,9 +61,11 @@ import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig'
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { markGridVisible, markWarmStartBegin } from '../utils/perfMetrics';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
+import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -70,12 +73,15 @@ import { hapticImpact, hapticSelection } from '../utils/haptics';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const COLS = Math.min(4, Math.floor(SCREEN_WIDTH / 90));
+const GRID_GEOMETRY = computeLauncherGridGeometry(SCREEN_WIDTH);
+const COLS = GRID_GEOMETRY.cols;
 const ROWS = 6;
 const APPS_PER_PAGE = COLS * ROWS; // 24
-const ICON_SIZE = 60;
-const GRID_HORIZONTAL_PADDING = 16;
-const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
+// Derivados da largura do ecrã (§2) — ver src/utils/launcherGridGeometry.ts.
+export const ICON_SIZE = GRID_GEOMETRY.iconSize;
+export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
+export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
+const CELL_WIDTH = GRID_GEOMETRY.cellWidth;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
 // How far past the screen edge the wallpaper layer is oversized (see the
@@ -104,7 +110,7 @@ export function computeWallpaperTranslateX(
 }
 
 // Built-in app routing: packageName → navigation screen name
-const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
+export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.phone': 'Phone',
   'com.iostoandroid.messages': 'Messages',
   'com.iostoandroid.contacts': 'Contacts',
@@ -118,6 +124,7 @@ const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.notes': 'Notes',
   'com.iostoandroid.reminders': 'Reminders',
   'com.iostoandroid.mail': 'Mail',
+  'com.iostoandroid.browser': 'Browser',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -152,7 +159,7 @@ export const BUILT_IN_DUPLICATE_PACKAGES: ReadonlySet<string> = new Set(
 );
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
-const VIRTUAL_ICON_CONFIG: Record<string, {
+export const VIRTUAL_ICON_CONFIG: Record<string, {
   icon: keyof typeof Ionicons.glyphMap;
   bg: string;
   gradient?: [string, string];
@@ -171,6 +178,7 @@ const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.notes': { icon: 'document-text', bg: '#FFCC00', gradient: ['#FFD60A', '#FFB300'], iconSize: 32 },
   'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
+  'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
 };
 
 // ---------------------------------------------------------------------------
@@ -943,8 +951,21 @@ export function LauncherHomeScreen() {
   // pressing HOME resets a real launcher: close whatever's open, land on the
   // first page. Also lives above the early returns, for the same
   // rules-of-hooks reason as canSpotlight above.
+  // Warm start (#517): a janela de medição abre quando o launcher volta a
+  // primeiro plano — quer por AppState (a Activity foi retomada) quer pela
+  // re-entrega do intent HOME — e fecha no próximo layout da grelha
+  // (markGridVisible). Não há aqui nenhuma alteração de comportamento: só
+  // marcas de tempo.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') markWarmStartBegin();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     return addHomePressedListener(() => {
+      markWarmStartBegin();
       const action = resolveHomePressAction({
         isFolderOpen: openFolder !== null,
         isOnFirstPage: currentPage === 0,
@@ -1349,7 +1370,18 @@ export function LauncherHomeScreen() {
       >
         {pages.map((pageItems, pageIndex) => (
           <View key={pageIndex} style={styles.page}>
-            <View style={styles.pageGrid}>
+            <View
+              testID={`launcher-page-grid-${pageIndex}`}
+              style={styles.pageGrid}
+              // Cold/warm start (#517) fecham AQUI, no primeiro layout da
+              // grelha da primeira página — o primeiro instante em que a
+              // grelha está de facto pintada. Medir no mount do ecrã daria um
+              // número falso: nesse momento o que se vê é o spinner do ramo
+              // `isLoading` acima. markGridVisible() é idempotente para o cold
+              // start, por isso re-layouts (rotação, duplo layout) não produzem
+              // segundas medições.
+              onLayout={pageIndex === 0 ? markGridVisible : undefined}
+            >
               {pageItems.map((item) => {
                 if (item.type === 'folder') {
                   return (
@@ -1625,13 +1657,13 @@ const styles = StyleSheet.create({
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 13.5,
+    borderRadius: ICON_RADIUS,
     overflow: 'hidden',
   },
   appIconPlaceholder: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 13.5,
+    borderRadius: ICON_RADIUS,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
