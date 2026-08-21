@@ -175,7 +175,7 @@ describe('LauncherHomeScreen wallpaper parallax (#433)', () => {
       recentApps: [],
       isLoading: false,
       refreshApps: jest.fn(() => Promise.resolve()),
-      launchApp: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
       addToDock: jest.fn(),
@@ -231,7 +231,7 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
   function mockApps(allApps: AppsStore.InstalledApp[], dock: string[] = []) {
     const dockApps = allApps.filter((a) => dock.includes(a.packageName));
     const nonDockApps = allApps.filter((a) => !dock.includes(a.packageName));
-    const launchApp = jest.fn(() => Promise.resolve());
+    const launchApp = jest.fn(() => Promise.resolve(true));
     jest.spyOn(AppsStore, 'useApps').mockReturnValue({
       apps: allApps,
       homeApps: [],
@@ -356,7 +356,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
       recentApps: [],
       isLoading: false,
       refreshApps: jest.fn(() => Promise.resolve()),
-      launchApp: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
       addToDock: jest.fn(),

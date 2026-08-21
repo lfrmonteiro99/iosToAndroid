@@ -53,6 +53,8 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
+import { AppLaunchOverlay } from '../components/AppLaunchOverlay';
+import type { LaunchBounds } from '../components/AppLaunchOverlay';
 import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
@@ -214,10 +216,25 @@ function DynamicIsland({ device, settings, textScale = 1 }: { device: ReturnType
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// How long AppIcon's measure() waits for measureInWindow's callback before
+// giving up (no expand animation) — measureInWindow is a real native
+// round-trip and, unlike the spring below, has no completion guarantee baked
+// into the API, so a launch must never hang on it (§6.3 "cuidados").
+const MEASURE_FALLBACK_MS = 50;
+
+// AppIcon hands the caller a *function* to measure its own on-screen bounds,
+// rather than measuring eagerly on every press. Built-in routes (Phone,
+// Settings, ...) never call it and navigate synchronously exactly as before —
+// only a real external-app launch pays for the native round-trip, and only
+// once the caller has already decided it needs one (#442 regression: routing
+// through a measurement first added a ~50ms tap delay ahead of every
+// navigation, built-in or not).
+type MeasureBounds = () => Promise<LaunchBounds | undefined>;
+
 interface AppIconProps {
   app: InstalledApp;
   cellWidth: number;
-  onPress: () => void;
+  onPress: (measure: MeasureBounds) => void;
   onLongPress: () => void;
   isJiggling?: boolean;
   onDelete?: () => void;
@@ -229,6 +246,31 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const iconRef = useRef<View>(null);
+
+  const measureBounds = useCallback<MeasureBounds>(() => new Promise((resolve) => {
+    const node = iconRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') {
+      resolve(undefined);
+      return;
+    }
+    let settled = false;
+    const fallback = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(undefined);
+    }, MEASURE_FALLBACK_MS);
+    node.measureInWindow((x, y, width, height) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      resolve({ x, y, width, height });
+    });
+  }), []);
+
+  const handlePress = useCallback(() => {
+    onPress(measureBounds);
+  }, [onPress, measureBounds]);
 
   useEffect(() => {
     if (isJiggling) {
@@ -266,8 +308,9 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
 
   return (
     <Pressable
+      ref={iconRef}
       style={[styles.appIconWrapper, { width: cellWidth }]}
-      onPress={isJiggling ? undefined : onPress}
+      onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress}
@@ -612,17 +655,63 @@ export function LauncherHomeScreen() {
     }
   }, [device.messages, navigation]);
 
-  // Unified app press handler — routes built-in apps to internal screens
-  const handleAppPress = useCallback((app: InstalledApp) => {
+  const reduceMotion = useGestureReduceMotion();
+
+  // Icon-expand transition state (#509, §6.3) — set when a non-built-in app is
+  // pressed with usable bounds; the overlay itself fires the real launch once
+  // its spring settles (see handleExpandComplete), never on a fixed timer.
+  const [launchTransition, setLaunchTransition] = useState<{
+    app: InstalledApp;
+    bounds: LaunchBounds;
+    phase: 'expand' | 'collapse';
+  } | null>(null);
+
+  // Fires exactly when the expand spring settles — this is the intent trigger
+  // point, not a setTimeout guess (§6.3). A failed launch collapses the
+  // overlay back to the icon instead of leaving it stuck full-screen.
+  const handleExpandComplete = useCallback(() => {
+    const pending = launchTransition;
+    if (!pending) return;
+    launchApp(pending.app.packageName).then((ok) => {
+      if (ok) {
+        setLaunchTransition(null);
+      } else {
+        setLaunchTransition((prev) => (prev ? { ...prev, phase: 'collapse' } : prev));
+      }
+    });
+  }, [launchTransition, launchApp]);
+
+  const handleCollapseComplete = useCallback(() => {
+    setLaunchTransition(null);
+  }, []);
+
+  // Unified app press handler — routes built-in apps to internal screens.
+  // `measure` is only invoked for a real external-app launch, never for a
+  // built-in route or a folder-modal launch (see AppIcon/MeasureBounds) — a
+  // built-in route stays exactly as synchronous as it always was.
+  const handleAppPress = useCallback((app: InstalledApp, measure?: MeasureBounds) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BUILT_IN_APPS routes all have undefined params; navigate overloads require params spec
       navigation.navigate(internalRoute as any);
-    } else {
-      launchApp(app.packageName);
+      return;
     }
-  }, [navigation, launchApp]);
+    // No measure fn (folder icons open inside a Modal — a separate native
+    // window that can't host a screen-spanning overlay) or reduceMotion:
+    // launch immediately, no expand, no measurement round-trip at all.
+    if (!measure || reduceMotion) {
+      launchApp(app.packageName);
+      return;
+    }
+    measure().then((bounds) => {
+      if (bounds) {
+        setLaunchTransition({ app, bounds, phase: 'expand' });
+      } else {
+        launchApp(app.packageName);
+      }
+    });
+  }, [navigation, launchApp, reduceMotion]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -647,7 +736,6 @@ export function LauncherHomeScreen() {
   const spotlightProgress = useSharedValue(0);
   const spotlightBuf = useVelocityBuffer();
   const spotlightT = useSharedValue(0);
-  const reduceMotion = useGestureReduceMotion();
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
     reduceMotionShared.value = reduceMotion;
@@ -1230,7 +1318,7 @@ export function LauncherHomeScreen() {
                     app={item.app}
                     cellWidth={CELL_WIDTH}
                     textScale={textScale}
-                    onPress={() => handleAppPress(item.app)}
+                    onPress={(measure) => handleAppPress(item.app, measure)}
                     onLongPress={() => handleLongPress(item.app)}
                     isJiggling={isJiggling}
                     badge={badgeCounts[item.app.packageName]}
@@ -1283,7 +1371,7 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
-                onPress={() => handleAppPress(app)}
+                onPress={(measure) => handleAppPress(app, measure)}
                 onLongPress={() => handleLongPress(app)}
                 isJiggling={isJiggling}
                 badge={badgeCounts[app.packageName]}
@@ -1361,6 +1449,20 @@ export function LauncherHomeScreen() {
         notification={activeBanner}
         onDismiss={() => setActiveBanner(null)}
       />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* App-icon expand transition (#509, §6.3)                            */}
+      {/* ---------------------------------------------------------------- */}
+      {launchTransition && (
+        <AppLaunchOverlay
+          key={launchTransition.app.packageName}
+          icon={launchTransition.app.icon}
+          bounds={launchTransition.bounds}
+          phase={launchTransition.phase}
+          onExpandComplete={handleExpandComplete}
+          onCollapseComplete={handleCollapseComplete}
+        />
+      )}
       </Animated.View>
     </GestureDetector>
   );

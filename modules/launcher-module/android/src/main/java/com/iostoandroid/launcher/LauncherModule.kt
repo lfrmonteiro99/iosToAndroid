@@ -2,6 +2,7 @@ package com.iostoandroid.launcher
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.app.ActivityOptions
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -136,7 +137,20 @@ class LauncherModule : Module() {
                 return@AsyncFunction false  // malformed, not installed, or not launchable
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            // Suppresses Android's default activity-open animation so it never shows
+            // underneath the JS-side icon-expand transition (#509, §6.3). This is the
+            // one piece of that animation actually controllable from here — what the
+            // launched app itself renders on entry is up to that app.
+            //
+            // ActivityOptions.makeCustomAnimation(context, 0, 0) is used instead of
+            // Activity#overridePendingTransition (deprecated in API 34 in favor of
+            // Activity#overrideActivityTransition) because `context` here is not
+            // guaranteed to be an Activity — launchApp is called from the launcher's
+            // process via FLAG_ACTIVITY_NEW_TASK, and overridePendingTransition is an
+            // Activity-only method. makeCustomAnimation works from any Context and
+            // carries no deprecation on any API level this app targets.
+            val noTransition = ActivityOptions.makeCustomAnimation(context, 0, 0)
+            context.startActivity(intent, noTransition.toBundle())
             true
         }
 

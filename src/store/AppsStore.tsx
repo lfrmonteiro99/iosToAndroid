@@ -60,7 +60,7 @@ interface AppsContextValue {
   recentApps: RecentApp[];
   isLoading: boolean;
   refreshApps: () => Promise<void>;
-  launchApp: (packageName: string) => Promise<void>;
+  launchApp: (packageName: string) => Promise<boolean>;
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
   addToDock: (packageName: string) => void;
@@ -253,14 +253,23 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ dockApps, homeApps }));
   }, []);
 
-  const launchApp = useCallback(async (packageName: string) => {
-    if (Platform.OS !== 'android') return;
+  // Returns whether the launch actually succeeded (#509) — callers that show
+  // an icon-expand transition need this to revert it on failure instead of
+  // leaving the animation stuck full-screen over a launcher that never left.
+  const launchApp = useCallback(async (packageName: string): Promise<boolean> => {
+    if (Platform.OS !== 'android') return false;
     try {
       const LauncherModule = (await import('../../modules/launcher-module/src')).default;
-      await LauncherModule.launchApp(packageName);
-      addToRecents(packageName);
+      const ok = await LauncherModule.launchApp(packageName);
+      if (ok) {
+        addToRecents(packageName);
+      } else {
+        alertRef.current('Error', 'Could not launch app. Please try again.');
+      }
+      return ok;
     } catch {
       alertRef.current('Error', 'Could not launch app. Please try again.');
+      return false;
     }
   }, [addToRecents]);
 
