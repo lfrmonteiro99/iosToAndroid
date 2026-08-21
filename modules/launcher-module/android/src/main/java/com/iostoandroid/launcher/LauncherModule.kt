@@ -11,8 +11,11 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Shader
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -1331,7 +1334,7 @@ class LauncherModule : Module() {
     }
 
     private fun writeIconToFile(drawable: Drawable, file: File) {
-        val bitmap = drawableToBitmap(drawable)
+        val bitmap = applySquircleMask(drawableToBitmap(drawable))
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         FileOutputStream(file).use { out ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
@@ -1340,7 +1343,7 @@ class LauncherModule : Module() {
     }
 
     private fun drawableToBase64(drawable: Drawable): String {
-        val bitmap = drawableToBitmap(drawable)
+        val bitmap = applySquircleMask(drawableToBitmap(drawable))
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         val outputStream = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream)
@@ -1360,15 +1363,34 @@ class LauncherModule : Module() {
         // fall back to the generic path below when the icon is malformed
         // (composeAdaptiveIcon returns null, e.g. no background layer).
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
+            // Este caminho ja devolve o bitmap mascarado pelo compositor do #484,
+            // e o call site volta a passar tudo pelo applySquircleMask do #480.
+            // Aplicar duas vezes e' idempotente NA FORMA: os dois usam o mesmo
+            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 4.7 e o
+            // n = 4.7 do applySquircleMask) e o mesmo gerador de pontos, portanto a
+            // segunda mascara recorta exactamente a mesma regiao. Se algum dia os
+            // expoentes divergirem, isto passa a cortar duas formas diferentes —
+            // e a razao pela qual ambos os sitios citam a constante.
             composeAdaptiveIcon(drawable)?.let { return it }
         }
-        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
-        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
-        return bitmap
+        // Center-crop para quadrado (#480): pega no maior quadrado centrado da
+        // origem e escala-o. Nunca distorce nem mete barras transparentes, por
+        // isso um icone-banner mantem as proporcoes e e' so cortado antes da
+        // mascara. Um icone redondo continua a ficar com cantos vazios — o #480
+        // diz explicitamente que nao resolve isso.
+        val srcW = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
+        val srcH = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
+        val side = srcW.coerceAtMost(srcH)
+        val src = Bitmap.createBitmap(srcW, srcH, Bitmap.Config.ARGB_8888)
+        Canvas(src).apply {
+            drawable.setBounds(0, 0, srcW, srcH)
+            drawable.draw(this)
+        }
+        val left = (srcW - side) / 2
+        val top = (srcH - side) / 2
+        val square = Bitmap.createBitmap(src, left, top, side, side)
+        if (square != src) src.recycle()
+        return square
     }
 
     /**
@@ -1381,6 +1403,50 @@ class LauncherModule : Module() {
      * AdaptiveIconDrawable also exposes getMonochrome() (API 33+, used for
      * themed/monochrome icons) — out of scope for #484, not handled here.
      */
+    /**
+     * Clip [src] to a 4.7-exponent superellipse (iOS-style squircle) and return
+     * the masked bitmap. Applied to every icon emitted by getInstalledApps and
+     * getAppIcon, so the launcher grid and the dock share one silhouette.
+     *
+     * Masking strategy:
+     *  - Output is a square of the smallest source dimension, so non-square
+     *    icons are center-cropped (drawableToBitmap) and the mask never sees a
+     *    rectangle.
+     *  - The clip path is built from [SuperellipsePath.points] — the SAME
+     *    generator that drives the TS/SVG reference in src/theme/squircle.ts —
+     *    so the native mask cannot drift from the reference geometry.
+     *  - Anti-aliasing uses a BitmapShader painted through the superellipse
+     *    Path via Canvas.drawPath(..., ANTI_ALIAS_FLAG). Path fills are
+     *    anti-aliased by drawPath (unlike clipPath, which is not), so the edge
+     *    stays smooth at 60pt instead of serrated.
+     *  - A circular source icon will still show empty (transparent) corners
+     *    after masking; that is the known-incomplete "dominant color" item of
+     *    epic #465 and is explicitly out of scope here (#480 does not fix it).
+     */
+    private fun applySquircleMask(src: Bitmap, n: Double = 4.7): Bitmap {
+        val size = src.width.coerceAtMost(src.height)
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
+        Canvas(out).drawPath(buildSuperellipsePath(size, n), paint)
+        return out
+    }
+
+    /** Build an android.graphics.Path for the superellipse in a [size]×[size] box. */
+    private fun buildSuperellipsePath(size: Int, n: Double): Path {
+        val pts = SuperellipsePath.points(size, n, 64)
+        return Path().apply {
+            if (pts.isEmpty()) return@apply
+            val first = pts[0]
+            moveTo(first.first.toFloat(), first.second.toFloat())
+            for (i in 1 until pts.size) {
+                val p = pts[i]
+                lineTo(p.first.toFloat(), p.second.toFloat())
+            }
+            close()
+        }
+    }
+
     private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable): Bitmap? {
         val background = drawable.background ?: return null
         val foreground = drawable.foreground
