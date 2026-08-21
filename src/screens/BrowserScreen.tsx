@@ -65,6 +65,8 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
   const styles = React.useMemo(() => createStyles(colors, isPrivate), [colors, isPrivate]);
 
@@ -95,7 +97,20 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
 
   const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
     setPageTitle(navState.title);
+    setCanGoBack(navState.canGoBack);
+    setCanGoForward(navState.canGoForward);
+    setInputUrl(navState.url);
   }, []);
+
+  const handleGoBackInHistory = useCallback(() => {
+    if (!canGoBack) return;
+    webviewRef.current?.goBack();
+  }, [canGoBack]);
+
+  const handleGoForwardInHistory = useCallback(() => {
+    if (!canGoForward) return;
+    webviewRef.current?.goForward();
+  }, [canGoForward]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -196,6 +211,44 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         title={pageTitle}
         url={currentUrl}
       />
+
+      <View
+        style={[
+          styles.bottomToolbar,
+          { paddingBottom: insets.bottom + 8, borderTopColor: colors.separator },
+        ]}
+      >
+        <Pressable
+          onPress={handleGoBackInHistory}
+          disabled={!canGoBack}
+          hitSlop={8}
+          accessibilityLabel="Go back in history"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canGoBack }}
+        >
+          <Ionicons
+            name="chevron-back"
+            size={26}
+            color={BROWSER_ACCENT}
+            style={{ opacity: canGoBack ? 1 : 0.3 }}
+          />
+        </Pressable>
+        <Pressable
+          onPress={handleGoForwardInHistory}
+          disabled={!canGoForward}
+          hitSlop={8}
+          accessibilityLabel="Go forward in history"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canGoForward }}
+        >
+          <Ionicons
+            name="chevron-forward"
+            size={26}
+            color={BROWSER_ACCENT}
+            style={{ opacity: canGoForward ? 1 : 0.3 }}
+          />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -228,5 +281,17 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
     progressTrack: { height: 2, backgroundColor: 'transparent' },
     progressBar: { height: 2, backgroundColor: BROWSER_ACCENT },
     webview: { flex: 1 },
+    bottomToolbar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 24,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      backgroundColor: colors.secondarySystemBackground,
+    },
   });
 }
