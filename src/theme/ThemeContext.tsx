@@ -14,6 +14,7 @@ import {
   AccentColorKey,
   Glass,
   glassSurface,
+  fontFamilyForSize,
 } from './CupertinoTheme';
 
 const THEME_STORAGE_KEY = '@iostoandroid/theme_preference';
@@ -40,18 +41,23 @@ function scaleTypography(
     '800': '900', '900': '900', 'normal': '600', 'bold': '900',
   };
 
-  const result = {} as typeof Typography;
-  for (const key of Object.keys(base) as (keyof typeof Typography)[]) {
-    const style = base[key];
+  const entries = Object.entries(base).map(([key, style]) => {
     const scaledFontSize = Math.round(style.fontSize * scale);
     const scaledLineHeight = Math.round(style.lineHeight * scale);
     const fontWeight = boldText
       ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
       : style.fontWeight;
-    // TypeScript cannot narrow assignment through a mapped key; cast to the concrete entry type
-    (result as Record<keyof typeof Typography, typeof style>)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight: fontWeight as typeof style.fontWeight };
-  }
-  return result;
+    // O corte Text/Display é do tamanho renderizado: escalar o token pode
+    // atravessar os 20pt nos dois sentidos, e a família tem de acompanhar.
+    return [key, {
+      ...style,
+      fontSize: scaledFontSize,
+      lineHeight: scaledLineHeight,
+      fontWeight,
+      fontFamily: fontFamilyForSize(scaledFontSize),
+    }];
+  });
+  return Object.fromEntries(entries) as typeof Typography;
 }
 
 interface ThemeContextValue {
