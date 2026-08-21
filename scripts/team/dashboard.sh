@@ -45,12 +45,33 @@ while [ $# -gt 0 ]; do
     --serve) MODE="serve"; shift ;;
     --port) PORT="$2"; shift 2 ;;
     --port=*) PORT="${1#--port=}"; shift ;;
-    # Para ver do telemóvel pela Tailscale. Não abre nada para a internet: a
-    # interface tailscale0 só é alcançável de dentro da tailnet.
+    # Para ver do telemóvel: liga-se À INTERFACE DA TAILSCALE, não a todas.
+    --tailscale|--ts) BIND="tailscale"; shift ;;
+    # 0.0.0.0 expõe em TODAS as interfaces — inclusive o WiFi de um café, e esta
+    # página não tem autenticação nenhuma. Fica, porque às vezes é o que se quer,
+    # mas avisa.
     --lan) BIND="0.0.0.0"; shift ;;
     *) shift ;;
   esac
 done
+
+# ── Onde ligar ─────────────────────────────────────────────────────────────
+#
+# Ligar a 0.0.0.0 para "ver do telemóvel" é o atalho errado: expõe uma página sem
+# autenticação em todas as interfaces, incluindo a WiFi onde estiveres. Ligar ao
+# endereço da tailscale0 dá o mesmo acesso ao telemóvel e a mais ninguém — quem
+# não está na tailnet não tem rota para lá.
+#
+# DUAS ESCUTAS, e não uma: o mesmo porto no 127.0.0.1 e no endereço da tailnet.
+# Ligar só ao endereço da tailnet mataria o localhost, que é como isto se usa na
+# própria máquina.
+TS_IP=""
+resolve_ts_ip() {
+  command -v tailscale >/dev/null 2>&1 || return 1
+  TS_IP=$(tailscale ip -4 2>/dev/null | head -1)
+  [ -n "$TS_IP" ] || return 1
+  return 0
+}
 
 DASH_DIR="${TEAM_DASH_DIR:-$LOG_DIR/dashboard}"
 mkdir -p "$DASH_DIR" 2>/dev/null || true
@@ -360,7 +381,23 @@ case "$MODE" in
     ) &
     GEN_PID=$!
     trap 'kill $GEN_PID 2>/dev/null' EXIT
-    log "dashboard em http://$( [ "$BIND" = "0.0.0.0" ] && echo "$(hostname -I | awk '{print $1}')" || echo localhost ):$PORT/"
-    cd "$DASH_DIR" && exec python3 -m http.server "$PORT" --bind "$BIND" >/dev/null 2>&1
+    cd "$DASH_DIR" || exit 1
+
+    if [ "$BIND" = "tailscale" ]; then
+      if ! resolve_ts_ip; then
+        echo "ERRO: --tailscale pedido mas não consegui o IP da tailnet (tailscale a correr?)" >&2
+        exit 1
+      fi
+      python3 -m http.server "$PORT" --bind "$TS_IP" >/dev/null 2>&1 &
+      TS_PID=$!
+      trap 'kill $GEN_PID $TS_PID 2>/dev/null' EXIT
+      log "dashboard: http://localhost:$PORT/  e  http://$TS_IP:$PORT/ (só dentro da tailnet)"
+      log "para HTTPS com nome, uma vez: sudo tailscale serve --bg --https=10443 http://127.0.0.1:$PORT"
+    else
+      [ "$BIND" = "0.0.0.0" ] && warn "a ligar a TODAS as interfaces — esta página não tem autenticação"
+      log "dashboard em http://$( [ "$BIND" = "0.0.0.0" ] && hostname -I | awk '{print $1}' || echo localhost ):$PORT/"
+    fi
+
+    exec python3 -m http.server "$PORT" --bind "$( [ "$BIND" = "tailscale" ] && echo 127.0.0.1 || echo "$BIND" )" >/dev/null 2>&1
     ;;
 esac

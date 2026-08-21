@@ -211,7 +211,7 @@ principal por baixo de um agente vivo.
 
 ```bash
 bash scripts/team/dashboard.sh --serve          # http://localhost:9317
-bash scripts/team/dashboard.sh --serve --lan    # tambem pela tailnet (telemovel)
+bash scripts/team/dashboard.sh --serve --tailscale   # tambem do telemovel, pela tailnet
 bash scripts/team/dashboard.sh --once           # so escreve o HTML
 ```
 
@@ -219,6 +219,22 @@ Mostra o cruzamento que nem o GitHub nem o log dao sozinhos: **que agente esta e
 que issue, em que slot, com que motor e ha quanto tempo**, mais os PRs abertos com
 o estado do issue ligado (bloqueado / a espera de reviewer / a ser revisto), o que
 foi integrado, e a linha de saude do watchdog com o alerta em destaque quando ha um.
+
+`--tailscale` liga **duas escutas** no mesmo porto: `127.0.0.1` e o endereco da
+tailnet (`tailscale ip -4`). Nao e o mesmo que `--lan`: 0.0.0.0 exporia uma pagina
+sem autenticacao em todas as interfaces, incluindo a WiFi onde estiveres; ligado a
+tailscale0 so tem rota quem esta na tailnet. Ligar SO ao endereco da tailnet
+mataria o localhost, dai as duas.
+
+Para HTTPS com nome (`https://<host>.ts.net:10443`), uma vez, com sudo:
+
+```bash
+sudo tailscale serve --bg --https=10443 http://127.0.0.1:9317
+sudo tailscale serve --https=10443 off      # desfazer
+```
+
+Nota: o `443` da tailnet nesta maquina ja aponta para o `8787` (companion-chat),
+e o 8443/8444/9443 tambem estao tomados — dai o 10443.
 
 Tres chamadas a API por actualizacao (`TEAM_DASH_REFRESH`, omissao 15s) — ~720/h
 contra um limite de 5000/h. A geracao e o servidor sao processos separados: uma
