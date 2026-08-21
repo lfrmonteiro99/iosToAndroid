@@ -20,6 +20,7 @@ export { AlertProvider, useAlert } from './AlertProvider';
 export { CupertinoSkeleton, SkeletonListRow, SkeletonCard } from './CupertinoSkeleton';
 export { CupertinoShareSheet } from './CupertinoShareSheet';
 export { BrowserReadingList } from './BrowserReadingList';
+export { BrowserBookmarksList } from './BrowserBookmarksList';
 export { NotificationBanner } from './NotificationBanner';
 export type { BannerNotification } from './NotificationBanner';
 export { HomeIndicator } from './HomeIndicator';
