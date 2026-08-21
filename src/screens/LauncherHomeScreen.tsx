@@ -66,6 +66,7 @@ import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
+import { clampWithRubberBand } from '../theme/motion';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -107,6 +108,26 @@ export function computeWallpaperTranslateX(
   'worklet';
   const progress = Math.min(1, Math.max(0, scrollX / Math.max(1, maxScrollX)));
   return overhang * (1 - 2 * progress);
+}
+
+// Rubber-band overscroll da paginação (#489, §3.3).
+//
+// A `ScrollView` do Android não reporta um offset proporcional ao arrasto para
+// além do limite (`View.overScrollBy` limita o desvio a
+// `ViewConfiguration.getScaledOverscrollDistance()`, uma constante pequena), por
+// isso a resistência elástica não pode vir de `onScroll`. Vem da distância real
+// do dedo (`translationX` de um `Gesture.Pan`) convertida pela fórmula pura de
+// `src/theme/motion.ts` (#488).
+//
+// `dimension` é a largura da página (cada página mede exactamente SCREEN_WIDTH),
+// o que dá o mesmo limite assimptótico (`dimension / RUBBER_C`) do UIScrollView.
+export function computePagerRubberBandOffset(
+  translationX: number,
+  dimension: number,
+): number {
+  // Corre dentro de `.onUpdate` / `useAnimatedStyle`, ou seja na thread de UI.
+  'worklet';
+  return clampWithRubberBand(translationX, 0, 0, dimension);
 }
 
 // Built-in app routing: packageName → navigation screen name
@@ -783,6 +804,20 @@ export function LauncherHomeScreen() {
   // worklets can gate the gesture without touching JS state.
   const canSpotlightShared = useSharedValue(true);
 
+  // Rubber-band overscroll das bordas do pager (#489). Dois SharedValues, um por
+  // borda: o conteúdo da página activa desloca-se pela curva da §3.3 enquanto o
+  // dedo arrasta para fora dos limites, e volta a 0 com mola ao soltar.
+  const firstPageOverscrollX = useSharedValue(0);
+  const lastPageOverscrollX = useSharedValue(0);
+
+  const firstPageOverscrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: firstPageOverscrollX.value }],
+  }));
+  const lastPageOverscrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: lastPageOverscrollX.value }],
+  }));
+
+
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
     .onUpdate((e) => {
@@ -1223,6 +1258,22 @@ export function LauncherHomeScreen() {
     return options;
   })();
 
+  // Borda da última página (App Library) — #489. Direcção/página que nenhum
+  // outro gesto reclama: `activeOffsetX([-20, Infinity])` activa só para
+  // arrastos para a ESQUERDA, e só na última página, por isso a paginação
+  // normal do `ScrollView` fica intacta em todas as outras páginas.
+  const lastPageRubberBandGesture = Gesture.Pan()
+    .enabled(currentPage === totalPages - 1)
+    .activeOffsetX([-20, Infinity])
+    .onUpdate((event) => {
+      'worklet';
+      lastPageOverscrollX.value = computePagerRubberBandOffset(event.translationX, SCREEN_WIDTH);
+    })
+    .onFinalize(() => {
+      'worklet';
+      lastPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
+    });
+
   // Right-swipe on the first home page → Today View (#455).
   //
   // TodayViewScreen was registered in RootStackParamList and given a
@@ -1237,16 +1288,28 @@ export function LauncherHomeScreen() {
   const todayViewGesture = Gesture.Pan()
     .enabled(canSpotlight && currentPage === 0)
     .activeOffsetX([-Infinity, 20])
+    .onUpdate((event) => {
+      'worklet';
+      // Resistência elástica na borda esquerda (#489). O gesto não tinha
+      // `.onUpdate`: arrastar para a direita na página 0 não dava feedback
+      // nenhum durante o arrasto. O deslocamento é sub-linear desde o primeiro
+      // pixel e satura em `SCREEN_WIDTH / RUBBER_C`.
+      firstPageOverscrollX.value = computePagerRubberBandOffset(event.translationX, SCREEN_WIDTH);
+    })
     .onEnd((event) => {
       'worklet';
       const progress = Math.max(0, event.translationX) / gestureConfig.todayViewCommitDp;
       if (commitForTodayView({ progress, velocity: 0, holdMs: 0 }) !== 'none') {
         runOnJS(navigateTo)('TodayView');
       }
+    })
+    .onFinalize(() => {
+      'worklet';
+      firstPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
   return (
-    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture)}>
+    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture, lastPageRubberBandGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
         <Animated.View
@@ -1369,7 +1432,10 @@ export function LauncherHomeScreen() {
         scrollEnabled={!isJiggling}
       >
         {pages.map((pageItems, pageIndex) => (
-          <View key={pageIndex} style={styles.page}>
+          <Animated.View
+            key={pageIndex}
+            style={[styles.page, pageIndex === 0 ? firstPageOverscrollStyle : null]}
+          >
             <View
               testID={`launcher-page-grid-${pageIndex}`}
               style={styles.pageGrid}
@@ -1414,15 +1480,18 @@ export function LauncherHomeScreen() {
                 );
               })}
             </View>
-          </View>
+          </Animated.View>
         ))}
 
         {/* App Library page — the App Library IS the last swipeable page
             (#434), rendered inline via the shared AppLibraryContent instead
             of a tap-through placeholder. */}
-        <View key="app-library" style={[styles.page, styles.appLibraryPage]}>
+        <Animated.View
+          key="app-library"
+          style={[styles.page, styles.appLibraryPage, lastPageOverscrollStyle]}
+        >
           <AppLibraryContent />
-        </View>
+        </Animated.View>
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
