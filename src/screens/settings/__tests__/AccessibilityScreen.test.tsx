@@ -95,3 +95,57 @@ describe('AccessibilityScreen', () => {
     expect(getByTestId('rt-value').props.children).toBe('true');
   });
 });
+
+// Reads fontChoice directly from SettingsStore — proves the control reached
+// the global store, not just local screen state.
+function FontChoiceReader() {
+  const { settings } = useSettings();
+  return <Text testID="font-choice-value">{settings.fontChoice}</Text>;
+}
+
+describe('AccessibilityScreen font choice (#477: Inter or system typeface)', () => {
+  it('renders the Font section with Inter and System options', () => {
+    const { getByText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
+    expect(getByText('Inter')).toBeTruthy();
+    expect(getByText('System')).toBeTruthy();
+  });
+
+  it('defaults to Inter selected', () => {
+    const { getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <FontChoiceReader />
+      </>,
+    );
+
+    expect(getByTestId('font-choice-value').props.children).toBe('inter');
+  });
+
+  it('selecting System updates the global SettingsStore fontChoice', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <FontChoiceReader />
+      </>,
+    );
+
+    fireEvent.press(getByText('System'));
+
+    expect(getByTestId('font-choice-value').props.children).toBe('system');
+  });
+
+  it('selecting System then Inter again returns to inter (no stuck state)', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <FontChoiceReader />
+      </>,
+    );
+
+    fireEvent.press(getByText('System'));
+    expect(getByTestId('font-choice-value').props.children).toBe('system');
+
+    fireEvent.press(getByText('Inter'));
+    expect(getByTestId('font-choice-value').props.children).toBe('inter');
+  });
+});

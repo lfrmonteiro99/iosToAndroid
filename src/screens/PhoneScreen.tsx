@@ -16,12 +16,11 @@ import { StatusBar } from 'expo-status-bar';
 import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { SkeletonListRow } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 import { avatarColorForName } from '../utils/avatarColor';
 
@@ -77,7 +76,7 @@ interface CallLogItemProps {
   call: CallLogEntry;
   isLast: boolean;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   onPress: () => void;
 }
 

@@ -133,6 +133,55 @@ describe('SettingsStore', () => {
   });
 });
 
+describe('SettingsStore fontChoice (#477: Inter or system typeface)', () => {
+  it('defaults to inter when nothing is stored', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.fontChoice).toBe('inter');
+    expect(DEFAULT_SETTINGS.fontChoice).toBe('inter');
+  });
+
+  it('update() switches fontChoice to system', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('fontChoice', 'system');
+    });
+
+    expect(result.current.settings.fontChoice).toBe('system');
+    // Unrelated defaults preserved
+    expect(result.current.settings.boldText).toBe(DEFAULT_SETTINGS.boldText);
+  });
+
+  it('persists fontChoice to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('fontChoice', 'system');
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"fontChoice":"system"'),
+    );
+  });
+
+  it('hydrates a persisted fontChoice from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, fontChoice: 'system' });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.fontChoice).toBe('system');
+  });
+});
+
 describe('SettingsProvider device sync gate (M10: no stale first render)', () => {
   it('renders nothing until the first device sync completes, then paints the synced SSID — never the seed value', async () => {
     // Capture the resolver up front — the Promise (and its resolve fn) must

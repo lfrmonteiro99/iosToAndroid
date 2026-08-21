@@ -4,7 +4,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 import { Ionicons } from '@expo/vector-icons';
 import type { DeviceSms } from '../store/DeviceStore';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
+import type { ResolvedTypography } from '../theme/ThemeContext';
 
 export interface LocalImageMessage {
   id: string;
@@ -29,7 +29,7 @@ export interface BubbleProps {
   message: DeviceSms | LocalImageMessage;
   isDark: boolean;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   reactions?: string[];
   onLongPress?: () => void;
   showReactionPicker?: boolean;
