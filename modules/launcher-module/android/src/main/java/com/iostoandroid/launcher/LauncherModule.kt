@@ -11,6 +11,8 @@ import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Path
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
@@ -111,12 +113,25 @@ class LauncherModule : Module() {
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                // GUARDA DE API, e não é defensiva por hábito: `ApplicationInfo.category`
+                // só existe a partir da API 26 e este módulo declara minSdkVersion 24
+                // (modules/launcher-module/android/build.gradle:13). Em API 24/25 o
+                // acesso ao campo lança NoSuchFieldError, o que rejeita a promise
+                // inteira do getInstalledApps — AppsStore.tsx apanha, alerta
+                // "Could not load apps", e o launcher fica sem uma única aplicação.
+                // O resto deste ficheiro usa a mesma guarda 15 vezes.
+                val category = if (CategoryMapper.isCategoryReadable(Build.VERSION.SDK_INT)) {
+                    CategoryMapper.categoryToString(appInfo.category)
+                } else {
+                    CategoryMapper.UNDEFINED
+                }
 
                 mapOf(
                     "name" to label,
                     "packageName" to packageName,
                     "icon" to icon,
-                    "isSystem" to isSystem
+                    "isSystem" to isSystem,
+                    "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
 
@@ -1166,12 +1181,61 @@ class LauncherModule : Module() {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             return drawable.bitmap
         }
+        // AdaptiveIconDrawable.draw() composites background+foreground using
+        // whatever mask the OS (or OEM launcher) has configured, so drawing it
+        // directly here would still yield a device-dependent shape — the exact
+        // inconsistency #484 exists to fix. Compose it ourselves instead; only
+        // fall back to the generic path below when the icon is malformed
+        // (composeAdaptiveIcon returns null, e.g. no background layer).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
+            composeAdaptiveIcon(drawable)?.let { return it }
+        }
         val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
         val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
+        return bitmap
+    }
+
+    /**
+     * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
+     * our own squircle mask, foreground layer scaled to
+     * [AdaptiveIconCompositor.FOREGROUND_SCALE] and centered on top. Returns
+     * null for a malformed icon with no background layer, so the caller falls
+     * back to the generic drawable-to-bitmap path.
+     *
+     * AdaptiveIconDrawable also exposes getMonochrome() (API 33+, used for
+     * themed/monochrome icons) — out of scope for #484, not handled here.
+     */
+    private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable): Bitmap? {
+        val background = drawable.background ?: return null
+        val foreground = drawable.foreground
+
+        val size = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 108
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat())
+        val maskPath = Path().apply {
+            moveTo(maskPoints[0].first, maskPoints[0].second)
+            maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
+            close()
+        }
+
+        canvas.save()
+        canvas.clipPath(maskPath)
+        background.setBounds(0, 0, size, size)
+        background.draw(canvas)
+        canvas.restore()
+
+        if (foreground != null) {
+            val bounds = AdaptiveIconCompositor.foregroundBounds(size)
+            foreground.setBounds(bounds.offset, bounds.offset, bounds.offset + bounds.scaledSize, bounds.offset + bounds.scaledSize)
+            foreground.draw(canvas)
+        }
+
         return bitmap
     }
 

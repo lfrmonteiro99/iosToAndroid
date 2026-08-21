@@ -58,6 +58,18 @@ jest.mock('expo-contacts', () => ({
   SortTypes: { LastName: 'lastName' },
 }));
 
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getCurrentPositionAsync: jest.fn(() =>
+    Promise.resolve({
+      coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 10 },
+      timestamp: Date.now(),
+    }),
+  ),
+  Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
