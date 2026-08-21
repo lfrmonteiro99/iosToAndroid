@@ -70,8 +70,20 @@ describe('SoftwareUpdateScreen', () => {
     const checkButton = getByText('Check Now');
     fireEvent.press(checkButton);
 
+    // Verify button shows "Checking…" while fetch is pending
     await waitFor(() => {
-      expect(queryByText(/Checking/i) || queryByText(/Check Now/i)).toBeTruthy();
+      expect(getByText('Checking…')).toBeTruthy();
+    }, { timeout: 2000 });
+
+    // Verify status card shows "Checking for updates…"
+    await waitFor(() => {
+      expect(queryByText(/Checking for updates/i)).toBeTruthy();
+    }, { timeout: 2000 });
+
+    // Verify it transitions back to "Check Now" after fetch completes
+    await waitFor(() => {
+      expect(getByText('Check Now')).toBeTruthy();
+      expect(queryByText('Checking…')).toBeNull();
     }, { timeout: 2000 });
   });
 });
