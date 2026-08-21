@@ -334,3 +334,23 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativePermissionsAn
     requestMultiplePermissions: jest.fn(() => Promise.resolve({})),
   },
 }));
+
+// Mock react-native-webview: it calls TurboModuleRegistry.getEnforcing('RNCWebViewModule')
+// at import time, which throws in the JS-only test environment. The mock keeps the
+// component contract (source/testID props + an imperative reload()) so screens that
+// render a WebView can be asserted on.
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const WebView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      reload: jest.fn(),
+      goBack: jest.fn(),
+      goForward: jest.fn(),
+      stopLoading: jest.fn(),
+    }));
+    return React.createElement(View, props);
+  });
+  WebView.displayName = 'WebView';
+  return { __esModule: true, WebView, default: WebView };
+});

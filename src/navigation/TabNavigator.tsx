@@ -49,6 +49,7 @@ import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouch
 import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
+import { AppStoreScreen } from '../screens/AppStoreScreen';
 import { SpotlightSearchScreen } from '../screens/SpotlightSearchScreen';
 import { SiriScreen } from '../screens/SiriScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
@@ -64,6 +65,7 @@ import { MapsScreen } from '../screens/MapsScreen';
 import { FindMyScreen } from '../screens/FindMyScreen';
 import { RemindersScreen } from '../screens/RemindersScreen';
 import { MailScreen } from '../screens/MailScreen';
+import { BrowserScreen } from '../screens/BrowserScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -108,6 +110,7 @@ export function TabNavigator() {
       <Stack.Screen name="FindMy" component={FindMyScreen} options={{ animation }} />
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
+      <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />
@@ -138,6 +141,7 @@ export function TabNavigator() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: slideAnimation }} />
       {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: slideAnimation }} />}
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
+      <Stack.Screen name="AppStore" component={AppStoreScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
       <Stack.Screen name="Siri" component={SiriScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left' }} />
