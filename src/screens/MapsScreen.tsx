@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Pressable,
   Modal,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,8 +20,10 @@ import {
   CupertinoSwipeableRow,
   CupertinoEmptyState,
   CupertinoShareSheet,
+  BrowserReadingList,
   useAlert,
 } from '../components';
+import { useReadingList } from '../store/ReadingListStore';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
@@ -198,6 +201,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<RecentLocation | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showReadingList, setShowReadingList] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
 
@@ -229,6 +233,8 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
     }).catch(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, []);
+
+  const { addItem: addToReadingList } = useReadingList();
 
   const dismissDemoBanner = useCallback(() => {
     setDemoBannerDismissed(true);
@@ -298,6 +304,28 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
       persistRecents(updated);
     },
     [recents, persistRecents],
+  );
+
+  // Reading List: persist the current location as a "read later" page, and
+  // open a saved item in the browser (no in-app WebView exists yet, so we
+  // hand the URL to the system — the same fallback the share sheet uses).
+  const handleAddToReadingList = useCallback(
+    (url: string, title: string) => {
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      addToReadingList(url, title || 'Shared page');
+    },
+    [addToReadingList],
+  );
+
+  const handleOpenReadingItem = useCallback(
+    (item: { url: string; title: string }) => {
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      Linking.openURL(item.url).catch(() => {
+        alert('Cannot open link', 'This device cannot open the saved page.');
+      });
+      setShowReadingList(false);
+    },
+    [alert],
   );
 
   // ── Filtered Recents ────────────────────────────────────────
@@ -495,6 +523,16 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
             <Ionicons name="chevron-back" size={24} color={MAPS_ACCENT} />
           </Pressable>
         }
+        rightButton={
+          <Pressable
+            onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setShowReadingList(true); }}
+            hitSlop={8}
+            accessibilityLabel="Open Reading List"
+            accessibilityRole="button"
+          >
+            <Ionicons name="book-outline" size={24} color={MAPS_ACCENT} />
+          </Pressable>
+        }
       />
 
       <FlatList
@@ -574,6 +612,14 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
         onClose={() => setShowShareSheet(false)}
         title={selectedLocation?.name}
         url={selectedLocation ? `https://maps.apple.com/?q=${encodeURIComponent(selectedLocation.name)}` : undefined}
+        onAddToReadingList={handleAddToReadingList}
+      />
+
+      {/* Reading List */}
+      <BrowserReadingList
+        visible={showReadingList}
+        onClose={() => setShowReadingList(false)}
+        onOpenItem={handleOpenReadingItem}
       />
     </View>
   );
