@@ -820,12 +820,23 @@ CYCLE=0
 log "arranque. base=$BASE_BRANCH repo=$REPO"
 build_impl_roster
 log "$(mem_status)"
+# Marca o arranque: o watchdog precisa de saber que a pipeline teve TEMPO de
+# entregar antes de dizer que não entrega.
+health_stamp started
 
 while true; do
   CYCLE=$((CYCLE + 1))
   log "──── ciclo $CYCLE ────"
 
   cleanup_stale
+
+  # O WATCHDOG CORRE EM TODOS OS CICLOS, e antes de qualquer despacho.
+  #
+  # As duas avarias de 2026-08-21 eram silenciosas e auto-perpetuantes: a segunda
+  # (tags-fantasma a esgotar o orçamento de memória) bloqueava precisamente os
+  # despachos que a resolveriam. Um watchdog que corresse depois, ou de vez em
+  # quando, teria ficado a ver.
+  bash "$SCRIPT_DIR/watchdog.sh" || warn "watchdog falhou neste ciclo"
 
   # ── Subscription cooldown: WAIT, don't spin ───────────────────────────────
   #

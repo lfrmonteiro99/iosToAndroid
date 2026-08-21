@@ -446,6 +446,68 @@ mem_status() {
     "$TEAM_AGENT_MEM_MB" "$(inflight_young_count)"
 }
 
+# ── Saúde: medir RESULTADOS, não actividade ────────────────────────────────
+#
+# As duas falhas de 2026-08-21 eram invisíveis do lado de fora porque tudo o que
+# a pipeline mostrava era ACTIVIDADE: ciclos, despachos, "sem memória", worktrees
+# a serem limpos. Havia 1069 despachos e zero agentes a correr; havia seis slots
+# a serem preenchidos e zero PRs. Um monitor que conta despachos diz que está
+# tudo bem nos dois casos.
+#
+# Portanto o que se marca aqui são só resultados que ninguém pode fingir: um
+# agente arrancou de facto, um veredicto foi lido, um PR foi aberto, um merge
+# aterrou. O watchdog compara ISSO com o tempo.
+HEALTH_DIR="$STATE_DIR/health"
+mkdir -p "$HEALTH_DIR" 2>/dev/null || true
+
+health_stamp() { date +%s > "$HEALTH_DIR/$1" 2>/dev/null || true; }
+
+# Segundos desde o último evento deste tipo. Sem registo -> um número enorme, para
+# que "nunca aconteceu" conte como "há muito tempo" em qualquer comparação.
+health_age() {
+  local f="$HEALTH_DIR/$1" t
+  [ -f "$f" ] || { echo 999999; return; }
+  t=$(cat "$f" 2>/dev/null || echo 0)
+  echo $(( $(date +%s) - t ))
+}
+
+health_bump() {
+  local f="$HEALTH_DIR/$1.count"
+  echo $(( $(cat "$f" 2>/dev/null || echo 0) + 1 )) > "$f" 2>/dev/null || true
+}
+
+health_count() { cat "$HEALTH_DIR/$1.count" 2>/dev/null || echo 0; }
+health_reset() { rm -f "$HEALTH_DIR/$1.count" 2>/dev/null || true; }
+
+# Ledger de acções de recuperação: cada uma corre UMA vez por chave (ou depois de
+# um TTL). É isto que impede o watchdog de se tornar o problema — desencalhar um
+# PR em ciclo é o caminho para as 184 reviews do mesmo commit.
+LEDGER_DIR="$STATE_DIR/health/ledger"
+mkdir -p "$LEDGER_DIR" 2>/dev/null || true
+
+ledger_once() {
+  # DECLARAÇÕES SEPARADAS, e não por estilo. O `local` é um builtin: a linha toda
+  # é expandida ANTES de as atribuições acontecerem, portanto
+  # `local key="$1" f="...$key..."` vê o $key VAZIO. O ficheiro do ledger ficava
+  # a ser o próprio directório, o write falhava, e o ledger autorizava sempre —
+  # ou seja, a guarda que existe para impedir reparações em ciclo não guardava
+  # nada. Apanhado pelo teste do PR encalhado, não por leitura.
+  local key="$1"
+  local ttl="${2:-0}"
+  local safe; safe=$(printf '%s' "$key" | tr -c 'a-zA-Z0-9._-' '_')
+  local f="$LEDGER_DIR/$safe"
+  local t now
+  [ -n "$safe" ] || return 1
+  now=$(date +%s)
+  if [ -f "$f" ]; then
+    t=$(cat "$f" 2>/dev/null || echo 0)
+    [ "$ttl" = "0" ] && return 1
+    [ $(( now - t )) -lt "$ttl" ] && return 1
+  fi
+  echo "$now" > "$f" 2>/dev/null || true
+  return 0
+}
+
 # ── Onde estão os binários dos motores ─────────────────────────────────────
 #
 # ISTO CUSTOU UMA NOITE INTEIRA. 383 ciclos, 1069 despachos, ZERO PRs.
@@ -472,6 +534,12 @@ claude_bin() {
     echo "$TEAM_CLAUDE_BIN"; return 0
   fi
   local p
+  # Caminho fixado pelo watchdog depois de ver o run-agent falhar a encontrá-lo.
+  # Sem isto a "reparação" dele era decorativa.
+  if [ -s "$HEALTH_DIR/claude-bin.resolved" ]; then
+    p=$(cat "$HEALTH_DIR/claude-bin.resolved" 2>/dev/null || echo "")
+    [ -n "$p" ] && [ -x "$p" ] && { echo "$p"; return 0; }
+  fi
   p=$(command -v claude 2>/dev/null) && { echo "$p"; return 0; }
   for p in "$HOME/.local/bin/claude" "$HOME/bin/claude" /usr/local/bin/claude; do
     [ -x "$p" ] && { echo "$p"; return 0; }

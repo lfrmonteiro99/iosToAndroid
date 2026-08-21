@@ -153,6 +153,9 @@ run_harness() {
   local -a cmd=("$@")
 
   echo "[run-agent] motor=$kind modelo=$model workdir=$WORKDIR timeout=${TIMEOUT_S}s" >&2
+  # Um motor ARRANCOU. É este o evento que faltava para distinguir "1069 despachos"
+  # de "1069 agentes" — hoje foram a primeira coisa e nenhuma da segunda.
+  health_stamp agent-ran
 
   local out_file
   out_file=$(mktemp "/tmp/run-agent-$AGENT_SLOT.XXXXXX.out")
@@ -278,6 +281,7 @@ if [ -z "$CLAUDE_BIN" ]; then
   # RUÍDO DE PROPÓSITO. Esta linha faltar é o que fez uma noite inteira parecer
   # "os agentes não conseguem" quando na verdade nenhum agente correu.
   echo "[run-agent] ATENÇÃO: não encontrei o binário do claude (PATH=$PATH). Define TEAM_CLAUDE_BIN." >&2
+  health_bump engine-missing
 fi
 
 if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && [ -n "$CLAUDE_BIN" ]; then

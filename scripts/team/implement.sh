@@ -484,6 +484,7 @@ O branch \`$BRANCH\` foi enviado mas o PR para \`$BASE_BRANCH\` não foi aberto.
     exit 1
   fi
   log "PR criado: #$PR_NUM ($REPO)"
+  health_stamp pr-created
 fi
 
 comment_issue "$ISSUE" "## Implementador: implementado

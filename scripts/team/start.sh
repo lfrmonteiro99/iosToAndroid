@@ -69,6 +69,10 @@ case "$ACTION" in
     else
       echo "orquestrador: parado"
     fi
+    # SAÚDE PRIMEIRO. As contagens de issues pareciam saudáveis nas duas avarias
+    # de hoje; o que as denunciava era não haver PRs nem agentes.
+    bash "$SCRIPT_DIR/watchdog.sh" --report 2>/dev/null || true
+    echo
     echo -n "issues por estado: "
     for s in qa:ready qa:wip qa:review qa:blocked-impl qa:blocked-spec qa:triage qa:needs-human; do
       # --limit 300: `gh issue list` defaults to 30, so without it the status
@@ -192,7 +196,8 @@ TEAM_ENV=" PATH='$TEAM_PATH'"
 for v in TEAM_HERMES TEAM_HERMES_BIN TEAM_CLAUDE_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
          TEAM_IMPLEMENTERS TEAM_IMPL_ENGINES TEAM_REVIEWERS \
          TEAM_AGENT_MEM_MB TEAM_MEM_FLOOR_MB TEAM_AGENT_WARMUP_S TEAM_JEST_WORKERS \
-         TEAM_CYCLE_SLEEP; do
+         TEAM_CYCLE_SLEEP TEAM_HEALTH_DELIVERY_S TEAM_HEALTH_AGENT_S \
+         TEAM_HEALTH_STRANDED_S TEAM_HEALTH_DEFER_MANY TEAM_HEALTH_BASELINE_AHEAD; do
   [ -n "${!v:-}" ] && TEAM_ENV="$TEAM_ENV $v='${!v}'"
 done
 

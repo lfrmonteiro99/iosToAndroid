@@ -322,6 +322,7 @@ $SUMMARY" >/dev/null 2>&1 || true
     gh pr merge "$PR" --repo "$REPO" --squash --delete-branch >/dev/null 2>&1 || true
     if merge_landed; then
       MERGE_OK=1
+      health_stamp merge
     else
       MSTATUS=$(gh pr view "$PR" --repo "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null || echo "")
       log "merge recusado (mergeStateStatus=$MSTATUS)"
