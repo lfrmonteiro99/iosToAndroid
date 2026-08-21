@@ -8,7 +8,7 @@ import {
   Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -158,9 +158,9 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         <View style={styles.page}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
             <View style={styles.iconWrap}>
-              <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
+              <GlassSurface intensity={20} tint="light" style={styles.iconBlur}>
                 <Ionicons name="phone-portrait" size={72} color="#FFFFFF" />
-              </BlurView>
+              </GlassSurface>
             </View>
             <Text style={[typography.largeTitle, styles.pageTitle]}>Welcome to{'\n'}iOS Launcher</Text>
             <Text style={[typography.body, styles.pageSubtitle]}>Transform your Android into iOS</Text>
@@ -206,7 +206,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
         <View style={styles.page}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
             <View style={styles.iconWrap}>
-              <BlurView intensity={20} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.iconBlur}>
+              <GlassSurface intensity={20} tint="light" style={styles.iconBlur}>
                 <Ionicons name="phone-portrait-outline" size={64} color="#FFFFFF" />
                 <Ionicons
                   name="square"
@@ -214,7 +214,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
                   color="#FFFFFF"
                   style={styles.homeButtonIcon}
                 />
-              </BlurView>
+              </GlassSurface>
             </View>
             <Text style={[typography.largeTitle, styles.pageTitle]}>Set as Default{'\n'}Launcher</Text>
             <Text style={[typography.body, styles.pageSubtitle]}>

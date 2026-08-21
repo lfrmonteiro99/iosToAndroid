@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -44,6 +43,7 @@ import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
   NotificationBanner,
+  GlassSurface,
   useAlert,
 } from '../components';
 import type { BannerNotification } from '../components';
@@ -448,7 +448,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <Pressable style={styles.folderOverlayBackdrop} onPress={onClose} accessibilityLabel="Dismiss" accessibilityRole="button">
         <Pressable onPress={e => e.stopPropagation()} importantForAccessibility="no">
-          <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
+          <GlassSurface intensity={60} tint="dark" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput
                 style={[styles.folderOverlayTitleInput, { fontSize: 17 * textScale }]}
@@ -477,7 +477,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                 />
               ))}
             </View>
-          </BlurView>
+          </GlassSurface>
         </Pressable>
       </Pressable>
     </Modal>
@@ -1270,10 +1270,9 @@ export function LauncherHomeScreen() {
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
       <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
-        <BlurView
+        <GlassSurface
           intensity={90}
           tint="dark"
-          experimentalBlurMethod="dimezisBlurView"
           style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
@@ -1298,7 +1297,7 @@ export function LauncherHomeScreen() {
               <View key={`empty-${i}`} style={{ width: DOCK_CELL_WIDTH }} />
             ))}
           </View>
-        </BlurView>
+        </GlassSurface>
       </View>
 
       {/* ---------------------------------------------------------------- */}

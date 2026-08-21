@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
@@ -87,10 +87,9 @@ export function CupertinoActionSheet({
           ]}
         >
           {/* Options group */}
-          <BlurView
+          <GlassSurface
             intensity={60}
             tint={theme.dark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
             style={[
               styles.group,
               { backgroundColor: groupBg, borderRadius: borderRadius.large },
@@ -151,7 +150,7 @@ export function CupertinoActionSheet({
                 </Text>
               </Pressable>
             ))}
-          </BlurView>
+          </GlassSurface>
 
           {/* Cancel button */}
           <Pressable
