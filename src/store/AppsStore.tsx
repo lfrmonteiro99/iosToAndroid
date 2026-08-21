@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../components';
 import { logger } from '../utils/logger';
 import { migrateAsyncStorageKey } from './storage';
+import { upsertApp, removeApp } from './appsIndexReducer';
+import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
 const APPS_INDEX_KEY = '@iostoandroid/apps_index';
@@ -50,6 +52,23 @@ async function getLauncherModule() {
   }
 }
 
+// The module's named exports (the event-subscription helpers), loaded the same
+// defensive way as the default export above.
+async function getLauncherModuleExports(): Promise<
+  typeof import('../../modules/launcher-module/src') | null
+> {
+  try {
+    return await import('../../modules/launcher-module/src');
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src');
+    } catch {
+      return null;
+    }
+  }
+}
+
 interface AppsState {
   allApps: InstalledApp[];
   homeApps: HomeApp[];
@@ -65,7 +84,6 @@ interface AppsContextValue {
   recentPackages: string[];
   recentApps: RecentApp[];
   isLoading: boolean;
-  refreshApps: () => Promise<void>;
   launchApp: (packageName: string) => Promise<void>;
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
@@ -255,6 +273,59 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     loadApps();
   }, [loadApps]);
 
+  // Install / uninstall / update: refresh only the package the broadcast named.
+  // A full loadApps() per event would mean 20 complete package scans when the
+  // user restores 20 apps at once (see #485), so the affected entry is patched
+  // into the index instead.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let mounted = true;
+
+    // Applies a pure reducer to the index. The reducer returns the SAME array
+    // when the event was a no-op (already-known package, unknown removal), and
+    // that identity check is what keeps a duplicate broadcast from re-rendering
+    // and re-writing the cached index.
+    const applyIndex = (reduce: (apps: InstalledApp[]) => InstalledApp[]) => {
+      setState(prev => {
+        const next = reduce(prev.allApps);
+        if (next === prev.allApps) return prev;
+        AsyncStorage.setItem(APPS_INDEX_KEY, JSON.stringify(next));
+        return { ...prev, allApps: next, dockApps: resolveDock(next, prev.dockApps) };
+      });
+    };
+
+    let unsubscribe = () => {};
+    (async () => {
+      const mod = await getLauncherModuleExports();
+      // A native build older than this JS bundle has no onPackageChanged event
+      // and therefore no subscription helper — the grid then behaves as before
+      // (refresh on next start) instead of the provider throwing on mount.
+      if (!mounted || typeof mod?.addPackageChangedListener !== 'function') return;
+      unsubscribe = mod.addPackageChangedListener(async ({ action, packageName }: PackageChange) => {
+        if (action === 'removed') {
+          applyIndex(prev => removeApp(prev, packageName));
+          return;
+        }
+        // 'added' and 'replaced' both mean "reprocess this package": an update
+        // changes the label and the cached icon's versionCode, so the entry has
+        // to be re-read rather than left as-is.
+        try {
+          const LauncherModule = await getLauncherModule();
+          const app = await LauncherModule?.getAppInfo(packageName);
+          if (!mounted || !app) return; // not launchable, or unmounted meanwhile
+          applyIndex(prev => upsertApp(prev, app));
+        } catch (e) {
+          logger.warn('AppsStore', `incremental refresh failed for ${packageName}`, e);
+        }
+      });
+    })();
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [resolveDock]);
+
   const persist = useCallback((dockApps: string[], homeApps: HomeApp[]) => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ dockApps, homeApps }));
   }, []);
@@ -339,7 +410,6 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     recentPackages,
     recentApps,
     isLoading: state.isLoading,
-    refreshApps: loadApps,
     launchApp,
     addToHome,
     removeFromHome,
@@ -349,7 +419,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     clearRecents,
     isDefaultLauncher: isDefault,
     openLauncherSettings,
-  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, loadApps, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings]);
+  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }
