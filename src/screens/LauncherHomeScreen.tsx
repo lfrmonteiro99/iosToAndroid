@@ -102,7 +102,7 @@ export function computeWallpaperTranslateX(
 }
 
 // Built-in app routing: packageName → navigation screen name
-const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
+export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.phone': 'Phone',
   'com.iostoandroid.messages': 'Messages',
   'com.iostoandroid.contacts': 'Contacts',
@@ -116,6 +116,7 @@ const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.notes': 'Notes',
   'com.iostoandroid.reminders': 'Reminders',
   'com.iostoandroid.mail': 'Mail',
+  'com.iostoandroid.browser': 'Browser',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -150,7 +151,7 @@ export const BUILT_IN_DUPLICATE_PACKAGES: ReadonlySet<string> = new Set(
 );
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
-const VIRTUAL_ICON_CONFIG: Record<string, {
+export const VIRTUAL_ICON_CONFIG: Record<string, {
   icon: keyof typeof Ionicons.glyphMap;
   bg: string;
   gradient?: [string, string];
@@ -169,6 +170,7 @@ const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.notes': { icon: 'document-text', bg: '#FFCC00', gradient: ['#FFD60A', '#FFB300'], iconSize: 32 },
   'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
+  'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
 };
 
 // ---------------------------------------------------------------------------
