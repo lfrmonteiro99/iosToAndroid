@@ -40,18 +40,15 @@ function scaleTypography(
     '800': '900', '900': '900', 'normal': '600', 'bold': '900',
   };
 
-  const result = {} as typeof Typography;
-  for (const key of Object.keys(base) as (keyof typeof Typography)[]) {
-    const style = base[key];
+  const entries = Object.entries(base).map(([key, style]) => {
     const scaledFontSize = Math.round(style.fontSize * scale);
     const scaledLineHeight = Math.round(style.lineHeight * scale);
     const fontWeight = boldText
       ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
       : style.fontWeight;
-    // TypeScript cannot narrow assignment through a mapped key; use intermediate typing
-    (result as Record<string, any>)[key] = { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight };
-  }
-  return result;
+    return [key, { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight }];
+  });
+  return Object.fromEntries(entries) as typeof Typography;
 }
 
 interface ThemeContextValue {
