@@ -67,6 +67,11 @@ class LauncherModule : Module() {
 
         Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
 
+        // Native view that reserves its own bounds against the Android system
+        // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
+        // left-edge catcher; no props, geometry comes from layout.
+        View(SystemGestureExclusionView::class) {}
+
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
 

@@ -58,6 +58,7 @@ export type RootStackParamList = {
   ComponentsGallery: undefined;
   AppLibrary: undefined;
   SpotlightSearch: undefined;
+  Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
 };
