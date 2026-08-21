@@ -4,12 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { useContacts } from '../store/ContactsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton, SkeletonListRow, BackEdgeSwipe } from '../components';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 
 function groupByLetter(contacts: DeviceContact[]) {
@@ -37,7 +36,7 @@ const ContactRow = React.memo(function ContactRow({
 }: {
   contact: DeviceContact;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   isLast: boolean;
   onPress: () => void;
   onLongPress: () => void;

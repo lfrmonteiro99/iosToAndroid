@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { withAutoLockSuppressed } from '../utils/permissions';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
   CupertinoSwipeableRow,
@@ -26,7 +26,6 @@ import {
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -223,7 +222,7 @@ interface ReminderRowProps {
   onFlag: () => void;
   onEdit: () => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   isOpen: boolean;
   onOpen: () => void;
 }
@@ -320,7 +319,7 @@ interface SmartListCardProps {
   count: number;
   onPress: () => void;
   themeColors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 const SmartListCard = React.memo(function SmartListCard({
