@@ -59,11 +59,21 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+const INSTALLED_ONLY_APP: AppsStore.InstalledApp = {
+  name: 'Acme Notes',
+  packageName: 'com.acme.notes',
+  icon: '',
+  isSystem: false,
+};
+
 describe('AppStoreScreen — Today section', () => {
   it('renders without crashing', () => {
-    const { toJSON, getByText } = render(<AppStoreScreen navigation={nav} />);
+    // Once the Search-tab segmented control exists, "Today" is rendered both
+    // as the segment label and as the section heading — getAllByText because
+    // two matches are now expected, not a regression.
+    const { toJSON, getAllByText } = render(<AppStoreScreen navigation={nav} />);
     expect(toJSON()).toBeTruthy();
-    expect(getByText('Today')).toBeTruthy();
+    expect(getAllByText('Today').length).toBeGreaterThan(0);
   });
 
   it('renders one card per entry in CURATED_APPS', () => {
@@ -162,6 +172,95 @@ describe('AppStoreScreen — Today section', () => {
     const { getByLabelText } = render(<AppStoreScreen navigation={nav} />);
     fireEvent.press(getByLabelText('Back'));
     expect(mockGoBack).toHaveBeenCalled();
+  });
+});
+
+describe('AppStoreScreen — Search tab', () => {
+  it('selecting Search swaps the visible content, and Today restores the original cards', () => {
+    const { getByText, getByPlaceholderText, queryByPlaceholderText, getAllByLabelText, queryAllByLabelText } =
+      render(<AppStoreScreen navigation={nav} />);
+
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+    expect(queryByPlaceholderText(/search/i)).toBeNull();
+
+    fireEvent.press(getByText('Search'));
+    expect(getByPlaceholderText(/search/i)).toBeTruthy();
+    expect(queryAllByLabelText(/card$/)).toHaveLength(0);
+
+    fireEvent.press(getByText('Today'));
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+    expect(queryByPlaceholderText(/search/i)).toBeNull();
+  });
+
+  it('a query matching an installed app (not in the curated catalog) shows an Open row', () => {
+    mockApps([INSTALLED_ONLY_APP]);
+    const { getByText, getByPlaceholderText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    fireEvent.changeText(getByPlaceholderText(/search/i), 'acme');
+    expect(getByLabelText(`Open ${INSTALLED_ONLY_APP.name}`)).toBeTruthy();
+  });
+
+  it('a query matching a curated, non-installed app shows a Get row', () => {
+    mockApps([]);
+    const { getByText, getByPlaceholderText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    fireEvent.changeText(getByPlaceholderText(/search/i), FIRST.name.toLowerCase());
+    expect(getByLabelText(`Get ${FIRST.name}`)).toBeTruthy();
+  });
+
+  it('an installed app that is also curated is shown once, as Open (dedup, installed takes precedence)', () => {
+    mockApps([installed(FIRST.packageName)]);
+    const { getByText, getByPlaceholderText, getAllByLabelText, queryByLabelText } = render(
+      <AppStoreScreen navigation={nav} />,
+    );
+    fireEvent.press(getByText('Search'));
+    fireEvent.changeText(getByPlaceholderText(/search/i), FIRST.packageName);
+    expect(getAllByLabelText(/^(Open|Get) /)).toHaveLength(1);
+    expect(queryByLabelText(`Get ${FIRST.packageName}`)).toBeNull();
+  });
+
+  it('an empty query shows no result rows', () => {
+    mockApps([]);
+    const { getByText, queryAllByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    expect(queryAllByLabelText(/^(Open|Get) /)).toHaveLength(0);
+  });
+
+  it('a query with no matches shows no result rows but keeps the Play Store fallback visible', () => {
+    mockApps([]);
+    const { getByText, getByPlaceholderText, getByLabelText, queryAllByLabelText } = render(
+      <AppStoreScreen navigation={nav} />,
+    );
+    fireEvent.press(getByText('Search'));
+    fireEvent.changeText(getByPlaceholderText(/search/i), 'zzznomatchzzz');
+    expect(queryAllByLabelText(/^(Open|Get) /)).toHaveLength(0);
+    expect(getByLabelText('Search on Play Store')).toBeTruthy();
+  });
+
+  it('pressing "Search on Play Store" calls Linking.openURL with a market search deep link containing the query', async () => {
+    mockApps([]);
+    const { getByText, getByPlaceholderText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    fireEvent.changeText(getByPlaceholderText(/search/i), 'gimp');
+    fireEvent.press(getByLabelText('Search on Play Store'));
+    await waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('market://search?q=')),
+    );
+    expect(openSpy).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent('gimp')));
+  });
+
+  it('does not press-through the Play Store fallback when the query is empty', () => {
+    mockApps([]);
+    const { getByText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    fireEvent.press(getByLabelText('Search on Play Store'));
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('makes clear only installed and curated apps are searched, not live Play Store results', () => {
+    const { getByText, getByTestId } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    expect(getByTestId('app-store-search-disclaimer')).toBeTruthy();
   });
 });
 

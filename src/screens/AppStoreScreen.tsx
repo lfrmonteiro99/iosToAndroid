@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CupertinoNavigationBar } from '../components';
+import { CupertinoNavigationBar, CupertinoSegmentedControl, CupertinoSearchBar } from '../components';
 import { useTheme } from '../theme/ThemeContext';
 import { useApps } from '../store/AppsStore';
 import { CURATED_APPS, type CuratedApp } from '../data/curatedApps';
@@ -25,6 +25,16 @@ export function playStoreUrl(packageName: string): string {
 /** Web fallback used when no Play Store client can handle `market://`. */
 export function playStoreWebUrl(packageName: string): string {
   return `https://play.google.com/store/apps/details?id=${packageName}`;
+}
+
+/** Play Store's own search UI for a query — not an in-app result list. */
+export function playStoreSearchUrl(query: string): string {
+  return `market://search?q=${encodeURIComponent(query)}`;
+}
+
+/** Web fallback for the Play Store search deep link. */
+export function playStoreSearchWebUrl(query: string): string {
+  return `https://play.google.com/store/search?q=${encodeURIComponent(query)}&c=apps`;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +105,8 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { apps, launchApp } = useApps();
+  const [tabIndex, setTabIndex] = useState(0);
+  const [query, setQuery] = useState('');
 
   // Set of installed package names — lookup is by packageName only, never by
   // display name, so a user-renamed app still resolves as installed.
@@ -129,6 +141,60 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
     }
   }, []);
 
+  const handleSearchOnPlayStore = useCallback(async (searchQuery: string) => {
+    const marketUrl = playStoreSearchUrl(searchQuery);
+    try {
+      if (await Linking.canOpenURL(marketUrl)) {
+        await Linking.openURL(marketUrl);
+        return;
+      }
+      const webUrl = playStoreSearchWebUrl(searchQuery);
+      if (await Linking.canOpenURL(webUrl)) {
+        await Linking.openURL(webUrl);
+      }
+    } catch (err) {
+      logger.warn('AppStoreScreen', 'could not open Play Store search', err);
+    }
+  }, []);
+
+  // Installed apps and CURATED_APPS are two different catalogs — neither one
+  // is a public "search" API (Android has none usable without Play Developer
+  // API credentials this app doesn't have), so this only ever matches against
+  // what's already known locally. Merged by packageName; `installed` is
+  // always recomputed against the live installedPackages set so an app that's
+  // actually on the device still shows as Open even if it only matched via
+  // its CURATED_APPS name.
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    const byPackage = new Map<string, CuratedApp & { installed: boolean }>();
+    const addResult = (packageName: string, name: string, category: string, tagline: string) => {
+      if (byPackage.has(packageName)) return;
+      byPackage.set(packageName, {
+        packageName,
+        name,
+        category,
+        tagline,
+        installed: installedPackages.has(packageName),
+      });
+    };
+
+    for (const app of apps) {
+      if (app.name.toLowerCase().includes(q) || app.packageName.toLowerCase().includes(q)) {
+        const curated = CURATED_APPS.find((c) => c.packageName === app.packageName);
+        addResult(app.packageName, app.name, curated?.category ?? 'Installed', curated?.tagline ?? '');
+      }
+    }
+    for (const curated of CURATED_APPS) {
+      if (curated.name.toLowerCase().includes(q)) {
+        addResult(curated.packageName, curated.name, curated.category, curated.tagline);
+      }
+    }
+
+    return Array.from(byPackage.values());
+  }, [apps, query, installedPackages]);
+
   return (
     <View style={styles.screenRoot}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
@@ -149,25 +215,73 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
         }
       />
 
+      <View style={styles.segmentedWrap}>
+        <CupertinoSegmentedControl
+          values={['Today', 'Search']}
+          selectedIndex={tabIndex}
+          onChange={setTabIndex}
+        />
+      </View>
+
       <ScrollView
         style={[styles.root, { backgroundColor: colors.systemGroupedBackground }]}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={[typography.title1, styles.sectionTitle, { color: colors.label }]}>Today</Text>
-        <Text style={[typography.footnote, styles.sectionNote, { color: colors.secondaryLabel }]}>
-          A hand-picked selection — not live Play Store data.
-        </Text>
+        {tabIndex === 0 ? (
+          <>
+            <Text style={[typography.title1, styles.sectionTitle, { color: colors.label }]}>Today</Text>
+            <Text style={[typography.footnote, styles.sectionNote, { color: colors.secondaryLabel }]}>
+              A hand-picked selection — not live Play Store data.
+            </Text>
 
-        {CURATED_APPS.map((app) => (
-          <AppRow
-            key={app.packageName}
-            app={app}
-            installed={installedPackages.has(app.packageName)}
-            onOpen={handleOpen}
-            onGet={handleGet}
-          />
-        ))}
+            {CURATED_APPS.map((app) => (
+              <AppRow
+                key={app.packageName}
+                app={app}
+                installed={installedPackages.has(app.packageName)}
+                onOpen={handleOpen}
+                onGet={handleGet}
+              />
+            ))}
+          </>
+        ) : (
+          <>
+            <CupertinoSearchBar value={query} onChangeText={setQuery} placeholder="Search Apps" />
+            <Text
+              testID="app-store-search-disclaimer"
+              style={[typography.footnote, styles.sectionNote, { color: colors.secondaryLabel }]}
+            >
+              Searches installed apps and the curated catalog only — not live Play Store results.
+            </Text>
+
+            {searchResults.map((app) => (
+              <AppRow
+                key={app.packageName}
+                app={app}
+                installed={app.installed}
+                onOpen={handleOpen}
+                onGet={handleGet}
+              />
+            ))}
+
+            <Pressable
+              onPress={() => handleSearchOnPlayStore(query.trim())}
+              disabled={!query.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Search on Play Store"
+              style={[
+                styles.playStoreBtn,
+                { backgroundColor: colors.systemGray5, opacity: query.trim() ? 1 : 0.5 },
+              ]}
+            >
+              <Text style={[typography.body, styles.playStoreLabel, { color: colors.systemBlue }]}>
+                Search on Play Store
+              </Text>
+            </Pressable>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -183,6 +297,20 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  segmentedWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  playStoreBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  playStoreLabel: {
+    fontWeight: '600',
   },
   sectionTitle: {
     fontWeight: '700',
