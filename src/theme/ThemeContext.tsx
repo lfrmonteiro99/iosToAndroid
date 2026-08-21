@@ -12,6 +12,8 @@ import {
   AnimationConfig,
   AccentColors,
   AccentColorKey,
+  Glass,
+  glassSurface,
 } from './CupertinoTheme';
 
 const THEME_STORAGE_KEY = '@iostoandroid/theme_preference';
@@ -59,6 +61,8 @@ interface ThemeContextValue {
   borderRadius: typeof BorderRadius;
   shadows: typeof Shadows;
   animation: typeof AnimationConfig;
+  glass: typeof Glass;
+  glassSurface: typeof glassSurface;
   isDark: boolean;
   isReady: boolean;
   mode: ThemeMode;
@@ -172,6 +176,8 @@ export function ThemeProvider({
       borderRadius: BorderRadius,
       shadows: Shadows,
       animation: AnimationConfig,
+      glass: Glass,
+      glassSurface,
       isDark,
       isReady,
       mode,

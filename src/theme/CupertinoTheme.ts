@@ -248,6 +248,31 @@ export const Spacing = {
   xxl: 48,
 } as const;
 
+// Glass surfaces with hairline borders (WCAG-compliant separation for solid glass)
+export const Glass = {
+  light: {
+    thin: { backgroundColor: 'rgba(242,242,247,0.72)' },
+    regular: { backgroundColor: 'rgba(242,242,247,0.82)' },
+    thick: { backgroundColor: 'rgba(242,242,247,0.94)' },
+    hairline: 'rgba(255,255,255,0.35)',
+  },
+  dark: {
+    thin: { backgroundColor: 'rgba(28,28,30,0.68)' },
+    regular: { backgroundColor: 'rgba(28,28,30,0.78)' },
+    thick: { backgroundColor: 'rgba(28,28,30,0.92)' },
+    hairline: 'rgba(255,255,255,0.12)',
+  },
+} as const;
+
+export function glassSurface(dark: boolean, weight: 'thin' | 'regular' | 'thick' = 'regular') {
+  const g = dark ? Glass.dark : Glass.light;
+  return {
+    ...g[weight],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: g.hairline,
+  };
+}
+
 // Border Radius
 export const BorderRadius = {
   small: 8,
