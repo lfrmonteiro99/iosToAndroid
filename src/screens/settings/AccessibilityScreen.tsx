@@ -29,7 +29,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const assistive = useAssistiveTouch();
-  const [reduceTransparency, setReduceTransparency] = useState(false);
   const [smartInvert, setSmartInvert] = useState(false);
   const [colorFilters, setColorFilters] = useState(false);
 
@@ -130,7 +129,10 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
             <CupertinoListTile
               title="Reduce Transparency"
               trailing={
-                <CupertinoSwitch value={reduceTransparency} onValueChange={setReduceTransparency} />
+                <CupertinoSwitch
+                  value={settings.reduceTransparency}
+                  onValueChange={(v) => update('reduceTransparency', v)}
+                />
               }
               showChevron={false}
             />

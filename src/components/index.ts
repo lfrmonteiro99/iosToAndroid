@@ -33,3 +33,5 @@ export { SpotlightReveal } from './SpotlightReveal';
 export { EdgePanelOverlay } from './EdgePanelOverlay';
 export { AppLaunchOverlay, interpolateLaunchFrame } from './AppLaunchOverlay';
 export type { LaunchBounds } from './AppLaunchOverlay';
+export { GlassSurface } from './GlassSurface';
+export type { GlassSurfaceProps } from './GlassSurface';

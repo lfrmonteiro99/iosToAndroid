@@ -628,3 +628,15 @@ export function addNotificationRemovedListener(
   });
   return () => sub.remove();
 }
+
+/**
+ * Subscribe to Android re-delivering the HOME intent (onNewIntent, fired only
+ * for CATEGORY_HOME — see MainActivity's override injected by
+ * plugins/withLauncherIntent.js) while the launcher is already in the
+ * foreground.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addHomePressedListener(listener: () => void): () => void {
+  const sub = addModuleListener('onHomePressed', listener);
+  return () => sub.remove();
+}

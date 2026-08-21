@@ -9,7 +9,7 @@ import {
   Share,
   Linking,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -96,10 +96,9 @@ export function CupertinoShareSheet({ visible, onClose, title, url, text }: Cupe
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
-          <BlurView
+          <GlassSurface
             intensity={85}
             tint={dark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
           />
 

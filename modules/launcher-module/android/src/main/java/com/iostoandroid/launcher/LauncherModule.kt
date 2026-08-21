@@ -47,7 +47,8 @@ class LauncherModule : Module() {
 @Volatile private var instance: LauncherModule? = null
 
         /**
-         * Called by [NotificationService] to forward notification events to JavaScript.
+         * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
+         * by plugins/withLauncherIntent.js) to forward events to JavaScript.
          * Uses Expo's built-in event emitter — declared via Events(...) in the definition.
          */
         fun emitEvent(name: String, bundle: Bundle) {
@@ -65,7 +66,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule

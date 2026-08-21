@@ -12,7 +12,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
@@ -397,16 +397,15 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
           accessibilityRole="button"
           accessibilityHint="Tap to open the menu. Drag to reposition. Long-press to hide."
         >
-          <BlurView
+          <GlassSurface
             intensity={55}
             tint={isDark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
             style={[styles.buttonBlur, { borderRadius: size / 2 }]}
           >
             <View style={[styles.buttonInner, { backgroundColor: isDark ? 'rgba(40,40,44,0.55)' : 'rgba(255,255,255,0.55)' }]}>
               <View style={[styles.buttonDot, { backgroundColor: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.65)' }]} />
             </View>
-          </BlurView>
+          </GlassSurface>
         </Animated.View>
       </GestureDetector>
     </>
@@ -445,10 +444,9 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
 
   return (
     <Animated.View style={[styles.menu, anchorStyle]}>
-      <BlurView
+      <GlassSurface
         intensity={70}
         tint={isDark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezisBlurView"
         style={styles.menuBlur}
       >
         <View style={styles.menuGrid}>
@@ -467,7 +465,7 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
             </Pressable>
           ))}
         </View>
-      </BlurView>
+      </GlassSurface>
     </Animated.View>
   );
 }

@@ -2,6 +2,13 @@ import React from 'react';
 import { render } from '../../test-utils';
 import { CupertinoNavigationBar } from '../CupertinoNavigationBar';
 import Animated from 'react-native-reanimated';
+import { useSettings } from '../../store/SettingsStore';
+
+function SetReduceTransparency({ value }: { value: boolean }) {
+  const { update } = useSettings();
+  React.useEffect(() => { update('reduceTransparency', value); }, [update, value]);
+  return null;
+}
 
 describe('CupertinoNavigationBar', () => {
   it('renders static version without children', () => {
@@ -9,6 +16,25 @@ describe('CupertinoNavigationBar', () => {
       <CupertinoNavigationBar title="Test Title" largeTitle={false} />,
     );
     expect(getByText('Test Title')).toBeTruthy();
+  });
+
+  // Issue #506: the nav bar's blur is one of the 27 real BlurView call sites
+  // migrated to GlassSurface — proves the "Reduce Transparency" switch actually
+  // reaches this component's rendered tree, not just the isolated GlassSurface unit.
+  it('mounts a real BlurView by default, and zero when reduceTransparency is on', () => {
+    const off = render(
+      <CupertinoNavigationBar title="Test Title" largeTitle={false} />,
+    );
+    expect(off.UNSAFE_queryAllByType('BlurView' as never)).toHaveLength(1);
+
+    const on = render(
+      <>
+        <SetReduceTransparency value={true} />
+        <CupertinoNavigationBar title="Test Title" largeTitle={false} />
+      </>,
+    );
+    expect(on.UNSAFE_queryAllByType('BlurView' as never)).toHaveLength(0);
+    expect(on.getByText('Test Title')).toBeTruthy();
   });
 
   it('renders scrollable version with children', () => {

@@ -7,6 +7,7 @@ import {
   PARALLAX_OVERHANG,
   BUILT_IN_APP_ANDROID_ALIASES,
   BUILT_IN_DUPLICATE_PACKAGES,
+  resolveHomePressAction,
 } from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
@@ -439,5 +440,38 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
     expect(getByText('Categories')).toBeTruthy();
     fireEvent.changeText(getByPlaceholderText('App Library'), 'zzz-no-such-app');
     expect(queryByText('Categories')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #508: HOME re-delivers the intent via onNewIntent (singleTask launchMode),
+// but nothing consumed it — the button was dead whenever the launcher was
+// already in the foreground (folder open, App Library page, page 3, ...).
+// resolveHomePressAction is the pure decision table behind the fix: given
+// what's open, what should HOME do. Kept pure and exported so every starting
+// state is asserted directly, without mounting the screen or a real ScrollView.
+// ---------------------------------------------------------------------------
+describe('resolveHomePressAction (#508)', () => {
+  it('closes the folder when a folder is open and already on the first page', () => {
+    expect(resolveHomePressAction({ isFolderOpen: true, isOnFirstPage: true })).toBe('closeFolder');
+  });
+
+  it('scrolls to the first page when no folder is open and not on the first page', () => {
+    expect(resolveHomePressAction({ isFolderOpen: false, isOnFirstPage: false })).toBe('scrollToFirstPage');
+  });
+
+  it('both closes the folder and scrolls to the first page when a folder is open on a page other than the first', () => {
+    expect(resolveHomePressAction({ isFolderOpen: true, isOnFirstPage: false })).toBe('closeFolderAndScrollToFirstPage');
+  });
+
+  it('does nothing when already on the first page with no folder open (must not flicker)', () => {
+    expect(resolveHomePressAction({ isFolderOpen: false, isOnFirstPage: true })).toBe('none');
+  });
+
+  // The App Library is the last page of the same pager (#434), not a
+  // separate overlay — from this function's point of view it's just
+  // isOnFirstPage: false, identical to being on any other non-first page.
+  it('treats being on the App Library page the same as any other non-first page', () => {
+    expect(resolveHomePressAction({ isFolderOpen: false, isOnFirstPage: false })).toBe('scrollToFirstPage');
   });
 });
