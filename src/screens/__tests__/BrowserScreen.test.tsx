@@ -107,6 +107,47 @@ describe('BrowserScreen — empty submit is inert (the inverse of the fix)', () 
   });
 });
 
+describe('BrowserScreen — Share', () => {
+  it('does not show the share sheet before the Share button is pressed', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.queryByLabelText('Copy')).toBeNull();
+  });
+
+  it('pressing Share opens the CupertinoShareSheet', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Share'));
+    expect(utils.getByLabelText('Copy')).toBeTruthy();
+  });
+
+  it('the share sheet receives the current URL and page title as props', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const webview = utils.getByTestId('browser-webview');
+    fireEvent(webview, 'navigationStateChange', { title: 'Example Domain', url: BROWSER_HOME_URL });
+    fireEvent.press(utils.getByLabelText('Share'));
+    expect(utils.getByText('Example Domain')).toBeTruthy();
+    expect(utils.getByText(BROWSER_HOME_URL)).toBeTruthy();
+  });
+
+  it('reflects a navigated URL and title in the share sheet, not the stale home ones', () => {
+    const utils = submitAddress('example.com');
+    const webview = utils.getByTestId('browser-webview');
+    fireEvent(webview, 'navigationStateChange', { title: 'Example', url: 'https://example.com' });
+    fireEvent.press(utils.getByLabelText('Share'));
+    expect(utils.getByText('Example')).toBeTruthy();
+    expect(utils.getByText('https://example.com')).toBeTruthy();
+    expect(utils.queryByText(BROWSER_HOME_URL)).toBeNull();
+  });
+
+  it('closing the share sheet dismisses it without changing the WebView URL', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Share'));
+    expect(utils.getByLabelText('Cancel')).toBeTruthy();
+    fireEvent.press(utils.getByLabelText('Cancel'));
+    expect(utils.queryByLabelText('Copy')).toBeNull();
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+});
+
 describe('home-screen registration', () => {
   it('registers the browser package in both maps', () => {
     expect(BUILT_IN_APPS['com.iostoandroid.browser']).toBe('Browser');

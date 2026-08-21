@@ -7,7 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
@@ -15,6 +15,7 @@ import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { Typography } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
+import { CupertinoShareSheet } from '../components/CupertinoShareSheet';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -60,8 +61,10 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
 
   const [inputUrl, setInputUrl] = useState(BROWSER_HOME_URL);
   const [currentUrl, setCurrentUrl] = useState(BROWSER_HOME_URL);
+  const [pageTitle, setPageTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showShareSheet, setShowShareSheet] = useState(false);
   const webviewRef = useRef<WebView>(null);
 
   const handleSubmit = useCallback(() => {
@@ -77,6 +80,15 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
 
   const handleReload = useCallback(() => {
     webviewRef.current?.reload();
+  }, []);
+
+  const handleShare = useCallback(() => {
+    hapticImpact();
+    setShowShareSheet(true);
+  }, []);
+
+  const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
+    setPageTitle(navState.title);
   }, []);
 
   return (
@@ -120,6 +132,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         >
           <Ionicons name="refresh" size={22} color={BROWSER_ACCENT} />
         </Pressable>
+        <Pressable
+          onPress={handleShare}
+          hitSlop={8}
+          accessibilityLabel="Share"
+          accessibilityRole="button"
+        >
+          <Ionicons name="share-outline" size={22} color={BROWSER_ACCENT} />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -145,8 +165,16 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           setLoading(false);
           setProgress(1);
         }}
+        onNavigationStateChange={handleNavigationStateChange}
         startInLoadingState
         renderLoading={() => <ActivityIndicator color={BROWSER_ACCENT} />}
+      />
+
+      <CupertinoShareSheet
+        visible={showShareSheet}
+        onClose={() => setShowShareSheet(false)}
+        title={pageTitle}
+        url={currentUrl}
       />
     </View>
   );
