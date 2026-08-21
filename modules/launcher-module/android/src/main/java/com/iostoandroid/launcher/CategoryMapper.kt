@@ -7,6 +7,23 @@ import android.content.pm.ApplicationInfo
  * Used by getInstalledApps to expose app category metadata to JavaScript.
  */
 object CategoryMapper {
+    const val UNDEFINED = "undefined"
+
+    /**
+     * Whether `ApplicationInfo.category` can be READ on this device.
+     *
+     * The field was added in API 26 (O) and this module ships with
+     * `minSdkVersion 24`, so on API 24/25 the field does not exist at runtime and
+     * touching it throws `NoSuchFieldError` — which rejects the whole
+     * `getInstalledApps` promise and leaves the launcher with no apps at all.
+     *
+     * The check lives here, as a pure function of the SDK level, so it can be
+     * unit-tested without an Android runtime. The CALL SITE still has to do the
+     * guarding: the crash happens on field access, so `appInfo.category` must not
+     * be evaluated at all below API 26.
+     */
+    fun isCategoryReadable(sdkInt: Int): Boolean = sdkInt >= 26 // Build.VERSION_CODES.O
+
     fun categoryToString(categoryValue: Int): String {
         return when (categoryValue) {
             ApplicationInfo.CATEGORY_UNDEFINED -> "undefined"

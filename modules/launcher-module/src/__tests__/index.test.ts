@@ -396,24 +396,51 @@ describe('deduplication of launcher entries by packageName', () => {
     expect(errors).toContain('getInstalledApps');
   });
 
-  it('includes the category field as a string in getInstalledApps results', async () => {
-    // Native response includes category as a stable string per ApplicationInfo constant
+  // O teste anterior daqui afirmava que uma categoria devolvida pelo mock chegava
+  // ao consumidor — passava com o codigo de producao revertido, porque so testava
+  // o pass-through do proprio mock. Estes tres testam o que a ponte FAZ.
+
+  it('passa as categorias do nativo intactas, incluindo valores que ainda nao conhece', async () => {
     const mod = bridgeReturning('getInstalledApps', [
-      { name: 'Gaming App', packageName: 'com.example.game', icon: '', isSystem: false, category: 'game' },
-      { name: 'Productivity App', packageName: 'com.example.productivity', icon: '', isSystem: false, category: 'productivity' },
-      { name: 'Unknown App', packageName: 'com.example.unknown', icon: '', isSystem: false, category: 'undefined' },
+      { name: 'Jogo', packageName: 'com.example.game', icon: '', isSystem: false, category: 'game' },
+      // Uma categoria de uma API futura: tem de sobreviver, nao ser coagida.
+      { name: 'Futuro', packageName: 'com.example.future', icon: '', isSystem: false, category: 'wellbeing' },
     ] as Parameters<typeof bridgeReturning>[1]);
 
     const apps = await mod.default.getInstalledApps();
 
-    expect(apps).toHaveLength(3);
-    // Verify each app has a category field
-    expect(apps[0]).toHaveProperty('category');
-    expect(apps[1]).toHaveProperty('category');
-    expect(apps[2]).toHaveProperty('category');
-    // Verify category values match expected constants
-    expect(apps[0].category).toBe('game');
-    expect(apps[1].category).toBe('productivity');
-    expect(apps[2].category).toBe('undefined');
+    expect(apps.map((a) => a.category)).toEqual(['game', 'wellbeing']);
+  });
+
+  it('preenche category com "undefined" quando o nativo nao a manda (API 24/25, ou modulo antigo)', async () => {
+    // Um dispositivo em API 24/25 nao tem ApplicationInfo.category, e um APK com
+    // uma versao anterior deste modulo nativo tambem nao a manda. O campo e
+    // declarado obrigatorio em InstalledApp: sem normalizacao, o consumidor recebe
+    // undefined num campo tipado como string e o TypeScript nao avisa, porque a
+    // fronteira nativa e `any`.
+    const mod = bridgeReturning('getInstalledApps', [
+      { name: 'Sem categoria', packageName: 'com.example.old', icon: '', isSystem: false },
+    ] as unknown as Parameters<typeof bridgeReturning>[1]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps).toHaveLength(1);
+    expect(apps[0].category).toBe('undefined');
+    // E nao inventa nada no resto da entrada.
+    expect(apps[0].packageName).toBe('com.example.old');
+    expect(apps[0].name).toBe('Sem categoria');
+  });
+
+  it('normaliza uma category que nao e string sem descartar a aplicacao', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      { name: 'Numero', packageName: 'com.example.num', icon: '', isSystem: false, category: 3 },
+      { name: 'Nulo', packageName: 'com.example.null', icon: '', isSystem: false, category: null },
+    ] as unknown as Parameters<typeof bridgeReturning>[1]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    // Nenhuma app se perde: uma categoria malformada nao e razao para a esconder.
+    expect(apps).toHaveLength(2);
+    expect(apps.map((a) => a.category)).toEqual(['undefined', 'undefined']);
   });
 });

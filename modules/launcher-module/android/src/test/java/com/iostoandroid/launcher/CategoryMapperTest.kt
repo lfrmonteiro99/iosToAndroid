@@ -36,6 +36,20 @@ class CategoryMapperTest {
     }
 
     @Test
+    fun `isCategoryReadable is false below API 26, where the field does not exist`() {
+        // minSdkVersion 24: estes dois SAO dispositivos suportados por este modulo.
+        assertEquals(false, CategoryMapper.isCategoryReadable(24))
+        assertEquals(false, CategoryMapper.isCategoryReadable(25))
+    }
+
+    @Test
+    fun `isCategoryReadable is true from API 26 up`() {
+        assertEquals(true, CategoryMapper.isCategoryReadable(26)) // O — fronteira
+        assertEquals(true, CategoryMapper.isCategoryReadable(31))
+        assertEquals(true, CategoryMapper.isCategoryReadable(35))
+    }
+
+    @Test
     fun `handles negative values gracefully`() {
         // Only CATEGORY_UNDEFINED is -1; others should map to "undefined"
         assertEquals("undefined", CategoryMapper.categoryToString(-2))
