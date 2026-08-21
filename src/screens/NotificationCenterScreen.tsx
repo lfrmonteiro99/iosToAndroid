@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { Glass } from '../theme/CupertinoTheme';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
 import { useAlert } from '../components';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
@@ -26,7 +27,14 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null;
+    // Dynamic import is unavailable in some environments (e.g. Jest's VM);
+    // fall back to a synchronous require so the module stays reachable there.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src').default;
+    } catch {
+      return null; // Expected: module unavailable on non-Android
+    }
   }
 };
 
@@ -324,7 +332,7 @@ export function NotificationCenterScreen() {
                             accessibilityLabel={`${notif.title || group.appName} notification from ${group.appName}`}
                             accessibilityRole="button"
                           >
-                            <BlurView intensity={50} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.notifCard}>
+                            <View style={styles.notifCard}>
                               <View style={styles.notifCardHeader}>
                                 <View style={styles.notifTitleRow}>
                                   {!isRead && <View style={styles.unreadDot} />}
@@ -421,7 +429,7 @@ export function NotificationCenterScreen() {
                                   </View>
                                 </View>
                               )}
-                            </BlurView>
+                            </View>
                           </Pressable>
                         </CupertinoSwipeableRow>
                       );
@@ -521,6 +529,8 @@ export const styles = StyleSheet.create({
     padding: 12,
     overflow: 'hidden',
     backgroundColor: 'rgba(32,32,36,0.92)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Glass.dark.hairline,
   },
   notifCardHeader: {
     flexDirection: 'row',
