@@ -53,7 +53,7 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
-import { zones, gestureConfig } from '../utils/gestureConfig';
+import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
@@ -271,7 +271,6 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress}
-      android_ripple={isJiggling ? null : { color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${app.name}`}
       accessibilityRole="button"
     >
@@ -393,10 +392,9 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
 
   return (
     <Pressable
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
     >
@@ -699,11 +697,16 @@ export function LauncherHomeScreen() {
         const { vy } = sampledVelocity(spotlightBuf.value, spotlightT.value);
         const p = Math.min(1, Math.max(0, spotlightProgress.value));
         const reason = commitForSpotlight({ progress: p, velocity: vy, holdMs: 0 });
+        // spotlightProgress is normalized over spotlightCommitDp; convert the
+        // dp/ms sample velocity to progress-units/sec.
+        const progressVelocity = dpPerMsToPtPerSec(vy) / gestureConfig.spotlightCommitDp;
         if (reason !== 'none') {
-          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value);
+          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value, progressVelocity);
           runOnJS(navigateTo)('SpotlightSearch');
           return;
         }
+        spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value, progressVelocity);
+        return;
       }
 
       spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
@@ -1117,9 +1120,8 @@ export function LauncherHomeScreen() {
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
           <Pressable
-            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
+            style={({ pressed }) => [styles.defaultBannerButton, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
             onPress={openLauncherSettings}
-            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >

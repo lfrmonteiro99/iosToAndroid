@@ -1,6 +1,29 @@
 import React from 'react';
-import { render } from '../../test-utils';
+import { render, waitFor } from '../../test-utils';
 import { NotificationCenterScreen, styles } from '../NotificationCenterScreen';
+import launcherModule from '../../../modules/launcher-module/src';
+
+interface MockNotif {
+  id: string;
+  key: string;
+  packageName: string;
+  title: string;
+  text: string;
+  time: number;
+  isOngoing: boolean;
+}
+
+function makeNotifs(count: number): MockNotif[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `n${i}`,
+    key: `n${i}`,
+    packageName: `com.app${i}`,
+    title: `Title ${i}`,
+    text: `Body ${i}`,
+    time: Date.now(),
+    isOngoing: false,
+  }));
+}
 
 // -- Contrast helpers (WCAG 2.1) applied to the screen's REAL style values --
 function parseColor(color: string) {
@@ -133,5 +156,47 @@ describe('NotificationCenterScreen', () => {
         }
       },
     );
+  });
+
+  // Issue #504: one real BlurView per notification card, mounted inside the
+  // .map() of visibleNotifs, blew past the §5 ceiling of 2 real blur surfaces
+  // (~13 with 10 notifications). Cards must render as solid glass surfaces;
+  // only the screen backdrop / dock are allowed a real blur.
+  describe('blur surface budget (issue #504)', () => {
+    afterEach(() => {
+      // Restore launcher-module defaults so unrelated tests in this file keep
+      // the denied-access default (hasAccess=false, empty notification list).
+      (launcherModule.isNotificationAccessGranted as jest.Mock).mockResolvedValue(false);
+      (launcherModule.getNotifications as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('mounts zero real BlurView surfaces for notification cards, even with 12 notifications', async () => {
+      (launcherModule.isNotificationAccessGranted as jest.Mock).mockResolvedValue(true);
+      (launcherModule.getNotifications as jest.Mock).mockResolvedValue(makeNotifs(12));
+
+      const { getByText, UNSAFE_queryAllByType } = render(<NotificationCenterScreen />);
+      await waitFor(() => expect(getByText('Title 0')).toBeTruthy());
+      // Sanity: all 12 cards actually mounted (otherwise a 0-count would be vacuous).
+      expect(getByText('Title 11')).toBeTruthy();
+
+      expect(UNSAFE_queryAllByType('BlurView' as never)).toHaveLength(0);
+    });
+
+    it('keeps a single notification card solid (no BlurView) when there is exactly one', async () => {
+      (launcherModule.isNotificationAccessGranted as jest.Mock).mockResolvedValue(true);
+      (launcherModule.getNotifications as jest.Mock).mockResolvedValue(makeNotifs(1));
+
+      const { getByText, UNSAFE_queryAllByType } = render(<NotificationCenterScreen />);
+      await waitFor(() => expect(getByText('Title 0')).toBeTruthy());
+
+      expect(UNSAFE_queryAllByType('BlurView' as never)).toHaveLength(0);
+    });
+
+    it('gives the notification card a material top hairline border in place of the removed blur', () => {
+      expect(styles.notifCard.borderTopWidth).toBeGreaterThan(0);
+      expect(styles.notifCard.borderTopColor).toBeTruthy();
+      // Border must not be the same as the fill — otherwise it's invisible, defeating the point.
+      expect(styles.notifCard.borderTopColor).not.toBe(styles.notifCard.backgroundColor);
+    });
   });
 });

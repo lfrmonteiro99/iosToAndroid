@@ -22,7 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { GestureHaptics } from '../utils/gestureHaptics';
 
@@ -125,9 +125,8 @@ function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCard
   if (onPress) {
     return (
       <Pressable
-        style={[styles.widgetCard, style]}
+        style={({ pressed }) => [styles.widgetCard, style, pressed && { opacity: 0.7 }]}
         onPress={onPress}
-        android_ripple={{ color: 'rgba(255,255,255,0.1)', borderless: false }}
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
       >
@@ -645,12 +644,15 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
         (absX >= gestureConfig.quickSwitchHybridDistanceDp &&
           absVx >= gestureConfig.quickSwitchHybridVelocity);
 
+      // translateX is a literal dp offset — vx is already dp/ms, convert to dp/sec.
+      const translateXVelocity = dpPerMsToPtPerSec(vx);
+
       if (shouldCommit && e.translationX < 0) {
         runOnJS(GestureHaptics.commit)('light');
-        translateX.value = withSpring(-400, gestureConfig.spring.mediumSettle);
+        translateX.value = withSpring(-400, { ...gestureConfig.spring.mediumSettle, velocity: translateXVelocity });
         opacity.value = withTiming(0, { duration: 250 }, () => runOnJS(handleClose)());
       } else {
-        translateX.value = withSpring(0, gestureConfig.spring.fastSettle);
+        translateX.value = withSpring(0, { ...gestureConfig.spring.fastSettle, velocity: translateXVelocity });
         opacity.value = withTiming(1, { duration: 200 });
       }
     });

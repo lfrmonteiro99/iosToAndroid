@@ -48,6 +48,8 @@ describe('app icons from the native bridge', () => {
       'utf8'
     );
     // The comment is the only thing standing between the next reader and this bug.
-    expect(bridge).toMatch(/COMPLETE data URI/);
+    // getInstalledApps() moved to a cached file:// URI (issue #483) while getAppIcon()
+    // still returns a data: URI — both are covered by the same "COMPLETE URI" contract.
+    expect(bridge).toMatch(/COMPLETE URI/);
   });
 });
