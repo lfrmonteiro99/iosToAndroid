@@ -45,14 +45,14 @@ export function squirclePathRect(
   const points: Array<{ x: number; y: number }> = [];
 
   // Top-left corner arc: from (r, 0) to (0, r)
-  const topLeftArc = generateCornerArc(r, r, Math.PI, 1.5 * Math.PI, n, segments);
+  const topLeftArc = generateCornerArc(r, r, 1.5 * Math.PI, Math.PI, r, n, segments);
   points.push(...topLeftArc);
 
   // Top edge: from (r, 0) to (w - r, 0)
   points.push({ x: w - r, y: 0 });
 
   // Top-right corner arc: from (w - r, 0) to (w, r)
-  const topRightArc = generateCornerArc(w - r, r, 1.5 * Math.PI, 2 * Math.PI, n, segments);
+  const topRightArc = generateCornerArc(w - r, r, 0, 0.5 * Math.PI, r, n, segments);
   points.push(...topRightArc);
 
   // Right edge: from (w, r) to (w, h - r)
@@ -62,8 +62,9 @@ export function squirclePathRect(
   const bottomRightArc = generateCornerArc(
     w - r,
     h - r,
-    0,
     0.5 * Math.PI,
+    Math.PI,
+    r,
     n,
     segments,
   );
@@ -73,7 +74,7 @@ export function squirclePathRect(
   points.push({ x: r, y: h });
 
   // Bottom-left corner arc: from (r, h) to (0, h - r)
-  const bottomLeftArc = generateCornerArc(r, h - r, 0.5 * Math.PI, Math.PI, n, segments);
+  const bottomLeftArc = generateCornerArc(r, h - r, Math.PI, 1.5 * Math.PI, r, n, segments);
   points.push(...bottomLeftArc);
 
   // Left edge: from (0, h - r) to (0, r)
@@ -85,12 +86,20 @@ export function squirclePathRect(
 /**
  * Generate a superellipse arc for a corner.
  * Returns points along the arc from startAngle to endAngle.
+ * @param centerX X coordinate of corner center
+ * @param centerY Y coordinate of corner center
+ * @param startAngle Start angle in radians
+ * @param endAngle End angle in radians
+ * @param r Radius to scale the arc
+ * @param n Superellipse exponent
+ * @param segments Number of segments for the entire shape
  */
 function generateCornerArc(
   centerX: number,
   centerY: number,
   startAngle: number,
   endAngle: number,
+  r: number,
   n: number,
   segments: number,
 ): Array<{ x: number; y: number }> {
@@ -106,8 +115,8 @@ function generateCornerArc(
     const sy = signedPow(Math.sin(angle), 2 / n);
 
     // Scale by radius and translate to corner center
-    const x = centerX + sx;
-    const y = centerY + sy;
+    const x = centerX + r * sx;
+    const y = centerY + r * sy;
 
     points.push({ x, y });
   }

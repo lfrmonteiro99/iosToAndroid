@@ -139,6 +139,73 @@ describe('squircle geometry', () => {
       expect(maxX).toBeCloseTo(w, 1);
       expect(maxY).toBeCloseTo(h, 1);
     });
+
+    it('corner arcs scale proportionally with radius', () => {
+      const w = 200;
+      const h = 200;
+      const smallRadius = 5;
+      const largeRadius = 50;
+
+      const pathSmall = squirclePathRect(w, h, smallRadius);
+      const pathLarge = squirclePathRect(w, h, largeRadius);
+
+      const pointsSmall = parsePathPoints(pathSmall);
+      const pointsLarge = parsePathPoints(pathLarge);
+
+      // For small radius, corner arcs should be tight (all points close to corner center)
+      // For large radius, corner arcs should extend farther
+
+      // Top-left corner center is at (smallRadius, smallRadius) or (largeRadius, largeRadius)
+      const distancesSmall = pointsSmall
+        .filter(p => p.x < w / 2 && p.y < h / 2) // Top-left quadrant
+        .map(p => Math.sqrt(Math.pow(p.x - smallRadius, 2) + Math.pow(p.y - smallRadius, 2)));
+
+      const distancesLarge = pointsLarge
+        .filter(p => p.x < w / 2 && p.y < h / 2) // Top-left quadrant
+        .map(p => Math.sqrt(Math.pow(p.x - largeRadius, 2) + Math.pow(p.y - largeRadius, 2)));
+
+      const maxDistSmall = Math.max(...distancesSmall);
+      const maxDistLarge = Math.max(...distancesLarge);
+
+      // The ratio of max distances should be approximately the same as the ratio of radii
+      // (allowing some tolerance for discretization)
+      const radiusRatio = largeRadius / smallRadius;
+      const distanceRatio = maxDistLarge / maxDistSmall;
+
+      expect(distanceRatio).toBeCloseTo(radiusRatio, 1);
+    });
+
+    it('corner arcs link smoothly to straight edges', () => {
+      const w = 200;
+      const h = 200;
+      const radius = 20;
+      const path = squirclePathRect(w, h, radius);
+      const points = parsePathPoints(path);
+
+      // Verify path starts at (radius, 0) — top edge meets top-left arc
+      expect(points[0].x).toBeCloseTo(radius, 0);
+      expect(points[0].y).toBeCloseTo(0, 0);
+
+      // Verify there's a point near (0, radius) — top-left arc meets left edge
+      const hasCornerPoint = points.some(p => Math.abs(p.x) < 1 && Math.abs(p.y - radius) < 1);
+      expect(hasCornerPoint).toBe(true);
+
+      // Verify there's a point near (w - radius, 0) — should be before top-right arc
+      const hasTopRightStart = points.some(p => Math.abs(p.x - (w - radius)) < 1 && Math.abs(p.y) < 1);
+      expect(hasTopRightStart).toBe(true);
+
+      // Verify there's a point near (w, radius) — top-right arc meets right edge
+      const hasTopRightEnd = points.some(p => Math.abs(p.x - w) < 1 && Math.abs(p.y - radius) < 1);
+      expect(hasTopRightEnd).toBe(true);
+
+      // Verify all points stay within bounds
+      points.forEach(p => {
+        expect(p.x).toBeGreaterThanOrEqual(0);
+        expect(p.x).toBeLessThanOrEqual(w);
+        expect(p.y).toBeGreaterThanOrEqual(0);
+        expect(p.y).toBeLessThanOrEqual(h);
+      });
+    });
   });
 
   describe('area approximation', () => {
