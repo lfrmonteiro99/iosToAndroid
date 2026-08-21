@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
   CupertinoSearchBar,
@@ -23,7 +23,6 @@ import {
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -71,7 +70,7 @@ interface QuickActionProps {
   label: string;
   onPress: () => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 const QuickAction = React.memo(function QuickAction({
@@ -116,7 +115,7 @@ interface RecentRowProps {
   onDelete: () => void;
   onToggleFavorite: () => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 const RecentRow = React.memo(function RecentRow({

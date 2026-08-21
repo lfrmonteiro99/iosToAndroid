@@ -61,6 +61,7 @@ export interface SettingsState {
   automaticUpdates: boolean;
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
+  fontChoice: 'inter' | 'system';
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -118,6 +119,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   automaticUpdates: true,
   updateAvailable: false,
   scheduledSummaryIdx: 0,
+  fontChoice: 'inter',
 };
 
 interface SettingsContextValue {

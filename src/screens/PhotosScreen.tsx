@@ -20,11 +20,10 @@ import * as MediaLibrary from 'expo-media-library';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { CupertinoNavigationBar, CupertinoSegmentedControl, useAlert, CupertinoSkeleton } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 2;
@@ -697,7 +696,7 @@ export function PhotosScreen({ navigation }: { navigation: AppNavigationProp }) 
 interface MemoriesSectionProps {
   onSelectMemory: (memory: { title: string }) => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 function MemoriesSection({ onSelectMemory, colors, typography }: MemoriesSectionProps) {
@@ -731,7 +730,7 @@ interface ForYouTabProps {
   assets: MediaLibrary.Asset[];
   loading: boolean;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   insets: { bottom: number };
   onSelectAsset: (assets: MediaLibrary.Asset[], index: number) => void;
 }
@@ -816,7 +815,7 @@ interface MemorySectionProps {
   title: string;
   assets: MediaLibrary.Asset[];
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   onSelectAsset: (assets: MediaLibrary.Asset[], index: number) => void;
 }
 
@@ -859,7 +858,7 @@ interface AlbumsTabProps {
   albumCovers: Record<string, string>;
   loading: boolean;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   insets: { bottom: number };
   showCreateAlbum: boolean;
   newAlbumName: string;
