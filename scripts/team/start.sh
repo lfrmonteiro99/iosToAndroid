@@ -162,7 +162,7 @@ log "a arrancar em tmux '$SESSION'; log: $LOGFILE"
 # única linha de aviso — exactamente o modo de falha que este bloco existe para
 # evitar. Qualquer variável nova de paralelismo entra aqui.
 TEAM_ENV=""
-for v in TEAM_HERMES TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
+for v in TEAM_HERMES TEAM_HERMES_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
          TEAM_IMPLEMENTERS TEAM_IMPL_ENGINES TEAM_REVIEWERS \
          TEAM_AGENT_MEM_MB TEAM_MEM_FLOOR_MB TEAM_AGENT_WARMUP_S TEAM_JEST_WORKERS \
          TEAM_CYCLE_SLEEP; do

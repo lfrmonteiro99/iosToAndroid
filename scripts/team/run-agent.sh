@@ -251,18 +251,21 @@ EOF
 # produzir veredicto — o mesmo modo de falha que o `< /dev/null` do ollama
 # resolveu. Não há --allowedTools equivalente; o isolamento vem do worktree.
 if [ "${AGENT_ENGINE:-}" = "hermes" ]; then
-  if ! command -v hermes >/dev/null 2>&1; then
-    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas o hermes não está no PATH" >&2
+  # Pelo caminho, não pelo PATH: ver hermes_bin em lib.sh. O PATH do servidor
+  # tmux não tem de incluir ~/.local/bin, e a versão anterior lia essa ausência
+  # como "não está instalado".
+  HERMES_BIN=$(hermes_bin) || {
+    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas não encontrei o binário do hermes" >&2
     exit 1
-  fi
+  }
   HERMES_MODEL="${HERMES_MODEL:-${AGENT_HERMES_MODEL:-}}"
   USED="hermes/${HERMES_MODEL:-default}"
   if [ -n "$HERMES_MODEL" ]; then
     run_harness "hermes" "$HERMES_MODEL" \
-      hermes -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
+      "$HERMES_BIN" -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
   else
     run_harness "hermes" "default" \
-      hermes -z "$PROMPT" --yolo --cli
+      "$HERMES_BIN" -z "$PROMPT" --yolo --cli
   fi
   RC=$?
   echo "$USED" > "$LOCK_PREFIX.$AGENT_SLOT.engine" 2>/dev/null || true

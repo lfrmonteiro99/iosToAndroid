@@ -446,6 +446,33 @@ mem_status() {
     "$TEAM_AGENT_MEM_MB" "$(inflight_young_count)"
 }
 
+# ── Onde está o hermes ─────────────────────────────────────────────────────
+#
+# `command -v hermes` NÃO SERVE, e a resposta errada é silenciosa: o binário está
+# em `~/.local/bin`, que entra no PATH pelo profile do utilizador — e o servidor
+# tmux onde a pipeline corre pode ter sido arrancado sem ele. O código dizia
+# então "o hermes não está no PATH", punha tudo em claude, e ficava assim durante
+# horas sem que nada parecesse avariado.
+#
+# Resolvido por caminho: PATH primeiro (se lá estiver, é o que o utilizador quer),
+# e depois os sítios onde de facto está instalado.
+TEAM_HERMES_BIN="${TEAM_HERMES_BIN:-}"
+
+hermes_bin() {
+  if [ -n "$TEAM_HERMES_BIN" ]; then
+    [ -x "$TEAM_HERMES_BIN" ] || return 1
+    echo "$TEAM_HERMES_BIN"; return 0
+  fi
+  local p
+  p=$(command -v hermes 2>/dev/null) && { echo "$p"; return 0; }
+  for p in "$HOME/.local/bin/hermes" "$HOME/bin/hermes" /usr/local/bin/hermes; do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+hermes_available() { hermes_bin >/dev/null 2>&1; }
+
 # Workers de jest por agente. Com N agentes em paralelo o default do jest
 # (cores-1) é o caminho mais curto para o OOM — ver o comentário do orçamento.
 TEAM_JEST_WORKERS="${TEAM_JEST_WORKERS:-2}"

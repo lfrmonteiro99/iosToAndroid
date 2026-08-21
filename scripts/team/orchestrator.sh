@@ -106,14 +106,40 @@ build_impl_roster() {
   for (( i=0; i<TEAM_IMPLEMENTERS; i++ )); do
     e="${raw[$(( i % ${#raw[@]} ))]}"
     e="${e// /}"
-    if [ "$e" = "hermes" ] && ! command -v hermes >/dev/null 2>&1; then
-      [ "$warned_hermes" = "0" ] && { log "hermes pedido mas não está no PATH — esses slots vão de claude"; warned_hermes=1; }
+    if [ "$e" = "hermes" ] && ! hermes_available; then
+      [ "$warned_hermes" = "0" ] && { log "hermes pedido mas não encontrei o binário — esses slots vão de claude"; warned_hermes=1; }
       e="claude"
     fi
     [ -n "$e" ] || e="claude"
     IMPL_ENGINES+=("$e")
   done
   log "slots de implementação: $TEAM_IMPLEMENTERS (${IMPL_ENGINES[*]}), tecto real = memória"
+  hermes_available && log "hermes disponível ($(hermes_bin)) — assume os slots enquanto a subscrição Claude estiver esgotada"
+}
+
+# ── Motor de AGORA, não motor de arranque ──────────────────────────────────
+#
+# O roster diz a preferência; isto diz o que corre neste instante. Enquanto a
+# subscrição Claude está esgotada, TODOS os slots vão de hermes — é um motor com
+# quota própria e o único que continua a produzir. Quando o cooldown expira, a
+# mesma função volta a devolver claude e o ciclo seguinte já arranca em claude,
+# sem intervenção.
+#
+# Porque não simplesmente deixar cair no fallback Ollama: o fallback é um DEGRAU
+# de degradação (modelo mais fraco, sem visão), o hermes é um par. Medido no
+# 2026-08-19: 47 corridas contra uma quota Ollama semanal esgotada, todas a zero.
+# Preferir o hermes quando ele existe é preferir um motor que ainda tem quota.
+impl_engine_now() {
+  local want="$1"
+  if [ "$want" = "hermes" ]; then
+    hermes_available && echo hermes || echo claude
+    return 0
+  fi
+  if [ "$(cooldown_remaining)" -gt 0 ] && hermes_available; then
+    echo hermes
+  else
+    echo claude
+  fi
 }
 
 # ── Issue queries ──────────────────────────────────────────────────────────
@@ -685,7 +711,7 @@ launch_implementers_if_needed() {
 
   for (( n=1; n<=TEAM_IMPLEMENTERS; n++ )); do
     slot="impl$n"
-    engine="${IMPL_ENGINES[$((n-1))]:-claude}"
+    engine=$(impl_engine_now "${IMPL_ENGINES[$((n-1))]:-claude}")
 
     # Ocupado: ou tem um role vivo registado, ou o lock do run-agent está tomado.
     # As duas guardas, pela mesma razão que o inflight existe.
@@ -791,7 +817,15 @@ while true; do
   #
   # Sleep to the reset instead, in chunks, so the pipeline picks straight back up
   # and a `--stop` still lands promptly.
-  if [ "${TEAM_USE_FALLBACK:-1}" != "1" ] || fallback_exhausted; then
+  #
+  # COM HERMES, NÃO SE DORME.
+  #
+  # Este bloco existe para não gastar um ciclo a redescobrir que a quota acabou.
+  # Mas dormir também desliga o hermes, que tem quota PRÓPRIA e é exactamente o
+  # motor que devia assumir aqui — a pipeline parava horas com um motor livre
+  # ao lado. Com hermes disponível o ciclo segue: o impl_engine_now põe todos os
+  # slots em hermes até a subscrição voltar.
+  if { [ "${TEAM_USE_FALLBACK:-1}" != "1" ] || fallback_exhausted; } && ! hermes_available; then
     REMAIN=$(cooldown_remaining)
     if [ "$REMAIN" -gt 0 ]; then
       fallback_exhausted && log "o fallback tambem esta sem quota (Ollama Cloud, ~$(( $(fallback_cooldown_remaining) / 60 ))min)"
@@ -812,6 +846,10 @@ while true; do
     log "a aguardar ${CYCLE_SLEEP}s..."
     sleep "$CYCLE_SLEEP"
     continue
+  fi
+
+  if [ "$(cooldown_remaining)" -gt 0 ] && hermes_available; then
+    log "subscrição Claude esgotada (volta às $(date -d "@$(( $(date +%s) + $(cooldown_remaining) ))" +%H:%M)) — implementadores em HERMES até lá"
   fi
 
   rescue_stuck_wip
