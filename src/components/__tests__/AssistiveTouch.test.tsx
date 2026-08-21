@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { act, render, fireEvent } from '../../test-utils';
-import { AssistiveTouch } from '../AssistiveTouch';
+import { AssistiveTouch, MENU_GEOMETRY } from '../AssistiveTouch';
 import { AssistiveTouchProvider, useAssistiveTouch } from '../../store/AssistiveTouchStore';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
 import type { RootStackParamList } from '../../navigation/types';
@@ -297,5 +297,21 @@ describe('AssistiveTouch acção siri', () => {
     fireEvent.press(getByLabelText('Spotlight'));
     expect(navigationRef.navigate).toHaveBeenCalledWith('SpotlightSearch');
     expect(navigationRef.navigate).not.toHaveBeenCalledWith('Siri');
+  });
+});
+
+describe('AssistiveTouch menu geometry', () => {
+  // The popover clips its overflow, so cells that do not fit the content box
+  // drop menu items out of view instead of wrapping them onto a visible row.
+  const { width, height, padding, gap, columns, cellHeight, maxItems } = MENU_GEOMETRY;
+  const contentW = width - padding * 2;
+  const contentH = height - padding * 2;
+
+  it('fits a full menu inside the popover', () => {
+    const cellW = (contentW - gap * (columns - 1)) / columns;
+    expect(cellW * columns + gap * (columns - 1)).toBeLessThanOrEqual(contentW);
+
+    const rows = Math.ceil(maxItems / columns);
+    expect(rows * cellHeight + gap * (rows - 1)).toBeLessThanOrEqual(contentH);
   });
 });

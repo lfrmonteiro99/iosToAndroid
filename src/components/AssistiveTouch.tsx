@@ -28,6 +28,27 @@ import { IDLE_DIM_MS } from '../utils/gestureConfig';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const SNAP_SPRING = { damping: 18, stiffness: 220 } as const;
 
+/**
+ * Radial-menu popover geometry. Shared by the anchor maths and the grid styles
+ * so the cells provably fit: the popover clips its overflow, so a cell size the
+ * content box cannot hold silently drops menu items instead of wrapping them
+ * into view.
+ */
+export const MENU_GEOMETRY = {
+  width: 240,
+  height: 200,
+  padding: 10,
+  gap: 6,
+  columns: 3,
+  cellHeight: 84,
+  /** Top-level menu capacity, mirrored by the settings screen. */
+  maxItems: 6,
+} as const;
+
+const MENU_CONTENT_W = MENU_GEOMETRY.width - MENU_GEOMETRY.padding * 2;
+const MENU_CELL_W =
+  (MENU_CONTENT_W - MENU_GEOMETRY.gap * (MENU_GEOMETRY.columns - 1)) / MENU_GEOMETRY.columns;
+
 // ─── Menu item catalog ──────────────────────────────────────────────────────
 
 interface MenuItemDef {
@@ -353,9 +374,9 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       // Prepend the override, drop any pre-existing entry with the same id
       const override = CONTEXT_OVERRIDES[currentRoute] as MenuItemDef;
       const filtered = items.filter((m) => m.id !== override.id);
-      return [override, ...filtered].slice(0, 6);
+      return [override, ...filtered].slice(0, MENU_GEOMETRY.maxItems);
     }
-    return items.slice(0, 6);
+    return items.slice(0, MENU_GEOMETRY.maxItems);
   }, [menuItems, contextAwareMenu, currentRoute]);
 
   if (!visible) return null;
@@ -431,8 +452,8 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
     const cx = anchorX.value + buttonSize / 2;
     const cy = anchorY.value + buttonSize / 2;
     const preferLeft = cx > SCREEN_W / 2;
-    const popWidth = 240;
-    const popHeight = 200;
+    const popWidth = MENU_GEOMETRY.width;
+    const popHeight = MENU_GEOMETRY.height;
     const gap = 14;
     const x = preferLeft ? cx - popWidth - gap : cx + gap;
     const y = Math.max(40, Math.min(SCREEN_H - popHeight - 40, cy - popHeight / 2));
@@ -507,24 +528,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 240,
-    height: 200,
+    width: MENU_GEOMETRY.width,
+    height: MENU_GEOMETRY.height,
     borderRadius: 20,
     overflow: 'hidden',
     zIndex: 55,
   },
   menuBlur: {
     flex: 1,
-    padding: 10,
+    padding: MENU_GEOMETRY.padding,
   },
   menuGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: MENU_GEOMETRY.gap,
   },
   menuCell: {
-    width: '32%',
-    height: 88,
+    // Absolute width, not a percentage: at width '32%' three cells plus their
+    // gaps overflowed the 220pt content box, so the grid fell back to two
+    // columns and the popover clipped items 5 and 6 out of view.
+    width: MENU_CELL_W,
+    height: MENU_GEOMETRY.cellHeight,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',

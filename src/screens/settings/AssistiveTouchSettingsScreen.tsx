@@ -10,6 +10,7 @@ import {
   CupertinoSwitch,
   CupertinoSlider,
   useAlert,
+  MENU_GEOMETRY,
 } from '../../components';
 import {
   useAssistiveTouch,
@@ -34,6 +35,9 @@ const ACTION_OPTIONS: { id: AssistiveAction; label: string }[] = [
   { id: 'siri',             label: 'Siri' },
   { id: 'none',             label: 'None' },
 ];
+
+/** Top-level menu capacity — the popover renders exactly this many cells. */
+const MAX_MENU_ITEMS = MENU_GEOMETRY.maxItems;
 
 const ALL_MENU_ITEMS: { id: MenuItemId; label: string }[] = [
   { id: 'home',             label: 'Home' },
@@ -95,6 +99,12 @@ export function AssistiveTouchSettingsScreen({ navigation }: { navigation: AppNa
   );
 
   const addItem = useCallback(() => {
+    // Check the cap before offering a picker: the default menu is already full,
+    // so picking an item there could only ever fail.
+    if (assistive.menuItems.length >= MAX_MENU_ITEMS) {
+      alert('Limit Reached', `A menu can hold at most ${MAX_MENU_ITEMS} items. Remove one first.`);
+      return;
+    }
     const missing = ALL_MENU_ITEMS.filter((i) => !assistive.menuItems.includes(i.id));
     if (missing.length === 0) {
       alert('Menu Full', 'All available items are already in your menu.');
@@ -103,15 +113,9 @@ export function AssistiveTouchSettingsScreen({ navigation }: { navigation: AppNa
     alert(
       'Add to Menu',
       undefined,
-      missing.slice(0, 6).map((item) => ({
+      missing.map((item) => ({
         text: item.label,
-        onPress: () => {
-          if (assistive.menuItems.length >= 6) {
-            alert('Limit Reached', 'A menu can hold at most 6 items. Remove one first.');
-            return;
-          }
-          assistive.update({ menuItems: [...assistive.menuItems, item.id] });
-        },
+        onPress: () => assistive.update({ menuItems: [...assistive.menuItems, item.id] }),
       })),
     );
   }, [assistive, alert]);
