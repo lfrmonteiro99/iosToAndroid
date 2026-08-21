@@ -153,6 +153,9 @@ run_harness() {
   local -a cmd=("$@")
 
   echo "[run-agent] motor=$kind modelo=$model workdir=$WORKDIR timeout=${TIMEOUT_S}s" >&2
+  # Um motor ARRANCOU. É este o evento que faltava para distinguir "1069 despachos"
+  # de "1069 agentes" — hoje foram a primeira coisa e nenhuma da segunda.
+  health_stamp agent-ran
 
   local out_file
   out_file=$(mktemp "/tmp/run-agent-$AGENT_SLOT.XXXXXX.out")
@@ -251,18 +254,21 @@ EOF
 # produzir veredicto — o mesmo modo de falha que o `< /dev/null` do ollama
 # resolveu. Não há --allowedTools equivalente; o isolamento vem do worktree.
 if [ "${AGENT_ENGINE:-}" = "hermes" ]; then
-  if ! command -v hermes >/dev/null 2>&1; then
-    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas o hermes não está no PATH" >&2
+  # Pelo caminho, não pelo PATH: ver hermes_bin em lib.sh. O PATH do servidor
+  # tmux não tem de incluir ~/.local/bin, e a versão anterior lia essa ausência
+  # como "não está instalado".
+  HERMES_BIN=$(hermes_bin) || {
+    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas não encontrei o binário do hermes" >&2
     exit 1
-  fi
+  }
   HERMES_MODEL="${HERMES_MODEL:-${AGENT_HERMES_MODEL:-}}"
   USED="hermes/${HERMES_MODEL:-default}"
   if [ -n "$HERMES_MODEL" ]; then
     run_harness "hermes" "$HERMES_MODEL" \
-      hermes -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
+      "$HERMES_BIN" -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
   else
     run_harness "hermes" "default" \
-      hermes -z "$PROMPT" --yolo --cli
+      "$HERMES_BIN" -z "$PROMPT" --yolo --cli
   fi
   RC=$?
   echo "$USED" > "$LOCK_PREFIX.$AGENT_SLOT.engine" 2>/dev/null || true
@@ -270,10 +276,18 @@ if [ "${AGENT_ENGINE:-}" = "hermes" ]; then
 fi
 
 # ── 1. Subscription (claude CLI) ───────────────────────────────────────────
-if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && command -v claude >/dev/null 2>&1; then
+CLAUDE_BIN=$(claude_bin || true)
+if [ -z "$CLAUDE_BIN" ]; then
+  # RUÍDO DE PROPÓSITO. Esta linha faltar é o que fez uma noite inteira parecer
+  # "os agentes não conseguem" quando na verdade nenhum agente correu.
+  echo "[run-agent] ATENÇÃO: não encontrei o binário do claude (PATH=$PATH). Define TEAM_CLAUDE_BIN." >&2
+  health_bump engine-missing
+fi
+
+if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && [ -n "$CLAUDE_BIN" ]; then
   USED="claude/$CLAUDE_MODEL"
   run_harness "claude" "$CLAUDE_MODEL" \
-    claude -p "$PROMPT" \
+    "$CLAUDE_BIN" -p "$PROMPT" \
       --model "$CLAUDE_MODEL" \
       "${ADD_DIR_ARGS[@]}" \
       --permission-mode acceptEdits \

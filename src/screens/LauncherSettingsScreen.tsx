@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,6 +20,33 @@ import {
   useAlert,
 } from '../components';
 import { logger } from '../utils/logger';
+import {
+  PERF_BUDGETS,
+  getPerfMetrics,
+  isWithinBudget,
+  subscribePerfMetrics,
+  type PerfBudgetKey,
+  type PerfMetrics,
+} from '../utils/perfMetrics';
+
+/**
+ * #517: os números de arranque têm de ser legíveis em runtime, e não podem
+ * viver num `console.log` — o `transform-remove-console` do babel apaga-os
+ * na build de release, que é precisamente a que interessa medir. Por isso são
+ * lidos do registo em memória e mostrados aqui.
+ */
+function usePerfMetrics(): PerfMetrics {
+  const [metrics, setMetrics] = useState<PerfMetrics>(() => getPerfMetrics());
+  useEffect(() => subscribePerfMetrics(setMetrics), []);
+  return metrics;
+}
+
+/** "312 ms (alvo 400 ms)" / "sem medição (alvo 400 ms)" — nunca um 0 inventado. */
+export function formatPerfValue(value: number | null, budget: PerfBudgetKey): string {
+  const target = `alvo ${PERF_BUDGETS[budget]} ms`;
+  if (value === null || !Number.isFinite(value)) return `sem medição (${target})`;
+  return `${Math.round(value)} ms (${target})`;
+}
 
 // Default dock package names — mirrors AppsStore constant
 const DEFAULT_DOCK = [
@@ -209,6 +236,8 @@ export function LauncherSettingsScreen() {
       },
     ]);
   };
+
+  const perf = usePerfMetrics();
 
   const doneButton = (
     <Text
@@ -400,6 +429,53 @@ export function LauncherSettingsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── Diagnostics (#517) ─────────────────────────────────── */}
+      <CupertinoListSection header="Diagnostics">
+        <CupertinoListTile
+          title="Cold Start"
+          leading={{ name: 'speedometer', color: '#fff', backgroundColor: '#FF9500' }}
+          showChevron={false}
+          trailing={
+            <Text
+              accessibilityLabel={`Cold start: ${formatPerfValue(perf.coldStartMs, 'coldStartMs')}`}
+              style={[
+                typography.body,
+                {
+                  color:
+                    isWithinBudget('coldStartMs', perf.coldStartMs) === false
+                      ? colors.systemRed
+                      : colors.secondaryLabel,
+                },
+              ]}
+            >
+              {formatPerfValue(perf.coldStartMs, 'coldStartMs')}
+            </Text>
+          }
+        />
+        <CupertinoListTile
+          title="Warm Start"
+          leading={{ name: 'flash', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron={false}
+          isLast
+          trailing={
+            <Text
+              accessibilityLabel={`Warm start: ${formatPerfValue(perf.warmStartMs, 'warmStartMs')}`}
+              style={[
+                typography.body,
+                {
+                  color:
+                    isWithinBudget('warmStartMs', perf.warmStartMs) === false
+                      ? colors.systemRed
+                      : colors.secondaryLabel,
+                },
+              ]}
+            >
+              {formatPerfValue(perf.warmStartMs, 'warmStartMs')}
+            </Text>
+          }
+        />
+      </CupertinoListSection>
 
       {/* ── About ──────────────────────────────────────────────── */}
       <CupertinoListSection header="About">

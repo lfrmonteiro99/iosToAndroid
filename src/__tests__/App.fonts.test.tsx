@@ -21,6 +21,8 @@ jest.mock('../../modules/launcher-module/src', () => ({
   default: {
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
     isNotificationAccessGranted: jest.fn(() => Promise.resolve(false)),
+    // #517: a instrumentação de cold start chama isto no arranque de App.tsx.
+    getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
     getNotifications: jest.fn(() => Promise.resolve([])),
   },
 }));

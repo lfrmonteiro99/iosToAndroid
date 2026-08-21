@@ -283,11 +283,16 @@ jest.mock('./modules/launcher-module/src', () => ({
   // renders it without a local jest.mock override (test-file jest.mock >
   // setupFiles) needs a callable default here, or the effect throws.
   addHomePressedListener: jest.fn(() => jest.fn()),
+  // AppsProvider subscribes to package install/remove/replace events (#485).
+  addPackageChangedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
     getAppIcon: jest.fn(() => Promise.resolve('')),
+    getAppInfo: jest.fn(() => Promise.resolve(null)),
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
+    // #517: a instrumentação de cold start chama isto no arranque de App.tsx.
+    getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
     openLauncherSettings: jest.fn(() => Promise.resolve(true)),
     getWifiInfo: jest.fn(() => Promise.resolve({ enabled: true, ssid: 'TestWiFi', rssi: -50, ip: '192.168.1.100' })),
     setWifiEnabled: jest.fn(() => Promise.resolve(true)),
