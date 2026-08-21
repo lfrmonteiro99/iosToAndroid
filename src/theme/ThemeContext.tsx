@@ -8,6 +8,7 @@ import {
   Typography,
   Spacing,
   BorderRadius,
+  Shape,
   Shadows,
   AnimationConfig,
   AccentColors,
@@ -59,6 +60,7 @@ interface ThemeContextValue {
   typography: typeof Typography;
   spacing: typeof Spacing;
   borderRadius: typeof BorderRadius;
+  shape: typeof Shape;
   shadows: typeof Shadows;
   animation: typeof AnimationConfig;
   glass: typeof Glass;
@@ -174,6 +176,7 @@ export function ThemeProvider({
       typography: scaleTypography(Typography, settings.textSizeIndex, settings.boldText),
       spacing: Spacing,
       borderRadius: BorderRadius,
+      shape: Shape,
       shadows: Shadows,
       animation: AnimationConfig,
       glass: Glass,

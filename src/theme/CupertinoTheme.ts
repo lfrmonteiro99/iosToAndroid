@@ -286,6 +286,18 @@ export const BorderRadius = {
   card14: 14,   // dialog containers, sheet list items
 } as const;
 
+// Shape tokens with superellipse exponent n per context
+// n = exponent of the superellipse equation. Larger n = more square corners.
+// See src/theme/squircle.ts for rendering.
+export const Shape = {
+  icon:        { radiusRatio: 0.2237, n: 4.7 },  // radiusRatio of icon size, not absolute value; 0.2237 from pre-iOS 26 spec (pending aferição vs real capture — see §13)
+  card:        { radius: 10, n: 4.0 },
+  sheet:       { radius: 13, n: 4.0 },
+  button:      { radius: 10, n: 3.5 },
+  widgetSmall: { radius: 22, n: 4.5 },
+  dock:        { radius: 34, n: 4.2 },
+} as const;
+
 // iOS-style Shadows (soft, not Material elevation)
 export const Shadows = StyleSheet.create({
   subtle: {
