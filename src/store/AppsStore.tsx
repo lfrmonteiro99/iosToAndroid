@@ -18,6 +18,12 @@ export interface InstalledApp {
   packageName: string;
   icon: string;
   isSystem: boolean;
+  /**
+   * ApplicationInfo.category exposed by LauncherModule (see modules/launcher-module).
+   * Optional: absent on cached indexes written before this field existed, and
+   * on the virtual built-in apps in VIRTUAL_APPS_MAP below.
+   */
+  category?: string;
 }
 
 export interface HomeApp {

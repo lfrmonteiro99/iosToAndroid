@@ -24,7 +24,9 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
+import android.os.SystemClock
 import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
@@ -237,6 +239,26 @@ class LauncherModule : Module() {
             }
             context.startActivity(intent)
             true
+        }
+
+        // ── Performance (§7, #517) ───────────────────────────────────────
+
+        /**
+         * Idade do processo em milissegundos: quanto tempo passou desde que o
+         * Android começou a arrancar ESTE processo. É a base honesta do cold
+         * start — inclui o arranque do processo e do runtime, que uma marca
+         * feita em JS já não consegue ver.
+         *
+         * Devolve -1.0 quando a API não está disponível (< API 24), para o lado
+         * JS poder distinguir "sem medição" de "medição zero".
+         */
+        AsyncFunction("getProcessStartAgeMs") {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val age = SystemClock.uptimeMillis() - Process.getStartUptimeMillis()
+                if (age >= 0) age.toDouble() else -1.0
+            } else {
+                -1.0
+            }
         }
 
         // ── Wi-Fi ────────────────────────────────────────────────────────

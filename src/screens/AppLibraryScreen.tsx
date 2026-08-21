@@ -34,23 +34,73 @@ const CATEGORY_KEYWORDS: { name: string; keywords: string[] }[] = [
   },
   {
     name: 'Entertainment',
-    keywords: ['youtube', 'netflix', 'spotify', 'disney', 'twitch', 'gaming', 'game', 'prime', 'hbo', 'hulu', 'music', 'podcast', 'radio', 'player'],
+    keywords: ['youtube', 'netflix', 'spotify', 'disney', 'twitch', 'prime', 'hbo', 'hulu', 'music', 'podcast', 'radio', 'player'],
   },
   {
-    name: 'Productivity',
-    keywords: ['gmail', 'drive', 'docs', 'sheets', 'calendar', 'slack', 'teams', 'office', 'word', 'excel', 'outlook', 'notion', 'trello', 'asana', 'zoom', 'meet'],
+    name: 'Games',
+    keywords: ['game', 'gaming', 'games', 'roblox', 'minecraft', 'fortnite', 'pubg', 'candy crush'],
+  },
+  {
+    name: 'Productivity & Finance',
+    keywords: ['gmail', 'drive', 'docs', 'sheets', 'calendar', 'slack', 'teams', 'office', 'word', 'excel', 'outlook', 'notion', 'trello', 'asana', 'zoom', 'meet', 'bank', 'banking', 'finance', 'wallet', 'paypal', 'venmo', 'crypto', 'invest', 'budget', 'tax'],
   },
   {
     name: 'Utilities',
-    keywords: ['calculator', 'clock', 'camera', 'files', 'settings', 'weather', 'maps', 'compass', 'flashlight', 'scanner', 'notes', 'reminder', 'translate', 'browser', 'chrome', 'firefox'],
+    keywords: ['calculator', 'clock', 'camera', 'files', 'settings', 'weather', 'compass', 'flashlight', 'scanner', 'notes', 'reminder', 'translate', 'browser', 'chrome', 'firefox'],
   },
   {
-    name: 'Shopping',
-    keywords: ['amazon', 'ebay', 'aliexpress', 'wish', 'shop', 'store', 'market', 'etsy', 'shein', 'zalando'],
+    name: 'Shopping & Food',
+    keywords: ['amazon', 'ebay', 'aliexpress', 'wish', 'shop', 'store', 'market', 'etsy', 'shein', 'zalando', 'food', 'restaurant', 'delivery', 'recipe', 'grocery', 'ubereats', 'doordash', 'foodpanda', 'wolt', 'glovo'],
+  },
+  {
+    name: 'Creativity',
+    keywords: ['photoshop', 'lightroom', 'canva', 'illustrator', 'procreate', 'sketch', 'draw', 'paint', 'capcut', 'premiere', 'figma'],
+  },
+  {
+    name: 'Information & Reading',
+    keywords: ['news', 'reader', 'kindle', 'book', 'magazine', 'rss', 'medium', 'wikipedia', 'flipboard'],
+  },
+  {
+    name: 'Travel',
+    keywords: ['uber', 'lyft', 'booking', 'airbnb', 'flight', 'trip', 'travel', 'transit', 'taxi', 'expedia', 'hotel', 'maps'],
+  },
+  {
+    name: 'Health & Fitness',
+    keywords: ['fitness', 'health', 'workout', 'gym', 'strava', 'fitbit', 'yoga', 'sleep', 'step', 'calorie', 'diet'],
+  },
+  {
+    name: 'Education',
+    keywords: ['education', 'learn', 'course', 'duolingo', 'khan', 'school', 'university', 'study', 'quiz', 'flashcard'],
   },
 ];
 
-function categorizeApp(app: InstalledApp): string {
+// ApplicationInfo.category (exposed as InstalledApp.category by LauncherModule,
+// see modules/launcher-module/src/index.ts) mapped to our category names.
+// Not 1:1 — decisions documented in the PR body:
+//   - AUDIO and VIDEO both collapse into Entertainment (no separate Music bucket).
+//   - IMAGE maps to Creativity (image editors/viewers read closer to creative
+//     tools than to any other iOS bucket).
+//   - ACCESSIBILITY maps to Utilities (assistive tools are utility-like; iOS's
+//     14 categories have no dedicated accessibility bucket).
+//   - Health & Fitness and Education have no native ApplicationInfo constant —
+//     they're only reachable via keywords below.
+const NATIVE_CATEGORY_MAP: Record<string, string> = {
+  game: 'Games',
+  social: 'Social',
+  news: 'Information & Reading',
+  maps: 'Travel',
+  productivity: 'Productivity & Finance',
+  audio: 'Entertainment',
+  video: 'Entertainment',
+  image: 'Creativity',
+  accessibility: 'Utilities',
+};
+
+export function categorizeApp(app: InstalledApp): string {
+  const native = app.category;
+  if (native && native !== 'undefined' && NATIVE_CATEGORY_MAP[native]) {
+    return NATIVE_CATEGORY_MAP[native];
+  }
   const nameLower = app.name.toLowerCase();
   const pkgLower = app.packageName.toLowerCase();
   for (const cat of CATEGORY_KEYWORDS) {
