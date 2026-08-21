@@ -206,14 +206,14 @@ export const Typography = {
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '700' as const,
-    letterSpacing: 0.35,
+    letterSpacing: -0.26,
     fontFamily: FontFamilies.display,
   },
   title3: {
     fontSize: 20,
     lineHeight: 25,
     fontWeight: '600' as const,
-    letterSpacing: 0.38,
+    letterSpacing: -0.45,
     fontFamily: FontFamilies.display,
   },
   headline: {
