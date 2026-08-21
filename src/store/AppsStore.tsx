@@ -432,7 +432,11 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     clearRecents,
     isDefaultLauncher: isDefault,
     openLauncherSettings,
-  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings]);
+    // Perdido no merge: a interface (do lado deste branch) declara refreshApps, o
+    // corpo do value veio do main, que ainda nao a tinha. loadApps e a
+    // implementacao, como no branch original (AppsStore.tsx:345).
+    refreshApps: loadApps,
+  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }
