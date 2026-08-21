@@ -210,7 +210,7 @@ principal por baixo de um agente vivo.
 ## Dashboard
 
 ```bash
-bash scripts/team/dashboard.sh --serve          # http://localhost:8787
+bash scripts/team/dashboard.sh --serve          # http://localhost:9317
 bash scripts/team/dashboard.sh --serve --lan    # tambem pela tailnet (telemovel)
 bash scripts/team/dashboard.sh --once           # so escreve o HTML
 ```

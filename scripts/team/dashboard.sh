@@ -26,7 +26,16 @@ source "$SCRIPT_DIR/lib.sh"
 ROLE="dashboard"
 
 MODE="once"
-PORT="${TEAM_DASH_PORT:-8787}"
+# 9317 E NAO 8787, e a diferenca importa.
+#
+# 8787 e o porto VIVO do companion-chat -- a app que o utilizador abre no
+# telemovel em 100.75.174.75:8787, e que esse projecto tem regra escrita para nao
+# tocar. So consegui ocupa-lo porque a app estava em baixo naquele instante:
+# quando arrancasse, ou falhava a ligar, ou o bookmark do telemovel passava a dar
+# este dashboard. Escolhido depois de inventariar os 110 portos referenciados nos
+# projectos em ~/Documentos -- o bairro dos 87xx esta cheio (8788, 8789, 8791,
+# 8792, 8797, 8799, 8800, 8801), portanto fica de fora inteiro.
+PORT="${TEAM_DASH_PORT:-9317}"
 BIND="127.0.0.1"
 REFRESH="${TEAM_DASH_REFRESH:-15}"
 
@@ -332,6 +341,16 @@ case "$MODE" in
     echo "$OUT"
     ;;
   serve)
+    # COLISAO DE PORTO NAO PODE SER SILENCIOSA. O `python -m http.server` morre
+    # com um traceback que, dentro de um tmux com tee, ninguem le -- e o sintoma
+    # e um dashboard que "nao abre". Verifica antes, e diz quem esta la.
+    if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
+      HOLDER=$(ss -ltnp 2>/dev/null | grep ":$PORT " | grep -oE 'users:\(\("[^"]+",pid=[0-9]+' | head -1 | sed 's/users:((//')
+      echo "ERRO: o porto $PORT já está ocupado${HOLDER:+ por $HOLDER}." >&2
+      echo "       Escolhe outro com --port N (ou TEAM_DASH_PORT), e confirma antes que" >&2
+      echo "       não é de outro projecto: grep -rn 'PORT' ~/Documentos/*/.env*" >&2
+      exit 1
+    fi
     generate
     # Regenera em segundo plano; o servidor só serve ficheiros. Separar as duas
     # coisas significa que uma falha do `gh` não derruba a página — fica só a
