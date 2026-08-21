@@ -150,11 +150,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const handleCloseTab = useCallback(
     (id: string) => {
       setTabs((prev) => {
-        const next = prev.filter((t) => t.id !== id);
-        if (id === activeTabId) {
+        const remaining = prev.filter((t) => t.id !== id);
+        // Invariant: the browser never has zero tabs open. Closing the last one
+        // replaces it with a fresh home tab rather than leaving an empty state.
+        const next = remaining.length > 0 ? remaining : [createTab(BROWSER_HOME_URL)];
+        if (id === activeTabId || remaining.length === 0) {
           const fallback = next[0];
-          setActiveTabId(fallback?.id ?? '');
-          setInputUrl(fallback?.url ?? BROWSER_HOME_URL);
+          setActiveTabId(fallback.id);
+          setInputUrl(fallback.url);
         }
         return next;
       });
@@ -235,8 +238,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           hitSlop={8}
           accessibilityLabel="Tabs"
           accessibilityRole="button"
+          style={styles.tabsButton}
         >
           <Ionicons name="albums-outline" size={22} color={BROWSER_ACCENT} />
+          <View style={styles.tabsBadge}>
+            <Text testID="browser-tabs-badge" style={styles.tabsBadgeText}>
+              {String(tabs.length)}
+            </Text>
+          </View>
         </Pressable>
         <Pressable
           onPress={handleShare}
@@ -351,6 +360,22 @@ function createStyles(colors: CupertinoColors) {
     progressTrack: { height: 2, backgroundColor: 'transparent' },
     progressBar: { height: 2, backgroundColor: BROWSER_ACCENT },
     webview: { flex: 1 },
+    tabsButton: { justifyContent: 'center', alignItems: 'center' },
+    tabsBadge: {
+      minWidth: 16,
+      paddingHorizontal: 3,
+      borderRadius: 8,
+      backgroundColor: BROWSER_ACCENT,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 1,
+    },
+    tabsBadgeText: {
+      ...Typography.caption2,
+      color: '#FFFFFF',
+      fontWeight: '700',
+      textAlign: 'center',
+    },
     tabGridHeader: {
       flexDirection: 'row',
       alignItems: 'center',
