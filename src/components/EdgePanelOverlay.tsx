@@ -7,7 +7,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import type { CommitPredicate, CommitReason } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
@@ -81,16 +81,20 @@ export function EdgePanelOverlay({
       currentT.value = Date.now();
       pushSample(buf.value, e.translationX, e.translationY, currentT.value);
       const { vy } = sampledVelocity(buf.value, currentT.value);
+      // panelProgress is normalized [0,1] over panelTravelDp; convert the
+      // dp/ms sample velocity to progress-units/sec so the spring inherits
+      // the release speed instead of always settling from a standstill.
+      const progressVelocity = dpPerMsToPtPerSec(vy) / gestureConfig.panelTravelDp;
       const progress = panelProgress.value;
       const reason = commitPredicate({ progress, velocity: vy, holdMs: 0 });
       if (reason !== 'none') {
         // Hand off to the real screen: retract the preview so it doesn't
         // linger underneath the transparent modal and block the home screen
         // when the user returns.
-        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
+        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value, progressVelocity);
         runOnJS(onCommit)();
       } else {
-        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
+        panelProgress.value = settle(0, 'fastSettle', reduceMotionShared.value, progressVelocity);
       }
     });
 

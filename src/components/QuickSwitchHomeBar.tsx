@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { GestureHaptics } from '../utils/gestureHaptics';
 import { commitForQuickSwitch } from '../utils/gestureMachine';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
@@ -95,6 +95,8 @@ export function QuickSwitchHomeBar() {
       const dx = e.translationX;
       const progress = Math.abs(dx) / gestureConfig.quickSwitchDistanceDp;
       const reason = commitForQuickSwitch({ progress, velocity: vx, holdMs: 0 });
+      // swipeOffset is a literal dp offset, same unit as vx scaled to per-second.
+      const offsetVelocity = dpPerMsToPtPerSec(vx);
 
       if (reason !== 'none') {
         const direction: 'left' | 'right' = dx < 0 ? 'left' : 'right';
@@ -106,13 +108,14 @@ export function QuickSwitchHomeBar() {
             dx < 0 ? -SCREEN_W : SCREEN_W,
             'softCarousel',
             reduceMotionShared.value,
+            offsetVelocity,
           );
         } else {
           // No destination — snap back
-          swipeOffset.value = settle(0, 'fastSettle', reduceMotionShared.value);
+          swipeOffset.value = settle(0, 'fastSettle', reduceMotionShared.value, offsetVelocity);
         }
       } else {
-        swipeOffset.value = settle(0, 'fastSettle', reduceMotionShared.value);
+        swipeOffset.value = settle(0, 'fastSettle', reduceMotionShared.value, offsetVelocity);
       }
       previewOpacity.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });

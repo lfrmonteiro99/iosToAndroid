@@ -92,21 +92,22 @@ export function CupertinoSwipeableRow({
       'worklet';
       const velocity = e.velocityX;
       const rm = reduceMotionShared.value;
+      // translateX is a literal dp offset — e.velocityX is already dp/sec.
       // Decide snap position
       if (velocity < -500 && trailingActions.length > 0) {
-        translateX.value = settle(-maxTrailing, SPRING_CONFIG, rm);
+        translateX.value = settle(-maxTrailing, SPRING_CONFIG, rm, velocity);
         runOnJS(triggerHaptic)();
       } else if (velocity > 500 && leadingActions.length > 0) {
-        translateX.value = settle(maxLeading, SPRING_CONFIG, rm);
+        translateX.value = settle(maxLeading, SPRING_CONFIG, rm, velocity);
         runOnJS(triggerHaptic)();
       } else if (translateX.value < -maxTrailing / 2) {
-        translateX.value = settle(-maxTrailing, SPRING_CONFIG, rm);
+        translateX.value = settle(-maxTrailing, SPRING_CONFIG, rm, velocity);
         runOnJS(triggerHaptic)();
       } else if (translateX.value > maxLeading / 2) {
-        translateX.value = settle(maxLeading, SPRING_CONFIG, rm);
+        translateX.value = settle(maxLeading, SPRING_CONFIG, rm, velocity);
         runOnJS(triggerHaptic)();
       } else {
-        translateX.value = settle(0, SPRING_CONFIG, rm);
+        translateX.value = settle(0, SPRING_CONFIG, rm, velocity);
       }
     });
 

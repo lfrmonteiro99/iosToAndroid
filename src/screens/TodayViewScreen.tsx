@@ -22,7 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { GestureHaptics } from '../utils/gestureHaptics';
 
@@ -645,12 +645,15 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
         (absX >= gestureConfig.quickSwitchHybridDistanceDp &&
           absVx >= gestureConfig.quickSwitchHybridVelocity);
 
+      // translateX is a literal dp offset — vx is already dp/ms, convert to dp/sec.
+      const translateXVelocity = dpPerMsToPtPerSec(vx);
+
       if (shouldCommit && e.translationX < 0) {
         runOnJS(GestureHaptics.commit)('light');
-        translateX.value = withSpring(-400, gestureConfig.spring.mediumSettle);
+        translateX.value = withSpring(-400, { ...gestureConfig.spring.mediumSettle, velocity: translateXVelocity });
         opacity.value = withTiming(0, { duration: 250 }, () => runOnJS(handleClose)());
       } else {
-        translateX.value = withSpring(0, gestureConfig.spring.fastSettle);
+        translateX.value = withSpring(0, { ...gestureConfig.spring.fastSettle, velocity: translateXVelocity });
         opacity.value = withTiming(1, { duration: 200 });
       }
     });
