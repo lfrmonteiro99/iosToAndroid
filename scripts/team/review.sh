@@ -225,11 +225,21 @@ agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 # exactamente como assume os implementadores (ver impl_engine_now no
 # orchestrator.sh). Sem isto, o reviewer so' volta a correr quando o Claude
 # regressa; com isto, a fila de reviews escoa durante o cooldown.
+# HERMES NO REVIEWER: OPT-IN, e por decisao do utilizador.
+#
+# O reviewer e o UNICO portao antes do main. O hermes implementa pior do que o
+# claude (avaliacao do utilizador, 2026-08-21), e um portao pior nao atrasa
+# trabalho — deixa passar codigo mau para o main, que e irreversivel na pratica.
+# Um PR que espera pela quota e recuperavel; um merge errado nao.
+#
+# Com TEAM_REVIEW_HERMES=1 assume mesmo assim, para quem preferir escoar a fila.
 REVIEW_ENGINE="claude"
-if { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && hermes_available; then
+if [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
+   && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && hermes_available; then
   REVIEW_ENGINE="hermes"
-  log "reviewer em HERMES (Claude indisponivel) — PR #$PR"
+  log "subscricao indisponivel e TEAM_REVIEW_HERMES=1 — a julgar em hermes"
 fi
+
 AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="$REVIEW_ENGINE" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
