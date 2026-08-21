@@ -264,6 +264,100 @@ describe('AppStoreScreen — Search tab', () => {
   });
 });
 
+describe('AppStoreScreen — Categories tab', () => {
+  it('the segmented control offers Today, Search and Categories', () => {
+    // 'Today' also labels the Today tab's section heading (default tab), so
+    // it has more than one match — getAllByText, not getByText.
+    const { getAllByText, getByText } = render(<AppStoreScreen navigation={nav} />);
+    expect(getAllByText('Today').length).toBeGreaterThan(0);
+    expect(getByText('Search')).toBeTruthy();
+    expect(getByText('Categories')).toBeTruthy();
+  });
+
+  it('selecting Categories renders at least one section header and its apps', () => {
+    mockApps([]);
+    const { getByText, getAllByText, getAllByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Categories'));
+    // Every CURATED_APPS category is a distinct section header — each also
+    // appears as the caption on its own app row(s), so match count, not
+    // uniqueness.
+    const uniqueCategories = new Set(CURATED_APPS.map((a) => a.category));
+    for (const category of uniqueCategories) {
+      expect(getAllByText(category).length).toBeGreaterThan(0);
+    }
+    expect(getAllByLabelText(/card$/).length).toBeGreaterThan(0);
+  });
+
+  it('every CURATED_APPS entry appears exactly once across all category sections', () => {
+    mockApps([]);
+    const { getByText, getAllByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Categories'));
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+    for (const app of CURATED_APPS) {
+      expect(getAllByLabelText(`${app.name} card`)).toHaveLength(1);
+    }
+  });
+
+  it('an installed curated app in Categories shows Open, not Get', () => {
+    mockApps([installed(FIRST.packageName)]);
+    const { getByText, getByLabelText, queryByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Categories'));
+    expect(getByLabelText(`Open ${FIRST.name}`)).toBeTruthy();
+    expect(queryByLabelText(`Get ${FIRST.name}`)).toBeNull();
+  });
+
+  it('a non-installed curated app in Categories shows Get, not Open', () => {
+    mockApps([]);
+    const { getByText, getByLabelText, queryByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Categories'));
+    expect(getByLabelText(`Get ${FIRST.name}`)).toBeTruthy();
+    expect(queryByLabelText(`Open ${FIRST.name}`)).toBeNull();
+  });
+
+  it('an installed app not in CURATED_APPS is grouped by keyword match, and shows Open', () => {
+    const musicApp: AppsStore.InstalledApp = {
+      name: 'MyMusic Player',
+      packageName: 'com.example.mymusicplayer',
+      icon: '',
+      isSystem: false,
+    };
+    mockApps([musicApp]);
+    const { getByText, getByLabelText, getAllByText, queryByText } = render(
+      <AppStoreScreen navigation={nav} />,
+    );
+    fireEvent.press(getByText('Categories'));
+    expect(getByLabelText(`Open ${musicApp.name}`)).toBeTruthy();
+    // Confirms it landed in Music, not the catch-all bucket — a broken
+    // categorizeInstalledApp that always returns 'Other' would fail this.
+    expect(getAllByText('Music').length).toBeGreaterThan(0);
+    expect(queryByText('Other')).toBeNull();
+  });
+
+  it('an installed app matching no keyword is grouped under Other', () => {
+    const mysteryApp: AppsStore.InstalledApp = {
+      name: 'Zzyzx',
+      packageName: 'com.example.zzyzx',
+      icon: '',
+      isSystem: false,
+    };
+    mockApps([mysteryApp]);
+    const { getByText, getByLabelText, getAllByText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Categories'));
+    expect(getByLabelText(`Open ${mysteryApp.name}`)).toBeTruthy();
+    // 'Other' is both the section header and this app's own caption text.
+    expect(getAllByText('Other').length).toBeGreaterThan(0);
+  });
+
+  it('switching Today → Categories → Today keeps the Today cards unchanged (inverse of the fix)', () => {
+    mockApps([]);
+    const { getByText, getAllByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+    fireEvent.press(getByText('Categories'));
+    fireEvent.press(getByText('Today'));
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+  });
+});
+
 describe('AppLibraryScreen entry point to the App Store', () => {
   it('renders an App Store button that navigates to the AppStore route', () => {
     const { getByLabelText } = render(<AppLibraryScreen navigation={nav} />);
