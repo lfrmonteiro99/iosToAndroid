@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from 'react-native';
-import { useSettings } from '../store/SettingsStore';
+import { useSettings, SettingsState } from '../store/SettingsStore';
 import {
   CupertinoTheme,
   getTheme,
@@ -16,6 +16,7 @@ import {
   Glass,
   glassSurface,
   fontFamilyForSize,
+  FontFamily,
 } from './CupertinoTheme';
 
 const THEME_STORAGE_KEY = '@iostoandroid/theme_preference';
@@ -28,13 +29,24 @@ const TEXT_SIZE_SCALE: Record<number, number> = { 0: 0.85, 1: 1.0, 2: 1.15, 3: 1
 
 type FontWeightValue = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900' | 'bold' | 'normal';
 
-function scaleTypography(
+/**
+ * Tipografia resolvida para consumo: igual à forma de `Typography`, excepto
+ * que `fontFamily` pode ser `undefined` quando o utilizador escolheu a fonte
+ * do sistema (#477) — é isso que faz o RN cair na tipografia da plataforma
+ * em vez de continuar a pedir Inter/InterDisplay.
+ */
+export type ResolvedTypography = {
+  [K in keyof typeof Typography]: Omit<(typeof Typography)[K], 'fontFamily'> & { fontFamily?: FontFamily };
+};
+
+function resolveTypography(
   base: typeof Typography,
   textSizeIndex: number,
   boldText: boolean,
-): typeof Typography {
+  fontChoice: SettingsState['fontChoice'],
+): ResolvedTypography {
   const scale = TEXT_SIZE_SCALE[textSizeIndex] ?? 1.0;
-  if (scale === 1.0 && !boldText) return base;
+  if (scale === 1.0 && !boldText && fontChoice === 'inter') return base;
 
   const boldWeightMap: Record<string, FontWeightValue> = {
     '100': '300', '200': '400', '300': '500',
@@ -50,20 +62,21 @@ function scaleTypography(
       : style.fontWeight;
     // O corte Text/Display é do tamanho renderizado: escalar o token pode
     // atravessar os 20pt nos dois sentidos, e a família tem de acompanhar.
+    // 'system' pede a fonte da plataforma: undefined, nunca um fallback fixo.
     return [key, {
       ...style,
       fontSize: scaledFontSize,
       lineHeight: scaledLineHeight,
       fontWeight,
-      fontFamily: fontFamilyForSize(scaledFontSize),
+      fontFamily: fontChoice === 'system' ? undefined : fontFamilyForSize(scaledFontSize),
     }];
   });
-  return Object.fromEntries(entries) as typeof Typography;
+  return Object.fromEntries(entries) as ResolvedTypography;
 }
 
 interface ThemeContextValue {
   theme: CupertinoTheme;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   spacing: typeof Spacing;
   borderRadius: typeof BorderRadius;
   shape: typeof Shape;
@@ -179,7 +192,7 @@ export function ThemeProvider({
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme: getTheme(isDark, accentColor, highContrast),
-      typography: scaleTypography(Typography, settings.textSizeIndex, settings.boldText),
+      typography: resolveTypography(Typography, settings.textSizeIndex, settings.boldText, settings.fontChoice),
       spacing: Spacing,
       borderRadius: BorderRadius,
       shape: Shape,
@@ -199,7 +212,7 @@ export function ThemeProvider({
       setAccentColor,
       setHighContrast,
     }),
-    [isDark, isReady, mode, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, toggleTheme, setDark, setThemeMode, setAccentColor, setHighContrast]
+    [isDark, isReady, mode, accentColor, highContrast, textScale, settings.textSizeIndex, settings.boldText, settings.fontChoice, toggleTheme, setDark, setThemeMode, setAccentColor, setHighContrast]
   );
 
   if (gateFirstRender && !isReady) return null;

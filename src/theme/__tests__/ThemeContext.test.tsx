@@ -4,7 +4,7 @@ import * as RN from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { render, waitFor, act, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider, useTheme } from '../ThemeContext';
-import { SettingsProvider } from '../../store/SettingsStore';
+import { SettingsProvider, useSettings } from '../../store/SettingsStore';
 
 const THEME_KEY = '@iostoandroid/theme_preference';
 
@@ -338,5 +338,69 @@ describe('Typography escalada mantém as famílias Inter (#475)', () => {
 
     await waitFor(() => expect(getByText('body=Inter/17/400')).toBeTruthy());
     expect(getByText('title3=InterDisplay/20/600')).toBeTruthy();
+  });
+});
+
+/**
+ * #477: a escolha 'system' tem de produzir a fonte real da plataforma — ou
+ * seja, `fontFamily: undefined` — e não um fallback qualquer. Um `fontFamily`
+ * ainda preenchido (mesmo que fosse 'Roboto') não seria a fonte do sistema
+ * escolhida pelo utilizador, seria outro hardcode.
+ */
+describe('fontChoice: Inter vs fonte do sistema (#477)', () => {
+  it('defaults to the Inter families when fontChoice is not set', async () => {
+    const { getByText } = renderTypography({});
+
+    await waitFor(() => expect(getByText('body=Inter/17/400')).toBeTruthy());
+    expect(getByText('title3=InterDisplay/20/600')).toBeTruthy();
+  });
+
+  it('drops fontFamily entirely (undefined) for every token when fontChoice=system', async () => {
+    const { getByText } = renderTypography({ fontChoice: 'system' });
+
+    await waitFor(() => expect(getByText('body=undefined/17/400')).toBeTruthy());
+    expect(getByText('title3=undefined/20/600')).toBeTruthy();
+    expect(getByText('largeTitle=undefined/34/700')).toBeTruthy();
+  });
+
+  it('keeps fontFamily undefined for system choice even combined with Dynamic Type and bold text', async () => {
+    // O corte Text/Display e o bump de peso continuam a aplicar-se ao tamanho
+    // e ao peso; só a família é que fica de fora quando o utilizador pediu a
+    // fonte do sistema — não pode "vazar" Inter por um caminho de escala.
+    const { getByText } = renderTypography({ fontChoice: 'system', textSizeIndex: 3, boldText: true });
+
+    await waitFor(() => expect(getByText('body=undefined/22/600')).toBeTruthy());
+    expect(getByText('title3=undefined/26/800')).toBeTruthy();
+  });
+
+  it('switching fontChoice back to inter at runtime restores the Inter families', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      key === SETTINGS_KEY ? Promise.resolve(JSON.stringify({ fontChoice: 'system' })) : Promise.resolve(null),
+    );
+
+    function FontChoiceProbe() {
+      const { typography } = useTheme();
+      const { update } = useSettings();
+      return (
+        <>
+          <Text>{`body=${typography.body.fontFamily}`}</Text>
+          <Text onPress={() => update('fontChoice', 'inter')}>use-inter</Text>
+        </>
+      );
+    }
+
+    const { getByText } = render(<FontChoiceProbe />, {
+      wrapper: ({ children }) => (
+        <SettingsProvider gateFirstRender={false}>
+          <ThemeProvider gateFirstRender={false}>{children}</ThemeProvider>
+        </SettingsProvider>
+      ),
+    });
+
+    await waitFor(() => expect(getByText('body=undefined')).toBeTruthy());
+
+    fireEvent.press(getByText('use-inter'));
+
+    await waitFor(() => expect(getByText('body=Inter')).toBeTruthy());
   });
 });

@@ -16,6 +16,7 @@ import { useAssistiveTouch } from '../../store/AssistiveTouchStore';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const TEXT_SIZE_LABELS = ['Small', 'Default', 'Large', 'XL'];
+const FONT_CHOICE_LABELS = ['Inter', 'System'];
 
 const A11Y_KEYS = {
   textscale: '@iostoandroid/a11y_textscale',
@@ -205,6 +206,22 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               <Text style={[typography.caption1, { color: colors.tertiaryLabel, marginTop: 8 }]}>
                 Current scale: {Math.round(textScale * 100)}%
               </Text>
+            </View>
+          </CupertinoListSection>
+        </View>
+
+        {/* Font — Inter (iOS metrics) or the Android system typeface */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Font"
+            footer="Inter matches iOS type metrics. System uses your device's default typeface."
+          >
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={FONT_CHOICE_LABELS}
+                selectedIndex={settings.fontChoice === 'system' ? 1 : 0}
+                onChange={(i) => update('fontChoice', i === 1 ? 'system' : 'inter')}
+              />
             </View>
           </CupertinoListSection>
         </View>
