@@ -9,7 +9,7 @@ import {
   Dimensions,
   StatusBar,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -225,7 +225,7 @@ export function MultitaskScreen({ navigation }: { navigation: AppNavigationProp 
   return (
     <View style={styles.root}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+      <GlassSurface intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
 
       {/* Tap backdrop to close */}
       <Pressable

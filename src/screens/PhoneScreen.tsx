@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from '../components';
 import { StatusBar } from 'expo-status-bar';
 import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
@@ -583,10 +583,9 @@ export function PhoneScreen({ navigation }: { navigation: AppNavigationProp }) {
     <View style={[styles.screen, { backgroundColor: colors.systemGroupedBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
       {/* Navigation Bar */}
-      <BlurView
+      <GlassSurface
         intensity={80}
         tint={theme.dark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezisBlurView"
         style={[
           styles.navBar,
           {
@@ -619,7 +618,7 @@ export function PhoneScreen({ navigation }: { navigation: AppNavigationProp }) {
             onChange={handleTabChange}
           />
         </View>
-      </BlurView>
+      </GlassSurface>
 
       {/* Content */}
       <View style={[styles.content, { paddingTop: insets.top + 44 + 52 }]}>
