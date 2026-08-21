@@ -3,6 +3,31 @@ import { render, fireEvent } from '../../test-utils';
 import { BrowserScreen, resolveUrl, BROWSER_HOME_URL } from '../BrowserScreen';
 import { BUILT_IN_APPS, VIRTUAL_ICON_CONFIG } from '../LauncherHomeScreen';
 
+// The global mock in jest.setup.js hands out a fresh jest.fn() per render
+// (useImperativeHandle has no deps array), so a reference captured before a
+// state-driven re-render would not be the one BrowserScreen actually calls.
+// Override it here with module-scoped mocks so the same fn identity survives
+// every re-render within this file, and BrowserScreen.test.tsx can assert on it.
+const mockGoBack = jest.fn();
+const mockGoForward = jest.fn();
+jest.mock('react-native-webview', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ReactActual = require('react');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { View } = require('react-native');
+  const WebView = ReactActual.forwardRef((props: object, ref: React.Ref<unknown>) => {
+    ReactActual.useImperativeHandle(ref, () => ({
+      reload: jest.fn(),
+      goBack: mockGoBack,
+      goForward: mockGoForward,
+      stopLoading: jest.fn(),
+    }));
+    return ReactActual.createElement(View, props);
+  });
+  WebView.displayName = 'WebView';
+  return { __esModule: true, WebView, default: WebView };
+});
+
 const nav = { navigate: jest.fn(), goBack: jest.fn() } as never;
 
 beforeEach(() => jest.clearAllMocks());
@@ -104,6 +129,93 @@ describe('BrowserScreen — empty submit is inert (the inverse of the fix)', () 
     fireEvent(bar, 'submitEditing');
     fireEvent(bar, 'submitEditing');
     expect(webviewUri(utils)).toBe('https://example.com');
+  });
+});
+
+function fireNavigationStateChange(
+  utils: ReturnType<typeof render>,
+  nav: { canGoBack: boolean; canGoForward: boolean; url: string; loading?: boolean },
+) {
+  fireEvent(utils.getByTestId('browser-webview'), 'navigationStateChange', {
+    canGoBack: nav.canGoBack,
+    canGoForward: nav.canGoForward,
+    url: nav.url,
+    loading: nav.loading ?? false,
+    title: '',
+    lockIdentifier: 0,
+    navigationType: 'click',
+  });
+}
+
+describe('BrowserScreen — Back/Forward toolbar', () => {
+  it('renders Back and Forward buttons dimmed and inert when history is empty in both directions', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireNavigationStateChange(utils, { canGoBack: false, canGoForward: false, url: BROWSER_HOME_URL });
+
+    const back = utils.getByLabelText('Go back in history');
+    const forward = utils.getByLabelText('Go forward in history');
+    expect(back.props.accessibilityState?.disabled).toBe(true);
+    expect(forward.props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.press(back);
+    fireEvent.press(forward);
+    expect(mockGoBack).not.toHaveBeenCalled();
+    expect(mockGoForward).not.toHaveBeenCalled();
+  });
+
+  it('enables Back and calls only WebView.goBack when canGoBack is true (not Forward)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireNavigationStateChange(utils, { canGoBack: true, canGoForward: false, url: 'https://example.com/page2' });
+
+    const back = utils.getByLabelText('Go back in history');
+    expect(back.props.accessibilityState?.disabled).toBe(false);
+    fireEvent.press(back);
+
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(mockGoForward).not.toHaveBeenCalled();
+  });
+
+  it('enables Forward and calls only WebView.goForward when canGoForward is true (not Back)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireNavigationStateChange(utils, { canGoBack: false, canGoForward: true, url: 'https://example.com/page1' });
+
+    const forward = utils.getByLabelText('Go forward in history');
+    expect(forward.props.accessibilityState?.disabled).toBe(false);
+    fireEvent.press(forward);
+
+    expect(mockGoForward).toHaveBeenCalledTimes(1);
+    expect(mockGoBack).not.toHaveBeenCalled();
+  });
+
+  it('re-enables both buttons when a later navigation reports history in both directions', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireNavigationStateChange(utils, { canGoBack: false, canGoForward: false, url: BROWSER_HOME_URL });
+    fireNavigationStateChange(utils, { canGoBack: true, canGoForward: true, url: 'https://example.com/page3' });
+
+    fireEvent.press(utils.getByLabelText('Go back in history'));
+    fireEvent.press(utils.getByLabelText('Go forward in history'));
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(mockGoForward).toHaveBeenCalledTimes(1);
+  });
+
+  it('reflects the WebView current URL in the address bar after navigating within the page', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireNavigationStateChange(utils, {
+      canGoBack: true,
+      canGoForward: false,
+      url: 'https://example.com/deep/link',
+    });
+    expect(utils.getByPlaceholderText('Search or enter website name').props.value).toBe(
+      'https://example.com/deep/link',
+    );
+  });
+
+  it('does not touch the top-bar "Go back" (navigation.goBack) button or label — regression guard', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireNavigationStateChange(utils, { canGoBack: true, canGoForward: true, url: 'https://example.com' });
+    fireEvent.press(utils.getByLabelText('Go back'));
+    expect((nav as unknown as { goBack: jest.Mock }).goBack).toHaveBeenCalledTimes(1);
+    expect(mockGoBack).not.toHaveBeenCalled();
   });
 });
 
