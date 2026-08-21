@@ -16,6 +16,7 @@ import { Typography } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 import { CupertinoShareSheet } from '../components/CupertinoShareSheet';
+import { BrowserTabGrid, BrowserTab } from '../components/BrowserTabGrid';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -53,15 +54,24 @@ export function resolveUrl(input: string): string {
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
 
+function generateTabId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
+
+function createTab(url: string): BrowserTab {
+  return { id: generateTabId(), url, title: '' };
+}
+
 export function BrowserScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createTab(BROWSER_HOME_URL)]);
+  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
+  const [showTabGrid, setShowTabGrid] = useState(false);
   const [inputUrl, setInputUrl] = useState(BROWSER_HOME_URL);
-  const [currentUrl, setCurrentUrl] = useState(BROWSER_HOME_URL);
-  const [pageTitle, setPageTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
@@ -69,11 +79,15 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
 
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const currentUrl = activeTab?.url ?? BROWSER_HOME_URL;
+  const pageTitle = activeTab?.title ?? '';
+
   const handleSubmit = useCallback(() => {
     const next = resolveUrl(inputUrl);
     if (!next) return;
-    setCurrentUrl(next);
-  }, [inputUrl]);
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, url: next } : t)));
+  }, [inputUrl, activeTabId]);
 
   const handleBack = useCallback(() => {
     hapticImpact();
@@ -89,12 +103,15 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     setShowShareSheet(true);
   }, []);
 
-  const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
-    setPageTitle(navState.title);
-    setCanGoBack(navState.canGoBack);
-    setCanGoForward(navState.canGoForward);
-    setInputUrl(navState.url);
-  }, []);
+  const handleNavigationStateChange = useCallback(
+    (navState: WebViewNavigation) => {
+      setCanGoBack(navState.canGoBack);
+      setCanGoForward(navState.canGoForward);
+      setInputUrl(navState.url);
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, title: navState.title } : t)));
+    },
+    [activeTabId],
+  );
 
   const handleGoBackInHistory = useCallback(() => {
     if (!canGoBack) return;
@@ -105,6 +122,75 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     if (!canGoForward) return;
     webviewRef.current?.goForward();
   }, [canGoForward]);
+
+  const handleShowTabGrid = useCallback(() => {
+    hapticImpact();
+    setShowTabGrid(true);
+  }, []);
+
+  const handleDoneWithTabGrid = useCallback(() => {
+    setShowTabGrid(false);
+  }, []);
+
+  const handleSelectTab = useCallback(
+    (id: string) => {
+      const tab = tabs.find((t) => t.id === id);
+      setActiveTabId(id);
+      setInputUrl(tab?.url ?? BROWSER_HOME_URL);
+      setShowTabGrid(false);
+    },
+    [tabs],
+  );
+
+  const handleNewTab = useCallback(() => {
+    const tab = createTab(BROWSER_HOME_URL);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setInputUrl(BROWSER_HOME_URL);
+    setShowTabGrid(false);
+  }, []);
+
+  const handleCloseTab = useCallback(
+    (id: string) => {
+      setTabs((prev) => {
+        const next = prev.filter((t) => t.id !== id);
+        if (id === activeTabId) {
+          const fallback = next[0];
+          setActiveTabId(fallback?.id ?? '');
+          setInputUrl(fallback?.url ?? BROWSER_HOME_URL);
+        }
+        return next;
+      });
+    },
+    [activeTabId],
+  );
+
+  if (showTabGrid || !activeTab) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        {tabs.length > 0 ? (
+          <View style={styles.tabGridHeader}>
+            <Text style={styles.tabGridTitle}>{tabs.length} Tab{tabs.length === 1 ? '' : 's'}</Text>
+            <Pressable
+              onPress={handleDoneWithTabGrid}
+              hitSlop={8}
+              accessibilityLabel="Done"
+              accessibilityRole="button"
+            >
+              <Text style={styles.goText}>Done</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        <BrowserTabGrid
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={handleSelectTab}
+          onNewTab={handleNewTab}
+          onCloseTab={handleCloseTab}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -148,6 +234,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           <Ionicons name="refresh" size={22} color={BROWSER_ACCENT} />
         </Pressable>
         <Pressable
+          onPress={handleShowTabGrid}
+          hitSlop={8}
+          accessibilityLabel="Tabs"
+          accessibilityRole="button"
+        >
+          <Ionicons name="albums-outline" size={22} color={BROWSER_ACCENT} />
+        </Pressable>
+        <Pressable
           onPress={handleShare}
           hitSlop={8}
           accessibilityLabel="Share"
@@ -167,6 +261,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
       ) : null}
 
       <WebView
+        key={activeTabId}
         ref={webviewRef}
         testID="browser-webview"
         source={{ uri: currentUrl }}
@@ -271,5 +366,13 @@ function createStyles(colors: CupertinoColors) {
       borderTopWidth: StyleSheet.hairlineWidth,
       backgroundColor: colors.secondarySystemBackground,
     },
+    tabGridHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    tabGridTitle: { ...Typography.headline, color: colors.label },
   });
 }
