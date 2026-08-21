@@ -466,4 +466,52 @@ describe('deduplication of launcher entries by packageName', () => {
     await expect(mod.default.getInstalledApps()).resolves.toEqual([]);
     expect(errors).toContain('getInstalledApps');
   });
+
+  // O teste anterior daqui afirmava que uma categoria devolvida pelo mock chegava
+  // ao consumidor — passava com o codigo de producao revertido, porque so testava
+  // o pass-through do proprio mock. Estes tres testam o que a ponte FAZ.
+
+  it('passa as categorias do nativo intactas, incluindo valores que ainda nao conhece', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      { name: 'Jogo', packageName: 'com.example.game', icon: '', isSystem: false, category: 'game' },
+      // Uma categoria de uma API futura: tem de sobreviver, nao ser coagida.
+      { name: 'Futuro', packageName: 'com.example.future', icon: '', isSystem: false, category: 'wellbeing' },
+    ] as Parameters<typeof bridgeReturning>[1]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps.map((a) => a.category)).toEqual(['game', 'wellbeing']);
+  });
+
+  it('preenche category com "undefined" quando o nativo nao a manda (API 24/25, ou modulo antigo)', async () => {
+    // Um dispositivo em API 24/25 nao tem ApplicationInfo.category, e um APK com
+    // uma versao anterior deste modulo nativo tambem nao a manda. O campo e
+    // declarado obrigatorio em InstalledApp: sem normalizacao, o consumidor recebe
+    // undefined num campo tipado como string e o TypeScript nao avisa, porque a
+    // fronteira nativa e `any`.
+    const mod = bridgeReturning('getInstalledApps', [
+      { name: 'Sem categoria', packageName: 'com.example.old', icon: '', isSystem: false },
+    ] as unknown as Parameters<typeof bridgeReturning>[1]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps).toHaveLength(1);
+    expect(apps[0].category).toBe('undefined');
+    // E nao inventa nada no resto da entrada.
+    expect(apps[0].packageName).toBe('com.example.old');
+    expect(apps[0].name).toBe('Sem categoria');
+  });
+
+  it('normaliza uma category que nao e string sem descartar a aplicacao', async () => {
+    const mod = bridgeReturning('getInstalledApps', [
+      { name: 'Numero', packageName: 'com.example.num', icon: '', isSystem: false, category: 3 },
+      { name: 'Nulo', packageName: 'com.example.null', icon: '', isSystem: false, category: null },
+    ] as unknown as Parameters<typeof bridgeReturning>[1]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    // Nenhuma app se perde: uma categoria malformada nao e razao para a esconder.
+    expect(apps).toHaveLength(2);
+    expect(apps.map((a) => a.category)).toEqual(['undefined', 'undefined']);
+  });
 });
