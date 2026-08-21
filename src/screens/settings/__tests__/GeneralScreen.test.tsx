@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '../../../test-utils';
+import { render, fireEvent } from '../../../test-utils';
 import { GeneralScreen } from '../GeneralScreen';
 
 jest.mock('@react-navigation/native', () => ({
@@ -70,5 +70,59 @@ describe('GeneralScreen', () => {
     const { queryByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
     // Acceptance criterion: grep -n ">1<" must not show hardcoded badge
     expect(queryByText('1')).toBeNull();
+  });
+
+  it('navigates to About when the About row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('About'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('About');
+  });
+
+  it('navigates to DateTime when the Date & Time row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Date & Time'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('DateTime');
+  });
+
+  it('navigates to Keyboard when the Keyboard row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Keyboard'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Keyboard');
+  });
+
+  it('navigates to Language & Region when the Language & Region row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Language & Region'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('LanguageRegion');
+  });
+
+  it('navigates to Storage when the Device Storage row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Device Storage'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Storage');
+  });
+
+  it('navigates to Vpn when the VPN & Device Management row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('VPN & Device Management'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Vpn');
+  });
+
+  it('navigates to BackupRestore when the Backup & Restore row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Backup & Restore'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('BackupRestore');
+  });
+
+  it('navigates to SoftwareUpdate when the Software Update row is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Software Update'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('SoftwareUpdate');
+  });
+
+  it('goes back to Settings when the title-area back control is pressed', () => {
+    const { getByText } = render(<GeneralScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Settings'));
+    expect(mockNavigation.goBack).toHaveBeenCalled();
   });
 });
