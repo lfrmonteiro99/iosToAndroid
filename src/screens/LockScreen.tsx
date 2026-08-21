@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import * as Haptics from 'expo-haptics';
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { GestureHaptics } from '../utils/gestureHaptics';
 import { useDevice } from '../store/DeviceStore';
@@ -624,14 +624,17 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
         progress >= gestureConfig.panelCommitProgress ||
         upwardV >= gestureConfig.panelCommitVelocity;
 
+      // translateY is a literal dp offset — vy is already dp/ms, convert to dp/sec.
+      const translateYVelocity = dpPerMsToPtPerSec(vy);
+
       if (shouldCommit) {
         runOnJS(GestureHaptics.commit)('light');
-        translateY.value = withSpring(-SCREEN_HEIGHT, gestureConfig.spring.mediumSettle);
+        translateY.value = withSpring(-SCREEN_HEIGHT, { ...gestureConfig.spring.mediumSettle, velocity: translateYVelocity });
         opacity.value = withTiming(0, { duration: 250 }, () => {
           runOnJS(handleUnlock)();
         });
       } else {
-        translateY.value = withSpring(0, gestureConfig.spring.fastSettle);
+        translateY.value = withSpring(0, { ...gestureConfig.spring.fastSettle, velocity: translateYVelocity });
         opacity.value = withTiming(1, { duration: 200 });
       }
     });

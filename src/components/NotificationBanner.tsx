@@ -95,8 +95,9 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         // Dismiss
         runOnJS(dismiss)();
       } else {
-        // Snap back
-        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        // Snap back — translateY is a literal dp offset, e.velocityY is
+        // already dp/sec, no conversion needed.
+        translateY.value = withSpring(0, { damping: 20, stiffness: 300, velocity: e.velocityY });
       }
     });
 

@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
-import { gestureConfig, IDLE_DIM_MS } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig, IDLE_DIM_MS } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { useGestureMachine, commitForHome, commitForSwitcher } from '../utils/gestureMachine';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
@@ -171,7 +171,8 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
       // ×8 (80 dp): home-bar drag is intentionally tolerant of lateral wrist movement;
       // stricter axis-lock would feel sticky on real devices during natural thumb swipes.
       if (Math.abs(e.translationX) > gestureConfig.axisLockDp * 8) {
-        translateY.value = settle(0, 'homeSettle', reduceMotionShared.value);
+        // translateY is a literal dp offset, same unit as vy scaled to per-second.
+        translateY.value = settle(0, 'homeSettle', reduceMotionShared.value, dpPerMsToPtPerSec(vy));
         machine.phase.value = 'cancelled';
         return;
       }
@@ -194,14 +195,16 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
     })
     .onEnd((e) => {
       'worklet';
-      translateY.value = settle(0, 'homeSettle', reduceMotionShared.value);
+      // Final velocity from multi-sample buffer — computed before the first
+      // settle() so translateY's spring can inherit the release speed.
+      pushSample(buf.value, e.translationX, e.translationY, currentT.value);
+      const { vy } = sampledVelocity(buf.value, currentT.value);
+      const translateYVelocity = dpPerMsToPtPerSec(vy);
+
+      translateY.value = settle(0, 'homeSettle', reduceMotionShared.value, translateYVelocity);
 
       const dy = Math.min(0, e.translationY);
       const progress = Math.max(0, Math.min(1, -dy / gestureConfig.homeTravelDp));
-
-      // Final velocity from multi-sample buffer
-      pushSample(buf.value, e.translationX, e.translationY, currentT.value);
-      const { vy } = sampledVelocity(buf.value, currentT.value);
 
       const holdMs = currentT.value - machine.startT.value;
 

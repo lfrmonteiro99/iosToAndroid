@@ -277,7 +277,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       translateX.value = dragStart.value.x + e.translationX;
       translateY.value = dragStart.value.y + e.translationY;
     })
-    .onEnd(() => {
+    .onEnd((e) => {
       'worklet';
       const rm = reduceMotionShared.value;
       // Magnetic snap to nearest horizontal edge
@@ -285,7 +285,9 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       const snapRight = SCREEN_W - size - 8;
       const center = translateX.value + size / 2;
       const targetX = center < SCREEN_W / 2 ? snapLeft : snapRight;
-      translateX.value = settle(targetX, SNAP_SPRING, rm);
+      // translateX/translateY are literal dp offsets — e.velocityX/velocityY
+      // from the gesture handler are already dp/sec, no conversion needed.
+      translateX.value = settle(targetX, SNAP_SPRING, rm, e.velocityX);
 
       // Clamp Y inside safe area
       const minY = insets.top + 8;
@@ -293,7 +295,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       let targetY = translateY.value;
       if (targetY < minY) targetY = minY;
       if (targetY > maxY) targetY = maxY;
-      translateY.value = settle(targetY, SNAP_SPRING, rm);
+      translateY.value = settle(targetY, SNAP_SPRING, rm, e.velocityY);
 
       runOnJS(persistPosition)(targetX, targetY);
       runOnJS(snapHaptic)();

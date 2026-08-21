@@ -53,7 +53,7 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
-import { zones, gestureConfig } from '../utils/gestureConfig';
+import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
@@ -697,11 +697,16 @@ export function LauncherHomeScreen() {
         const { vy } = sampledVelocity(spotlightBuf.value, spotlightT.value);
         const p = Math.min(1, Math.max(0, spotlightProgress.value));
         const reason = commitForSpotlight({ progress: p, velocity: vy, holdMs: 0 });
+        // spotlightProgress is normalized over spotlightCommitDp; convert the
+        // dp/ms sample velocity to progress-units/sec.
+        const progressVelocity = dpPerMsToPtPerSec(vy) / gestureConfig.spotlightCommitDp;
         if (reason !== 'none') {
-          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value);
+          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value, progressVelocity);
           runOnJS(navigateTo)('SpotlightSearch');
           return;
         }
+        spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value, progressVelocity);
+        return;
       }
 
       spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
