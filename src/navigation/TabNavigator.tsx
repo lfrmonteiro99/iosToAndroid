@@ -61,6 +61,7 @@ import { PhotosScreen } from '../screens/PhotosScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { NotesScreen } from '../screens/NotesScreen';
 import { MapsScreen } from '../screens/MapsScreen';
+import { FindMyScreen } from '../screens/FindMyScreen';
 import { RemindersScreen } from '../screens/RemindersScreen';
 import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
@@ -105,6 +106,7 @@ export function TabNavigator() {
       <Stack.Screen name="Calendar" component={CalendarScreen} options={{ animation }} />
       <Stack.Screen name="Notes" component={NotesScreen} options={{ animation }} />
       <Stack.Screen name="Maps" component={MapsScreen} options={{ animation }} />
+      <Stack.Screen name="FindMy" component={FindMyScreen} options={{ animation }} />
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
