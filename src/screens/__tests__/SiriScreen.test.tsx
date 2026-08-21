@@ -1,8 +1,28 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, waitFor } from '../../test-utils';
 import { SiriScreen } from '../SiriScreen';
 import type { AppNavigationProp } from '../../navigation/types';
 import type { InstalledApp } from '../../store/AppsStore';
+import type { Alarm } from '../../utils/alarmScheduling';
+
+const mockCreateQuickAlarm = jest.fn<Promise<Alarm>, [number, number, string?]>(
+  (hour: number, minute: number, label?: string) =>
+    Promise.resolve({
+      id: 'quick-1',
+      hour,
+      minute,
+      label: label?.trim() || 'Alarm',
+      days: [],
+      enabled: true,
+      notificationIds: ['notification-id'],
+    }),
+);
+
+// The whole module is replaced: SiriScreen only uses `createQuickAlarm` from it,
+// and loading the real module pulls in expo-notifications' native channel manager.
+jest.mock('../../utils/alarmScheduling', () => ({
+  createQuickAlarm: (...args: [number, number, string?]) => mockCreateQuickAlarm(...args),
+}));
 
 const mockLaunchApp = jest.fn<Promise<void>, [string]>(() => Promise.resolve());
 const mockApps: InstalledApp[] = [
@@ -21,6 +41,13 @@ jest.mock('../../store/AppsStore', () => {
   };
 });
 
+/** The clock time the assistant speaks for a given hour/minute in this locale. */
+function spokenTime(hour: number, minute: number): string {
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
 function makeNav() {
   return { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
 }
@@ -35,6 +62,7 @@ function submit(input: string, nav: AppNavigationProp = makeNav()) {
 
 beforeEach(() => {
   mockLaunchApp.mockClear();
+  mockCreateQuickAlarm.mockClear();
 });
 
 describe('SiriScreen', () => {
@@ -116,12 +144,48 @@ describe('SiriScreen', () => {
     }
   });
 
-  // ── SET_ALARM / UNRECOGNIZED ─────────────────────────────────────────────
-  it('tells the user alarms are not supported yet, without navigating', () => {
+  // ── SET_ALARM ────────────────────────────────────────────────────────────
+  it('creates the alarm and confirms the time, without navigating', async () => {
     const { getByText, nav } = submit('Set alarm for 7:30 am');
-    expect(getByText(/not supported yet/i)).toBeTruthy();
+    await waitFor(() => expect(getByText(`Alarm set for ${spokenTime(7, 30)}`)).toBeTruthy());
+    expect(mockCreateQuickAlarm).toHaveBeenCalledWith(7, 30);
     expect(nav.navigate).not.toHaveBeenCalled();
   });
+
+  it('passes a 12-hour PM command through as a 24-hour hour', async () => {
+    const { getByText } = submit('Set alarm for 7pm');
+    await waitFor(() => expect(getByText(`Alarm set for ${spokenTime(19, 0)}`)).toBeTruthy());
+    expect(mockCreateQuickAlarm).toHaveBeenCalledWith(19, 0);
+  });
+
+  it('creates two alarms when the command is repeated', async () => {
+    const nav = makeNav();
+    const { getByLabelText } = render(<SiriScreen navigation={nav} />);
+    const field = getByLabelText('Ask Siri');
+    fireEvent.changeText(field, 'Set alarm for 7pm');
+    fireEvent(field, 'submitEditing');
+    fireEvent.changeText(field, 'Set alarm for 8pm');
+    fireEvent(field, 'submitEditing');
+    await waitFor(() => expect(mockCreateQuickAlarm).toHaveBeenCalledTimes(2));
+    expect(mockCreateQuickAlarm).toHaveBeenNthCalledWith(1, 19, 0);
+    expect(mockCreateQuickAlarm).toHaveBeenNthCalledWith(2, 20, 0);
+  });
+
+  it('reports a failure instead of a confirmation when createQuickAlarm rejects', async () => {
+    mockCreateQuickAlarm.mockRejectedValueOnce(new Error('storage full'));
+    const { getByText, queryByText, nav } = submit('Set alarm for 7pm');
+    await waitFor(() => expect(getByText(/couldn't set that alarm/i)).toBeTruthy());
+    expect(queryByText(/alarm set for/i)).toBeNull();
+    expect(nav.navigate).not.toHaveBeenCalled();
+  });
+
+  it('does not create an alarm for an unparseable time (stays unrecognized)', () => {
+    const { getByText } = submit('Set alarm for banana');
+    expect(mockCreateQuickAlarm).not.toHaveBeenCalled();
+    expect(getByText(/not supported yet|didn't catch/i)).toBeTruthy();
+  });
+
+  // ── UNRECOGNIZED ─────────────────────────────────────────────────────────
 
   it('responds to an unrecognized command without throwing or navigating', () => {
     const { getByText, nav } = submit('Make me a sandwich');
