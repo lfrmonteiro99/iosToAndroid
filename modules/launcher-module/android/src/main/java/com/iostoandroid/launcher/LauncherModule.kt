@@ -90,12 +90,14 @@ class LauncherModule : Module() {
                     drawableToBase64(resolveInfo.loadIcon(pm))
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val category = CategoryMapper.categoryToString(appInfo.category)
 
                 mapOf(
                     "name" to label,
                     "packageName" to packageName,
                     "icon" to icon,
-                    "isSystem" to isSystem
+                    "isSystem" to isSystem,
+                    "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
         }

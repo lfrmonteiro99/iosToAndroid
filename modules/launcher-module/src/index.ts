@@ -13,6 +13,13 @@ export interface InstalledApp {
    */
   icon: string;
   isSystem: boolean;
+  /**
+   * ApplicationInfo.category mapped to a stable string constant.
+   * Possible values: 'undefined', 'game', 'audio', 'video', 'image', 'social',
+   * 'news', 'maps', 'productivity', 'accessibility'.
+   * API 26+; older devices return 'undefined'.
+   */
+  category: string;
 }
 
 export interface WifiInfo {

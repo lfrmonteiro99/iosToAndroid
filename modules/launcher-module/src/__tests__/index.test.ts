@@ -395,4 +395,25 @@ describe('deduplication of launcher entries by packageName', () => {
     await expect(mod.default.getInstalledApps()).resolves.toEqual([]);
     expect(errors).toContain('getInstalledApps');
   });
+
+  it('includes the category field as a string in getInstalledApps results', async () => {
+    // Native response includes category as a stable string per ApplicationInfo constant
+    const mod = bridgeReturning('getInstalledApps', [
+      { name: 'Gaming App', packageName: 'com.example.game', icon: '', isSystem: false, category: 'game' },
+      { name: 'Productivity App', packageName: 'com.example.productivity', icon: '', isSystem: false, category: 'productivity' },
+      { name: 'Unknown App', packageName: 'com.example.unknown', icon: '', isSystem: false, category: 'undefined' },
+    ] as Parameters<typeof bridgeReturning>[1]);
+
+    const apps = await mod.default.getInstalledApps();
+
+    expect(apps).toHaveLength(3);
+    // Verify each app has a category field
+    expect(apps[0]).toHaveProperty('category');
+    expect(apps[1]).toHaveProperty('category');
+    expect(apps[2]).toHaveProperty('category');
+    // Verify category values match expected constants
+    expect(apps[0].category).toBe('game');
+    expect(apps[1].category).toBe('productivity');
+    expect(apps[2].category).toBe('undefined');
+  });
 });
