@@ -11,6 +11,9 @@ import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
@@ -1139,7 +1142,7 @@ class LauncherModule : Module() {
     }
 
     private fun writeIconToFile(drawable: Drawable, file: File) {
-        val bitmap = drawableToBitmap(drawable)
+        val bitmap = applySquircleMask(drawableToBitmap(drawable))
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         FileOutputStream(file).use { out ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
@@ -1148,7 +1151,7 @@ class LauncherModule : Module() {
     }
 
     private fun drawableToBase64(drawable: Drawable): String {
-        val bitmap = drawableToBitmap(drawable)
+        val bitmap = applySquircleMask(drawableToBitmap(drawable))
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         val outputStream = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream)
@@ -1157,17 +1160,74 @@ class LauncherModule : Module() {
         return "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
+    /**
+     * Fit [drawable] into a square via center-crop: take the largest centered
+     * axis-aligned square of the source and scale it to the output square. This
+     * is the rule chosen for non-square icons — see #480. It never distorts the
+     * aspect ratio (no letterboxing, which would add transparent bars), so a
+     * wide banner icon keeps its proportions and just gets cropped to a square
+     * before the squircle mask is applied. A round icon still ends up with empty
+     * corners after masking; #480 deliberately does NOT address that.
+     */
     private fun drawableToBitmap(drawable: Drawable): Bitmap {
-        if (drawable is BitmapDrawable && drawable.bitmap != null) {
-            return drawable.bitmap
+        val srcW = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
+        val srcH = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
+        val side = srcW.coerceAtMost(srcH)
+        val src = Bitmap.createBitmap(srcW, srcH, Bitmap.Config.ARGB_8888)
+        Canvas(src).apply {
+            drawable.setBounds(0, 0, srcW, srcH)
+            drawable.draw(this)
         }
-        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
-        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
-        return bitmap
+        // Center-crop the largest square sub-region.
+        val left = (srcW - side) / 2
+        val top = (srcH - side) / 2
+        val square = Bitmap.createBitmap(src, left, top, side, side)
+        if (square != src) src.recycle()
+        return square
+    }
+
+    /**
+     * Clip [src] to a 4.7-exponent superellipse (iOS-style squircle) and return
+     * the masked bitmap. Applied to every icon emitted by getInstalledApps and
+     * getAppIcon, so the launcher grid and the dock share one silhouette.
+     *
+     * Masking strategy:
+     *  - Output is a square of the smallest source dimension, so non-square
+     *    icons are center-cropped (drawableToBitmap) and the mask never sees a
+     *    rectangle.
+     *  - The clip path is built from [SuperellipsePath.points] — the SAME
+     *    generator that drives the TS/SVG reference in src/theme/squircle.ts —
+     *    so the native mask cannot drift from the reference geometry.
+     *  - Anti-aliasing uses a BitmapShader painted through the superellipse
+     *    Path via Canvas.drawPath(..., ANTI_ALIAS_FLAG). Path fills are
+     *    anti-aliased by drawPath (unlike clipPath, which is not), so the edge
+     *    stays smooth at 60pt instead of serrated.
+     *  - A circular source icon will still show empty (transparent) corners
+     *    after masking; that is the known-incomplete "dominant color" item of
+     *    epic #465 and is explicitly out of scope here (#480 does not fix it).
+     */
+    private fun applySquircleMask(src: Bitmap, n: Double = 4.7): Bitmap {
+        val size = src.width.coerceAtMost(src.height)
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
+        Canvas(out).drawPath(buildSuperellipsePath(size, n), paint)
+        return out
+    }
+
+    /** Build an android.graphics.Path for the superellipse in a [size]×[size] box. */
+    private fun buildSuperellipsePath(size: Int, n: Double): Path {
+        val pts = SuperellipsePath.points(size, n, 64)
+        return Path().apply {
+            if (pts.isEmpty()) return@apply
+            val first = pts[0]
+            moveTo(first.first.toFloat(), first.second.toFloat())
+            for (i in 1 until pts.size) {
+                val p = pts[i]
+                lineTo(p.first.toFloat(), p.second.toFloat())
+            }
+            close()
+        }
     }
 
     @Suppress("DEPRECATION")
