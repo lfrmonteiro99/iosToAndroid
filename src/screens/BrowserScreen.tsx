@@ -57,7 +57,6 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const [inputUrl, setInputUrl] = useState(BROWSER_HOME_URL);
   const [currentUrl, setCurrentUrl] = useState(BROWSER_HOME_URL);
@@ -65,7 +64,9 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
   const webviewRef = useRef<WebView>(null);
+  const styles = React.useMemo(() => createStyles(colors, isPrivate), [colors, isPrivate]);
 
   const handleSubmit = useCallback(() => {
     const next = resolveUrl(inputUrl);
@@ -87,13 +88,18 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     setShowShareSheet(true);
   }, []);
 
+  const handleTogglePrivate = useCallback(() => {
+    hapticImpact();
+    setIsPrivate((prev) => !prev);
+  }, []);
+
   const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
     setPageTitle(navState.title);
   }, []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
+      <View testID="browser-topbar" style={styles.topBar}>
         <Pressable
           onPress={handleBack}
           hitSlop={8}
@@ -140,6 +146,19 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         >
           <Ionicons name="share-outline" size={22} color={BROWSER_ACCENT} />
         </Pressable>
+        <Pressable
+          onPress={handleTogglePrivate}
+          hitSlop={8}
+          accessibilityLabel="Toggle private browsing"
+          accessibilityRole="button"
+          accessibilityState={{ selected: isPrivate }}
+        >
+          <Ionicons
+            name={isPrivate ? 'eye-off' : 'eye'}
+            size={22}
+            color={isPrivate ? colors.label : BROWSER_ACCENT}
+          />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -156,6 +175,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         testID="browser-webview"
         source={{ uri: currentUrl }}
         style={styles.webview}
+        incognito={isPrivate}
         onLoadStart={() => {
           setLoading(true);
           setProgress(0);
@@ -182,7 +202,9 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-function createStyles(colors: CupertinoColors) {
+const PRIVATE_BACKGROUND = '#1C1C1E';
+
+function createStyles(colors: CupertinoColors, isPrivate: boolean) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.systemBackground },
     topBar: {
@@ -191,14 +213,14 @@ function createStyles(colors: CupertinoColors) {
       gap: 8,
       paddingHorizontal: 12,
       paddingVertical: 8,
-      backgroundColor: colors.secondarySystemBackground,
+      backgroundColor: isPrivate ? PRIVATE_BACKGROUND : colors.secondarySystemBackground,
     },
     addressBar: {
       flex: 1,
       height: 36,
       borderRadius: 10,
       paddingHorizontal: 12,
-      backgroundColor: colors.tertiarySystemBackground,
+      backgroundColor: isPrivate ? PRIVATE_BACKGROUND : colors.tertiarySystemBackground,
       color: colors.label,
       ...Typography.body,
     },
