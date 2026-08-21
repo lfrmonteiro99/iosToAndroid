@@ -14,6 +14,7 @@ import {
   AccentColorKey,
   Glass,
   glassSurface,
+  fontFamilyForSize,
 } from './CupertinoTheme';
 
 const THEME_STORAGE_KEY = '@iostoandroid/theme_preference';
@@ -46,7 +47,15 @@ function scaleTypography(
     const fontWeight = boldText
       ? (boldWeightMap[style.fontWeight] ?? style.fontWeight) as FontWeightValue
       : style.fontWeight;
-    return [key, { ...style, fontSize: scaledFontSize, lineHeight: scaledLineHeight, fontWeight }];
+    // O corte Text/Display é do tamanho renderizado: escalar o token pode
+    // atravessar os 20pt nos dois sentidos, e a família tem de acompanhar.
+    return [key, {
+      ...style,
+      fontSize: scaledFontSize,
+      lineHeight: scaledLineHeight,
+      fontWeight,
+      fontFamily: fontFamilyForSize(scaledFontSize),
+    }];
   });
   return Object.fromEntries(entries) as typeof Typography;
 }

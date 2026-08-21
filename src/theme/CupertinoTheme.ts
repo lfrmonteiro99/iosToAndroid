@@ -160,7 +160,31 @@ export type AccentColorKey = keyof typeof AccentColors;
 
 export type CupertinoColors = typeof SystemColors.light;
 
-const fonts = { display: 'InterDisplay', text: 'Inter' } as const;
+/**
+ * Famílias de texto da app. Os nomes são os que o Android tem registados em
+ * `ReactFontManager` — têm de bater certo com `expo.plugins["expo-font"]` no
+ * `app.json`, que é onde cada peso (400/500/600/700) é associado ao ficheiro
+ * estático correspondente. Sem esse mapa, `fontWeight` não faz nada de útil
+ * numa família custom no Android: o `ReactFontManager` só distingue NORMAL de
+ * BOLD (`nearestStyle`, ReactFontManager.kt:132-139), o 500/600 cai no ficheiro
+ * Regular e o ≥700 sai em Roboto. Ver o corpo do PR do #475.
+ */
+export const FontFamilies = { display: 'InterDisplay', text: 'Inter' } as const;
+
+export type FontFamily = (typeof FontFamilies)[keyof typeof FontFamilies];
+
+/** Ponto a partir do qual a Apple (e o Inter) troca Text por Display. Inclusivo. */
+export const DISPLAY_MIN_FONT_SIZE = 20;
+
+/**
+ * O corte óptico é do tamanho *renderizado*, não do tamanho de desenho: com o
+ * Dynamic Type ligado um `body` de 17pt pode ir aos 22pt, e aí a variante certa
+ * é a Display. Por isso o `scaleTypography` volta a passar por aqui depois de
+ * escalar, em vez de arrastar a família do token.
+ */
+export function fontFamilyForSize(fontSize: number): FontFamily {
+  return fontSize >= DISPLAY_MIN_FONT_SIZE ? FontFamilies.display : FontFamilies.text;
+}
 
 // iOS Typography Scale — Inter family with Display variant for sizes ≥20pt, Text variant for <20pt
 export const Typography = {
@@ -169,84 +193,84 @@ export const Typography = {
     lineHeight: 41,
     fontWeight: '700' as const,
     letterSpacing: 0.41,
-    fontFamily: fonts.display,
+    fontFamily: FontFamilies.display,
   },
   title1: {
     fontSize: 28,
     lineHeight: 34,
     fontWeight: '700' as const,
     letterSpacing: 0.36,
-    fontFamily: fonts.display,
+    fontFamily: FontFamilies.display,
   },
   title2: {
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '700' as const,
     letterSpacing: 0.35,
-    fontFamily: fonts.display,
+    fontFamily: FontFamilies.display,
   },
   title3: {
     fontSize: 20,
     lineHeight: 25,
     fontWeight: '600' as const,
     letterSpacing: 0.38,
-    fontFamily: fonts.display,
+    fontFamily: FontFamilies.display,
   },
   headline: {
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '600' as const,
     letterSpacing: -0.41,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   body: {
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '400' as const,
     letterSpacing: -0.41,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   callout: {
     fontSize: 16,
     lineHeight: 21,
     fontWeight: '400' as const,
     letterSpacing: -0.32,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   subhead: {
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '400' as const,
     letterSpacing: -0.24,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   footnote: {
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '400' as const,
     letterSpacing: -0.08,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   caption1: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '400' as const,
     letterSpacing: 0,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   caption2: {
     fontSize: 11,
     lineHeight: 13,
     fontWeight: '400' as const,
     letterSpacing: 0.07,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
   tabLabel: {
     fontSize: 10,
     lineHeight: 12,
     fontWeight: '500' as const,
     letterSpacing: 0,
-    fontFamily: fonts.text,
+    fontFamily: FontFamilies.text,
   },
 };
 
