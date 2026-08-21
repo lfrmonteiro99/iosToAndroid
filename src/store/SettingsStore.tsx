@@ -53,6 +53,7 @@ export interface SettingsState {
   locationServices: boolean;
   wallpaperIndex: number;
   reduceMotion: boolean;
+  reduceTransparency: boolean;
   boldText: boolean;
   showLockScreen: boolean;
   biometricUnlock: boolean;
@@ -109,6 +110,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   locationServices: true,
   wallpaperIndex: 0,
   reduceMotion: false,
+  reduceTransparency: false,
   boldText: false,
   showLockScreen: true,
   biometricUnlock: true,

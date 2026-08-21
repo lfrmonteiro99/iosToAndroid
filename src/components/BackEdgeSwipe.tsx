@@ -9,11 +9,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { commitForBack } from '../utils/gestureMachine';
 import { hapticSelection } from '../utils/haptics';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { GestureExclusionView } from './GestureExclusionView';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -77,11 +78,15 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
       pushSample(buf.value, e.translationX, e.translationY, currentT.value);
       const { vx } = sampledVelocity(buf.value, currentT.value);
       const reason = commitForBack({ progress: progress.value, velocity: vx, holdMs: 0 });
+      // progress is normalized [0,1] over the edge-swipe travel distance;
+      // convert the dp/ms sample velocity to progress-units/sec.
+      const travel = SCREEN_W * gestureConfig.backTravelRatio;
+      const progressVelocity = dpPerMsToPtPerSec(vx) / travel;
       // The native gesture owns navigation; we just animate our edge shadow out.
       if (reason !== 'none') {
-        progress.value = settle(1, 'backSettle', reduceMotionShared.value);
+        progress.value = settle(1, 'backSettle', reduceMotionShared.value, progressVelocity);
       } else {
-        progress.value = settle(0, 'backSettle', reduceMotionShared.value);
+        progress.value = settle(0, 'backSettle', reduceMotionShared.value, progressVelocity);
       }
     });
 
@@ -97,7 +102,7 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ flex: 1 }}>
       <GestureDetector gesture={pan}>
-        <View
+        <GestureExclusionView
           style={styles.edgeCatch}
           collapsable={false}
           accessible={false}

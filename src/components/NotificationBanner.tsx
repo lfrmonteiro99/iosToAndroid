@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useRef } from 'react';
 import { View, Text, Image, StyleSheet, Platform } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -95,8 +95,9 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         // Dismiss
         runOnJS(dismiss)();
       } else {
-        // Snap back
-        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        // Snap back — translateY is a literal dp offset, e.velocityY is
+        // already dp/sec, no conversion needed.
+        translateY.value = withSpring(0, { damping: 20, stiffness: 300, velocity: e.velocityY });
       }
     });
 
@@ -133,10 +134,9 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         accessibilityRole="alert"
         accessibilityLabel={`${notification.appName}: ${notification.title}. ${notification.body}`}
       >
-        <BlurView
+        <GlassSurface
           intensity={95}
           tint={theme.dark ? 'dark' : 'light'}
-          experimentalBlurMethod="dimezisBlurView"
           style={styles.blur}
         >
           <View style={styles.content}>
@@ -188,7 +188,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
               </Text>
             </View>
           </View>
-        </BlurView>
+        </GlassSurface>
       </Animated.View>
     </GestureDetector>
   );

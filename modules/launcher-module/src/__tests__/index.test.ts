@@ -283,6 +283,77 @@ describe('LauncherModule notification listeners (event-driven, #196)', () => {
   });
 });
 
+// #508: Android re-delivers the HOME intent via onNewIntent (singleTask
+// launchMode) instead of recreating the Activity, but nothing on the JS side
+// was listening for it — HOME did nothing while the launcher was already in
+// the foreground. This is the bridge half of the fix: forwarding the native
+// "onHomePressed" event (emitted only for CATEGORY_HOME — see MainActivity's
+// override, injected by plugins/withLauncherIntent.js) to a JS listener.
+describe('LauncherModule HOME button listener (event-driven, #508)', () => {
+  it('addHomePressedListener subscribes to onHomePressed', () => {
+    const addListener = jest.fn((_event: string, _handler: () => void) => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    mod.addHomePressedListener(handler);
+
+    expect(addListener).toHaveBeenCalledWith('onHomePressed', expect.any(Function));
+  });
+
+  it('addHomePressedListener invokes the caller-supplied handler when the native event fires', () => {
+    const addListener = jest.fn((_event: string, _handler: () => void) => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    mod.addHomePressedListener(handler);
+
+    const nativeHandler = addListener.mock.calls[0][1];
+    nativeHandler();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('addHomePressedListener unsubscribe calls the native subscription remove() exactly once', () => {
+    const remove = jest.fn();
+    const addListener = jest.fn(() => ({ remove }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const unsubscribe = mod.addHomePressedListener(jest.fn());
+    expect(remove).not.toHaveBeenCalled();
+
+    unsubscribe();
+    unsubscribe(); // calling twice must not double-invoke or throw
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it('addHomePressedListener degrades to a no-op unsubscribe when the native module exposes no event emitter', () => {
+    // makeNativeModule() (not …WithListener) hardcodes addListener to undefined —
+    // the pre-fix state on a device where the AAR predates event support.
+    mockNativeModule = makeNativeModule(false);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    const unsubscribe = mod.addHomePressedListener(handler);
+
+    expect(() => unsubscribe()).not.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('two independent addHomePressedListener subscribers each get their own native subscription', () => {
+    const addListener = jest.fn(() => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    mod.addHomePressedListener(jest.fn());
+    mod.addHomePressedListener(jest.fn());
+
+    expect(addListener).toHaveBeenCalledTimes(2);
+  });
+});
+
 // PackageManager.queryIntentActivities yields one entry per launcher activity,
 // not one per package, so an app registering several (Google also registers
 // "Voice Search") reaches JS as repeated packageNames. Consumers key React

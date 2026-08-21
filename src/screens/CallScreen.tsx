@@ -60,10 +60,14 @@ function ControlButton({ icon, label, onPress, active, disabled }: ControlButton
   const { typography } = useTheme();
   return (
     <Pressable
-      style={[styles.controlBtn, active && styles.controlBtnActive, disabled && styles.controlBtnDisabled]}
+      style={({ pressed }) => [
+        styles.controlBtn,
+        active && styles.controlBtnActive,
+        disabled && styles.controlBtnDisabled,
+        pressed && !disabled && { opacity: 0.65 },
+      ]}
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
-      android_ripple={disabled ? null : { color: 'rgba(255,255,255,0.15)', radius: 35 }}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
@@ -212,9 +216,8 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
       {/* ------------------------------------------------------------------ */}
       <View style={styles.endCallRow}>
         <Pressable
-          style={styles.endCallBtn}
+          style={({ pressed }) => [styles.endCallBtn, pressed && { opacity: 0.7 }]}
           onPress={handleEndCall}
-          android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: 35 }}
           accessibilityRole="button"
           accessibilityLabel="End Call"
         >

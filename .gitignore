@@ -40,3 +40,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Gradle build output do modulo nativo. Nao esta coberto pela regra /android acima
+# porque o modulo vive em modules/launcher-module/android/, fora da raiz — e apareceu
+# como 5.2M de artefactos sem versionar a bloquear qualquer rebase do working tree.
+modules/*/android/build/

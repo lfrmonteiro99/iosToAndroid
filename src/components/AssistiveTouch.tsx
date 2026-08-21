@@ -12,7 +12,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
@@ -229,7 +229,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
         case 'controlCenter':    navigate('ControlCenter'); break;
         case 'spotlight':        navigate('SpotlightSearch'); break;
         case 'settings':         navigate('Settings'); break;
-        case 'siri':             navigate('SpotlightSearch'); break; // best-available analogue
+        case 'siri':             navigate('Siri'); break;
         case 'screenshot':
           // No reliable programmatic screenshot API; briefly flash the screen
           // and let the user capture via power+volume. Treat as placeholder.
@@ -277,7 +277,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       translateX.value = dragStart.value.x + e.translationX;
       translateY.value = dragStart.value.y + e.translationY;
     })
-    .onEnd(() => {
+    .onEnd((e) => {
       'worklet';
       const rm = reduceMotionShared.value;
       // Magnetic snap to nearest horizontal edge
@@ -285,7 +285,9 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       const snapRight = SCREEN_W - size - 8;
       const center = translateX.value + size / 2;
       const targetX = center < SCREEN_W / 2 ? snapLeft : snapRight;
-      translateX.value = settle(targetX, SNAP_SPRING, rm);
+      // translateX/translateY are literal dp offsets — e.velocityX/velocityY
+      // from the gesture handler are already dp/sec, no conversion needed.
+      translateX.value = settle(targetX, SNAP_SPRING, rm, e.velocityX);
 
       // Clamp Y inside safe area
       const minY = insets.top + 8;
@@ -293,7 +295,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       let targetY = translateY.value;
       if (targetY < minY) targetY = minY;
       if (targetY > maxY) targetY = maxY;
-      translateY.value = settle(targetY, SNAP_SPRING, rm);
+      translateY.value = settle(targetY, SNAP_SPRING, rm, e.velocityY);
 
       runOnJS(persistPosition)(targetX, targetY);
       runOnJS(snapHaptic)();
@@ -395,16 +397,15 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
           accessibilityRole="button"
           accessibilityHint="Tap to open the menu. Drag to reposition. Long-press to hide."
         >
-          <BlurView
+          <GlassSurface
             intensity={55}
             tint={isDark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
             style={[styles.buttonBlur, { borderRadius: size / 2 }]}
           >
             <View style={[styles.buttonInner, { backgroundColor: isDark ? 'rgba(40,40,44,0.55)' : 'rgba(255,255,255,0.55)' }]}>
               <View style={[styles.buttonDot, { backgroundColor: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.65)' }]} />
             </View>
-          </BlurView>
+          </GlassSurface>
         </Animated.View>
       </GestureDetector>
     </>
@@ -443,19 +444,17 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
 
   return (
     <Animated.View style={[styles.menu, anchorStyle]}>
-      <BlurView
+      <GlassSurface
         intensity={70}
         tint={isDark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezisBlurView"
         style={styles.menuBlur}
       >
         <View style={styles.menuGrid}>
           {items.map((item) => (
             <Pressable
               key={item.id}
-              style={[styles.menuCell, { backgroundColor: cellBg }]}
+              style={({ pressed }) => [styles.menuCell, { backgroundColor: cellBg, opacity: pressed ? 0.65 : 1 }]}
               onPress={() => onPick(item)}
-              android_ripple={{ color: 'rgba(255,255,255,0.15)', borderless: true }}
               accessibilityRole="button"
               accessibilityLabel={item.label}
             >
@@ -466,7 +465,7 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
             </Pressable>
           ))}
         </View>
-      </BlurView>
+      </GlassSurface>
     </Animated.View>
   );
 }

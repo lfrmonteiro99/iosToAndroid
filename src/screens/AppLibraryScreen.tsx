@@ -110,13 +110,37 @@ interface CategoryCardProps {
   title: string;
   apps: InstalledApp[];
   onPress: () => void;
+  onLaunchApp: (packageName: string) => void;
   cardWidth: number;
 }
 
-const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, cardWidth }: CategoryCardProps) {
+// From this many apps onward, the 4th grid cell becomes a 2x2 "more apps"
+// quadrant instead of a 4th large icon. Below this, 3 large icons + a
+// quadrant holding a single mini icon reads worse than just 4 equal large
+// icons — there's nothing extra to signal, so the quadrant only appears once
+// there truly is more content hiding behind it.
+const QUADRANT_MIN_APPS = 5;
+const MAX_QUADRANT_MINIS = 4;
+const MINI_GAP = 3;
+const MIN_TOUCH_TARGET = 44;
+
+// Pads small icon cells up to the platform's minimum touch target (§1.5)
+// without inflating their visual size.
+function touchHitSlop(size: number) {
+  const pad = Math.ceil(Math.max(0, MIN_TOUCH_TARGET - size) / 2);
+  return { top: pad, bottom: pad, left: pad, right: pad };
+}
+
+export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, onLaunchApp, cardWidth }: CategoryCardProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const iconSize = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
+  const iconHitSlop = touchHitSlop(iconSize);
+  const miniSize = (iconSize - MINI_GAP) / 2;
+
+  const hasQuadrant = apps.length >= QUADRANT_MIN_APPS;
+  const largeApps = hasQuadrant ? apps.slice(0, 3) : apps.slice(0, 4);
+  const miniApps = hasQuadrant ? apps.slice(3, 3 + MAX_QUADRANT_MINIS) : [];
 
   return (
     <Pressable
@@ -132,16 +156,36 @@ const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, ca
       accessibilityLabel={`${title} category, ${apps.length} app${apps.length !== 1 ? 's' : ''}`}
       accessibilityRole="button"
     >
-      {/* 2x2 icon grid */}
+      {/* 3 large icons (each opens its app directly) plus, once there are
+          more apps than fit, a mini-icon quadrant that opens the category */}
       <View style={styles.iconGrid}>
-        {Array.from({ length: 4 }).map((_, idx) => {
-          const a = apps[idx];
-          return (
-            <View key={idx} style={{ width: iconSize, height: iconSize }}>
-              {a ? <AppIcon app={a} size={iconSize} /> : null}
-            </View>
-          );
-        })}
+        {largeApps.map((a) => (
+          <Pressable
+            key={a.packageName}
+            onPress={() => onLaunchApp(a.packageName)}
+            hitSlop={iconHitSlop}
+            style={{ width: iconSize, height: iconSize }}
+            accessibilityLabel={`Open ${a.name}, App Library`}
+            accessibilityRole="button"
+          >
+            <AppIcon app={a} size={iconSize} />
+          </Pressable>
+        ))}
+        {hasQuadrant && (
+          <Pressable
+            onPress={onPress}
+            hitSlop={iconHitSlop}
+            style={[styles.miniQuadrant, { width: iconSize, height: iconSize }]}
+            accessibilityLabel={`See all ${apps.length} apps in ${title}`}
+            accessibilityRole="button"
+          >
+            {miniApps.map((a) => (
+              <View key={a.packageName} style={{ width: miniSize, height: miniSize }}>
+                <AppIcon app={a} size={miniSize} />
+              </View>
+            ))}
+          </Pressable>
+        )}
       </View>
       <Text
         style={[typography.subhead, styles.categoryTitle, { color: colors.label }]}
@@ -440,6 +484,7 @@ export function AppLibraryContent() {
                 apps={cat.apps}
                 cardWidth={cardWidth}
                 onPress={() => setCategoryModal({ title: cat.name, apps: cat.apps })}
+                onLaunchApp={handleLaunch}
               />
             ))}
           </View>
@@ -565,6 +610,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 3,
     marginBottom: 10,
+  },
+  miniQuadrant: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignContent: 'center',
+    justifyContent: 'center',
+    gap: MINI_GAP,
   },
   categoryTitle: {
     fontWeight: '600',

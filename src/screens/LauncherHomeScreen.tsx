@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -34,6 +33,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
+import { addHomePressedListener } from '../../modules/launcher-module/src';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
@@ -44,6 +44,7 @@ import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
   NotificationBanner,
+  GlassSurface,
   useAlert,
 } from '../components';
 import type { BannerNotification } from '../components';
@@ -53,7 +54,7 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
-import { zones, gestureConfig } from '../utils/gestureConfig';
+import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
@@ -181,6 +182,35 @@ function formatTime(date: Date): string {
 }
 
 // ---------------------------------------------------------------------------
+// HOME button (#508)
+// ---------------------------------------------------------------------------
+
+// What Android's re-delivered HOME intent (onNewIntent, singleTask launchMode
+// — see plugins/withLauncherIntent.js) must reset once the launcher is
+// already in the foreground. Pure and exported so every starting state is
+// asserted directly, without mounting the screen or a real ScrollView.
+// The App Library is just the last page of this same pager (#434), not a
+// separate overlay, so it needs no case of its own: it's isOnFirstPage: false,
+// like any other non-first page.
+export interface HomePressState {
+  isFolderOpen: boolean;
+  isOnFirstPage: boolean;
+}
+
+export type HomePressAction =
+  | 'none'
+  | 'closeFolder'
+  | 'scrollToFirstPage'
+  | 'closeFolderAndScrollToFirstPage';
+
+export function resolveHomePressAction(state: HomePressState): HomePressAction {
+  if (state.isFolderOpen && !state.isOnFirstPage) return 'closeFolderAndScrollToFirstPage';
+  if (state.isFolderOpen) return 'closeFolder';
+  if (!state.isOnFirstPage) return 'scrollToFirstPage';
+  return 'none';
+}
+
+// ---------------------------------------------------------------------------
 // Dynamic Island
 // ---------------------------------------------------------------------------
 
@@ -271,7 +301,6 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress}
-      android_ripple={isJiggling ? null : { color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${app.name}`}
       accessibilityRole="button"
     >
@@ -393,10 +422,9 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
 
   return (
     <Pressable
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
     >
@@ -450,7 +478,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <Pressable style={styles.folderOverlayBackdrop} onPress={onClose} accessibilityLabel="Dismiss" accessibilityRole="button">
         <Pressable onPress={e => e.stopPropagation()} importantForAccessibility="no">
-          <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.folderOverlayCard}>
+          <GlassSurface intensity={60} tint="dark" style={styles.folderOverlayCard}>
             {editing ? (
               <TextInput
                 style={[styles.folderOverlayTitleInput, { fontSize: 17 * textScale }]}
@@ -479,7 +507,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                 />
               ))}
             </View>
-          </BlurView>
+          </GlassSurface>
         </Pressable>
       </Pressable>
     </Modal>
@@ -699,11 +727,16 @@ export function LauncherHomeScreen() {
         const { vy } = sampledVelocity(spotlightBuf.value, spotlightT.value);
         const p = Math.min(1, Math.max(0, spotlightProgress.value));
         const reason = commitForSpotlight({ progress: p, velocity: vy, holdMs: 0 });
+        // spotlightProgress is normalized over spotlightCommitDp; convert the
+        // dp/ms sample velocity to progress-units/sec.
+        const progressVelocity = dpPerMsToPtPerSec(vy) / gestureConfig.spotlightCommitDp;
         if (reason !== 'none') {
-          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value);
+          spotlightProgress.value = settle(1, 'mediumSettle', reduceMotionShared.value, progressVelocity);
           runOnJS(navigateTo)('SpotlightSearch');
           return;
         }
+        spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value, progressVelocity);
+        return;
       }
 
       spotlightProgress.value = settle(0, 'fastSettle', reduceMotionShared.value);
@@ -814,6 +847,28 @@ export function LauncherHomeScreen() {
   useEffect(() => {
     canSpotlightShared.value = canSpotlight;
   }, [canSpotlight, canSpotlightShared]);
+
+  // HOME button (#508): Android re-delivers the intent via onNewIntent
+  // (singleTask) instead of creating a new Activity, but nothing was
+  // listening — this reacts to the native "onHomePressed" event (emitted
+  // only for CATEGORY_HOME, see plugins/withLauncherIntent.js) the same way
+  // pressing HOME resets a real launcher: close whatever's open, land on the
+  // first page. Also lives above the early returns, for the same
+  // rules-of-hooks reason as canSpotlight above.
+  useEffect(() => {
+    return addHomePressedListener(() => {
+      const action = resolveHomePressAction({
+        isFolderOpen: openFolder !== null,
+        isOnFirstPage: currentPage === 0,
+      });
+      if (action === 'closeFolder' || action === 'closeFolderAndScrollToFirstPage') {
+        setOpenFolder(null);
+      }
+      if (action === 'scrollToFirstPage' || action === 'closeFolderAndScrollToFirstPage') {
+        scrollViewRef.current?.scrollTo({ x: 0, animated: true });
+      }
+    });
+  }, [openFolder, currentPage]);
 
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
@@ -1117,9 +1172,8 @@ export function LauncherHomeScreen() {
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
           <Pressable
-            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
+            style={({ pressed }) => [styles.defaultBannerButton, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
             onPress={openLauncherSettings}
-            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
@@ -1268,10 +1322,9 @@ export function LauncherHomeScreen() {
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
       <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
-        <BlurView
+        <GlassSurface
           intensity={90}
           tint="dark"
-          experimentalBlurMethod="dimezisBlurView"
           style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
@@ -1296,7 +1349,7 @@ export function LauncherHomeScreen() {
               <View key={`empty-${i}`} style={{ width: DOCK_CELL_WIDTH }} />
             ))}
           </View>
-        </BlurView>
+        </GlassSurface>
       </View>
 
       {/* ---------------------------------------------------------------- */}

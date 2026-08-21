@@ -33,6 +33,8 @@ import android.util.Base64
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -44,7 +46,8 @@ class LauncherModule : Module() {
 @Volatile private var instance: LauncherModule? = null
 
         /**
-         * Called by [NotificationService] to forward notification events to JavaScript.
+         * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
+         * by plugins/withLauncherIntent.js) to forward events to JavaScript.
          * Uses Expo's built-in event emitter — declared via Events(...) in the definition.
          */
         fun emitEvent(name: String, bundle: Bundle) {
@@ -62,7 +65,12 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
+
+        // Native view that reserves its own bounds against the Android system
+        // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
+        // left-edge catcher; no props, geometry comes from layout.
+        View(SystemGestureExclusionView::class) {}
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
@@ -82,12 +90,25 @@ class LauncherModule : Module() {
             val activities = pm.queryIntentActivities(mainIntent, 0)
                 .distinctBy { it.activityInfo.packageName }
 
-            activities.map { resolveInfo ->
+            // Icons are cached to disk as <packageName>_<versionCode>.png instead of
+            // being re-extracted and base64-encoded on every launch — see IconCache
+            // for the filename/orphan logic this AsyncFunction drives.
+            val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
+            val validIconFileNames = mutableSetOf<String>()
+
+            val apps = activities.map { resolveInfo ->
                 val appInfo = resolveInfo.activityInfo.applicationInfo
                 val label = resolveInfo.loadLabel(pm).toString()
                 val packageName = resolveInfo.activityInfo.packageName
                 val icon = try {
-                    drawableToBase64(resolveInfo.loadIcon(pm))
+                    val versionCode = getVersionCode(pm, packageName)
+                    val fileName = IconCache.fileName(packageName, versionCode)
+                    validIconFileNames.add(fileName)
+                    val iconFile = File(iconsDir, fileName)
+                    if (!iconFile.exists()) {
+                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                    }
+                    "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                 // GUARDA DE API, e não é defensiva por hábito: `ApplicationInfo.category`
@@ -111,6 +132,16 @@ class LauncherModule : Module() {
                     "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
+
+            // Drop cached PNGs for apps that were uninstalled, or updated to a
+            // versionCode whose icon was just (re-)cached under a new key above —
+            // otherwise filesDir/icons grows without bound.
+            val existingIconFileNames = iconsDir.list()?.toList() ?: emptyList()
+            IconCache.orphanedFiles(existingIconFileNames, validIconFileNames).forEach { name ->
+                try { File(iconsDir, name).delete() } catch (e: Exception) { /* best effort */ }
+            }
+
+            apps
         }
 
         AsyncFunction("launchApp") { packageName: String ->
@@ -1110,6 +1141,28 @@ class LauncherModule : Module() {
 
     private fun intToIp(ip: Int): String {
         return "${ip and 0xFF}.${ip shr 8 and 0xFF}.${ip shr 16 and 0xFF}.${ip shr 24 and 0xFF}"
+    }
+
+    /** [PackageInfo.versionCode] is deprecated (32-bit, wraps); longVersionCode is its
+     * Android P+ replacement. Used as part of the icon cache key so an app update
+     * invalidates its cached PNG for free. */
+    private fun getVersionCode(pm: PackageManager, packageName: String): Long {
+        val info = pm.getPackageInfo(packageName, 0)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+    }
+
+    private fun writeIconToFile(drawable: Drawable, file: File) {
+        val bitmap = drawableToBitmap(drawable)
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
+        FileOutputStream(file).use { out ->
+            scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+        }
+        if (bitmap != scaledBitmap) scaledBitmap.recycle()
     }
 
     private fun drawableToBase64(drawable: Drawable): String {

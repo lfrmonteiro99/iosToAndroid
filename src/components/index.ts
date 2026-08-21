@@ -31,3 +31,5 @@ export { ControlCenterOverlay } from './ControlCenterOverlay';
 export { NotificationCenterOverlay } from './NotificationCenterOverlay';
 export { SpotlightReveal } from './SpotlightReveal';
 export { EdgePanelOverlay } from './EdgePanelOverlay';
+export { GlassSurface } from './GlassSurface';
+export type { GlassSurfaceProps } from './GlassSurface';

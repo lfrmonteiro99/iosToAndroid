@@ -258,3 +258,85 @@ describe('ThemeProvider tri-state mode (C5: system scheme, not clock)', () => {
     }
   });
 });
+
+const SETTINGS_KEY = '@iostoandroid/settings';
+
+function TypographyProbe() {
+  const { typography } = useTheme();
+  const fmt = (s: { fontFamily?: string; fontSize: number; fontWeight: string }) =>
+    `${s.fontFamily}/${s.fontSize}/${s.fontWeight}`;
+  return (
+    <>
+      <Text>{`body=${fmt(typography.body)}`}</Text>
+      <Text>{`title3=${fmt(typography.title3)}`}</Text>
+      <Text>{`largeTitle=${fmt(typography.largeTitle)}`}</Text>
+    </>
+  );
+}
+
+function renderTypography(settings: Record<string, unknown>) {
+  (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+    key === SETTINGS_KEY ? Promise.resolve(JSON.stringify(settings)) : Promise.resolve(null),
+  );
+  return render(<TypographyProbe />, {
+    wrapper: ({ children }) => (
+      <SettingsProvider gateFirstRender={false}>
+        <ThemeProvider gateFirstRender={false}>{children}</ThemeProvider>
+      </SettingsProvider>
+    ),
+  });
+}
+
+/**
+ * O corte Text/Display do #475 é do tamanho *renderizado*. O Dynamic Type e o
+ * Negrito de acessibilidade mexem no tamanho e no peso depois do token, por
+ * isso é aqui — e não na tabela de tokens — que se prova que a família
+ * continua a acompanhar, e que nenhum destes caminhos deixa `fontFamily` cair
+ * (o que devolveria o ecrã ao Roboto).
+ */
+describe('Typography escalada mantém as famílias Inter (#475)', () => {
+  it('keeps the token families at the default text size', async () => {
+    const { getByText } = renderTypography({});
+
+    await waitFor(() => expect(getByText('body=Inter/17/400')).toBeTruthy());
+    expect(getByText('title3=InterDisplay/20/600')).toBeTruthy();
+    expect(getByText('largeTitle=InterDisplay/34/700')).toBeTruthy();
+  });
+
+  it('moves a text token to Display when Dynamic Type pushes it past 20pt', async () => {
+    // body 17pt × 1.3 = 22pt — acima do corte, logo Display.
+    const { getByText } = renderTypography({ textSizeIndex: 3 });
+
+    await waitFor(() => expect(getByText('body=InterDisplay/22/400')).toBeTruthy());
+  });
+
+  it('moves a display token to Text when Dynamic Type pulls it below 20pt', async () => {
+    // O inverso: title3 20pt × 0.85 = 17pt — abaixo do corte, logo Text.
+    const { getByText } = renderTypography({ textSizeIndex: 0 });
+
+    await waitFor(() => expect(getByText('title3=Inter/17/600')).toBeTruthy());
+    expect(getByText('largeTitle=InterDisplay/29/700')).toBeTruthy();
+  });
+
+  it('keeps the family when the bold-text setting bumps the weight', async () => {
+    const { getByText } = renderTypography({ boldText: true });
+
+    await waitFor(() => expect(getByText('body=Inter/17/600')).toBeTruthy());
+    expect(getByText('largeTitle=InterDisplay/34/900')).toBeTruthy();
+  });
+
+  it('combines Dynamic Type and bold text without losing the family', async () => {
+    const { getByText } = renderTypography({ textSizeIndex: 3, boldText: true });
+
+    await waitFor(() => expect(getByText('body=InterDisplay/22/600')).toBeTruthy());
+    expect(getByText('title3=InterDisplay/26/800')).toBeTruthy();
+  });
+
+  it('ignores an out-of-range text size index instead of dropping the family', async () => {
+    // TEXT_SIZE_SCALE só tem 0..3; um índice fora disso cai no factor 1.0.
+    const { getByText } = renderTypography({ textSizeIndex: 99 });
+
+    await waitFor(() => expect(getByText('body=Inter/17/400')).toBeTruthy());
+    expect(getByText('title3=InterDisplay/20/600')).toBeTruthy();
+  });
+});

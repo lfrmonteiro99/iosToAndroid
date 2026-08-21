@@ -9,7 +9,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import * as Haptics from 'expo-haptics';
-import { gestureConfig } from '../utils/gestureConfig';
+import { dpPerMsToPtPerSec, gestureConfig } from '../utils/gestureConfig';
 import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gestureVelocity';
 import { GestureHaptics } from '../utils/gestureHaptics';
 import { useDevice } from '../store/DeviceStore';
@@ -222,10 +222,9 @@ function NotificationGroupCard({
 
       {/* Collapsed: show only latest notification */}
       {!expanded && (
-        <BlurView
+        <GlassSurface
           intensity={40}
           tint="dark"
-          experimentalBlurMethod="dimezisBlurView"
           style={styles.groupNotifCard}
         >
           <Pressable
@@ -254,17 +253,16 @@ function NotificationGroupCard({
           >
             <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
           </Pressable>
-        </BlurView>
+        </GlassSurface>
       )}
 
       {/* Expanded: show all notifications */}
       {expanded &&
         group.notifications.map((item) => (
-          <BlurView
+          <GlassSurface
             key={item.id}
             intensity={40}
             tint="dark"
-            experimentalBlurMethod="dimezisBlurView"
             style={styles.groupNotifCard}
           >
             <Pressable
@@ -301,7 +299,7 @@ function NotificationGroupCard({
             >
               <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
             </Pressable>
-          </BlurView>
+          </GlassSurface>
         ))}
     </View>
   );
@@ -624,14 +622,17 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
         progress >= gestureConfig.panelCommitProgress ||
         upwardV >= gestureConfig.panelCommitVelocity;
 
+      // translateY is a literal dp offset — vy is already dp/ms, convert to dp/sec.
+      const translateYVelocity = dpPerMsToPtPerSec(vy);
+
       if (shouldCommit) {
         runOnJS(GestureHaptics.commit)('light');
-        translateY.value = withSpring(-SCREEN_HEIGHT, gestureConfig.spring.mediumSettle);
+        translateY.value = withSpring(-SCREEN_HEIGHT, { ...gestureConfig.spring.mediumSettle, velocity: translateYVelocity });
         opacity.value = withTiming(0, { duration: 250 }, () => {
           runOnJS(handleUnlock)();
         });
       } else {
-        translateY.value = withSpring(0, gestureConfig.spring.fastSettle);
+        translateY.value = withSpring(0, { ...gestureConfig.spring.fastSettle, velocity: translateYVelocity });
         opacity.value = withTiming(1, { duration: 200 });
       }
     });
@@ -829,9 +830,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
             accessibilityLabel={flashlightOn ? 'Turn off flashlight' : 'Turn on flashlight'}
             accessibilityRole="button"
           >
-            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
+            <GlassSurface intensity={40} tint="dark" style={[styles.circleBlur, flashlightOn && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
               <Ionicons name="flashlight" size={22} color={flashlightOn ? '#000' : '#fff'} />
-            </BlurView>
+            </GlassSurface>
           </Pressable>
 
           <View style={styles.swipeHintWrap}>
@@ -887,9 +888,9 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
             accessibilityLabel="Open camera"
             accessibilityRole="button"
           >
-            <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={styles.circleBlur}>
+            <GlassSurface intensity={40} tint="dark" style={styles.circleBlur}>
               <Ionicons name="camera-outline" size={22} color="#fff" />
-            </BlurView>
+            </GlassSurface>
           </Pressable>
         </View>
         )}

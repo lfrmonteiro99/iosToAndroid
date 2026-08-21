@@ -287,6 +287,47 @@ diz-te onde estão as fronteiras naturais."
 #
 # A PR is only reviewed again when its HEAD MOVES. Re-reviewing the same commit
 # cannot produce a different answer.
+# ── Reserva em voo de um PR ────────────────────────────────────────────────
+#
+# mark_reviewed so corre DEPOIS do veredicto, e de proposito: marcar antes foi o que
+# encalhou os PRs #324/#333/#338/#342, porque um review sem veredicto gravava o sha e
+# o pick_pr nunca mais olhava para eles. Nao mexo nesse invariante.
+#
+# Mas com um reviewer DESTACADO a levar ~5.6 min, o pick_pr devolvia o mesmo PR
+# durante ~7 ciclos e o slot main comecava a rever o que o rev2 ja estava a rever —
+# dois merges do mesmo PR.
+#
+# A reserva resolve isso com DUAS guardas, porque uma so nao chega:
+#
+#   * ficheiro $LOCK_PREFIX.<slot>.pr com o numero do PR, valido SO enquanto o lock
+#     desse slot estiver tomado. A autoridade e o flock, nao o ficheiro: o SO
+#     liberta-o na morte do processo, logo nao ha reservas obsoletas para limpar.
+#   * CLAIMED_THIS_CYCLE, para a janela de segundos entre o orquestrador escrever a
+#     reserva e o review.sh tomar o lock la dentro — nessa janela o lock esta livre e
+#     a reserva sozinha pareceria obsoleta.
+CLAIMED_THIS_CYCLE=""
+
+claim_pr() {
+  local slot="$1" pr="$2"
+  echo "$pr" > "$LOCK_PREFIX.$slot.pr" 2>/dev/null || true
+  CLAIMED_THIS_CYCLE="$CLAIMED_THIS_CYCLE $pr"
+}
+
+pr_claimed() {
+  local pr="$1" f slot held
+  case " $CLAIMED_THIS_CYCLE " in *" $pr "*) return 0 ;; esac
+  for f in "$LOCK_PREFIX".*.pr; do
+    [ -f "$f" ] || continue
+    [ "$(cat "$f" 2>/dev/null)" = "$pr" ] || continue
+    slot=${f#"$LOCK_PREFIX."}; slot=${slot%.pr}
+    # lock tomado => ha de facto um reviewer vivo neste PR. Livre => reserva obsoleta.
+    if ! flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 pick_pr() {
   local list line num sha
   list=$(gh pr list --repo "$REPO" --base "$BASE_BRANCH" --state open \
@@ -303,6 +344,8 @@ pick_pr() {
     # Deferred PRs are skipped for the same reason deferred issues are: an unjudged
     # PR returns every cycle, and if the engine is what failed that is a spin.
     is_deferred "pr-$num" && continue
+    # Ja ha um reviewer vivo neste PR (ver pr_claimed).
+    pr_claimed "$num" && continue
     if ! grep -qxF "$num $sha" "$REVIEWED_STATE" 2>/dev/null; then
       echo "$num"; return 0
     fi
@@ -459,6 +502,7 @@ run_implement() { log "IMPLEMENTADOR -> #$1"; bash "$SCRIPT_DIR/implement.sh" "$
 # review.sh now exits 78 for "I did not judge this", and only a real verdict marks
 # the sha.
 run_review() {
+  claim_pr main "$1"
   log "REVIEWER -> PR #$1"
   bash "$SCRIPT_DIR/review.sh" "$1"; local rc=$?
   if [ "$rc" = "78" ]; then
@@ -523,6 +567,46 @@ launch_hermes_if_needed() {
     nohup bash "$SCRIPT_DIR/implement.sh" "$i" >> "$LOG_DIR/hermes-bg.log" 2>&1 &
 }
 
+# ── Reviewer paralelo ──────────────────────────────────────────────────────
+#
+# Um SEGUNDO reviewer, no seu slot. Desligado por defeito: so arranca com
+# TEAM_REVIEWERS >= 2.
+#
+# Porque existe, medido a 2026-08-21 nos logs: uma review leva ~5.6 min (PR #498,
+# 01:06:53->01:12:30, inclui npm ci + lint + tsc + jest) e uma implementacao ~27 min.
+# Com 7 slots de implementacao a produzir (~15 PR/h) contra um reviewer serial
+# (~10 PR/h) a fila crescia ~5 PR/h. O reviewer nao e lento; era um so.
+#
+# Tres coisas mantem os reviewers fora do caminho um do outro:
+#   * slot proprio (TEAM_SLOT=revN) -> lock proprio no run-agent.sh;
+#   * PR diferente por construcao: cada um chama pick_pr, e o primeiro RESERVA o
+#     que apanhou, logo o seguinte recebe outro (ver claim_pr/pr_claimed);
+#   * worktree proprio, que o review.sh ja cria por PR.
+#
+# Vai ANTES dos despachos bloqueantes e nao mexe no DID, como o curator e o hermes:
+# destacado mas em ultimo seria a mesma ordem em serie com mais maquinaria.
+#
+# NAO faz mark_reviewed. Quem o faz e o run_review do slot main, e so com veredicto
+# real; um reviewer destacado que morra sem julgar tem de deixar o PR a volta.
+launch_reviewers_extra_if_needed() {
+  local want="${TEAM_REVIEWERS:-1}" i slot pr
+  [ "$want" -ge 2 ] 2>/dev/null || return 0
+
+  for i in $(seq 2 "$want"); do
+    slot="rev$i"
+    if ! flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null; then
+      continue   # este slot ja esta ocupado
+    fi
+    pr=$(pick_pr)
+    [ -n "$pr" ] || return 0   # sem PRs livres: nada a distribuir
+
+    claim_pr "$slot" "$pr"
+    log "REVIEWER $slot (paralelo) -> PR #$pr"
+    TEAM_SLOT="$slot" \
+      nohup bash "$SCRIPT_DIR/review.sh" "$pr" >> "$LOG_DIR/$slot-bg.log" 2>&1 &
+  done
+}
+
 # ── Explicit targets ───────────────────────────────────────────────────────
 if [ -n "$TARGET_PR" ]; then run_review "$TARGET_PR"; exit 0; fi
 
@@ -583,11 +667,23 @@ while true; do
   rescue_stuck_wip
   close_orphan_prs
 
+  # Dependências. O pipeline não as sabe representar — só labels e prioridade — e com
+  # dois implementadores em paralelo um par dependente arranca junto por construção.
+  # Um issue bloqueado fica SEM label qa:* (invisível aqui) e declara-o no corpo com
+  # "**Bloqueado por:** #N". Isto promove-o a qa:ready quando os bloqueadores fecharem.
+  # Corre antes dos despachos: um issue desbloqueado neste ciclo já pode ser apanhado.
+  bash "$SCRIPT_DIR/unblock.sh" >/dev/null 2>&1 || warn "unblock.sh falhou neste ciclo"
+
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed
 
   # Second implementer on a different engine and a different issue.
   launch_hermes_if_needed
+
+  # Reviewers extra, antes dos despachos: cada um reserva o PR que apanha, para que
+  # o run_review bloqueante mais abaixo receba outro.
+  CLAIMED_THIS_CYCLE=""
+  launch_reviewers_extra_if_needed
 
   DID=0
 
