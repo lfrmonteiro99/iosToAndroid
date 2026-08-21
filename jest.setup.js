@@ -58,6 +58,18 @@ jest.mock('expo-contacts', () => ({
   SortTypes: { LastName: 'lastName' },
 }));
 
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getCurrentPositionAsync: jest.fn(() =>
+    Promise.resolve({
+      coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 10 },
+      timestamp: Date.now(),
+    }),
+  ),
+  Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
@@ -324,3 +336,23 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativePermissionsAn
     requestMultiplePermissions: jest.fn(() => Promise.resolve({})),
   },
 }));
+
+// Mock react-native-webview: it calls TurboModuleRegistry.getEnforcing('RNCWebViewModule')
+// at import time, which throws in the JS-only test environment. The mock keeps the
+// component contract (source/testID props + an imperative reload()) so screens that
+// render a WebView can be asserted on.
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const WebView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      reload: jest.fn(),
+      goBack: jest.fn(),
+      goForward: jest.fn(),
+      stopLoading: jest.fn(),
+    }));
+    return React.createElement(View, props);
+  });
+  WebView.displayName = 'WebView';
+  return { __esModule: true, WebView, default: WebView };
+});
