@@ -583,6 +583,13 @@ while true; do
   rescue_stuck_wip
   close_orphan_prs
 
+  # Dependências. O pipeline não as sabe representar — só labels e prioridade — e com
+  # dois implementadores em paralelo um par dependente arranca junto por construção.
+  # Um issue bloqueado fica SEM label qa:* (invisível aqui) e declara-o no corpo com
+  # "**Bloqueado por:** #N". Isto promove-o a qa:ready quando os bloqueadores fecharem.
+  # Corre antes dos despachos: um issue desbloqueado neste ciclo já pode ser apanhado.
+  bash "$SCRIPT_DIR/unblock.sh" >/dev/null 2>&1 || warn "unblock.sh falhou neste ciclo"
+
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed
 
