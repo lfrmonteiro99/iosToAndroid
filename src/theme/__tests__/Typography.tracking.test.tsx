@@ -1,10 +1,19 @@
 import { Typography } from '../CupertinoTheme';
 
-// Source: Apple SF Pro typography table from developer.apple.com/design/human-interface-guidelines/typography
-// Mapping: iOS size (pt) → tracking (1/1000 em) → tracking in points at the given size
+// Source: Apple SF Pro typography tracking table
 // https://developer.apple.com/design/human-interface-guidelines/typography
-const APPLE_TRACKING_TABLE = {
-  largeTitle: { fontSize: 34, appleTracking: 0.40 },
+// Apple "Tracking (points)" column per size (Size -> Tracking 1/1000 em -> Tracking points).
+// Tolerance is 0.05 (toBeCloseTo(x, 1) == |diff| < 0.05), which accommodates the
+// documented nits between the shipped values and Apple's exact table:
+//   largeTitle 0.41 vs 0.40, title1 0.36 vs 0.38, callout 0.32 vs 0.31, subhead 0.24 vs 0.23.
+// This checks the VALUE, not just the sign: a future magnitude regression such as
+// headline -0.41 -> -0.05 (|diff|=0.38) makes the test fail, whereas a sign-only check
+// would still pass.
+const APPLE_TRACKING_TABLE: Record<
+  string,
+  { fontSize: number; appleTracking: number }
+> = {
+  largeTitle: { fontSize: 34, appleTracking: 0.4 },
   title1: { fontSize: 28, appleTracking: 0.38 },
   title2: { fontSize: 22, appleTracking: -0.26 },
   title3: { fontSize: 20, appleTracking: -0.45 },
@@ -19,28 +28,17 @@ const APPLE_TRACKING_TABLE = {
 
 describe('Typography tracking values (letterSpacing) against Apple SF Pro', () => {
   Object.entries(APPLE_TRACKING_TABLE).forEach(([key, { appleTracking }]) => {
-    it(`${key} letterSpacing matches Apple tracking (${appleTracking})`, () => {
+    it(`${key} letterSpacing (${appleTracking}) matches Apple tracking within 0.05`, () => {
       const style = Typography[key as keyof typeof Typography];
-      expect(style.letterSpacing).toBeDefined();
-
-      // Most importantly: verify sign is correct
-      if (appleTracking > 0) {
-        expect(style.letterSpacing).toBeGreaterThan(0);
-      } else if (appleTracking < 0) {
-        expect(style.letterSpacing).toBeLessThan(0);
-      } else {
-        expect(style.letterSpacing).toBe(0);
-      }
+      expect(style.letterSpacing).toBeCloseTo(appleTracking, 1);
     });
   });
 
-  it('title2 has negative tracking (sinking optical weight)', () => {
-    expect(Typography.title2.letterSpacing).toBeLessThan(0);
+  it('title2 has exactly the corrected negative tracking (-0.26)', () => {
     expect(Typography.title2.letterSpacing).toBe(-0.26);
   });
 
-  it('title3 has negative tracking (sinking optical weight)', () => {
-    expect(Typography.title3.letterSpacing).toBeLessThan(0);
+  it('title3 has exactly the corrected negative tracking (-0.45)', () => {
     expect(Typography.title3.letterSpacing).toBe(-0.45);
   });
 });
