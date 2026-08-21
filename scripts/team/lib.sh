@@ -446,6 +446,45 @@ mem_status() {
     "$TEAM_AGENT_MEM_MB" "$(inflight_young_count)"
 }
 
+# ── Onde estão os binários dos motores ─────────────────────────────────────
+#
+# ISTO CUSTOU UMA NOITE INTEIRA. 383 ciclos, 1069 despachos, ZERO PRs.
+#
+# O `command -v claude` do run-agent.sh falhava porque a pipeline foi arrancada
+# de uma shell cujo PATH não tinha `~/.local/bin` (uma sessão de agente, não um
+# terminal com o profile do utilizador). E a falha é SILENCIOSA por construção:
+# o `if ... && command -v claude` simplesmente não entra, não imprime nada, e o
+# fluxo cai no fallback Ollama — que estava sem quota semanal. Do lado de fora
+# vê-se "sem veredicto, issue adiado" 1069 vezes e parece que os agentes não
+# conseguem fazer o trabalho. Nunca correu nenhum.
+#
+# O mesmo bug existia para o hermes e foi corrigido primeiro; corrigir só metade
+# foi pior que não corrigir nenhum, porque deixou o failover a depender de um
+# sinal ("o Claude reportou esgotamento") que nunca podia chegar.
+#
+# Regra: NENHUM motor é resolvido por PATH sozinho, e a ausência de um binário
+# NUNCA é silenciosa.
+TEAM_CLAUDE_BIN="${TEAM_CLAUDE_BIN:-}"
+
+claude_bin() {
+  if [ -n "$TEAM_CLAUDE_BIN" ]; then
+    [ -x "$TEAM_CLAUDE_BIN" ] || return 1
+    echo "$TEAM_CLAUDE_BIN"; return 0
+  fi
+  local p
+  p=$(command -v claude 2>/dev/null) && { echo "$p"; return 0; }
+  for p in "$HOME/.local/bin/claude" "$HOME/bin/claude" /usr/local/bin/claude; do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  # nvm: qualquer versão instalada serve, a mais recente primeiro.
+  for p in $(ls -d "$HOME"/.nvm/versions/node/*/bin/claude 2>/dev/null | sort -rV); do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+claude_available() { claude_bin >/dev/null 2>&1; }
+
 # ── Onde está o hermes ─────────────────────────────────────────────────────
 #
 # `command -v hermes` NÃO SERVE, e a resposta errada é silenciosa: o binário está

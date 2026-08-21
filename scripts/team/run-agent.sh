@@ -273,10 +273,17 @@ if [ "${AGENT_ENGINE:-}" = "hermes" ]; then
 fi
 
 # ── 1. Subscription (claude CLI) ───────────────────────────────────────────
-if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && command -v claude >/dev/null 2>&1; then
+CLAUDE_BIN=$(claude_bin || true)
+if [ -z "$CLAUDE_BIN" ]; then
+  # RUÍDO DE PROPÓSITO. Esta linha faltar é o que fez uma noite inteira parecer
+  # "os agentes não conseguem" quando na verdade nenhum agente correu.
+  echo "[run-agent] ATENÇÃO: não encontrei o binário do claude (PATH=$PATH). Define TEAM_CLAUDE_BIN." >&2
+fi
+
+if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && [ -n "$CLAUDE_BIN" ]; then
   USED="claude/$CLAUDE_MODEL"
   run_harness "claude" "$CLAUDE_MODEL" \
-    claude -p "$PROMPT" \
+    "$CLAUDE_BIN" -p "$PROMPT" \
       --model "$CLAUDE_MODEL" \
       "${ADD_DIR_ARGS[@]}" \
       --permission-mode acceptEdits \

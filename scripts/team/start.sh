@@ -161,8 +161,35 @@ log "a arrancar em tmux '$SESSION'; log: $LOGFILE"
 # portanto `TEAM_REVIEWERS=3 bash start.sh` arrancava com UM reviewer e sem uma
 # única linha de aviso — exactamente o modo de falha que este bloco existe para
 # evitar. Qualquer variável nova de paralelismo entra aqui.
-TEAM_ENV=""
-for v in TEAM_HERMES TEAM_HERMES_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
+#
+# O PATH TAMBÉM É INJECTADO, E NÃO HERDADO.
+#
+# `tmux new-session` herda o ambiente do SERVIDOR tmux, e o servidor herda o de
+# quem o arrancou primeiro. Se isso foi uma sessão de agente em vez de um
+# terminal com o profile do utilizador, o PATH não tem `~/.local/bin` — e a
+# pipeline corre a noite inteira sem encontrar o `claude`, em silêncio, com
+# 1069 despachos e zero PRs (2026-08-21, 02:46→10:35).
+#
+# Portanto: os motores são resolvidos AQUI, por caminho, e os directórios deles
+# entram no PATH da sessão. Se não se resolvem, isto grita agora em vez de
+# falhar durante horas.
+TEAM_PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+for b in claude hermes; do
+  case "$b" in
+    claude) resolved=$(claude_bin || true) ;;
+    hermes) resolved=$(hermes_bin || true) ;;
+  esac
+  if [ -n "$resolved" ]; then
+    TEAM_PATH="$(dirname "$resolved"):$TEAM_PATH"
+    log "motor $b: $resolved"
+  else
+    log "AVISO: não encontrei o binário do $b — a pipeline vai correr sem ele"
+  fi
+done
+export PATH="$TEAM_PATH"
+
+TEAM_ENV=" PATH='$TEAM_PATH'"
+for v in TEAM_HERMES TEAM_HERMES_BIN TEAM_CLAUDE_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
          TEAM_IMPLEMENTERS TEAM_IMPL_ENGINES TEAM_REVIEWERS \
          TEAM_AGENT_MEM_MB TEAM_MEM_FLOOR_MB TEAM_AGENT_WARMUP_S TEAM_JEST_WORKERS \
          TEAM_CYCLE_SLEEP; do

@@ -129,11 +129,21 @@ build_impl_roster() {
 # de degradação (modelo mais fraco, sem visão), o hermes é um par. Medido no
 # 2026-08-19: 47 corridas contra uma quota Ollama semanal esgotada, todas a zero.
 # Preferir o hermes quando ele existe é preferir um motor que ainda tem quota.
+# O GATILHO NÃO PODE SER SÓ O COOLDOWN.
+#
+# A primeira versão só trocava para hermes quando a subscrição reportava
+# esgotamento. Mas se o binário do claude nem se resolve, esse relatório nunca
+# chega — foi exactamente o que aconteceu: 1069 despachos sem um único agente a
+# correr, com o hermes disponível ao lado e nunca usado. "Claude indisponível"
+# tem mais causas do que "sem quota", e todas elas querem o mesmo: hermes.
 impl_engine_now() {
   local want="$1"
   if [ "$want" = "hermes" ]; then
     hermes_available && echo hermes || echo claude
     return 0
+  fi
+  if ! claude_available && hermes_available; then
+    echo hermes; return 0
   fi
   if [ "$(cooldown_remaining)" -gt 0 ] && hermes_available; then
     echo hermes
