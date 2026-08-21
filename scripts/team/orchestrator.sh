@@ -471,12 +471,23 @@ pick_pr() {
   return 0
 }
 
-mark_reviewed() {
-  local num="$1" sha
-  sha=$(gh pr view "$num" --repo "$REPO" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
-  [ -n "$sha" ] || return 0
-  echo "$num $sha" >> "$REVIEWED_STATE"
-  tail -300 "$REVIEWED_STATE" > "$REVIEWED_STATE.tmp" && mv "$REVIEWED_STATE.tmp" "$REVIEWED_STATE"
+# QUEM MARCA A SHA REVISTA É O review.sh, não isto.
+#
+# Era aqui, e o preço era a review do slot principal ter de ser BLOQUEANTE — o
+# ciclo não podia avançar sem saber se houve veredicto. Media-se em 2 ciclos por
+# 7 minutos, com 9GB livres e 5 slots de implementação vazios à espera de uma
+# review de 6 minutos. O invariante ("só um veredicto real marca a sha") não se
+# perdeu: mudou para dentro de quem o pode afirmar.
+#
+# Aqui fica só o corte da lista, que tem de ser feito por UM processo. Com N
+# reviewers a escrever em paralelo, um `tail > tmp && mv` dentro de cada um
+# apagava as linhas dos outros.
+trim_reviewed_state() {
+  local n
+  n=$(grep -c . "$REVIEWED_STATE" 2>/dev/null || echo 0)
+  [ "${n:-0}" -gt 400 ] || return 0
+  tail -300 "$REVIEWED_STATE" > "$REVIEWED_STATE.tmp" 2>/dev/null \
+    && mv "$REVIEWED_STATE.tmp" "$REVIEWED_STATE"
 }
 
 # ── Stale cleanup ──────────────────────────────────────────────────────────
@@ -625,30 +636,38 @@ Devolvido a \`$L_READY\` para nova tentativa."
 
 # ── Role dispatch ──────────────────────────────────────────────────────────
 run_implement() { log "IMPLEMENTADOR -> #$1"; bash "$SCRIPT_DIR/implement.sh" "$1" || log "implement falhou #$1"; }
-# A PR IS ONLY "REVIEWED" IF IT WAS ACTUALLY JUDGED.
+# A PR IS ONLY "REVIEWED" IF IT WAS ACTUALLY JUDGED — e quem o afirma é o review.sh.
 #
-# mark_reviewed used to run unconditionally, so a review that produced NO verdict —
-# quota exhausted, slot busy, engine died — still recorded the head sha. pick_pr
-# only re-reviews a PR whose head MOVED, and nothing pushes to a branch whose issue
-# is sitting in qa:review, so the PR was never looked at again.
+# mark_reviewed corria aqui, sem condição, e uma review que não produzia veredicto
+# — quota esgotada, slot ocupado, motor morto — gravava a sha na mesma. O pick_pr
+# só volta a rever um PR cuja head se MOVA, e nada empurra para o branch de um
+# issue parado em qa:review: quatro PRs ficaram assim (#324, #333, #338, #342), o
+# mais antigo catorze horas, com o quadro a dizer "em review". O #520 repetiu-o
+# hoje, doze horas.
 #
-# Four PRs were stranded exactly that way (#324, #333, #338, #342), the oldest for
-# fourteen hours, while the board showed them as "in review". review.sh's own
-# comment claimed "no reviewed-sha record was written" — it was wrong, because the
-# orchestrator wrote it.
+# Agora o review.sh marca a sha que reviu, e só depois de ler um veredicto; as
+# saídas sem veredicto fazem exit 78 e não marcam nada.
 #
-# review.sh now exits 78 for "I did not judge this", and only a real verdict marks
-# the sha.
+# TODAS as reviews são destacadas, incluindo a do primeiro slot. Ver
+# trim_reviewed_state para o que ficou deste lado.
+dispatch_review() {
+  local slot="$1" pr="$2"
+  claim_pr "$slot" "$pr"
+  log "REVIEWER $slot -> PR #$pr"
+  TEAM_SLOT="$slot" \
+    nohup bash "$SCRIPT_DIR/review.sh" "$pr" >> "$LOG_DIR/$slot-bg.log" 2>&1 &
+  DISPATCHED_REVIEW=$((DISPATCHED_REVIEW + 1))
+}
+
+# Alvo explícito (`--pr N`): aí sim, em primeiro plano — quem pediu quer o
+# resultado no terminal, não num ficheiro de log.
 run_review() {
   claim_pr main "$1"
-  log "REVIEWER -> PR #$1"
-  bash "$SCRIPT_DIR/review.sh" "$1"; local rc=$?
-  if [ "$rc" = "78" ]; then
-    log "PR #$1 não foi julgado (rc=78) — NÃO marco como revisto, volta na próxima"
-    return 0
-  fi
-  [ "$rc" -ne 0 ] && log "review falhou PR #$1 (rc=$rc)"
-  mark_reviewed "$1"
+  log "REVIEWER (primeiro plano) -> PR #$1"
+  bash "$SCRIPT_DIR/review.sh" "$1"
+  local rc=$?
+  [ "$rc" = "78" ] && log "PR #$1 não foi julgado (rc=78) — volta na próxima"
+  return 0
 }
 
 # The curator runs DETACHED on its own slot. It writes only GitHub comments and
@@ -697,6 +716,7 @@ launch_curator_if_needed() {
 # Vai ANTES do review bloqueante e não mexe no DID: destacado mas em último seria
 # a mesma ordem em série com mais maquinaria.
 DISPATCHED_IMPL=0
+DISPATCHED_REVIEW=0
 
 # Rework primeiro, trabalho novo depois — a mesma ordem do despacho serial:
 # acabar o que está começado vale mais do que começar mais.
@@ -756,8 +776,8 @@ launch_implementers_if_needed() {
 
 # ── Reviewer paralelo ──────────────────────────────────────────────────────
 #
-# Reviewers para alem do slot `main`, um por slot. Desligados por defeito: so
-# arrancam com TEAM_REVIEWERS >= 2.
+# TODOS os reviewers, um por slot rev1..revN (TEAM_REVIEWERS, omissao 1). Nenhum
+# bloqueia o ciclo.
 #
 # Porque existe, medido a 2026-08-21 nos logs: uma review leva ~5.6 min (PR #498,
 # 01:06:53->01:12:30, inclui npm ci + lint + tsc + jest) e uma implementacao ~27 min.
@@ -773,18 +793,16 @@ launch_implementers_if_needed() {
 # Vai ANTES dos despachos bloqueantes e nao mexe no DID, como o curator e o hermes:
 # destacado mas em ultimo seria a mesma ordem em serie com mais maquinaria.
 #
-# NAO faz mark_reviewed. Quem o faz e o run_review do slot main, e so com veredicto
-# real; um reviewer destacado que morra sem julgar tem de deixar o PR a volta.
-launch_reviewers_extra_if_needed() {
+# Nenhum marca a sha: quem marca e o proprio review.sh, e so depois de ler um
+# veredicto real. Um reviewer que morra sem julgar tem de deixar o PR a volta.
+launch_reviewers_if_needed() {
   local want="${TEAM_REVIEWERS:-1}" i slot pr
-  [ "$want" -ge 2 ] 2>/dev/null || return 0
+  [ "$want" -ge 1 ] 2>/dev/null || return 0
 
-  for i in $(seq 2 "$want"); do
+  for i in $(seq 1 "$want"); do
     slot="rev$i"
-    if ! flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null; then
-      continue   # este slot ja esta ocupado
-    fi
     inflight_slot_active "$slot" && continue
+    flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null || continue
     # Um reviewer custa o mesmo que um implementador (mesmo harness, mesmo jest),
     # portanto passa pelo mesmo orçamento.
     if ! mem_room_for_agent; then
@@ -793,11 +811,7 @@ launch_reviewers_extra_if_needed() {
     fi
     pr=$(pick_pr)
     [ -n "$pr" ] || return 0   # sem PRs livres: nada a distribuir
-
-    claim_pr "$slot" "$pr"
-    log "REVIEWER $slot (paralelo) -> PR #$pr"
-    TEAM_SLOT="$slot" \
-      nohup bash "$SCRIPT_DIR/review.sh" "$pr" >> "$LOG_DIR/$slot-bg.log" 2>&1 &
+    dispatch_review "$slot" "$pr"
   done
 }
 
@@ -898,6 +912,7 @@ while true; do
   CLAIMED_THIS_CYCLE=""
   CLAIMED_ISSUES_THIS_CYCLE=""
   DISPATCHED_IMPL=0
+  DISPATCHED_REVIEW=0
 
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed
@@ -905,22 +920,20 @@ while true; do
   # OS REVIEWERS VÊM PRIMEIRO, e é por causa do orçamento de memória: quem for
   # despachado primeiro fica com a folga. Rever é o que fecha issues e mete
   # código em main — um implementador que espere um ciclo (45s) não custa nada,
-  # uma fila de PRs sem quem a reveja custa tudo. Cada um reserva o PR que
-  # apanha, para que o run_review bloqueante mais abaixo receba outro.
-  launch_reviewers_extra_if_needed
+  # uma fila de PRs sem quem a reveja custa tudo.
+  trim_reviewed_state
+  launch_reviewers_if_needed
 
   # Implementadores: enche os slots livres enquanto houver memória e fila.
   launch_implementers_if_needed
 
   DID=0
   [ "$DISPATCHED_IMPL" -gt 0 ] && DID=1
+  [ "$DISPATCHED_REVIEW" -gt 0 ] && DID=1
 
-  # A ordem importa. Rever é o que desbloqueia merges e fecha issues — mas já não
-  # é uma escolha entre rever E implementar: os implementadores acima são
-  # destacados, portanto o review deste ciclo corre POR CIMA deles, não em vez
-  # deles.
-  PR=$(pick_pr)
-  if [ -n "$PR" ]; then run_review "$PR"; DID=1; fi
+  # Já não há passo bloqueante nenhum: o ciclo despacha e volta a olhar 45s
+  # depois, portanto um slot que vague é enchido em 45s em vez de esperar que a
+  # review de 6 minutos do slot principal acabe.
 
   # Nada despachado.
   if [ "$DID" = "0" ]; then

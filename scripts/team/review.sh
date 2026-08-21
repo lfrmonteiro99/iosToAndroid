@@ -273,6 +273,28 @@ fi
 
 clear_noverdict "pr-$PR"   # judged: the streak is over
 
+# ── MARCAR A SHA REVISTA É TRABALHO DO REVIEWER, e passou a ser feito aqui ──
+#
+# Era o orquestrador que o fazia, DEPOIS de a review terminar, e isso obrigava a
+# review do slot principal a ser BLOQUEANTE: o ciclo não podia avançar sem saber
+# se houve veredicto. Medido: 2 ciclos em 7 minutos, com 9GB de memória livre e 5
+# slots de implementação vazios à espera de uma review de 6 minutos.
+#
+# Quem sabe se julgou é quem julgou. Chegar aqui significa veredicto lido e
+# parseado — as duas saídas sem veredicto acima fazem `exit 78` e nunca marcam
+# nada, que é o invariante que impede as 184 reviews do mesmo commit.
+#
+# E marca a sha QUE FOI REVISTA (a do worktree), não a que estiver na cabeça do
+# branch quando a review acabar: se o implementador empurrou entretanto, essa
+# nunca foi vista por ninguém e marcá-la esconderia trabalho novo.
+REVIEWED_SHA=$(git -C "$WT" rev-parse HEAD 2>/dev/null || echo "")
+if [ -n "$REVIEWED_SHA" ]; then
+  echo "$PR $REVIEWED_SHA" >> "$STATE_DIR/reviewed-shas"
+  log "PR #$PR marcado como revisto na sha $REVIEWED_SHA"
+else
+  warn "não consegui ler a sha revista do PR #$PR — não marco (volta na próxima)"
+fi
+
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:1500}"
 # The reviewer's findings are posted as PR and issue comments and routinely cite
