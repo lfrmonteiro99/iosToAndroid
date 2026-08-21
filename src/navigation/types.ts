@@ -26,6 +26,7 @@ export type RootStackParamList = {
   Notes: undefined;
   Maps: undefined;
   Reminders: undefined;
+  Browser: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
 
   // Settings
