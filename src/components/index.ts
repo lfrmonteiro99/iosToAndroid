@@ -34,4 +34,6 @@ export { EdgePanelOverlay } from './EdgePanelOverlay';
 export { AppLaunchOverlay, interpolateLaunchFrame } from './AppLaunchOverlay';
 export type { LaunchBounds } from './AppLaunchOverlay';
 export { GlassSurface } from './GlassSurface';
+export { SiriWaveform } from './SiriWaveform';
+export type { SiriWaveformProps } from './SiriWaveform';
 export type { GlassSurfaceProps } from './GlassSurface';
