@@ -7,6 +7,7 @@ import { ProfileProvider } from './store/ProfileStore';
 import { AppsProvider } from './store/AppsStore';
 import { DeviceProvider } from './store/DeviceStore';
 import { FoldersProvider } from './store/FoldersStore';
+import { LocationProvider } from './store/LocationStore';
 
 // gateFirstRender={false} on the two gated providers.
 //
@@ -28,7 +29,9 @@ function AllProviders({ children }: { children: React.ReactNode }) {
             <AppsProvider>
               <DeviceProvider>
                 <FoldersProvider>
-                  {children}
+                  <LocationProvider>
+                    {children}
+                  </LocationProvider>
                 </FoldersProvider>
               </DeviceProvider>
             </AppsProvider>
