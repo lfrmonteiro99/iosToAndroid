@@ -156,8 +156,16 @@ log "a arrancar em tmux '$SESSION'; log: $LOGFILE"
 # exactamente o que aconteceu na primeira tentativa de ligar o par Hermes.
 #
 # Passar no comando é a única forma que não depende do estado do servidor.
+#
+# A LISTA TEM DE ESTAR COMPLETA, e não estava: TEAM_REVIEWERS nunca cá esteve,
+# portanto `TEAM_REVIEWERS=3 bash start.sh` arrancava com UM reviewer e sem uma
+# única linha de aviso — exactamente o modo de falha que este bloco existe para
+# evitar. Qualquer variável nova de paralelismo entra aqui.
 TEAM_ENV=""
-for v in TEAM_HERMES TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL; do
+for v in TEAM_HERMES TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
+         TEAM_IMPLEMENTERS TEAM_IMPL_ENGINES TEAM_REVIEWERS \
+         TEAM_AGENT_MEM_MB TEAM_MEM_FLOOR_MB TEAM_AGENT_WARMUP_S TEAM_JEST_WORKERS \
+         TEAM_CYCLE_SLEEP; do
   [ -n "${!v:-}" ] && TEAM_ENV="$TEAM_ENV $v='${!v}'"
 done
 

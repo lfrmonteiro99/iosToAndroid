@@ -307,6 +307,159 @@ cooldown_remaining() {
 
 mkdir -p "$VERDICT_DIR" "$LOG_DIR" "$STATE_DIR" "$WT_ROOT" 2>/dev/null || true
 
+# ── Registo de agentes VIVOS (in-flight) ───────────────────────────────────
+#
+# O flock do run-agent.sh não serve para saber se um role está vivo, e essa
+# confusão custou trabalho real. O lock só é tomado LÁ DENTRO, no fim do
+# implement.sh: antes disso há set_state, comentário no issue, criação do
+# worktree e `npm ci` — minutos em que o slot parece livre. O cleanup_stale do
+# ciclo seguinte lia essa liberdade como "não há ninguém", apagava os veredictos
+# de implement e removia o worktree DEBAIXO do agente. É o #442: o agente
+# reportou que o worktree foi "recriado pelo menos 2 vezes", perdeu os edits, e o
+# issue voltou a qa:ready num ciclo infinito.
+#
+# Com dois implementadores isso era uma janela; com N é o caso normal, porque há
+# sempre alguém a aquecer. Logo o registo tem de ser do PROCESSO, não do lock:
+# cada role escreve o seu PID à cabeça e apaga-o no trap EXIT. Um agente morto a
+# SIGKILL deixa um ficheiro obsoleto, e `kill -0` a esse PID desmascara-o — não é
+# preciso limpar nada.
+#
+# A tag é o NOME DO WORKTREE (implement-142, review-517, curator-99), para que o
+# cleanup possa decidir worktree a worktree em vez de por role.
+INFLIGHT_DIR="$STATE_DIR/inflight"
+mkdir -p "$INFLIGHT_DIR" 2>/dev/null || true
+
+# "<pid> <slot>". O slot vem no MESMO ficheiro (e não numa tag própria) porque
+# duas tags por agente fariam o inflight_young_count contar cada agente duas
+# vezes e duplicar o orçamento de memória.
+inflight_register() {
+  local tag="$1" slot="${2:-${TEAM_SLOT:-main}}"
+  echo "$$ $slot" > "$INFLIGHT_DIR/$tag" 2>/dev/null || true
+}
+
+inflight_release() {
+  local tag="$1"
+  rm -f "$INFLIGHT_DIR/$tag" 2>/dev/null || true
+}
+
+# 0 = há um processo vivo com esta tag.
+inflight_active() {
+  local tag="$1" pid
+  pid=$(awk '{print $1; exit}' "$INFLIGHT_DIR/$tag" 2>/dev/null || echo "")
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+# 0 = este SLOT tem um role vivo. É isto, e não o flock do run-agent.sh, que diz
+# se um slot está ocupado: o lock só é tomado no fim do implement.sh, depois do
+# worktree e do `npm ci`, e nessa janela de minutos o slot parece livre e o
+# despachante lança-lhe outro agente por cima.
+inflight_slot_active() {
+  local slot="$1" f tag
+  for f in "$INFLIGHT_DIR"/*; do
+    [ -f "$f" ] || continue
+    [ "$(awk '{print $2; exit}' "$f" 2>/dev/null)" = "$slot" ] || continue
+    tag=$(basename "$f")
+    inflight_active "$tag" && return 0
+  done
+  return 1
+}
+
+# Tags vivas, uma por linha. Aceita um prefixo opcional (`implement`).
+inflight_list() {
+  local prefix="${1:-}" f tag
+  for f in "$INFLIGHT_DIR"/${prefix}*; do
+    [ -f "$f" ] || continue
+    tag=$(basename "$f")
+    inflight_active "$tag" || continue
+    echo "$tag"
+  done
+}
+
+inflight_count() { inflight_list "${1:-}" | grep -c . || true; }
+
+# Tags vivas há MENOS de $2 segundos (default: TEAM_AGENT_WARMUP_S).
+#
+# Existe por causa do orçamento de memória: um agente lançado agora ainda não
+# gastou o que vai gastar (o pico é o `npm ci` e depois o jest), portanto contar
+# só o MemAvailable actual autoriza lançar cinco agentes seguidos que só depois
+# colidem. Os jovens contam como memória já comprometida.
+inflight_young_count() {
+  local prefix="${1:-}" window="${2:-${TEAM_AGENT_WARMUP_S:-300}}" tag now age n=0
+  now=$(date +%s)
+  while IFS= read -r tag; do
+    [ -n "$tag" ] || continue
+    age=$(( now - $(stat -c %Y "$INFLIGHT_DIR/$tag" 2>/dev/null || echo "$now") ))
+    [ "$age" -lt "$window" ] && n=$((n + 1))
+  done < <(inflight_list "$prefix")
+  echo "$n"
+}
+
+# ── Orçamento de memória para agentes em paralelo ──────────────────────────
+#
+# O tecto do paralelismo nesta máquina é a MEMÓRIA, não a CPU e não a quota. Um
+# agente não é só o processo do harness (~0.5 GB): é o `npm ci`, e sobretudo o
+# `npm test`, que é jest e por omissão abre `cores-1` workers. Nesta máquina são
+# 11 workers de React Native por agente — cinco agentes seriam ~55 processos node
+# e um OOM garantido em 15 GB. Daí duas defesas, e são precisas as duas:
+#
+#   * TEAM_JEST_WORKERS, injectado nos prompts (ver __TEST_CMD__), que limita o
+#     jest de CADA agente;
+#   * este orçamento, que recusa lançar mais um quando não há folga.
+#
+# TEAM_AGENT_MEM_MB é o custo estimado de um agente NO PICO, com o jest limitado.
+# TEAM_MEM_FLOOR_MB é o que fica para o resto da máquina (o utilizador está a
+# trabalhar nela) e nunca é emprestado.
+#
+# NÃO é medido por processo de propósito: o que interessa é a folga do sistema, e
+# somar RSS de árvores de processos conta memória partilhada várias vezes.
+TEAM_AGENT_MEM_MB="${TEAM_AGENT_MEM_MB:-2000}"
+TEAM_MEM_FLOOR_MB="${TEAM_MEM_FLOOR_MB:-2048}"
+TEAM_AGENT_WARMUP_S="${TEAM_AGENT_WARMUP_S:-300}"
+
+# MemAvailable, não `free`: é a estimativa do próprio kernel do que pode ser
+# entregue sem swap, já descontando o que da cache não é recuperável.
+mem_available_mb() {
+  awk '/^MemAvailable:/ { print int($2 / 1024); exit }' /proc/meminfo 2>/dev/null || echo 0
+}
+
+# Quanto é preciso ter livre para lançar mais um agente: o chão, mais o agente
+# novo, mais os que ainda estão a aquecer e portanto ainda não aparecem no
+# MemAvailable.
+mem_required_mb() {
+  local young; young=$(inflight_young_count)
+  echo $(( TEAM_MEM_FLOOR_MB + TEAM_AGENT_MEM_MB * (young + 1) ))
+}
+
+# 0 = há memória para mais um agente. Silencioso; quem chama é que decide logar.
+mem_room_for_agent() {
+  local avail req
+  avail=$(mem_available_mb)
+  req=$(mem_required_mb)
+  [ "$avail" -ge "$req" ]
+}
+
+# Uma linha legível para o log do orquestrador.
+mem_status() {
+  printf 'mem %sMB livres, preciso de %sMB (chão %s + %s por agente x %s a aquecer +1)' \
+    "$(mem_available_mb)" "$(mem_required_mb)" "$TEAM_MEM_FLOOR_MB" \
+    "$TEAM_AGENT_MEM_MB" "$(inflight_young_count)"
+}
+
+# Workers de jest por agente. Com N agentes em paralelo o default do jest
+# (cores-1) é o caminho mais curto para o OOM — ver o comentário do orçamento.
+TEAM_JEST_WORKERS="${TEAM_JEST_WORKERS:-2}"
+
+# O comando de testes que vai NOS PROMPTS. Um valor vazio de TEAM_JEST_WORKERS
+# devolve `npm test` puro, para quem quiser o comportamento antigo.
+test_cmd() {
+  if [ -n "${TEAM_JEST_WORKERS:-}" ] && [ "$TEAM_JEST_WORKERS" != "0" ]; then
+    echo "npm test -- --maxWorkers=$TEAM_JEST_WORKERS"
+  else
+    echo "npm test"
+  fi
+}
+
 # ── Labels: the pipeline state machine ─────────────────────────────────────
 # Exactly one qa:* label is the authoritative state of an issue. Comments are
 # the audit trail; the label is what the orchestrator dispatches on.

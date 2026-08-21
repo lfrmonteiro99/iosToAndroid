@@ -28,9 +28,19 @@
 #
 # Exactly ONE qa:* label is an issue's state. Comments are the audit trail.
 #
-# One write-path agent at a time (they share a lock): two agents pushing to the same
-# repo at once is how you get lost work. The curator is the exception — it only
-# reads code and writes GitHub comments, so it runs on its own slot alongside.
+# PARALELISMO: N implementadores, o tecto é a MEMÓRIA.
+#
+# Já não é "um agente do caminho de escrita de cada vez". Cada role corre no seu
+# SLOT, com o seu lock, o seu worktree e o seu issue — e enquanto houver memória
+# livre o despachante enche mais um slot. Ver launch_implementers_if_needed
+# (implementadores), launch_reviewers_if_needed (reviewers) e o orçamento de
+# memória em lib.sh.
+#
+# Três coisas mantêm N agentes fora do caminho uns dos outros:
+#   * slot próprio (TEAM_SLOT=implN/revN/curator) -> lock próprio no run-agent.sh;
+#   * trabalho diferente por construção: quem despacha RESERVA (claim_issue /
+#     claim_pr) e o registo de agentes vivos (inflight_*) sobrevive ao ciclo;
+#   * worktree próprio por issue/PR, criado pelo role.
 #
 # Usage:
 #   orchestrator.sh [--once] [--issue N] [--pr N] [--max-cycles N]
@@ -62,6 +72,49 @@ done
 
 REVIEWED_STATE="$STATE_DIR/reviewed-shas"
 touch "$REVIEWED_STATE" 2>/dev/null || true
+
+# ── Quantos implementadores ────────────────────────────────────────────────
+#
+# TEAM_IMPLEMENTERS é um TECTO DURO, não um alvo: o número real de agentes vivos
+# é decidido ciclo a ciclo pela memória livre (mem_room_for_agent, em lib.sh).
+# Serve só para limitar o disparate — 20 worktrees com `npm ci` cada não cabem em
+# lado nenhum, por muita RAM que o /proc diga que há.
+#
+# Antes disto o tecto era 2 e estava escrito no código: o slot `main` mais o slot
+# `hermes`, ligado à mão com TEAM_HERMES=1. Passa a ser uma lista de slots
+# `impl1..implN`, todos iguais, cada um com o seu motor.
+TEAM_IMPLEMENTERS="${TEAM_IMPLEMENTERS:-6}"
+
+# Motores dos slots, por ordem, ciclada até encher os slots. Vazio = default:
+#   * TEAM_HERMES=1 -> "claude,hermes" (alterna, para não gastar a subscrição
+#     Claude toda de uma vez: N implementadores Claude partilham UMA quota, e
+#     quando ela seca secam todos ao mesmo tempo);
+#   * senão -> só claude, que era o comportamento antes de existirem slots.
+TEAM_IMPL_ENGINES="${TEAM_IMPL_ENGINES:-}"
+
+declare -a IMPL_ENGINES=()
+
+build_impl_roster() {
+  local spec="$TEAM_IMPL_ENGINES" e i
+  local -a raw=()
+  if [ -z "$spec" ]; then
+    if [ "${TEAM_HERMES:-0}" = "1" ]; then spec="claude,hermes"; else spec="claude"; fi
+  fi
+  IFS=',' read -r -a raw <<< "$spec"
+  [ "${#raw[@]}" -gt 0 ] || raw=(claude)
+  local warned_hermes=0
+  for (( i=0; i<TEAM_IMPLEMENTERS; i++ )); do
+    e="${raw[$(( i % ${#raw[@]} ))]}"
+    e="${e// /}"
+    if [ "$e" = "hermes" ] && ! command -v hermes >/dev/null 2>&1; then
+      [ "$warned_hermes" = "0" ] && { log "hermes pedido mas não está no PATH — esses slots vão de claude"; warned_hermes=1; }
+      e="claude"
+    fi
+    [ -n "$e" ] || e="claude"
+    IMPL_ENGINES+=("$e")
+  done
+  log "slots de implementação: $TEAM_IMPLEMENTERS (${IMPL_ENGINES[*]}), tecto real = memória"
+}
 
 # ── Issue queries ──────────────────────────────────────────────────────────
 #
@@ -160,6 +213,28 @@ issues_with() {
 # If nothing easy is left it still takes the head of the queue rather than idling:
 # a hard issue attempted is better than a queue that stops, and the deferral
 # breaker bounds the cost of getting that wrong.
+# ── Reserva de issues ─────────────────────────────────────────────────────
+#
+# Com dois implementadores a corrida era evitada por aritmética: o Claude levava
+# o índice 0 da fila e o Hermes o índice 1. Isso não escala e nunca foi sólido —
+# o cache de issues é lido uma vez por ciclo, o `qa:wip` só aparece segundos
+# depois do despacho, e no modo fallback os filtros de degradação fazem o índice
+# 0 cair num issue que já é de outro.
+#
+# Passa a haver reserva explícita, com as duas guardas do claim_pr:
+#   * CLAIMED_ISSUES_THIS_CYCLE, para a janela entre despachar e o implement.sh
+#     marcar qa:wip;
+#   * o registo de agentes vivos (inflight), que atravessa ciclos e é PID, logo
+#     não deixa reservas obsoletas para trás.
+CLAIMED_ISSUES_THIS_CYCLE=""
+
+claim_issue() { CLAIMED_ISSUES_THIS_CYCLE="$CLAIMED_ISSUES_THIS_CYCLE $1"; }
+
+issue_claimed() {
+  case " $CLAIMED_ISSUES_THIS_CYCLE " in *" $1 "*) return 0 ;; esac
+  inflight_active "implement-$1"
+}
+
 first_with() {
   local n first_any="" fb=0
   on_fallback && fb=1
@@ -167,6 +242,7 @@ first_with() {
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     is_deferred "$n" && continue
+    issue_claimed "$n" && continue
     [ -z "$first_any" ] && first_any="$n"
 
     if [ "$fb" = "1" ]; then
@@ -185,25 +261,27 @@ first_with() {
   return 0
 }
 
-# Nth actionable issue for a label (0-indexed), para o par Hermes.
+# Primeiro issue livre de uma label, SEM os filtros de degradação da subscrição.
 #
-# PORQUE NÃO first_with NOS DOIS: o implementador só marca qa:wip depois de
-# preparar o worktree, e o cache de issues é lido uma vez por ciclo. Se ambos
-# chamassem first_with, ambos liam a mesma fila antes de qualquer um marcar e
-# pegavam no MESMO issue — dois agentes, dois worktrees, o mesmo branch. A corrida
-# é evitada por construção: o Claude leva o índice 0, o Hermes o índice 1.
-#
-# Sem `on_fallback`: o Hermes é um motor próprio e não está sujeito ao cooldown
-# da subscrição Claude, portanto os filtros de degradação não se lhe aplicam.
-nth_with() {
-  local label="$1" want="$2" n i=0
+# Substitui o antigo nth_with (que distribuía por índice — ver o comentário da
+# reserva acima). Para motores próprios como o hermes: não estão sujeitos ao
+# cooldown da subscrição Claude, portanto os filtros do first_with não se lhes
+# aplicam.
+next_free_with() {
+  local n
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     is_deferred "$n" && continue
-    if [ "$i" -eq "$want" ]; then echo "$n"; return 0; fi
-    i=$((i + 1))
-  done < <(issues_with "$label")
+    issue_claimed "$n" && continue
+    echo "$n"; return 0
+  done < <(issues_with "$1")
   return 0
+}
+
+# O selector certo para o motor do slot.
+next_issue_for() {
+  local label="$1" engine="$2"
+  if [ "$engine" = "claude" ]; then first_with "$label"; else next_free_with "$label"; fi
 }
 
 # Labels on one issue, straight from the cache.
@@ -316,6 +394,10 @@ claim_pr() {
 pr_claimed() {
   local pr="$1" f slot held
   case " $CLAIMED_THIS_CYCLE " in *" $pr "*) return 0 ;; esac
+  # Terceira guarda, e a mais fiável: há um review.sh vivo neste PR. Cobre a
+  # janela em que o reviewer ainda está a preparar o worktree e portanto ainda
+  # não tomou o lock do run-agent.sh.
+  inflight_active "review-$pr" && return 0
   for f in "$LOCK_PREFIX".*.pr; do
     [ -f "$f" ] || continue
     [ "$(cat "$f" 2>/dev/null)" = "$pr" ] || continue
@@ -364,54 +446,61 @@ mark_reviewed() {
 # ── Stale cleanup ──────────────────────────────────────────────────────────
 # Nothing survives from one cycle to the next. An inherited verdict makes an agent
 # report the PREVIOUS run's work as its own.
+# A GUARDA É POR TRABALHO, NÃO POR SLOT.
+#
+# A versão anterior limpava tudo desde que o slot `main` estivesse livre, com uma
+# excepção pregada à mão para o hermes. Duas coisas estavam mal, e a segunda
+# destruiu trabalho real:
+#
+#   * o flock não diz se um role está vivo. Só é tomado dentro do run-agent.sh,
+#     no FIM do implement.sh — antes disso há set_state, comentário no issue,
+#     worktree e `npm ci`. Nessa janela de minutos o slot parece livre.
+#   * o worktree era removido incondicionalmente. Foi o #442: o agente reportou
+#     que o worktree lhe foi "recriado pelo menos 2 vezes", perdeu os edits, não
+#     chegou a commitar, e o issue voltou a qa:ready num ciclo infinito.
+#
+# Com N slots isso deixaria de ser uma janela e passaria a ser o caso normal —
+# há sempre alguém a aquecer. Portanto a decisão é tomada ITEM A ITEM contra o
+# registo de agentes vivos (PID), que é o mesmo nome para o worktree e para o
+# veredicto: `implement-142`, `review-517`, `curator-99`.
 cleanup_stale() {
-  local lock="$LOCK_PREFIX.main.lock"
-  if flock -w 0 -n "$lock" true 2>/dev/null; then
+  local f tag wt pgidfile pgid slot
 
-    # Only the roles whose slot is provably free. Deleting the verdict of a live
-    # agent running in another slot is exactly the bug that destroyed the critic's
-    # findings in the sibling project — four real findings lost, which from the
-    # outside looked like "it found nothing".
-    # O SLOT HERMES CONTA COMO OCUPADO. O implementador paralelo escreve
-    # `implement-N.json` tal como o do slot main, portanto apagar os veredictos de
-    # `implement` com o hermes vivo destrói o trabalho dele a meio — e o worktree
-    # dele é podado a seguir. Medido no #442: o agente reportou que o worktree foi
-    # "recriado de origin/main pelo menos 2 vezes" e que perdeu os edits, nunca
-    # chegou a commitar nem a escrever veredicto, e o issue voltou a qa:ready num
-    # ciclo infinito. É exactamente o modo de falha que o comentário acima descreve,
-    # e passou a ser possível quando o slot hermes foi acrescentado sem estender
-    # esta guarda.
-    local roles="review"
-    if flock -w 0 -n "$LOCK_PREFIX.hermes.lock" true 2>/dev/null; then
-      roles="implement $roles"
-    else
-      log "hermes a correr — não mexo nos veredictos de implement"
-    fi
-    if flock -w 0 -n "$LOCK_PREFIX.curator.lock" true 2>/dev/null; then
-      roles="curator $roles"
-    fi
-    for role in $roles; do
-      rm -f "$VERDICT_DIR/$role"-*.json 2>/dev/null || true
-    done
+  # Veredictos órfãos: um veredicto cujo agente já não existe é o que faz o
+  # próximo agente reportar o trabalho do anterior como seu.
+  for f in "$VERDICT_DIR"/*.json; do
+    [ -f "$f" ] || continue
+    tag=$(basename "$f" .json)
+    inflight_active "$tag" && continue
+    rm -f "$f" 2>/dev/null || true
+  done
 
-    local pgidfile="$lock.pgid"
-    if [ -f "$pgidfile" ]; then
-      local pgid; pgid=$(cat "$pgidfile" 2>/dev/null || echo "")
-      if [ -n "$pgid" ] && kill -0 -"$pgid" 2>/dev/null; then
-        log "stale: a matar a árvore do agente (pgid $pgid)"
-        kill -TERM -"$pgid" 2>/dev/null || true
-        sleep 2
-        kill -KILL -"$pgid" 2>/dev/null || true
-      fi
-      rm -f "$pgidfile"
+  # Árvores de processos abandonadas, slot a slot. O flock chega aqui: se está
+  # livre E não há registo vivo neste slot, o pgid que ficou é órfão.
+  for pgidfile in "$LOCK_PREFIX".*.lock.pgid; do
+    [ -f "$pgidfile" ] || continue
+    slot=${pgidfile#"$LOCK_PREFIX."}; slot=${slot%.lock.pgid}
+    inflight_slot_active "$slot" && continue
+    flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null || continue
+    pgid=$(cat "$pgidfile" 2>/dev/null || echo "")
+    if [ -n "$pgid" ] && kill -0 -"$pgid" 2>/dev/null; then
+      log "stale: a matar a árvore do agente do slot $slot (pgid $pgid)"
+      kill -TERM -"$pgid" 2>/dev/null || true
+      sleep 2
+      kill -KILL -"$pgid" 2>/dev/null || true
     fi
-    for wt in "$WT_ROOT"/implement-* "$WT_ROOT"/review-* "$WT_ROOT"/curator-*; do
-      [ -e "$wt" ] || continue
-      log "stale: a remover worktree $(basename "$wt")"
-      wt_remove "$wt"
-    done
-    git -C "$TEAM_ROOT" worktree prune 2>/dev/null || true
-  fi
+    rm -f "$pgidfile"
+  done
+
+  # Worktrees sem agente vivo.
+  for wt in "$WT_ROOT"/implement-* "$WT_ROOT"/review-* "$WT_ROOT"/curator-*; do
+    [ -e "$wt" ] || continue
+    tag=$(basename "$wt")
+    inflight_active "$tag" && continue
+    log "stale: a remover worktree $tag"
+    wt_remove "$wt"
+  done
+  git -C "$TEAM_ROOT" worktree prune 2>/dev/null || true
 }
 
 # ── PRs whose issue no longer exists ──────────────────────────────────────
@@ -453,11 +542,24 @@ corrida de review. Fechado. O branch fica no remoto se alguém quiser o diff." >
 
 # An issue stuck in qa:wip with no agent alive means the implementer died. Left
 # alone it blocks that issue forever, because nothing dispatches on qa:wip.
+#
+# "SEM AGENTE VIVO" É POR ISSUE, NÃO PELO LOCK GLOBAL.
+#
+# Isto testava um único lock (`main`) e, se estivesse livre, declarava órfãos
+# TODOS os issues em qa:wip. Com um implementador bloqueante era quase verdade.
+# Com N implementadores destacados é falso quase sempre — o lock `main` fica
+# livre assim que o review acaba, e cada implementador vivo tem o seu issue em
+# qa:wip sem PR ainda (o PR só aparece no fim). O resgate devolvia-os a qa:ready
+# e o ciclo seguinte lançava um SEGUNDO implementador sobre trabalho em curso:
+# dois agentes, dois worktrees, o mesmo branch, e o que o segundo faz `push
+# --force` por cima do primeiro.
+#
+# A pergunta certa é sobre AQUELE issue, e a resposta está no registo de agentes
+# vivos.
 rescue_stuck_wip() {
-  local lock="$LOCK_PREFIX.main.lock"
-  flock -w 0 -n "$lock" true 2>/dev/null || return 0   # an agent is running; leave it
   local issue pr
   for issue in $(issues_with "$L_WIP"); do
+    inflight_active "implement-$issue" && continue   # está alguém a trabalhar nisto
     # "No agent alive" does NOT mean "no work done". The implementer opens the PR
     # and only then transitions the issue, so a crash in that window leaves a real,
     # complete PR behind on an issue still marked qa:wip. Demoting that to qa:ready
@@ -529,48 +631,87 @@ launch_curator_if_needed() {
   [ -n "$i" ] || i=$(first_with "$L_TRIAGE")
   [ -n "$i" ] || return 0
 
-  if ! flock -w 0 -n "$LOCK_PREFIX.curator.lock" true 2>/dev/null; then
+  if inflight_slot_active curator \
+     || ! flock -w 0 -n "$LOCK_PREFIX.curator.lock" true 2>/dev/null; then
     log "curator já a correr no seu slot — #$i espera a vez"
+    return 0
+  fi
+  if ! mem_room_for_agent; then
+    log "sem memória para o curator — $(mem_status)"
     return 0
   fi
   log "CURATOR (paralelo) -> #$i"
   nohup bash "$SCRIPT_DIR/curator.sh" "$i" >> "$LOG_DIR/curator-bg.log" 2>&1 &
 }
 
-# ── Implementador paralelo (Hermes/Nous) ───────────────────────────────────
+# ── Implementadores: N slots, tecto de memória ─────────────────────────────
 #
-# Um SEGUNDO implementador, a correr ao mesmo tempo que o Claude, num motor
-# diferente. Desligado por defeito: só arranca com TEAM_HERMES=1.
+# TODOS os implementadores são destacados, incluindo o primeiro. Antes o slot
+# `main` implementava de forma BLOQUEANTE: uma implementação leva ~27 min, e
+# durante esses 27 min o ciclo não corria, logo nenhum outro slot era enchido.
+# Acrescentar slots sem tirar o bloqueio dava paralelismo em rajadas — todos
+# lançados no mesmo instante, e depois a máquina meia vazia à espera do mais
+# lento. Destacados, cada slot que vaga é enchido no ciclo seguinte (~45s).
 #
-# Três coisas mantêm os dois agentes fora do caminho um do outro:
-#   * slot próprio (TEAM_SLOT=hermes) -> lock próprio no run-agent.sh;
-#   * issue diferente por construção (nth_with índice 1, não first_with);
-#   * worktree próprio, que o implement.sh já cria por issue.
+# O que decide quantos correm não é este tecto, é a memória: mem_room_for_agent
+# conta a folga real e ainda desconta os agentes que estão a AQUECER (o pico é o
+# `npm ci` e o jest, não o arranque), senão lançavam-se seis num minuto e o OOM
+# aparecia cinco minutos depois. Ver lib.sh.
 #
-# Tal como o curator, vai ANTES dos despachos bloqueantes e não mexe no DID: se
-# ficasse depois, nunca seria alcançado enquanto o role pesado não terminasse, e
-# "destacado mas em último" é a mesma ordem em série com mais maquinaria.
-launch_hermes_if_needed() {
-  [ "${TEAM_HERMES:-0}" = "1" ] || return 0
-  command -v hermes >/dev/null 2>&1 || { log "TEAM_HERMES=1 mas o hermes não está no PATH"; return 0; }
+# Vai ANTES do review bloqueante e não mexe no DID: destacado mas em último seria
+# a mesma ordem em série com mais maquinaria.
+DISPATCHED_IMPL=0
 
-  local i
-  i=$(nth_with "$L_READY" 1)
-  [ -n "$i" ] || return 0   # menos de dois issues na fila: o Claude leva o único
+# Rework primeiro, trabalho novo depois — a mesma ordem do despacho serial:
+# acabar o que está começado vale mais do que começar mais.
+pick_impl_target() {
+  local engine="$1" i
+  while :; do
+    i=$(next_issue_for "$L_BLOCKED_IMPL" "$engine")
+    [ -n "$i" ] || break
+    if escalate_if_stuck "$i"; then
+      log "#$i: rejeições até agora: $(attempts_of "$i") de $MAX_ATTEMPTS"
+      echo "$i"; return 0
+    fi
+    # Redireccionado para o curator: reservado para não voltar a aparecer neste
+    # ciclo (o cache de issues é deste ciclo e ainda diz blocked-impl).
+    claim_issue "$i"
+  done
+  next_issue_for "$L_READY" "$engine"
+}
 
-  if ! flock -w 0 -n "$LOCK_PREFIX.hermes.lock" true 2>/dev/null; then
-    log "hermes já a correr no seu slot — #$i espera a vez"
-    return 0
-  fi
-  log "IMPLEMENTADOR HERMES (paralelo) -> #$i"
-  TEAM_SLOT=hermes AGENT_ENGINE=hermes \
-    nohup bash "$SCRIPT_DIR/implement.sh" "$i" >> "$LOG_DIR/hermes-bg.log" 2>&1 &
+launch_implementers_if_needed() {
+  local n slot engine i
+
+  for (( n=1; n<=TEAM_IMPLEMENTERS; n++ )); do
+    slot="impl$n"
+    engine="${IMPL_ENGINES[$((n-1))]:-claude}"
+
+    # Ocupado: ou tem um role vivo registado, ou o lock do run-agent está tomado.
+    # As duas guardas, pela mesma razão que o inflight existe.
+    inflight_slot_active "$slot" && continue
+    flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null || continue
+
+    if ! mem_room_for_agent; then
+      log "sem memória para mais um implementador — $(mem_status); $((TEAM_IMPLEMENTERS - n + 1)) slot(s) por encher"
+      return 0
+    fi
+
+    i=$(pick_impl_target "$engine")
+    [ -n "$i" ] || return 0   # fila vazia: nada para distribuir
+
+    claim_issue "$i"
+    log "IMPLEMENTADOR $slot [$engine] -> #$i"
+    TEAM_SLOT="$slot" AGENT_ENGINE="$engine" \
+      nohup bash "$SCRIPT_DIR/implement.sh" "$i" >> "$LOG_DIR/$slot-bg.log" 2>&1 &
+    DISPATCHED_IMPL=$((DISPATCHED_IMPL + 1))
+  done
 }
 
 # ── Reviewer paralelo ──────────────────────────────────────────────────────
 #
-# Um SEGUNDO reviewer, no seu slot. Desligado por defeito: so arranca com
-# TEAM_REVIEWERS >= 2.
+# Reviewers para alem do slot `main`, um por slot. Desligados por defeito: so
+# arrancam com TEAM_REVIEWERS >= 2.
 #
 # Porque existe, medido a 2026-08-21 nos logs: uma review leva ~5.6 min (PR #498,
 # 01:06:53->01:12:30, inclui npm ci + lint + tsc + jest) e uma implementacao ~27 min.
@@ -596,6 +737,13 @@ launch_reviewers_extra_if_needed() {
     slot="rev$i"
     if ! flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null; then
       continue   # este slot ja esta ocupado
+    fi
+    inflight_slot_active "$slot" && continue
+    # Um reviewer custa o mesmo que um implementador (mesmo harness, mesmo jest),
+    # portanto passa pelo mesmo orçamento.
+    if ! mem_room_for_agent; then
+      log "sem memória para mais um reviewer — $(mem_status)"
+      return 0
     fi
     pr=$(pick_pr)
     [ -n "$pr" ] || return 0   # sem PRs livres: nada a distribuir
@@ -624,6 +772,8 @@ fi
 # ── Main loop ──────────────────────────────────────────────────────────────
 CYCLE=0
 log "arranque. base=$BASE_BRANCH repo=$REPO"
+build_impl_roster
+log "$(mem_status)"
 
 while true; do
   CYCLE=$((CYCLE + 1))
@@ -674,50 +824,33 @@ while true; do
   # Corre antes dos despachos: um issue desbloqueado neste ciclo já pode ser apanhado.
   bash "$SCRIPT_DIR/unblock.sh" >/dev/null 2>&1 || warn "unblock.sh falhou neste ciclo"
 
+  # Reservas: são por ciclo, e têm de ser limpas ANTES de qualquer despacho —
+  # senão um issue reservado no ciclo anterior nunca mais é escolhido.
+  CLAIMED_THIS_CYCLE=""
+  CLAIMED_ISSUES_THIS_CYCLE=""
+  DISPATCHED_IMPL=0
+
   # Repair analysis runs alongside delivery, never in front of it.
   launch_curator_if_needed
 
-  # Second implementer on a different engine and a different issue.
-  launch_hermes_if_needed
+  # Implementadores: enche os slots livres enquanto houver memória e fila.
+  launch_implementers_if_needed
 
-  # Reviewers extra, antes dos despachos: cada um reserva o PR que apanha, para que
-  # o run_review bloqueante mais abaixo receba outro.
-  CLAIMED_THIS_CYCLE=""
+  # Reviewers extra, antes do review bloqueante: cada um reserva o PR que apanha,
+  # para que o run_review mais abaixo receba outro.
   launch_reviewers_extra_if_needed
 
   DID=0
+  [ "$DISPATCHED_IMPL" -gt 0 ] && DID=1
 
-  # Priority order matters. Reviewing first is what unblocks merges and closes
-  # issues; only then do we start new work — otherwise the backlog grows faster
-  # than it drains and nothing ever reaches qa:done.
-
-  # 1. Review open PRs whose head has moved since the last review.
+  # A ordem importa. Rever é o que desbloqueia merges e fecha issues — mas já não
+  # é uma escolha entre rever E implementar: os implementadores acima são
+  # destacados, portanto o review deste ciclo corre POR CIMA deles, não em vez
+  # deles.
   PR=$(pick_pr)
   if [ -n "$PR" ]; then run_review "$PR"; DID=1; fi
 
-  # 2. Rework: code problems back to the implementer.
-  if [ "$DID" = "0" ]; then
-    I=$(first_with "$L_BLOCKED_IMPL")
-    if [ -n "$I" ]; then
-      if escalate_if_stuck "$I"; then
-        log "#$I: rejeições até agora: $(attempts_of "$I") de $MAX_ATTEMPTS"
-        run_implement "$I"
-      fi
-      DID=1
-    fi
-  fi
-
-  # 3. New work. No curation step: the implementer investigates the code itself and
-  #    only asks for analysis when the issue genuinely is not actionable.
-  if [ "$DID" = "0" ]; then
-    I=$(first_with "$L_READY")
-    if [ -n "$I" ]; then
-      run_implement "$I"
-      DID=1
-    fi
-  fi
-
-  # 4. Nothing dispatched.
+  # Nada despachado.
   if [ "$DID" = "0" ]; then
     ACTIONABLE=$(count_actionable)
     if [ "$ACTIONABLE" -gt 0 ]; then

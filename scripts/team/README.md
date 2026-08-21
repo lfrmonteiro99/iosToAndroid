@@ -74,13 +74,40 @@ O orquestrador **termina sozinho** quando não houver nenhum issue accionável.
 
 | Script | Papel | Slot | Escreve |
 |---|---|---|---|
-| `implement.sh` | investiga, escreve o teste vermelho, corrige, abre PR | `main` | branch `qa/issue-N`, PR |
-| `review.sh` | corre lint+tsc+jest, confere o diff contra o issue, faz merge | `main` | merge para `main`, fecha o issue |
+| `implement.sh` | investiga, escreve o teste vermelho, corrige, abre PR | `impl1..implN` | branch `qa/issue-N`, PR |
+| `review.sh` | corre lint+tsc+jest, confere o diff contra o issue, faz merge | `main`, `rev2..revM` | merge para `main`, fecha o issue |
 | `curator.sh` | análise de reparação: causa raiz, AC, passos de teste, `split` | `curator` | comentários e labels |
 
-`main` é um lock exclusivo — **um agente de escrita de cada vez**. Dois agentes a
-fazer push ao mesmo repositório é como se perde trabalho. O curator corre no seu
-próprio slot em paralelo: só escreve comentários no GitHub, sem git e sem build.
+## Paralelismo: o tecto é a MEMÓRIA
+
+Cada agente corre no seu **slot**: lock próprio, worktree próprio, issue/PR
+próprio. Já não é "um agente de escrita de cada vez" — o que impede trabalho
+perdido não é um lock global, é o isolamento (issue diferente + worktree
+diferente + reserva explícita).
+
+Quantos correm ao mesmo tempo **não é uma constante**: em cada ciclo o
+orquestrador enche os slots livres enquanto `MemAvailable` der folga
+(`mem_room_for_agent`, em `lib.sh`). `TEAM_IMPLEMENTERS` é só um tecto duro
+contra o disparate.
+
+Duas coisas que não são óbvias e são as que quebram isto:
+
+* **O `npm test` é jest, e o jest abre `cores-1` workers.** Nesta máquina são 11
+  workers de React Native **por agente** — cinco agentes seriam ~55 processos node
+  e um OOM garantido. Por isso os prompts recebem `npm test --
+  --maxWorkers=$TEAM_JEST_WORKERS` (omissão: 2) em vez de `npm test`.
+* **Um agente lançado agora ainda não gastou o que vai gastar.** O pico é o
+  `npm ci` e depois o jest, minutos depois do arranque. Se o orçamento só olhasse
+  para o `MemAvailable` do instante, lançava seis num minuto e batia no OOM
+  cinco minutos mais tarde. Os agentes com menos de `TEAM_AGENT_WARMUP_S`
+  contam como memória já comprometida.
+
+O registo de agentes vivos (`state/inflight/<tag>`, com o PID) é o que diz se um
+slot está ocupado — **não o flock**. O lock só é tomado dentro do `run-agent.sh`,
+no fim do `implement.sh`, depois do worktree e do `npm ci`: até lá o slot parece
+livre. Era essa janela que fazia o `cleanup_stale` remover o worktree debaixo de
+um agente vivo (o #442) e o `rescue_stuck_wip` devolver a `qa:ready` um issue que
+já estava a ser trabalhado.
 
 ## O reviewer é o único portão
 
@@ -187,6 +214,13 @@ Tudo por variável de ambiente, com omissões em `lib.sh`:
 | Variável | Omissão | Efeito |
 |---|---|---|
 | `TEAM_CYCLE_SLEEP` | `45` | segundos entre ciclos |
+| `TEAM_IMPLEMENTERS` | `6` | tecto de slots de implementação (o real é a memória) |
+| `TEAM_IMPL_ENGINES` | `claude` (ou `claude,hermes` com `TEAM_HERMES=1`) | motores dos slots, ciclados |
+| `TEAM_REVIEWERS` | `1` | reviewers em paralelo |
+| `TEAM_AGENT_MEM_MB` | `2000` | custo estimado de um agente no pico |
+| `TEAM_MEM_FLOOR_MB` | `2048` | memória que nunca é emprestada à pipeline |
+| `TEAM_AGENT_WARMUP_S` | `300` | quanto tempo um agente conta como "ainda a crescer" |
+| `TEAM_JEST_WORKERS` | `2` | `--maxWorkers` do jest em cada agente (`0` = default do jest) |
 | `TEAM_MAX_ATTEMPTS` | `3` | tentativas antes de escalar para o curator |
 | `IMPLEMENT_MODEL` / `REVIEW_MODEL` / `CURATOR_MODEL` | `sonnet` | modelo por papel |
 | `IMPLEMENT_HONOUR_READY_LABELS` | `0` | a `1`, usa `haiku` nos issues com `haiku-ready` |

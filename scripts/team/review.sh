@@ -22,7 +22,10 @@ PROMPT="/tmp/ios2a-review-prompt-$PR.txt"
 # (modelo resolvido mais abaixo, a partir do issue ligado)
 WT=""
 
-cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
+# inflight_register: ver o comentário em implement.sh. Mesmo motivo, mesma janela
+# (o lock do run-agent.sh só é tomado no fim), mesma consequência.
+inflight_register "review-$PR" "${TEAM_SLOT:-main}"
+cleanup() { [ -n "$WT" ] && wt_remove "$WT"; inflight_release "review-$PR"; }
 trap cleanup EXIT
 
 PR_INFO=$(gh pr view "$PR" --repo "$REPO" \
@@ -200,7 +203,8 @@ fi
   echo ""
   printf '%s\n' "$DIFF"
 } | sed -e "s|__VERDICT_PATH__|$VERDICT_FILE|g" \
-        -e "s|__WORKDIR__|$WT|g" > "$PROMPT"
+        -e "s|__WORKDIR__|$WT|g" \
+        -e "s|__TEST_CMD__|$(test_cmd)|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
 agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
