@@ -113,12 +113,25 @@ class LauncherModule : Module() {
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                // GUARDA DE API, e não é defensiva por hábito: `ApplicationInfo.category`
+                // só existe a partir da API 26 e este módulo declara minSdkVersion 24
+                // (modules/launcher-module/android/build.gradle:13). Em API 24/25 o
+                // acesso ao campo lança NoSuchFieldError, o que rejeita a promise
+                // inteira do getInstalledApps — AppsStore.tsx apanha, alerta
+                // "Could not load apps", e o launcher fica sem uma única aplicação.
+                // O resto deste ficheiro usa a mesma guarda 15 vezes.
+                val category = if (CategoryMapper.isCategoryReadable(Build.VERSION.SDK_INT)) {
+                    CategoryMapper.categoryToString(appInfo.category)
+                } else {
+                    CategoryMapper.UNDEFINED
+                }
 
                 mapOf(
                     "name" to label,
                     "packageName" to packageName,
                     "icon" to icon,
-                    "isSystem" to isSystem
+                    "isSystem" to isSystem,
+                    "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
 
