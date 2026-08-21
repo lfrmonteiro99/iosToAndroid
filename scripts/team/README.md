@@ -207,6 +207,24 @@ principal em vez de instalar. Quando o lock difere — porque o issue mexeu nas
 dependências — instala a sério, porque aí o symlink mutaria a árvore do checkout
 principal por baixo de um agente vivo.
 
+## Dashboard
+
+```bash
+bash scripts/team/dashboard.sh --serve          # http://localhost:8787
+bash scripts/team/dashboard.sh --serve --lan    # tambem pela tailnet (telemovel)
+bash scripts/team/dashboard.sh --once           # so escreve o HTML
+```
+
+Mostra o cruzamento que nem o GitHub nem o log dao sozinhos: **que agente esta em
+que issue, em que slot, com que motor e ha quanto tempo**, mais os PRs abertos com
+o estado do issue ligado (bloqueado / a espera de reviewer / a ser revisto), o que
+foi integrado, e a linha de saude do watchdog com o alerta em destaque quando ha um.
+
+Tres chamadas a API por actualizacao (`TEAM_DASH_REFRESH`, omissao 15s) — ~720/h
+contra um limite de 5000/h. A geracao e o servidor sao processos separados: uma
+falha do `gh` deixa a pagina a mostrar a ultima recolha boa, com o relogio a
+denunciar a idade, em vez de derrubar o dashboard.
+
 ## Configuração
 
 Tudo por variável de ambiente, com omissões em `lib.sh`:
