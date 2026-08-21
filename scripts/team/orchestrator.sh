@@ -736,6 +736,16 @@ launch_implementers_if_needed() {
     i=$(pick_impl_target "$engine")
     [ -n "$i" ] || return 0   # fila vazia: nada para distribuir
 
+    # UM NÚMERO, OU NADA. Guarda contra o que já aconteceu: o `log` escrevia para
+    # stdout, o pick_impl_target loga, e o `$i` vinha com a linha de log dentro.
+    # Despachou três slots para o mesmo "issue" e encheu o registo de agentes com
+    # tags que nunca morrem. O log já foi para stderr; isto é o cinto.
+    case "$i" in
+      ''|*[!0-9]*)
+        warn "pick_impl_target devolveu algo que não é um número de issue: $(printf '%q' "$i") — slot $slot não despachado"
+        return 0 ;;
+    esac
+
     claim_issue "$i"
     log "IMPLEMENTADOR $slot [$engine] -> #$i"
     TEAM_SLOT="$slot" AGENT_ENGINE="$engine" \

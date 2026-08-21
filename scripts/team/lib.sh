@@ -545,7 +545,20 @@ ALL_QA_LABELS="$L_TRIAGE,$L_READY,$L_WIP,$L_REVIEW,$L_DONE,$L_BLOCKED_IMPL,$L_BL
 # these; the curator may re-grade.
 ALL_PRIO_LABELS="P0,P1,P2,P3"
 
-log() { echo "[${ROLE:-team}] $(date +%H:%M:%S) $*"; }
+# O LOG VAI PARA STDERR, e não é cosmética.
+#
+# Escrevia para stdout, e isso envenena qualquer `x=$(funcao_que_loga)`. Custou
+# uma hora de pipeline parada: o pick_impl_target chama o escalate_if_stuck (que
+# loga), dentro de `i=$(pick_impl_target ...)` — e o `$i` passou a ser a LINHA DE
+# LOG mais o número. Daí três slots despachados para o mesmo "issue"
+# `[orchestrator] 12:12 #475: rejeições... 475`, tags de agente vivo com esse
+# nome (que nunca morrem, logo contam para sempre como "a aquecer"), o orçamento
+# de memória esgotado por fantasmas, e nenhuma review despachada durante uma
+# hora com dois PRs à espera.
+#
+# Diagnósticos pertencem ao stderr. Quem quer o log num ficheiro já usa `2>&1`
+# (o start.sh e os despachos dos roles fazem-no), portanto nada se perde.
+log() { echo "[${ROLE:-team}] $(date +%H:%M:%S) $*" >&2; }
 warn() { echo "[${ROLE:-team}] $(date +%H:%M:%S) WARN $*" >&2; }
 
 # ── Issue state transitions ────────────────────────────────────────────────
