@@ -1,8 +1,16 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, waitFor } from '../../test-utils';
 import { SiriScreen } from '../SiriScreen';
 import type { AppNavigationProp } from '../../navigation/types';
 import type { InstalledApp } from '../../store/AppsStore';
+import * as Speech from 'expo-speech';
+
+// expo-speech is a native module with no implementation under jest; mock it
+// the same way ClockScreen.test.tsx mocks expo-notifications.
+jest.mock('expo-speech', () => ({
+  speak: jest.fn(),
+  stop: jest.fn(),
+}));
 
 const mockLaunchApp = jest.fn<Promise<void>, [string]>(() => Promise.resolve());
 const mockApps: InstalledApp[] = [
@@ -35,6 +43,8 @@ function submit(input: string, nav: AppNavigationProp = makeNav()) {
 
 beforeEach(() => {
   mockLaunchApp.mockClear();
+  (Speech.speak as jest.Mock).mockClear();
+  (Speech.stop as jest.Mock).mockClear();
 });
 
 describe('SiriScreen', () => {
@@ -179,5 +189,46 @@ describe('SiriScreen', () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
     expect(() => submit('Open Calculator')).not.toThrow();
     expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
+  });
+
+  // ── Speech (issue #256) ──────────────────────────────────────────────────
+  it('speaks the response exactly once when a command yields a response', () => {
+    submit('Open Calculator');
+    expect(Speech.speak).toHaveBeenCalledTimes(1);
+    expect(Speech.speak).toHaveBeenCalledWith('Opening Calculator.');
+  });
+
+  it('does not speak the greeting on initial mount', () => {
+    render(<SiriScreen navigation={makeNav()} />);
+    expect(Speech.speak).not.toHaveBeenCalled();
+  });
+
+  it('speaks the launchApp-failure response when launchApp rejects', async () => {
+    mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
+    submit('Open Calculator');
+    // Success response set synchronously, failure response set in async .catch.
+    expect(Speech.speak).toHaveBeenCalledWith('Opening Calculator.');
+    await waitFor(() =>
+      expect(Speech.speak).toHaveBeenCalledWith("Couldn't open Calculator."),
+    );
+    expect(Speech.speak).toHaveBeenCalledTimes(2);
+  });
+
+  it('calls stopSpeaking (Speech.stop) on unmount', () => {
+    const { unmount } = render(<SiriScreen navigation={makeNav()} />);
+    expect(Speech.stop).not.toHaveBeenCalled();
+    unmount();
+    expect(Speech.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not double-speak when the same response text is set twice in a row', () => {
+    const nav = makeNav();
+    const { getByLabelText } = render(<SiriScreen navigation={nav} />);
+    const field = getByLabelText('Ask Siri');
+    fireEvent.changeText(field, 'Open Calculator');
+    fireEvent(field, 'submitEditing');
+    fireEvent.changeText(field, 'Open Calculator');
+    fireEvent(field, 'submitEditing');
+    expect(Speech.speak).toHaveBeenCalledTimes(1);
   });
 });

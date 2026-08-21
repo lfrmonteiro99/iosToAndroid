@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { useApps } from '../store/AppsStore';
 import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { parseCommand } from '../assistant/commandParser';
+import { speak, stopSpeaking } from '../assistant/speech';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 
@@ -126,6 +127,17 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         return;
     }
   }, [text, findApp, contacts, launchApp, navigation]);
+
+  // Speak every response once it is set. Bound to `[response]` rather than
+  // calling the speech inline in the switch so the async `launchApp` failure
+  // path (which sets a second response inside `.catch`) is also covered, and
+  // so the same text submitted twice doesn't double-speak. The `response`
+  // guard skips the initial `null` (the greeting shows via `GREETING`).
+  useEffect(() => {
+    if (response) speak(response);
+  }, [response]);
+
+  useEffect(() => () => stopSpeaking(), []);
 
   const styles = useMemo(() => createStyles(), []);
 
