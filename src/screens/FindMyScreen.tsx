@@ -1,16 +1,37 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CupertinoNavigationBar } from '../components/CupertinoNavigationBar';
 import { CupertinoListSection, CupertinoListTile } from '../components/CupertinoListSection';
 import { CupertinoButton } from '../components/CupertinoButton';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { CupertinoEmptyState } from '../components/CupertinoEmptyState';
+import { CupertinoSwitch } from '../components/CupertinoSwitch';
+import { CupertinoTextField } from '../components/CupertinoTextField';
+import { hapticSelection } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
 import { useLocation } from '../store/LocationStore';
 import { useContacts } from '../store/ContactsStore';
+
+const LOST_MODE_KEY = '@iostoandroid/findmy_lost_mode';
+
+interface LostModeState {
+  active: boolean;
+  message: string; // shown on the overlay, e.g. a contact phone number
+}
+
+const DEFAULT_LOST_MODE: LostModeState = { active: false, message: '' };
 
 function formatRelative(timestamp: number): string {
   const diffSec = Math.floor((Date.now() - timestamp) / 1000);
@@ -54,6 +75,82 @@ export function FindMyScreen() {
     ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}`
     : null;
   const updatedLabel = currentLocation ? `Updated ${formatRelative(currentLocation.timestamp)}` : null;
+
+  // ── Lost mode (issue #267) ──────────────────────────────────────────────
+  // In-app-only simulation: an unprivileged launcher cannot lock the device,
+  // so "Mark as Lost" is confined to this screen. The flag is persisted and
+  // hydrated on mount so it survives navigation away and back (and restart).
+  const [lostMode, setLostMode] = useState<LostModeState>(DEFAULT_LOST_MODE);
+  const [showMessagePrompt, setShowMessagePrompt] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState('');
+
+  const persistLostMode = useCallback(async (next: LostModeState) => {
+    try {
+      await AsyncStorage.setItem(LOST_MODE_KEY, JSON.stringify(next));
+    } catch {
+      // silently fail — storage is best-effort for a cosmetic overlay
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(LOST_MODE_KEY).then((raw) => {
+      if (cancelled) return;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as Partial<LostModeState>;
+          setLostMode({
+            active: parsed.active === true,
+            message: typeof parsed.message === 'string' ? parsed.message : '',
+          });
+        } catch {
+          /* ignore corrupt storage */
+        }
+      }
+    }).catch(() => {
+      /* ignore */
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggleLostMode = useCallback(
+    (value: boolean) => {
+      hapticSelection().catch(() => {});
+      if (value) {
+        // Toggling on opens a prompt to capture an optional contact message
+        // before activating.
+        setPendingMessage(lostMode.message);
+        setShowMessagePrompt(true);
+      } else {
+        // Toggling off directly disables and persists.
+        const next: LostModeState = { active: false, message: '' };
+        setLostMode(next);
+        void persistLostMode(next);
+      }
+    },
+    [lostMode.message, persistLostMode],
+  );
+
+  const confirmMessagePrompt = useCallback(() => {
+    const next: LostModeState = { active: true, message: pendingMessage };
+    setLostMode(next);
+    void persistLostMode(next);
+    setShowMessagePrompt(false);
+  }, [pendingMessage, persistLostMode]);
+
+  const cancelMessagePrompt = useCallback(() => {
+    // User dismissed the prompt without activating — leave the switch off.
+    setShowMessagePrompt(false);
+    setLostMode((prev) => ({ ...prev, active: false }));
+  }, []);
+
+  const turnOffLostMode = useCallback(() => {
+    const next: LostModeState = { active: false, message: '' };
+    setLostMode(next);
+    void persistLostMode(next);
+  }, [persistLostMode]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -111,6 +208,26 @@ export function FindMyScreen() {
                         backgroundColor: colors.systemBlue,
                       }}
                     />
+                    <CupertinoListTile
+                      title="Mark as Lost"
+                      subtitle={
+                        lostMode.active && lostMode.message
+                          ? lostMode.message
+                          : undefined
+                      }
+                      leading={{
+                        name: 'alert-circle',
+                        color: '#FFFFFF',
+                        backgroundColor: colors.systemRed,
+                      }}
+                      trailing={
+                        <CupertinoSwitch
+                          value={lostMode.active}
+                          onValueChange={handleToggleLostMode}
+                        />
+                      }
+                      showChevron={false}
+                    />
                   </CupertinoListSection>
                 </View>
               )}
@@ -155,6 +272,89 @@ export function FindMyScreen() {
           )}
         </ScrollView>
       </CupertinoNavigationBar>
+
+      {/* Message prompt — inline Modal capturing the optional contact note. */}
+      <Modal
+        visible={showMessagePrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelMessagePrompt}
+      >
+        <View style={styles.promptBackdrop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.promptSheet}
+          >
+            <View
+              style={[
+                styles.promptContent,
+                { backgroundColor: colors.secondarySystemGroupedBackground },
+              ]}
+            >
+              <Text style={[typography.title3, { color: colors.label, fontWeight: '700' }]}>
+                Lost Mode
+              </Text>
+              <Text
+                style={[
+                  typography.footnote,
+                  { color: colors.secondaryLabel, marginTop: 6, marginBottom: 12 },
+                ]}
+              >
+                Add an optional contact message so someone who finds this device knows how to
+                reach you.
+              </Text>
+              <CupertinoTextField
+                value={pendingMessage}
+                onChangeText={setPendingMessage}
+                placeholder="Contact message (optional)"
+              />
+              <View style={styles.promptActions}>
+                <CupertinoButton
+                  title="Cancel"
+                  variant="plain"
+                  onPress={cancelMessagePrompt}
+                />
+                <CupertinoButton
+                  title="Save"
+                  variant="filled"
+                  onPress={confirmMessagePrompt}
+                />
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Full-screen lost-mode overlay — only rendered while FindMyScreen is
+          mounted and lostMode.active is true. It never blocks navigation away
+          and never shows on any other screen. */}
+      <Modal
+        visible={lostMode.active}
+        animationType="fade"
+        onRequestClose={turnOffLostMode}
+      >
+        <View style={[styles.overlay, { backgroundColor: colors.systemBackground }]}>
+          <Ionicons name="alert-circle" size={64} color={colors.systemRed} style={styles.overlayIcon} />
+          <Text style={[typography.largeTitle, { color: colors.label, textAlign: 'center' }]}>
+            This Device Is Marked as Lost
+          </Text>
+          {lostMode.message ? (
+            <Text style={[typography.title3, { color: colors.secondaryLabel, textAlign: 'center', marginTop: 12 }]}>
+              {`Reach me: ${lostMode.message}`}
+            </Text>
+          ) : null}
+          <Text style={[typography.footnote, { color: colors.tertiaryLabel, textAlign: 'center', marginTop: 20 }]}>
+            This does not lock your device
+          </Text>
+          <View style={styles.overlayButton}>
+            <CupertinoButton
+              title="Turn Off Lost Mode"
+              variant="filled"
+              onPress={turnOffLostMode}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -194,5 +394,39 @@ const styles = StyleSheet.create({
   sectionContainer: {
     paddingHorizontal: 16,
     marginTop: 8,
+  },
+  // Message prompt sheet
+  promptBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  promptSheet: {
+    width: '100%',
+  },
+  promptContent: {
+    borderRadius: 14,
+    padding: 20,
+  },
+  promptActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  // Lost-mode overlay
+  overlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  overlayIcon: {
+    marginBottom: 20,
+  },
+  overlayButton: {
+    marginTop: 32,
+    width: '100%',
   },
 });

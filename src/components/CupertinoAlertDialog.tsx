@@ -139,8 +139,11 @@ export function CupertinoAlertDialog({
                   },
                 ]}
                 onPress={() => {
-                  action.onPress();
+                  // Close first: an action that itself opens another alert
+                  // (e.g. "Limit Reached") would otherwise be hidden again by
+                  // this dismissal, since both setStates land in one batch.
                   onClose();
+                  action.onPress();
                 }}
               >
                 <Text

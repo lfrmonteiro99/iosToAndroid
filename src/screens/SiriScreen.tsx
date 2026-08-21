@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Platform,
+  PermissionsAndroid,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,8 +19,11 @@ import { useTheme } from '../theme/ThemeContext';
 import { parseCommand } from '../assistant/commandParser';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+import { useAlert, SiriWaveform } from '../components';
+import { withAutoLockSuppressed } from '../utils/permissions';
 
 const GREETING = 'What can I help you with?';
+const LISTENING = 'Listening…';
 const NOT_SUPPORTED = "That's not supported yet.";
 
 /** Format a Date the way the assistant speaks a clock time ("2:05 PM"). */
@@ -45,6 +51,23 @@ function findContact(contacts: Contact[], query: string): Contact | undefined {
   });
 }
 
+// Loaded defensively via dynamic import so tests without the native module
+// still render, matching the pattern in AppsStore.
+async function getLauncherModuleExports(): Promise<
+  typeof import('../../modules/launcher-module/src') | null
+> {
+  try {
+    return await import('../../modules/launcher-module/src');
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require
+      return require('../../modules/launcher-module/src');
+    } catch {
+      return null;
+    }
+  }
+}
+
 interface SiriScreenProps {
   navigation: AppNavigationProp;
 }
@@ -55,9 +78,14 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
   const insets = useSafeAreaInsets();
   const { apps, launchApp } = useApps();
   const { contacts } = useContacts();
+  const alert = useAlert();
 
   const [text, setText] = useState('');
   const [response, setResponse] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  // Availability is per-device — cached once, then used to disable the mic if
+  // the platform has no on-device recognizer (e.g. non-Android emulators).
+  const [voiceAvailable, setVoiceAvailable] = useState<boolean | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   const findApp = useCallback(
@@ -70,11 +98,8 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
     [apps],
   );
 
-  const handleSubmit = useCallback(() => {
-    const input = text;
+  const runCommand = useCallback((input: string) => {
     if (input.trim().length === 0) return;
-    setText('');
-
     const command = parseCommand(input);
 
     switch (command.type) {
@@ -125,9 +150,150 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         setResponse(NOT_SUPPORTED);
         return;
     }
-  }, [text, findApp, contacts, launchApp, navigation]);
+  }, [findApp, contacts, launchApp, navigation]);
+
+  const handleSubmit = useCallback(() => {
+    const input = text;
+    setText('');
+    runCommand(input);
+  }, [text, runCommand]);
+
+  // ── Voice recognition ──────────────────────────────────────────────────
+  // Query availability once so the mic can be disabled when the platform
+  // has no on-device recognizer.
+  useEffect(() => {
+    let cancelled = false;
+    getLauncherModuleExports().then((mod) => {
+      if (cancelled) return;
+      if (!mod?.default) { setVoiceAvailable(false); return; }
+      mod.default.isSpeechRecognitionAvailable()
+        .then((ok) => { if (!cancelled) setVoiceAvailable(!!ok); })
+        .catch(() => { if (!cancelled) setVoiceAvailable(false); });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Subscribe to speech events while listening. Final result runs the same
+  // command pipeline as typed input; partial results stream into the field so
+  // the user sees their words appear.
+  useEffect(() => {
+    if (!listening) return;
+    let unsubResult: (() => void) | undefined;
+    let unsubPartial: (() => void) | undefined;
+    let unsubError: (() => void) | undefined;
+    let cancelled = false;
+
+    getLauncherModuleExports().then((mod) => {
+      if (cancelled || !mod) return;
+      unsubPartial = mod.addSpeechPartialResultListener?.((partial) => {
+        setText(partial);
+      });
+      unsubResult = mod.addSpeechResultListener?.((final) => {
+        setText('');
+        setListening(false);
+        runCommand(final);
+      });
+      unsubError = mod.addSpeechErrorListener?.((err) => {
+        setListening(false);
+        setResponse(`Couldn't hear you (${err}).`);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsubResult?.();
+      unsubPartial?.();
+      unsubError?.();
+    };
+  }, [listening, runCommand]);
+
+  const stopListening = useCallback(async () => {
+    setListening(false);
+    const mod = await getLauncherModuleExports();
+    await mod?.default?.stopSpeechRecognition().catch(() => {});
+  }, []);
+
+  const startListening = useCallback(async () => {
+    if (voiceAvailable === false) {
+      alert('Voice Not Available', 'Speech recognition is not available on this device.');
+      return;
+    }
+
+    // Ask for the microphone up front — the native recognizer will otherwise
+    // just fire onError with an opaque code the user can't act on.
+    if (Platform.OS === 'android') {
+      try {
+        const already = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        );
+        if (!already) {
+          const result = await withAutoLockSuppressed(() => PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+              title: 'Listen to Voice Commands',
+              message: 'Allow the assistant to use the microphone for voice input?',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Deny',
+            },
+          ));
+          if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+            alert(
+              'Microphone Needed',
+              result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+                ? 'Microphone access is disabled. Enable it in system settings to talk to the assistant.'
+                : 'Microphone access was denied. Voice commands need it to work.',
+              [
+                ...(result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+                  ? [{ text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } }]
+                  : []),
+                { text: 'OK' },
+              ],
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        logger.warn('SiriScreen', 'RECORD_AUDIO check failed', e);
+      }
+    }
+
+    setText('');
+    setResponse(LISTENING);
+    setListening(true);
+
+    const mod = await getLauncherModuleExports();
+    const started = await mod?.default?.startSpeechRecognition().catch(() => false);
+    if (!started) {
+      // Native side already emitted an error; but if the module was missing
+      // entirely, clear the listening state so the mic is tappable again.
+      setListening(false);
+      setResponse('Voice input is unavailable right now.');
+    }
+  }, [voiceAvailable, alert]);
+
+  const toggleListening = useCallback(() => {
+    if (listening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [listening, stopListening, startListening]);
+
+  // Stop the recognizer if the screen unmounts mid-listen (back button, tab
+  // switch) so the mic doesn't stay held.
+  useEffect(() => () => {
+    getLauncherModuleExports().then((mod) => {
+      mod?.default?.stopSpeechRecognition().catch(() => {});
+    });
+  }, []);
 
   const styles = useMemo(() => createStyles(), []);
+  const micDisabled = voiceAvailable === false;
+  const micColor = listening
+    ? colors.systemRed
+    : micDisabled
+      ? colors.tertiaryLabel
+      : colors.systemBlue;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
@@ -157,6 +323,12 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         </Text>
       </ScrollView>
 
+      {/* Bars sit above the input row so their motion reads as the mic
+          state, not decoration on the text field. */}
+      <View style={styles.waveformRow} pointerEvents="none">
+        <SiriWaveform listening={listening} />
+      </View>
+
       <View
         style={[
           styles.inputRow,
@@ -179,7 +351,22 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           accessibilityLabel="Ask Siri"
           autoFocus
           blurOnSubmit={false}
+          editable={!listening}
         />
+        <Pressable
+          onPress={toggleListening}
+          disabled={micDisabled}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={listening ? 'Stop listening' : 'Start voice input'}
+          accessibilityState={{ disabled: micDisabled, selected: listening }}
+          style={({ pressed }) => [
+            styles.micButton,
+            { opacity: pressed && !micDisabled ? 0.6 : 1 },
+          ]}
+        >
+          <Ionicons name={listening ? 'stop-circle' : 'mic'} size={28} color={micColor} />
+        </Pressable>
       </View>
     </View>
   );
@@ -193,16 +380,31 @@ function createStyles() {
     responseArea: { flex: 1 },
     responseContent: { padding: 24, flexGrow: 1, justifyContent: 'center' },
     responseText: { textAlign: 'center' },
+    waveformRow: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 6,
+    },
     inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingHorizontal: 12,
       paddingTop: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
+      gap: 8,
     },
     input: {
+      flex: 1,
       minHeight: 40,
       borderRadius: 20,
       paddingHorizontal: 16,
       paddingVertical: 8,
+    },
+    micButton: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 }
