@@ -271,7 +271,6 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress}
-      android_ripple={isJiggling ? null : { color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${app.name}`}
       accessibilityRole="button"
     >
@@ -393,10 +392,9 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
 
   return (
     <Pressable
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: 'rgba(255,255,255,0.2)', radius: ICON_SIZE / 2 }}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
     >
@@ -1122,9 +1120,8 @@ export function LauncherHomeScreen() {
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
           <Pressable
-            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
+            style={({ pressed }) => [styles.defaultBannerButton, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
             onPress={openLauncherSettings}
-            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
