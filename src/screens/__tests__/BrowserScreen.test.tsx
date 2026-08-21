@@ -148,6 +148,92 @@ describe('BrowserScreen — Share', () => {
   });
 });
 
+describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
+  it('opens the tab grid when the Tabs button is pressed', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    expect(utils.getByTestId('browser-tab-grid')).toBeTruthy();
+    expect(utils.queryByTestId('browser-webview')).toBeNull();
+  });
+
+  it('"+ New Tab" creates a tab and makes it the active one, remounting the WebView at the home URL', () => {
+    const utils = submitAddress('example.com');
+    expect(webviewUri(utils)).toBe('https://example.com');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+
+  it("switching tabs in the grid re-mounts the WebView with the selected tab's url", () => {
+    const utils = submitAddress('example.com');
+    expect(webviewUri(utils)).toBe('https://example.com');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+
+    // New tab is active and defaults to the home URL — WebView re-mounted with it.
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+
+    // Go back to the grid and switch back to the first tab (still showing example.com).
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('Tab: https://example.com'));
+    expect(webviewUri(utils)).toBe('https://example.com');
+  });
+
+  it('the grid shows one card per open tab', () => {
+    const utils = submitAddress('example.com');
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    expect(utils.getByLabelText('Tab: https://example.com')).toBeTruthy();
+    expect(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`)).toBeTruthy();
+  });
+
+  it('"Done" returns to the active tab without changing it', () => {
+    const utils = submitAddress('example.com');
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(webviewUri(utils)).toBe('https://example.com');
+  });
+
+  it('closing the only tab leaves activeTabId pointing at no tab (grid shown, no WebView, no crash)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText(`Close tab: ${BROWSER_HOME_URL}`));
+
+    expect(utils.queryByTestId('browser-webview')).toBeNull();
+    expect(utils.getByLabelText('New Tab')).toBeTruthy();
+    expect(utils.queryByLabelText(/^Tab: /)).toBeNull();
+  });
+
+  it('closing the active tab (when others remain) activates another existing tab', () => {
+    const utils = submitAddress('example.com');
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab')); // active tab is now the new home-url tab
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText(`Close tab: ${BROWSER_HOME_URL}`));
+
+    // Only the example.com tab remains — grid should reflect that, and selecting it works.
+    expect(utils.queryByLabelText(`Tab: ${BROWSER_HOME_URL}`)).toBeNull();
+    fireEvent.press(utils.getByLabelText('Tab: https://example.com'));
+    expect(webviewUri(utils)).toBe('https://example.com');
+  });
+
+  it('closing a background (non-active) tab does not change the active WebView url', () => {
+    const utils = submitAddress('example.com');
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab')); // new tab (home url) becomes active
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    // Close the background tab (example.com), not the active one.
+    fireEvent.press(utils.getByLabelText('Close tab: https://example.com'));
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+});
+
 describe('home-screen registration', () => {
   it('registers the browser package in both maps', () => {
     expect(BUILT_IN_APPS['com.iostoandroid.browser']).toBe('Browser');
