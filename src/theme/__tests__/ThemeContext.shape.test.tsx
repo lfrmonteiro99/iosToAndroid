@@ -18,6 +18,19 @@ function renderTheme(ui: React.ReactElement) {
 }
 
 describe('Shape tokens (C6: superellipse curvature)', () => {
+  it('locks all Shape token values to prevent silent mutations', () => {
+    // This assertion traps any change to radius, radiusRatio, or n.
+    // Mutation test: changing card.radius from 10 to 999 MUST fail this test.
+    expect(Shape).toEqual({
+      icon:        { radiusRatio: 0.2237, n: 4.7 },
+      card:        { radius: 10, n: 4.0 },
+      sheet:       { radius: 13, n: 4.0 },
+      button:      { radius: 10, n: 3.5 },
+      widgetSmall: { radius: 22, n: 4.5 },
+      dock:        { radius: 34, n: 4.2 },
+    });
+  });
+
   it('exports Shape token with all required properties per context', () => {
     expect(Shape).toBeDefined();
     expect(typeof Shape).toBe('object');
