@@ -37,18 +37,23 @@ export type LauncherGridGeometry = {
  */
 export function computeLauncherGridGeometry(screenWidth: number): LauncherGridGeometry {
   const width = Math.max(1, screenWidth);
-  const cols = Math.max(1, Math.min(4, Math.floor(width / 90)));
+  const cols = 4;
 
-  const horizontalPadding = Math.min(
-    Math.round(width * GRID_PADDING_RATIO),
-    // Nunca deixar a área de conteúdo sem espaço, mesmo em larguras absurdas.
-    Math.floor((width - cols) / 2),
+  const horizontalPadding = Math.max(
+    0,
+    Math.min(
+      Math.round(width * GRID_PADDING_RATIO),
+      // Nunca deixar a área de conteúdo sem espaço, mesmo em larguras absurdas.
+      Math.floor((width - cols) / 2),
+    ),
   );
 
   const cellWidth = (width - horizontalPadding * 2) / cols;
   // O ícone tem de caber na célula: se o valor da especificação não couber
   // (larguras muito estreitas), fica limitado pela célula em vez de transbordar.
-  const iconSize = Math.max(1, Math.min(Math.round(width * ICON_SIZE_RATIO), Math.floor(cellWidth)));
+  // Em larguras absurdamente pequenas (< 4dp com cols=4), permite degradação
+  // a iconSize=0 em vez de quebrar o constraint de caber no ecrã.
+  const iconSize = Math.max(0, Math.min(Math.round(width * ICON_SIZE_RATIO), Math.floor(cellWidth)));
 
   return {
     cols,

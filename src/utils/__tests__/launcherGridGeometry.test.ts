@@ -58,7 +58,9 @@ describe('computeLauncherGridGeometry', () => {
     (width) => {
       const g = computeLauncherGridGeometry(width);
       expect(g.cols).toBeGreaterThanOrEqual(1);
-      expect(g.iconSize).toBeGreaterThanOrEqual(1);
+      // Com cols=4 fixo, em larguras < 4 o ícone pode ser 0 para caber no ecrã.
+      // Isto é um edge case teórico (ecrãs reais >= 320dp).
+      expect(g.iconSize).toBeGreaterThanOrEqual(0);
       expect(g.horizontalPadding).toBeGreaterThanOrEqual(0);
       expect(g.iconSize * g.cols + g.horizontalPadding * 2).toBeLessThanOrEqual(
         Math.max(1, width),
@@ -75,6 +77,15 @@ describe('computeLauncherGridGeometry', () => {
 
   it('é puro: a mesma largura devolve sempre os mesmos valores', () => {
     expect(computeLauncherGridGeometry(411)).toEqual(computeLauncherGridGeometry(411));
+  });
+
+  it('mantém sempre 4 colunas (#500)', () => {
+    // A grelha deve ter sempre 4 colunas (como no iOS), em qualquer largura.
+    // O ícone é que encolhe para caber, não a contagem de colunas.
+    for (const width of [320, 360, 393, 411, 480]) {
+      const g = computeLauncherGridGeometry(width);
+      expect(g.cols).toBe(4);
+    }
   });
 });
 
