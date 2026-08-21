@@ -19,19 +19,28 @@ jest.mock('../../../store/SettingsStore', () => ({
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
 
-type TestNode = { parent: TestNode | null };
 function switchForRow(root: ReturnType<typeof render>, title: string) {
-  let node: TestNode | null = root.getByText(title) as unknown as TestNode;
-  while (node && !within(node as never).queryByRole('switch')) {
-    node = node.parent;
+  const textNode = root.getByText(title);
+  let node: unknown = textNode.parent;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  while (node && !(within as any)(node).queryByRole('switch')) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    node = (node as any).parent;
   }
-  if (!node) throw new Error('No switch found for row "' + title + '"');
-  return within(node as never).getByRole('switch');
+  if (!node) throw new Error(`No switch found for row "${title}"`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (within as any)(node).getByRole('switch');
 }
 
 describe('NotificationsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useSettings } = require('../../../store/SettingsStore');
+    (useSettings as jest.Mock).mockReturnValue({
+      settings: { ...baseSettings },
+      update: mockUpdate,
+    });
   });
 
   it('renders without crashing', () => {
