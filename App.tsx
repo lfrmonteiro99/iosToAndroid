@@ -15,6 +15,7 @@ import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
 import { DeviceProvider, useDevice } from './src/store/DeviceStore';
 import { FoldersProvider } from './src/store/FoldersStore';
+import { ReadingListProvider } from './src/store/ReadingListStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
@@ -349,6 +350,7 @@ export default function App() {
                 <AppsProvider>
                 <DeviceProvider>
                 <FoldersProvider>
+                <ReadingListProvider>
                 <AssistiveTouchProvider>
                 <ErrorBoundary>
                   <AlertProvider>
@@ -356,6 +358,7 @@ export default function App() {
                   </AlertProvider>
                 </ErrorBoundary>
                 </AssistiveTouchProvider>
+                </ReadingListProvider>
                 </FoldersProvider>
                 </DeviceProvider>
                 </AppsProvider>
