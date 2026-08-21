@@ -58,6 +58,18 @@ jest.mock('expo-contacts', () => ({
   SortTypes: { LastName: 'lastName' },
 }));
 
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getCurrentPositionAsync: jest.fn(() =>
+    Promise.resolve({
+      coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 10 },
+      timestamp: Date.now(),
+    }),
+  ),
+  Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
@@ -271,11 +283,16 @@ jest.mock('./modules/launcher-module/src', () => ({
   // renders it without a local jest.mock override (test-file jest.mock >
   // setupFiles) needs a callable default here, or the effect throws.
   addHomePressedListener: jest.fn(() => jest.fn()),
+  // AppsProvider subscribes to package install/remove/replace events (#485).
+  addPackageChangedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
     getAppIcon: jest.fn(() => Promise.resolve('')),
+    getAppInfo: jest.fn(() => Promise.resolve(null)),
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
+    // #517: a instrumentação de cold start chama isto no arranque de App.tsx.
+    getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
     openLauncherSettings: jest.fn(() => Promise.resolve(true)),
     getWifiInfo: jest.fn(() => Promise.resolve({ enabled: true, ssid: 'TestWiFi', rssi: -50, ip: '192.168.1.100' })),
     setWifiEnabled: jest.fn(() => Promise.resolve(true)),
@@ -322,3 +339,23 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativePermissionsAn
     requestMultiplePermissions: jest.fn(() => Promise.resolve({})),
   },
 }));
+
+// Mock react-native-webview: it calls TurboModuleRegistry.getEnforcing('RNCWebViewModule')
+// at import time, which throws in the JS-only test environment. The mock keeps the
+// component contract (source/testID props + an imperative reload()) so screens that
+// render a WebView can be asserted on.
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const WebView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      reload: jest.fn(),
+      goBack: jest.fn(),
+      goForward: jest.fn(),
+      stopLoading: jest.fn(),
+    }));
+    return React.createElement(View, props);
+  });
+  WebView.displayName = 'WebView';
+  return { __esModule: true, WebView, default: WebView };
+});

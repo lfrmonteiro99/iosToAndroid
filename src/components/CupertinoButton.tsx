@@ -1,8 +1,10 @@
 import React, { useMemo, useRef, useCallback } from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, GestureResponderEvent } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { ImpactFeedbackStyle } from 'expo-haptics';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useCupertinoPress } from '../hooks/useCupertinoPress';
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -78,26 +80,32 @@ export const CupertinoButton = React.memo(function CupertinoButton({
     }
   }, [variant, disabled, baseColor, colors.secondaryLabel]);
 
+  // Shared press-feedback primitive (issue #495): scale 0.96 + opacity 0.40 on
+  // press, respecting reduceMotion. Replaces the previous inline
+  // `opacity: pressed ? 0.6 : 1`, which was one of six divergent opacity
+  // conventions across the app; 0.40 is the §3.2 default for icon/button
+  // surfaces. A disabled button must not show pressed feedback.
+  const { style: pressStyle, onPressIn, onPressOut } = useCupertinoPress(!disabled);
+
   return (
     <Pressable
       onPress={(e) => {
         hapticImpact(ImpactFeedbackStyle.Light);
         handlePress(e);
       }}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityState={{ disabled }}
-      style={({ pressed }) => [
-        styles.base,
-        containerStyle,
-        { opacity: pressed ? 0.6 : 1 },
-        style,
-      ]}
+      style={[styles.base, containerStyle, style]}
     >
-      <Text style={[typography.headline, styles.text, textStyle]}>
-        {title}
-      </Text>
+      <Animated.View style={pressStyle}>
+        <Text style={[typography.headline, styles.text, textStyle]}>
+          {title}
+        </Text>
+      </Animated.View>
     </Pressable>
   );
 });

@@ -2,6 +2,7 @@ package com.iostoandroid.launcher
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.app.ActivityOptions
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -10,7 +11,12 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Shader
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
@@ -22,7 +28,14 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
@@ -44,6 +57,7 @@ class LauncherModule : Module() {
     companion object {
         var flashlightState = false
 @Volatile private var instance: LauncherModule? = null
+@Volatile var activeRecognizer: SpeechRecognizer? = null
 
         /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
@@ -65,7 +79,12 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
+
+        // Native view that reserves its own bounds against the Android system
+        // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
+        // left-edge catcher; no props, geometry comes from layout.
+        View(SystemGestureExclusionView::class) {}
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
@@ -106,12 +125,25 @@ class LauncherModule : Module() {
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                // GUARDA DE API, e não é defensiva por hábito: `ApplicationInfo.category`
+                // só existe a partir da API 26 e este módulo declara minSdkVersion 24
+                // (modules/launcher-module/android/build.gradle:13). Em API 24/25 o
+                // acesso ao campo lança NoSuchFieldError, o que rejeita a promise
+                // inteira do getInstalledApps — AppsStore.tsx apanha, alerta
+                // "Could not load apps", e o launcher fica sem uma única aplicação.
+                // O resto deste ficheiro usa a mesma guarda 15 vezes.
+                val category = if (CategoryMapper.isCategoryReadable(Build.VERSION.SDK_INT)) {
+                    CategoryMapper.categoryToString(appInfo.category)
+                } else {
+                    CategoryMapper.UNDEFINED
+                }
 
                 mapOf(
                     "name" to label,
                     "packageName" to packageName,
                     "icon" to icon,
-                    "isSystem" to isSystem
+                    "isSystem" to isSystem,
+                    "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
 
@@ -126,6 +158,41 @@ class LauncherModule : Module() {
             apps
         }
 
+        AsyncFunction("getAppInfo") { packageName: String ->
+            // Single-package equivalent of getInstalledApps: used to refresh only
+            // the package a PACKAGE_* broadcast named (#485) instead of rescanning
+            // every installed app. Returns null when the package is gone or has no
+            // launcher activity, so JS can drop the event.
+            try {
+                val pm = context.packageManager
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setPackage(packageName)
+                }
+                val resolveInfo = pm.queryIntentActivities(mainIntent, 0).firstOrNull()
+                if (resolveInfo == null) {
+                    null
+                } else {
+                    val appInfo = resolveInfo.activityInfo.applicationInfo
+                    val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
+                    val icon = try {
+                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName))
+                        val iconFile = File(iconsDir, fileName)
+                        if (!iconFile.exists()) {
+                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                        }
+                        "file://" + iconFile.absolutePath
+                    } catch (e: Exception) { "" }
+                    mapOf(
+                        "name" to resolveInfo.loadLabel(pm).toString(),
+                        "packageName" to packageName,
+                        "icon" to icon,
+                        "isSystem" to ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0)
+                    )
+                }
+            } catch (e: Exception) { null }
+        }
+
         AsyncFunction("launchApp") { packageName: String ->
             // Shape regex first, then whitelist via PackageManager: malformed names
             // never reach the resolver, and non-installed / non-launchable packages
@@ -137,7 +204,20 @@ class LauncherModule : Module() {
                 return@AsyncFunction false  // malformed, not installed, or not launchable
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            // Suppresses Android's default activity-open animation so it never shows
+            // underneath the JS-side icon-expand transition (#509, §6.3). This is the
+            // one piece of that animation actually controllable from here — what the
+            // launched app itself renders on entry is up to that app.
+            //
+            // ActivityOptions.makeCustomAnimation(context, 0, 0) is used instead of
+            // Activity#overridePendingTransition (deprecated in API 34 in favor of
+            // Activity#overrideActivityTransition) because `context` here is not
+            // guaranteed to be an Activity — launchApp is called from the launcher's
+            // process via FLAG_ACTIVITY_NEW_TASK, and overridePendingTransition is an
+            // Activity-only method. makeCustomAnimation works from any Context and
+            // carries no deprecation on any API level this app targets.
+            val noTransition = ActivityOptions.makeCustomAnimation(context, 0, 0)
+            context.startActivity(intent, noTransition.toBundle())
             true
         }
 
@@ -182,6 +262,26 @@ class LauncherModule : Module() {
             }
             context.startActivity(intent)
             true
+        }
+
+        // ── Performance (§7, #517) ───────────────────────────────────────
+
+        /**
+         * Idade do processo em milissegundos: quanto tempo passou desde que o
+         * Android começou a arrancar ESTE processo. É a base honesta do cold
+         * start — inclui o arranque do processo e do runtime, que uma marca
+         * feita em JS já não consegue ver.
+         *
+         * Devolve -1.0 quando a API não está disponível (< API 24), para o lado
+         * JS poder distinguir "sem medição" de "medição zero".
+         */
+        AsyncFunction("getProcessStartAgeMs") {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val age = SystemClock.uptimeMillis() - Process.getStartUptimeMillis()
+                if (age >= 0) age.toDouble() else -1.0
+            } else {
+                -1.0
+            }
         }
 
         // ── Wi-Fi ────────────────────────────────────────────────────────
@@ -987,6 +1087,7 @@ class LauncherModule : Module() {
                 android.Manifest.permission.CALL_PHONE,
                 android.Manifest.permission.READ_SMS,
                 android.Manifest.permission.SEND_SMS,
+                android.Manifest.permission.RECORD_AUDIO,
                 android.Manifest.permission.CAMERA,
                 android.Manifest.permission.ACCESS_FINE_LOCATION,
                 android.Manifest.permission.READ_PHONE_STATE,
@@ -1078,18 +1179,112 @@ class LauncherModule : Module() {
             } catch (e: Exception) { false }
         }
 
+        // ── Speech recognition (Siri / voice-to-text) ────────────────────
+
+        // Reference to the in-flight recognizer so stopSpeechRecognition can
+        // tear it down. Guarded with @Volatile + synchronized because the
+        // recognition listener callbacks arrive on the main looper thread.
+        AsyncFunction("startSpeechRecognition") {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                val bundle = Bundle().apply {
+                    putString("error", "Speech recognition unavailable on this device")
+                }
+                sendEvent("onSpeechError", bundle)
+                return@AsyncFunction false
+            }
+            synchronized(this@LauncherModule) {
+                activeRecognizer?.destroy()
+                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                activeRecognizer = recognizer
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+                        val text = matches?.firstOrNull() ?: return
+                        val bundle = Bundle().apply { putString("text", text) }
+                        sendEvent("onSpeechPartialResult", bundle)
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+                        val text = matches?.firstOrNull() ?: return
+                        val bundle = Bundle().apply { putString("text", text) }
+                        sendEvent("onSpeechResult", bundle)
+                    }
+
+                    override fun onError(error: Int) {
+                        val bundle = Bundle().apply { putString("error", "SpeechRecognizer error $error") }
+                        sendEvent("onSpeechError", bundle)
+                    }
+                })
+            }
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            // startListening must run on the main looper; the bridge call may
+            // arrive on a different thread.
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                activeRecognizer?.startListening(intent)
+            } else {
+                Handler(Looper.getMainLooper()).post {
+                    activeRecognizer?.startListening(intent)
+                }
+            }
+            true
+        }
+
+        AsyncFunction("stopSpeechRecognition") {
+            synchronized(this@LauncherModule) {
+                val recognizer = activeRecognizer
+                activeRecognizer = null
+                if (recognizer == null) return@AsyncFunction false
+                try {
+                    recognizer.stopListening()
+                    recognizer.destroy()
+                } catch (_: Exception) {}
+                true
+            }
+        }
+
+        AsyncFunction("isSpeechRecognitionAvailable") {
+            SpeechRecognizer.isRecognitionAvailable(context)
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────────
+
+        OnCreate {
+            // Dynamic registration is mandatory: since API 26 the implicit
+            // PACKAGE_ADDED/REMOVED/REPLACED broadcasts are not delivered to
+            // receivers declared in the manifest.
+            try {
+                PackageChangeReceiver.register(appContext.reactContext ?: return@OnCreate)
+            } catch (_: Exception) {}
+        }
 
         OnDestroy {
             // Best-effort cleanup: unregister any lingering BroadcastReceivers and
             // clear the companion-object back-reference so NotificationService stops
             // routing events to a stale module instance.
             try {
-                BluetoothDiscoveryReceiver.unregister(
-                    appContext.reactContext ?: return@OnDestroy
-                )
+                val ctx = appContext.reactContext ?: return@OnDestroy
+                BluetoothDiscoveryReceiver.unregister(ctx)
+                PackageChangeReceiver.unregister(ctx)
             } catch (_: Exception) {}
             instance = null
+            try { activeRecognizer?.destroy() } catch (_: Exception) {}
+            activeRecognizer = null
         }
     }
 
@@ -1139,7 +1334,7 @@ class LauncherModule : Module() {
     }
 
     private fun writeIconToFile(drawable: Drawable, file: File) {
-        val bitmap = drawableToBitmap(drawable)
+        val bitmap = applySquircleMask(drawableToBitmap(drawable))
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         FileOutputStream(file).use { out ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
@@ -1148,7 +1343,7 @@ class LauncherModule : Module() {
     }
 
     private fun drawableToBase64(drawable: Drawable): String {
-        val bitmap = drawableToBitmap(drawable)
+        val bitmap = applySquircleMask(drawableToBitmap(drawable))
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         val outputStream = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream)
@@ -1161,12 +1356,124 @@ class LauncherModule : Module() {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             return drawable.bitmap
         }
-        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
-        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        // AdaptiveIconDrawable.draw() composites background+foreground using
+        // whatever mask the OS (or OEM launcher) has configured, so drawing it
+        // directly here would still yield a device-dependent shape — the exact
+        // inconsistency #484 exists to fix. Compose it ourselves instead; only
+        // fall back to the generic path below when the icon is malformed
+        // (composeAdaptiveIcon returns null, e.g. no background layer).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
+            // Este caminho ja devolve o bitmap mascarado pelo compositor do #484,
+            // e o call site volta a passar tudo pelo applySquircleMask do #480.
+            // Aplicar duas vezes e' idempotente NA FORMA: os dois usam o mesmo
+            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 4.7 e o
+            // n = 4.7 do applySquircleMask) e o mesmo gerador de pontos, portanto a
+            // segunda mascara recorta exactamente a mesma regiao. Se algum dia os
+            // expoentes divergirem, isto passa a cortar duas formas diferentes —
+            // e a razao pela qual ambos os sitios citam a constante.
+            composeAdaptiveIcon(drawable)?.let { return it }
+        }
+        // Center-crop para quadrado (#480): pega no maior quadrado centrado da
+        // origem e escala-o. Nunca distorce nem mete barras transparentes, por
+        // isso um icone-banner mantem as proporcoes e e' so cortado antes da
+        // mascara. Um icone redondo continua a ficar com cantos vazios — o #480
+        // diz explicitamente que nao resolve isso.
+        val srcW = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
+        val srcH = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
+        val side = srcW.coerceAtMost(srcH)
+        val src = Bitmap.createBitmap(srcW, srcH, Bitmap.Config.ARGB_8888)
+        Canvas(src).apply {
+            drawable.setBounds(0, 0, srcW, srcH)
+            drawable.draw(this)
+        }
+        val left = (srcW - side) / 2
+        val top = (srcH - side) / 2
+        val square = Bitmap.createBitmap(src, left, top, side, side)
+        if (square != src) src.recycle()
+        return square
+    }
+
+    /**
+     * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
+     * our own squircle mask, foreground layer scaled to
+     * [AdaptiveIconCompositor.FOREGROUND_SCALE] and centered on top. Returns
+     * null for a malformed icon with no background layer, so the caller falls
+     * back to the generic drawable-to-bitmap path.
+     *
+     * AdaptiveIconDrawable also exposes getMonochrome() (API 33+, used for
+     * themed/monochrome icons) — out of scope for #484, not handled here.
+     */
+    /**
+     * Clip [src] to a 4.7-exponent superellipse (iOS-style squircle) and return
+     * the masked bitmap. Applied to every icon emitted by getInstalledApps and
+     * getAppIcon, so the launcher grid and the dock share one silhouette.
+     *
+     * Masking strategy:
+     *  - Output is a square of the smallest source dimension, so non-square
+     *    icons are center-cropped (drawableToBitmap) and the mask never sees a
+     *    rectangle.
+     *  - The clip path is built from [SuperellipsePath.points] — the SAME
+     *    generator that drives the TS/SVG reference in src/theme/squircle.ts —
+     *    so the native mask cannot drift from the reference geometry.
+     *  - Anti-aliasing uses a BitmapShader painted through the superellipse
+     *    Path via Canvas.drawPath(..., ANTI_ALIAS_FLAG). Path fills are
+     *    anti-aliased by drawPath (unlike clipPath, which is not), so the edge
+     *    stays smooth at 60pt instead of serrated.
+     *  - A circular source icon will still show empty (transparent) corners
+     *    after masking; that is the known-incomplete "dominant color" item of
+     *    epic #465 and is explicitly out of scope here (#480 does not fix it).
+     */
+    private fun applySquircleMask(src: Bitmap, n: Double = 4.7): Bitmap {
+        val size = src.width.coerceAtMost(src.height)
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
+        Canvas(out).drawPath(buildSuperellipsePath(size, n), paint)
+        return out
+    }
+
+    /** Build an android.graphics.Path for the superellipse in a [size]×[size] box. */
+    private fun buildSuperellipsePath(size: Int, n: Double): Path {
+        val pts = SuperellipsePath.points(size, n, 64)
+        return Path().apply {
+            if (pts.isEmpty()) return@apply
+            val first = pts[0]
+            moveTo(first.first.toFloat(), first.second.toFloat())
+            for (i in 1 until pts.size) {
+                val p = pts[i]
+                lineTo(p.first.toFloat(), p.second.toFloat())
+            }
+            close()
+        }
+    }
+
+    private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable): Bitmap? {
+        val background = drawable.background ?: return null
+        val foreground = drawable.foreground
+
+        val size = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 108
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
+
+        val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat())
+        val maskPath = Path().apply {
+            moveTo(maskPoints[0].first, maskPoints[0].second)
+            maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
+            close()
+        }
+
+        canvas.save()
+        canvas.clipPath(maskPath)
+        background.setBounds(0, 0, size, size)
+        background.draw(canvas)
+        canvas.restore()
+
+        if (foreground != null) {
+            val bounds = AdaptiveIconCompositor.foregroundBounds(size)
+            foreground.setBounds(bounds.offset, bounds.offset, bounds.offset + bounds.scaledSize, bounds.offset + bounds.scaledSize)
+            foreground.draw(canvas)
+        }
+
         return bitmap
     }
 
