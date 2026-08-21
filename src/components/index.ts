@@ -32,4 +32,6 @@ export { NotificationCenterOverlay } from './NotificationCenterOverlay';
 export { SpotlightReveal } from './SpotlightReveal';
 export { EdgePanelOverlay } from './EdgePanelOverlay';
 export { GlassSurface } from './GlassSurface';
+export { SiriWaveform } from './SiriWaveform';
+export type { SiriWaveformProps } from './SiriWaveform';
 export type { GlassSurfaceProps } from './GlassSurface';
