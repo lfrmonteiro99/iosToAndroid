@@ -172,6 +172,14 @@ interface LauncherModuleType {
   isDefaultLauncher(): Promise<boolean>;
   openLauncherSettings(): Promise<boolean>;
   goHome(): Promise<boolean>;
+  /**
+   * Idade do processo em ms. -1 quando indisponível (< API 24, fora de Android,
+   * ou erro na bridge) — nunca 0, para "sem medição" não passar por
+   * "instantâneo". Async como todos os métodos desta bridge, ainda que o lado
+   * nativo seja uma leitura de relógio: o contrato uniforme é o que o
+   * tratamento de erros (`onBridgeError`) e os seus testes assumem.
+   */
+  getProcessStartAgeMs(): Promise<number>;
   uninstallApp(packageName: string): Promise<boolean>;
   // Wi-Fi
   getWifiInfo(): Promise<WifiInfo | null>;
@@ -257,6 +265,7 @@ const stub: LauncherModuleType = {
   isDefaultLauncher: async () => false,
   openLauncherSettings: async () => false,
   goHome: async () => false,
+  getProcessStartAgeMs: async () => -1,
   uninstallApp: async () => false,
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
@@ -446,6 +455,12 @@ function createBridgedModule(): LauncherModuleType {
     unpairBluetoothDevice: async (address: string) => {
       try { return await nativeModule.unpairBluetoothDevice(address); }
       catch (e) { console.error('LauncherModule.unpairBluetoothDevice failed:', e); reportBridgeError('unpairBluetoothDevice', e); return false; }
+    },
+    getProcessStartAgeMs: async () => {
+      try {
+        const age = await nativeModule.getProcessStartAgeMs();
+        return typeof age === 'number' ? age : -1;
+      } catch (e) { reportBridgeError('getProcessStartAgeMs', e); return -1; }
     },
     getStorageInfo: async () => {
       try { return await nativeModule.getStorageInfo(); }
