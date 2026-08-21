@@ -20,14 +20,13 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoTextField, GlassSurface, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
 import { LocalImageMessage, MessageBubble } from './MessageBubble';
 
@@ -106,7 +105,7 @@ interface MessageRowProps {
   item: DeviceSms | LocalImageMessage;
   isDark: boolean;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   reactions?: string[];
   selectedMsgId: string | null;
   onLongPress: (msgId: string) => void;

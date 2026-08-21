@@ -107,7 +107,7 @@ function mockLoadedApps() {
     recentApps: [],
     isLoading: false,
     refreshApps: jest.fn(() => Promise.resolve()),
-    launchApp: jest.fn(() => Promise.resolve()),
+    launchApp: jest.fn(() => Promise.resolve(true)),
     addToHome: jest.fn(),
     removeFromHome: jest.fn(),
     addToDock: jest.fn(),

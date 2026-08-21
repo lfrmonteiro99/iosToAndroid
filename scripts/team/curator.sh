@@ -32,7 +32,9 @@ PROMPT="/tmp/ios2a-curator-prompt-$ISSUE.txt"
 MODEL="${CURATOR_MODEL:-$TEAM_MODEL_MED_CLAUDE}"
 export AGENT_FALLBACK_MODEL="${AGENT_FALLBACK_MODEL:-$TEAM_FALLBACK_MED}"
 
-cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
+# inflight_register: ver o comentário em implement.sh.
+inflight_register "curator-$ISSUE" "${TEAM_SLOT:-curator}"
+cleanup() { [ -n "$WT" ] && wt_remove "$WT"; inflight_release "curator-$ISSUE"; }
 trap cleanup EXIT
 
 log "issue #$ISSUE modelo=$MODEL"

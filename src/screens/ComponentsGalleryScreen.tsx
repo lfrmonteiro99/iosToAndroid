@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '../theme/ThemeContext';
-import { Typography } from '../theme/CupertinoTheme';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import {
   CupertinoNavigationBar,
   CupertinoButton,
@@ -22,7 +21,7 @@ import {
   useAlert,
 } from '../components';
 
-function SectionHeader({ title, typography, color }: { title: string; typography: typeof Typography; color: string }) {
+function SectionHeader({ title, typography, color }: { title: string; typography: ResolvedTypography; color: string }) {
   return (
     <Text
       style={[
