@@ -463,8 +463,11 @@ EXISTING_PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --base "$BASE_BRANCH" \
   --state open --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
 
 if [ -n "$EXISTING_PR" ]; then
-  gh pr edit "$EXISTING_PR" --repo "$REPO" \
-    --title "$SUMMARY (#$ISSUE)" --body "$PR_BODY" >/dev/null 2>&1 || true
+  # NAO `gh pr edit`: falha sempre com o erro dos Projects classic e o silencio
+  # deixava o corpo do PR a descrever a ronda anterior — ver update_pr_api.
+  if ! update_pr_api "$EXISTING_PR" "$SUMMARY (#$ISSUE)" "$PR_BODY"; then
+    warn "não consegui actualizar o corpo do PR #$EXISTING_PR — o reviewer vai ver a descrição antiga"
+  fi
   gh pr comment "$EXISTING_PR" --repo "$REPO" --body "## Implementador: retrabalho submetido
 
 $SUMMARY

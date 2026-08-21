@@ -698,6 +698,27 @@ add_label_api() {
     -f "labels[]=$label" >/dev/null 2>&1
 }
 
+# Actualizar titulo/corpo de um PR pela REST API, pela MESMA razao do add_label_api
+# — e esta faltava, com consequencias piores.
+#
+# `gh pr edit --body` falha inteiro com o erro de deprecacao dos Projects classic
+# (`repository.pullRequest.projectCards`). No implement.sh essa chamada estava com
+# `|| true`, portanto TODOS os retrabalhos falhavam a actualizar o corpo, em
+# silencio, e o PR ficava a descrever a ronda anterior. Foi assim que o #524 levou
+# tres bloqueios seguidos por "a descricao do PR nao corresponde ao diff": o
+# implementador escrevia o corpo novo, a chamada morria, o reviewer bloqueava pelo
+# texto velho, e o implementador respondia a isso reescrevendo CODIGO — 12
+# ficheiros ao terceiro ciclo, com o codigo ja aprovado desde o primeiro.
+#
+# Devolve 0 so quando o PATCH passa, para que quem chama possa avisar em vez de
+# assumir.
+update_pr_api() {
+  local number="$1" title="$2" body="$3" payload
+  payload=$(jq -n --arg t "$title" --arg b "$body" '{title: $t, body: $b}') || return 1
+  printf '%s' "$payload" \
+    | gh api -X PATCH "repos/$REPO/pulls/$number" --input - >/dev/null 2>&1
+}
+
 # Open a PR via the REST API. Same reason as add_label_api: `gh pr create` can die
 # on Projects-classic resolution, so the branch is pushed and the PR never opens —
 # which in the sibling project stranded two fully-implemented issues for hours.
