@@ -65,7 +65,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged")
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
@@ -124,6 +124,41 @@ class LauncherModule : Module() {
             }
 
             apps
+        }
+
+        AsyncFunction("getAppInfo") { packageName: String ->
+            // Single-package equivalent of getInstalledApps: used to refresh only
+            // the package a PACKAGE_* broadcast named (#485) instead of rescanning
+            // every installed app. Returns null when the package is gone or has no
+            // launcher activity, so JS can drop the event.
+            try {
+                val pm = context.packageManager
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setPackage(packageName)
+                }
+                val resolveInfo = pm.queryIntentActivities(mainIntent, 0).firstOrNull()
+                if (resolveInfo == null) {
+                    null
+                } else {
+                    val appInfo = resolveInfo.activityInfo.applicationInfo
+                    val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
+                    val icon = try {
+                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName))
+                        val iconFile = File(iconsDir, fileName)
+                        if (!iconFile.exists()) {
+                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                        }
+                        "file://" + iconFile.absolutePath
+                    } catch (e: Exception) { "" }
+                    mapOf(
+                        "name" to resolveInfo.loadLabel(pm).toString(),
+                        "packageName" to packageName,
+                        "icon" to icon,
+                        "isSystem" to ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0)
+                    )
+                }
+            } catch (e: Exception) { null }
         }
 
         AsyncFunction("launchApp") { packageName: String ->
@@ -1080,14 +1115,23 @@ class LauncherModule : Module() {
 
         // ── Lifecycle ────────────────────────────────────────────────────
 
+        OnCreate {
+            // Dynamic registration is mandatory: since API 26 the implicit
+            // PACKAGE_ADDED/REMOVED/REPLACED broadcasts are not delivered to
+            // receivers declared in the manifest.
+            try {
+                PackageChangeReceiver.register(appContext.reactContext ?: return@OnCreate)
+            } catch (_: Exception) {}
+        }
+
         OnDestroy {
             // Best-effort cleanup: unregister any lingering BroadcastReceivers and
             // clear the companion-object back-reference so NotificationService stops
             // routing events to a stale module instance.
             try {
-                BluetoothDiscoveryReceiver.unregister(
-                    appContext.reactContext ?: return@OnDestroy
-                )
+                val ctx = appContext.reactContext ?: return@OnDestroy
+                BluetoothDiscoveryReceiver.unregister(ctx)
+                PackageChangeReceiver.unregister(ctx)
             } catch (_: Exception) {}
             instance = null
         }
