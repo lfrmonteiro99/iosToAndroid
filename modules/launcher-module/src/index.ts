@@ -20,6 +20,13 @@ export interface InstalledApp {
    */
   icon: string;
   isSystem: boolean;
+  /**
+   * ApplicationInfo.category mapped to a stable string constant.
+   * Possible values: 'undefined', 'game', 'audio', 'video', 'image', 'social',
+   * 'news', 'maps', 'productivity', 'accessibility'.
+   * API 26+; older devices return 'undefined'.
+   */
+  category: string;
 }
 
 export interface WifiInfo {
@@ -321,6 +328,25 @@ const stub: LauncherModuleType = {
  * The native side dedupes at the source too; this keeps existing installs
  * correct when the JS bundle updates ahead of the native binary.
  */
+// `InstalledApp.category` é declarado obrigatório, e uma declaração de tipo não
+// é uma garantia: o valor vem da ponte nativa. Falta em dois casos reais — um
+// dispositivo em API 24/25, onde o campo `ApplicationInfo.category` não existe, e
+// um APK com uma versão anterior deste módulo nativo instalada. Nesses casos o
+// consumidor recebia `undefined` num campo tipado como `string`, e o TypeScript
+// não avisa porque a fronteira nativa é `any`.
+//
+// Normaliza a AUSÊNCIA, não o valor: qualquer string que o nativo mande passa
+// intacta, incluindo categorias novas de APIs futuras. Coagir strings
+// desconhecidas para 'undefined' esconderia exactamente a informação nova.
+function withCategory<T extends { category?: unknown }>(items: T[]): T[] {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) =>
+    item && typeof item === 'object' && typeof (item as { category?: unknown }).category !== 'string'
+      ? { ...item, category: 'undefined' }
+      : item,
+  );
+}
+
 function dedupeByPackageName<T extends { packageName?: string }>(items: T[]): T[] {
   // A malformed payload is passed through untouched rather than coerced, so a
   // native contract break stays visible to the caller instead of becoming [].
@@ -343,7 +369,7 @@ function createBridgedModule(): LauncherModuleType {
 
   return {
     getInstalledApps: async () => {
-      try { return dedupeByPackageName<InstalledApp>(await nativeModule.getInstalledApps()); }
+      try { return dedupeByPackageName<InstalledApp>(withCategory(await nativeModule.getInstalledApps())); }
       catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {

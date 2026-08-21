@@ -49,7 +49,9 @@ import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouch
 import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
+import { AppStoreScreen } from '../screens/AppStoreScreen';
 import { SpotlightSearchScreen } from '../screens/SpotlightSearchScreen';
+import { SiriScreen } from '../screens/SiriScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
 import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
@@ -60,6 +62,7 @@ import { PhotosScreen } from '../screens/PhotosScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { NotesScreen } from '../screens/NotesScreen';
 import { MapsScreen } from '../screens/MapsScreen';
+import { FindMyScreen } from '../screens/FindMyScreen';
 import { RemindersScreen } from '../screens/RemindersScreen';
 import { MailScreen } from '../screens/MailScreen';
 
@@ -103,6 +106,7 @@ export function TabNavigator() {
       <Stack.Screen name="Calendar" component={CalendarScreen} options={{ animation }} />
       <Stack.Screen name="Notes" component={NotesScreen} options={{ animation }} />
       <Stack.Screen name="Maps" component={MapsScreen} options={{ animation }} />
+      <Stack.Screen name="FindMy" component={FindMyScreen} options={{ animation }} />
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
 
@@ -135,7 +139,9 @@ export function TabNavigator() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: slideAnimation }} />
       {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: slideAnimation }} />}
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
+      <Stack.Screen name="AppStore" component={AppStoreScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
+      <Stack.Screen name="Siri" component={SiriScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
