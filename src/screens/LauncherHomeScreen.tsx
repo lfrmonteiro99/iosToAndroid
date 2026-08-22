@@ -273,15 +273,24 @@ type MeasureBounds = () => Promise<LaunchBounds | undefined>;
 interface AppIconProps {
   app: InstalledApp;
   cellWidth: number;
-  onPress: (measure: MeasureBounds) => void;
-  onLongPress: () => void;
+  onPress: (app: InstalledApp, measure: MeasureBounds) => void;
+  onLongPress: (app: InstalledApp) => void;
   isJiggling?: boolean;
-  onDelete?: () => void;
+  onDelete?: (app: InstalledApp) => void;
   badge?: number;
   textScale?: number;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
+// React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
+// e voltava a chamar useAnimatedStyle/useSharedValue — sempre que
+// LauncherHomeScreen re-renderizava por qualquer motivo, incluindo um
+// simples avanço de página (setCurrentPage). `onPress`/`onLongPress`/`onDelete`
+// recebem agora `app` como argumento em vez de o capturarem por closure, para
+// que o pai possa passar a mesma referência de função (useCallback) a todas
+// as instâncias em vez de criar uma arrow function nova por ícone a cada render
+// — sem isso o memo não teria qualquer efeito, porque a prop `onPress` nunca
+// seria igual à do render anterior.
+const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
@@ -308,8 +317,12 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   }), []);
 
   const handlePress = useCallback(() => {
-    onPress(measureBounds);
-  }, [onPress, measureBounds]);
+    onPress(app, measureBounds);
+  }, [onPress, app, measureBounds]);
+
+  const handleLongPress = useCallback(() => {
+    onLongPress(app);
+  }, [onLongPress, app]);
 
   useEffect(() => {
     if (isJiggling) {
@@ -352,7 +365,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      onLongPress={onLongPress}
+      onLongPress={handleLongPress}
       accessibilityLabel={`Open ${app.name}`}
       accessibilityRole="button"
     >
@@ -408,7 +421,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
             style={styles.jiggleDeleteBtn}
             onPress={(e) => {
               e.stopPropagation?.();
-              onDelete?.();
+              onDelete?.(app);
             }}
             hitSlop={4}
             accessibilityLabel={`Remove ${app.name}`}
@@ -423,7 +436,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
       </Text>
     </Pressable>
   );
-}
+});
 
 interface PageDotsProps {
   total: number;
@@ -459,11 +472,14 @@ type GridItem =
 // FolderIcon
 // ---------------------------------------------------------------------------
 
-function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
+// React.memo (#518): mesma razão que AppIcon acima. `onPress` recebe `folder`
+// como argumento em vez de o capturar por closure, para o pai poder passar
+// um useCallback estável a todas as instâncias.
+const FolderIcon = React.memo(function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
   folder: AppFolder;
   cellWidth: number;
   apps: InstalledApp[];
-  onPress: () => void;
+  onPress: (folder: AppFolder) => void;
   onLongPress: () => void;
   textScale?: number;
 }) {
@@ -472,10 +488,14 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
     .filter(Boolean)
     .slice(0, 9) as InstalledApp[];
 
+  const handlePress = useCallback(() => {
+    onPress(folder);
+  }, [onPress, folder]);
+
   return (
     <Pressable
       style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
-      onPress={onPress}
+      onPress={handlePress}
       onLongPress={onLongPress}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
@@ -494,7 +514,7 @@ function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale =
       <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
     </Pressable>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // FolderOverlay
@@ -901,6 +921,24 @@ export function LauncherHomeScreen() {
     openActionSheet(app);
   }, [isJiggling, openActionSheet]);
 
+  // Stable across renders (#518) — passadas directamente a AppIcon/FolderIcon
+  // em vez de uma arrow function nova por ícone a cada render, para que
+  // React.memo consiga mesmo evitar o re-render em transições de página.
+  const handleDeleteApp = useCallback((app: InstalledApp) => {
+    removeFromHome(app.packageName);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, [removeFromHome]);
+
+  const handleOpenFolder = useCallback((folder: AppFolder) => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setOpenFolder(folder);
+  }, []);
+
+  const handleFolderLongPress = useCallback(() => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsJiggling(true);
+  }, []);
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -1051,15 +1089,23 @@ export function LauncherHomeScreen() {
     return items;
   }, [nonDockApps, dockApps, folders]);
 
-  // Paginate grid items
-  const pages: GridItem[][] = [];
-  for (let i = 0; i < gridItems.length; i += APPS_PER_PAGE) {
-    pages.push(gridItems.slice(i, i + APPS_PER_PAGE));
-  }
-  // Ensure at least one page
-  if (pages.length === 0) {
-    pages.push([]);
-  }
+  // Paginate grid items — memoizado (#518): sem isto, este array era
+  // recriado em TODO o render (incluindo o causado por um simples avanço de
+  // página via setCurrentPage), o que por si só invalidava qualquer
+  // memoização de AppIcon/FolderIcon a jusante — `pages.map` produzia
+  // sempre uma árvore de elementos nova, mesmo quando gridItems não mudou.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const pages: GridItem[][] = useMemo(() => {
+    const out: GridItem[][] = [];
+    for (let i = 0; i < gridItems.length; i += APPS_PER_PAGE) {
+      out.push(gridItems.slice(i, i + APPS_PER_PAGE));
+    }
+    // Ensure at least one page
+    if (out.length === 0) {
+      out.push([]);
+    }
+    return out;
+  }, [gridItems]);
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
@@ -1358,6 +1404,7 @@ export function LauncherHomeScreen() {
       {/* Swipeable app pages                                                */}
       {/* ---------------------------------------------------------------- */}
       <ScrollView
+        testID="launcher-pager"
         ref={scrollViewRef}
         horizontal
         pagingEnabled
@@ -1394,8 +1441,8 @@ export function LauncherHomeScreen() {
                       cellWidth={CELL_WIDTH}
                       apps={apps}
                       textScale={textScale}
-                      onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setOpenFolder(item.folder); }}
-                      onLongPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setIsJiggling(true); }}
+                      onPress={handleOpenFolder}
+                      onLongPress={handleFolderLongPress}
                     />
                   );
                 }
@@ -1405,14 +1452,11 @@ export function LauncherHomeScreen() {
                     app={item.app}
                     cellWidth={CELL_WIDTH}
                     textScale={textScale}
-                    onPress={(measure) => handleAppPress(item.app, measure)}
-                    onLongPress={() => handleLongPress(item.app)}
+                    onPress={handleAppPress}
+                    onLongPress={handleLongPress}
                     isJiggling={isJiggling}
                     badge={badgeCounts[item.app.packageName]}
-                    onDelete={() => {
-                      removeFromHome(item.app.packageName);
-                      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    }}
+                    onDelete={handleDeleteApp}
                   />
                 );
               })}
@@ -1457,14 +1501,11 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
-                onPress={(measure) => handleAppPress(app, measure)}
-                onLongPress={() => handleLongPress(app)}
+                onPress={handleAppPress}
+                onLongPress={handleLongPress}
                 isJiggling={isJiggling}
                 badge={badgeCounts[app.packageName]}
-                onDelete={() => {
-                  removeFromHome(app.packageName);
-                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                }}
+                onDelete={handleDeleteApp}
               />
             ))}
             {/* Fill empty dock slots */}
