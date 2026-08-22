@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { reactionPickerPop } from '../theme/springPresets';
 import { Ionicons } from '@expo/vector-icons';
 import type { DeviceSms } from '../store/DeviceStore';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
@@ -52,7 +53,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const pickerScale = useSharedValue(showReactionPicker ? 1 : 0);
 
   useEffect(() => {
-    pickerScale.value = withSpring(showReactionPicker ? 1 : 0, { damping: 18, stiffness: 400 });
+    pickerScale.value = withSpring(showReactionPicker ? 1 : 0, reactionPickerPop);
   }, [showReactionPicker, pickerScale]);
 
   const pickerStyle = useAnimatedStyle(() => ({
