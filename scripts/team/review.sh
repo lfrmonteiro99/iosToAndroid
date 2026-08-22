@@ -160,7 +160,11 @@ git -C "$TEAM_ROOT" fetch origin "$BASE" >/dev/null 2>&1 || true
 DIFF=$(git -C "$WT" --no-pager diff "origin/$BASE...HEAD" 2>/dev/null || true)
 FILES=$(git -C "$WT" --no-pager diff "origin/$BASE...HEAD" --name-only 2>/dev/null || true)
 DIFF_BYTES=${#DIFF}
-DIFF="${DIFF:0:60000}"
+# O prompt vai em argv do hermes (MAX_ARG_STRLEN ~128KB): 60KB de diff + template
+# + issue com comentários rebentava o setsid com E2BIG (medido no #587: 68KB de
+# diff, "Lista de argumentos muito longa", agente nunca arrancava). O agente tem
+# o worktree e git: o diff completo está a um comando, por isso trunca-se aqui.
+DIFF="${DIFF:0:30000}"
 
 if [ -z "${DIFF//[[:space:]]/}" ]; then
   log "DIFF VAZIO — não se revê um PR pelo título"
@@ -182,7 +186,14 @@ if [ -n "$ISSUE" ]; then
   ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" --json title,body,comments --jq '
     "# " + .title + "\n\n" + (.body // "") + "\n\n## Comentários\n\n" +
     (if (.comments | length) > 0 then
-       ([.comments[] | "- **@" + (.author.login // "anon") + "**: " + (.body // "")] | join("\n\n"))
+       # Dedupe de repetidos consecutivos + cauda de 20: o implementador comenta
+       # "corrida sem veredicto" a cada tentativa e o prompt (que leva o issue
+       # inteiro) rebentava o argv — mesmo E2BIG do implement.sh (#486).
+       ([.comments[] | {a: (.author.login // "anon"), b: (.body // "")}]
+        | reduce .[] as $c ([]; if length > 0 and .[-1].a == $c.a and .[-1].b == $c.b then . else . + [$c] end)
+        | .[-20:]
+        | map("- **@" + .a + "**: " + .b)
+        | join("\n\n"))
      else "(sem comentários)" end)' 2>/dev/null || echo "")
 fi
 
@@ -208,7 +219,10 @@ fi
   echo ""
   printf '%s\n' "$FILES"
   echo ""
-  echo "## Diff (${DIFF_BYTES} bytes no total)"
+  echo "## Diff (${DIFF_BYTES} bytes no total — truncado no prompt a 30000)"
+  echo ""
+  echo "Para o diff COMPLETO, corre no worktree:"
+  echo "  git -C $WT --no-pager diff origin/$BASE...HEAD"
   echo ""
   printf '%s\n' "$DIFF"
 } | sed -e "s|__VERDICT_PATH__|$VERDICT_FILE|g" \
