@@ -128,7 +128,7 @@ export function CupertinoActionSheet({
                   {
                     borderTopWidth: index > 0 || title || message ? StyleSheet.hairlineWidth : 0,
                     borderTopColor: colors.separator,
-                    backgroundColor: pressed ? colors.systemGray5 : 'transparent',
+                    backgroundColor: pressed ? colors.pressedRowBackground : 'transparent',
                   },
                 ]}
                 onPress={() => {

@@ -63,6 +63,8 @@ import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gesture
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import { launcherIconPress } from '../theme/springPresets';
+import { CUPERTINO_PRESS_SCALE } from '../hooks/useCupertinoPress';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import { markGridVisible, markWarmStartBegin } from '../utils/perfMetrics';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
@@ -380,7 +382,10 @@ const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPre
   const handlePressIn = useCallback(() => {
     if (isJiggling) return;
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(0.85, launcherIconPress);
+    // §3.2 shared press scale (issue #496). Was an ad hoc 0.85; the icon keeps
+    // its own shared value because the press scale is composed with the jiggle
+    // rotation in the same animated style.
+    pressScale.value = withSpring(CUPERTINO_PRESS_SCALE, launcherIconPress);
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [isJiggling, pressScale]);
 
@@ -526,8 +531,8 @@ const FolderIcon = React.memo(function FolderIcon({ folder, cellWidth, apps, onP
   }, [onPress, folder]);
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
+    <CupertinoPressable
+      style={[styles.appIconWrapper, { width: cellWidth }]}
       onPress={handlePress}
       onLongPress={onLongPress}
       accessibilityLabel={`Open ${folder.name} folder`}
@@ -545,7 +550,7 @@ const FolderIcon = React.memo(function FolderIcon({ folder, cellWidth, apps, onP
         </View>
       </View>
       <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
-    </Pressable>
+    </CupertinoPressable>
   );
 });
 
@@ -1419,14 +1424,14 @@ export function LauncherHomeScreen() {
       {!isDefaultLauncher && !isJiggling && (
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
-          <Pressable
-            style={({ pressed }) => [styles.defaultBannerButton, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
+          <CupertinoPressable
+            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
             <Text style={[styles.defaultBannerButtonText, { fontSize: 12 * textScale }]}>Set Now</Text>
-          </Pressable>
+          </CupertinoPressable>
         </View>
       )}
 
