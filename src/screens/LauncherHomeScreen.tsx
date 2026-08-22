@@ -1360,6 +1360,7 @@ export function LauncherHomeScreen() {
         ref={scrollViewRef}
         horizontal
         pagingEnabled
+        decelerationRate={0.998}
         showsHorizontalScrollIndicator={false}
         onScroll={handlePageScroll}
         scrollEventThrottle={16}
@@ -1367,6 +1368,7 @@ export function LauncherHomeScreen() {
         style={styles.pagerContainer}
         contentContainerStyle={styles.pagerContent}
         scrollEnabled={!isJiggling}
+        testID="launcher-pagination-scroll"
       >
         {pages.map((pageItems, pageIndex) => (
           <View key={pageIndex} style={styles.page}>
