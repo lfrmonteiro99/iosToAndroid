@@ -17,6 +17,8 @@ import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 import { CupertinoShareSheet } from '../components/CupertinoShareSheet';
 import { BrowserTabGrid, BrowserTab } from '../components/BrowserTabGrid';
+import { BrowserBookmarksList } from '../components/BrowserBookmarksList';
+import { useBookmarks } from '../store/BookmarksStore';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -66,6 +68,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
 
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createTab(BROWSER_HOME_URL)]);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -74,6 +77,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showBookmarksList, setShowBookmarksList] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -103,6 +107,27 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     hapticImpact();
     setShowShareSheet(true);
   }, []);
+
+  const handleToggleBookmark = useCallback(() => {
+    if (!currentUrl) return;
+    hapticImpact();
+    if (isBookmarked(currentUrl)) {
+      const existing = bookmarks.find((bm) => bm.url === currentUrl);
+      if (existing) removeBookmark(existing.id);
+    } else {
+      addBookmark(currentUrl, pageTitle);
+    }
+  }, [currentUrl, pageTitle, isBookmarked, bookmarks, addBookmark, removeBookmark]);
+
+  const handleOpenBookmarks = useCallback(() => {
+    hapticImpact();
+    setShowBookmarksList(true);
+  }, []);
+
+  const handleNavigateToBookmark = useCallback((url: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, url } : t)));
+    setInputUrl(url);
+  }, [activeTabId]);
 
   const handleTogglePrivate = useCallback(() => {
     hapticImpact();
@@ -240,6 +265,18 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           <Ionicons name="refresh" size={22} color={BROWSER_ACCENT} />
         </Pressable>
         <Pressable
+          onPress={handleToggleBookmark}
+          hitSlop={8}
+          accessibilityLabel={isBookmarked(currentUrl) ? 'Remove bookmark' : 'Add bookmark'}
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isBookmarked(currentUrl) ? 'star' : 'star-outline'}
+            size={22}
+            color={BROWSER_ACCENT}
+          />
+        </Pressable>
+        <Pressable
           onPress={handleShowTabGrid}
           hitSlop={8}
           accessibilityLabel="Tabs"
@@ -349,7 +386,22 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
             style={{ opacity: canGoForward ? 1 : 0.3 }}
           />
         </Pressable>
+        <Pressable
+          onPress={handleOpenBookmarks}
+          hitSlop={8}
+          accessibilityLabel="Bookmarks"
+          accessibilityRole="button"
+        >
+          <Ionicons name="bookmark-outline" size={24} color={BROWSER_ACCENT} />
+        </Pressable>
       </View>
+
+      <BrowserBookmarksList
+        visible={showBookmarksList}
+        bookmarks={bookmarks}
+        onClose={() => setShowBookmarksList(false)}
+        onNavigate={handleNavigateToBookmark}
+      />
     </View>
   );
 }
