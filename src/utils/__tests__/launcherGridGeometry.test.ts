@@ -89,6 +89,55 @@ describe('computeLauncherGridGeometry', () => {
   });
 });
 
+// issue #503: colunas e escala de ícone tornam-se configuráveis via
+// SettingsStore. computeLauncherGridGeometry ganha dois parâmetros opcionais
+// — cols e iconScale — que antes desta mudança eram simplesmente ignorados
+// pelo JS (uma função chamada com argumentos extra não declarados na sua
+// assinatura não falha; os argumentos são descartados em silêncio).
+describe('computeLauncherGridGeometry — colunas e escala configuráveis (#503)', () => {
+  it('deriva cols do parâmetro, não do valor fixo 4', () => {
+    expect(computeLauncherGridGeometry(360, 6).cols).toBe(6);
+    expect(computeLauncherGridGeometry(360, 3).cols).toBe(3);
+  });
+
+  it('a célula encolhe com mais colunas e o ícone nunca excede a célula', () => {
+    const g4 = computeLauncherGridGeometry(360, 4);
+    const g6 = computeLauncherGridGeometry(360, 6);
+    expect(g6.cellWidth).toBeLessThan(g4.cellWidth);
+    expect(g6.iconSize).toBeLessThanOrEqual(g6.cellWidth);
+  });
+
+  it('iconScale escala o ícone sobre 0.153 x W, respeitando o limite da célula', () => {
+    const base = computeLauncherGridGeometry(393, 4, 1);
+    const scaledUp = computeLauncherGridGeometry(393, 4, 1.2);
+    const scaledDown = computeLauncherGridGeometry(393, 4, 0.8);
+    expect(scaledUp.iconSize).toBeGreaterThan(base.iconSize);
+    expect(scaledDown.iconSize).toBeLessThan(base.iconSize);
+    expect(scaledUp.iconSize).toBeLessThanOrEqual(scaledUp.cellWidth);
+  });
+
+  it.each([
+    [360, 6, 1.2],
+    [480, 3, 0.8],
+    [360, 3, 1.2],
+    [480, 6, 0.8],
+    [320, 6, 1.2],
+  ])(
+    'nunca sobrepõe ícones nem corta colunas (largura=%i cols=%i scale=%p)',
+    (width, cols, scale) => {
+      const g = computeLauncherGridGeometry(width, cols, scale);
+      expect(g.iconSize).toBeLessThanOrEqual(g.cellWidth);
+      expect(g.iconSize * g.cols + g.horizontalPadding * 2).toBeLessThanOrEqual(width);
+    },
+  );
+
+  it('sem argumentos extra mantém o comportamento histórico (#500)', () => {
+    // Backward-compat: chamadas antigas (só largura) continuam a dar cols=4,
+    // escala 1 — nada que já dependia da assinatura de 1 argumento regride.
+    expect(computeLauncherGridGeometry(393)).toEqual(computeLauncherGridGeometry(393, 4, 1));
+  });
+});
+
 describe('LauncherHomeScreen consome a geometria derivada', () => {
   const loadScreenAtWidth = (width: number) => {
     jest.resetModules();

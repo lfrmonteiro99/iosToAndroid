@@ -73,15 +73,16 @@ import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+// Default geometry (4 cols, scale 1) — dock, folder-overlay icons, and this
+// module's own exports intentionally stay pinned to this regardless of the
+// user's grid density settings (issue #503). The actual home-screen grid
+// derives its live geometry from settings inside LauncherHomeScreen() below
+// via `gridGeometry` (computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale)).
 const GRID_GEOMETRY = computeLauncherGridGeometry(SCREEN_WIDTH);
-const COLS = GRID_GEOMETRY.cols;
-const ROWS = 6;
-const APPS_PER_PAGE = COLS * ROWS; // 24
 // Derivados da largura do ecrã (§2) — ver src/utils/launcherGridGeometry.ts.
 export const ICON_SIZE = GRID_GEOMETRY.iconSize;
 export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
 export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
-const CELL_WIDTH = GRID_GEOMETRY.cellWidth;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
 
 // How far past the screen edge the wallpaper layer is oversized (see the
@@ -278,10 +279,34 @@ interface AppIconProps {
   onDelete?: () => void;
   badge?: number;
   textScale?: number;
+  /** Icon square side, in dp. Defaults to the fixed 393dp-reference size so
+   * dock and folder-overlay call sites (unaffected by grid density, #503)
+   * keep their existing look without passing this explicitly. */
+  iconSize?: number;
+  iconRadius?: number;
+  /** Whether the app name renders under the icon (issue #503). */
+  showLabel?: boolean;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
+function AppIcon({
+  app,
+  cellWidth,
+  onPress,
+  onLongPress,
+  isJiggling,
+  onDelete,
+  badge,
+  textScale = 1,
+  iconSize = ICON_SIZE,
+  iconRadius = ICON_RADIUS,
+  showLabel = true,
+}: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
+  // Label block (margin + text line) measured at the 393dp reference so the
+  // default (cols=4, scale=1, labels on) cell height matches the historical
+  // fixed 88 exactly: 5 (paddingTop) + 60 (iconSize) + 23 = 88.
+  const wrapperHeight = 5 + iconSize + (showLabel ? 23 : 0);
+  const iconBoxSize = { width: iconSize, height: iconSize, borderRadius: iconRadius };
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
   const iconRef = useRef<View>(null);
@@ -347,7 +372,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   return (
     <Pressable
       ref={iconRef}
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }]}
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -359,26 +384,28 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
         {virtualCfg ? (
           virtualCfg.gradient ? (
             <LinearGradient
+              testID={`app-icon-box-${app.packageName}`}
               colors={virtualCfg.gradient}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
-              style={styles.appIconPlaceholder}
+              style={[styles.appIconPlaceholder, iconBoxSize]}
             >
               <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
             </LinearGradient>
           ) : (
-            <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
+            <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize, { backgroundColor: virtualCfg.bg }]}>
               <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
             </View>
           )
         ) : app.icon ? (
           <Image
+            testID={`app-icon-box-${app.packageName}`}
             source={{ uri: app.icon }}
-            style={styles.appIconImage}
+            style={[styles.appIconImage, iconBoxSize]}
             resizeMode="contain"
           />
         ) : (
-          <View style={styles.appIconPlaceholder}>
+          <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize]}>
             <Ionicons name="apps" size={28} color="#fff" />
           </View>
         )}
@@ -386,7 +413,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           <View style={{
             position: 'absolute',
             top: 0,
-            right: (cellWidth - ICON_SIZE) / 2 - 4,
+            right: (cellWidth - iconSize) / 2 - 4,
             backgroundColor: '#FF3B30',
             borderRadius: 9,
             minWidth: 18,
@@ -417,9 +444,11 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           </Pressable>
         )}
       </Animated.View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
-        {app.name}
-      </Text>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
+          {app.name}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -458,39 +487,68 @@ type GridItem =
 // FolderIcon
 // ---------------------------------------------------------------------------
 
-function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
+function FolderIcon({
+  folder,
+  cellWidth,
+  apps,
+  onPress,
+  onLongPress,
+  textScale = 1,
+  iconSize = ICON_SIZE,
+  iconRadius = ICON_RADIUS,
+  showLabel = true,
+}: {
   folder: AppFolder;
   cellWidth: number;
   apps: InstalledApp[];
   onPress: () => void;
   onLongPress: () => void;
   textScale?: number;
+  iconSize?: number;
+  iconRadius?: number;
+  showLabel?: boolean;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean)
     .slice(0, 9) as InstalledApp[];
 
+  const wrapperHeight = 5 + iconSize + (showLabel ? 23 : 0);
+  // Mini-icons scale with the folder icon so they never overflow it — the
+  // folder box itself always equals iconSize (issue #503: more grid columns
+  // shrink the cell, and a fixed 60dp folder icon would then overlap the
+  // next column).
+  const miniSize = Math.max(6, Math.round(iconSize * (14 / 60)));
+  const miniRadius = Math.max(1, Math.round(miniSize * (3 / 14)));
+
   return (
     <Pressable
-      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
+      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, height: wrapperHeight, opacity: pressed ? 0.6 : 1 }]}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
     >
-      <View style={[styles.folderIcon, { backgroundColor: folder.color }]}>
+      <View
+        testID={`folder-icon-box-${folder.id}`}
+        style={[
+          styles.folderIcon,
+          { width: iconSize, height: iconSize, borderRadius: iconRadius, backgroundColor: folder.color },
+        ]}
+      >
         <View style={styles.folderGrid}>
           {folderApps.map((app, i) =>
             app?.icon ? (
-              <Image key={i} source={{ uri: app.icon }} style={styles.folderMiniIcon} />
+              <Image key={i} source={{ uri: app.icon }} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }]} />
             ) : (
-              <View key={i} style={[styles.folderMiniIcon, { backgroundColor: 'rgba(255,255,255,0.3)' }]} />
+              <View key={i} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius, backgroundColor: 'rgba(255,255,255,0.3)' }]} />
             )
           )}
         </View>
       </View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
+      )}
     </Pressable>
   );
 }
@@ -668,6 +726,17 @@ export function LauncherHomeScreen() {
   const { theme: launcherTheme, textScale } = useTheme();
   const colors = launcherTheme.colors;
   const alert = useAlert();
+
+  // Grid density (issue #503): columns/icon-scale reshape the geometry, so
+  // they're derived per-render from settings instead of the module-level
+  // defaults above (which stay 4 cols / scale 1, for callers — dock, folder
+  // overlay, the geometry test module-export check — that intentionally
+  // don't follow user density preferences).
+  const gridGeometry = useMemo(
+    () => computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale),
+    [settings.gridColumns, settings.iconSizeScale],
+  );
+  const appsPerPage = gridGeometry.cols * settings.gridRows;
 
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
@@ -1050,10 +1119,12 @@ export function LauncherHomeScreen() {
     return items;
   }, [nonDockApps, dockApps, folders]);
 
-  // Paginate grid items
+  // Paginate grid items. Slicing the same flat, order-stable `gridItems` list
+  // at a different chunk size re-packs pages without ever reordering an app —
+  // there is no per-page stored position to migrate (issue #503).
   const pages: GridItem[][] = [];
-  for (let i = 0; i < gridItems.length; i += APPS_PER_PAGE) {
-    pages.push(gridItems.slice(i, i + APPS_PER_PAGE));
+  for (let i = 0; i < gridItems.length; i += appsPerPage) {
+    pages.push(gridItems.slice(i, i + appsPerPage));
   }
   // Ensure at least one page
   if (pages.length === 0) {
@@ -1371,7 +1442,7 @@ export function LauncherHomeScreen() {
         testID="launcher-pagination-scroll"
       >
         {pages.map((pageItems, pageIndex) => (
-          <View key={pageIndex} style={styles.page}>
+          <View key={pageIndex} style={[styles.page, { paddingHorizontal: gridGeometry.horizontalPadding }]}>
             <View
               testID={`launcher-page-grid-${pageIndex}`}
               style={styles.pageGrid}
@@ -1390,7 +1461,10 @@ export function LauncherHomeScreen() {
                     <FolderIcon
                       key={`folder-${item.folder.id}`}
                       folder={item.folder}
-                      cellWidth={CELL_WIDTH}
+                      cellWidth={gridGeometry.cellWidth}
+                      iconSize={gridGeometry.iconSize}
+                      iconRadius={gridGeometry.iconRadius}
+                      showLabel={settings.showIconLabels}
                       apps={apps}
                       textScale={textScale}
                       onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setOpenFolder(item.folder); }}
@@ -1402,7 +1476,10 @@ export function LauncherHomeScreen() {
                   <AppIcon
                     key={item.app.packageName}
                     app={item.app}
-                    cellWidth={CELL_WIDTH}
+                    cellWidth={gridGeometry.cellWidth}
+                    iconSize={gridGeometry.iconSize}
+                    iconRadius={gridGeometry.iconRadius}
+                    showLabel={settings.showIconLabels}
                     textScale={textScale}
                     onPress={(measure) => handleAppPress(item.app, measure)}
                     onLongPress={() => handleLongPress(item.app)}
