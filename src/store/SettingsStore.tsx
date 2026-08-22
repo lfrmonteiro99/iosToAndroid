@@ -73,6 +73,7 @@ export interface SettingsState {
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
+  pressFeedback: 'scale-opacity' | 'opacity' | 'none';
   /** Home-screen grid columns (§2 derivation, issue #503). */
   gridColumns: 3 | 4 | 5 | 6;
   /** Home-screen grid rows per page (issue #503). */
@@ -167,6 +168,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   updateAvailable: false,
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
+  pressFeedback: 'scale-opacity',
   gridColumns: 4,
   gridRows: 6,
   iconSizeScale: 1.0,
