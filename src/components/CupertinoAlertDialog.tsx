@@ -9,6 +9,7 @@ import Animated, {
 import { useTheme } from '../theme/ThemeContext';
 import { BorderRadius } from '../theme/CupertinoTheme';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { alertDialogPresent } from '../theme/springPresets';
 
 interface AlertAction {
   label: string;
@@ -40,7 +41,7 @@ export function CupertinoAlertDialog({
 
   useEffect(() => {
     if (visible) {
-      scale.value = reduceMotion ? withTiming(1, { duration: 150 }) : withSpring(1, { damping: 25, stiffness: 500 });
+      scale.value = reduceMotion ? withTiming(1, { duration: 150 }) : withSpring(1, alertDialogPresent);
       opacity.value = withTiming(1, { duration: 200 });
     } else {
       scale.value = withTiming(1.2, { duration: 150 });
