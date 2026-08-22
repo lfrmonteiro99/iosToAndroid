@@ -13,23 +13,47 @@ class IconCacheTest {
 
     @Test
     fun `fileName encodes packageName and versionCode so an app update gets a new key`() {
+        // #486 adds the icon treatment to the key; the no-arg call uses the default.
         assertEquals(
-            "com.android.settings_1.png",
+            "com.android.settings_1_${IconTreatment.DEFAULT}.png",
             IconCache.fileName("com.android.settings", 1L)
         )
         // Same package, new versionCode after an update — different key entirely,
         // so the stale PNG is never mistaken for the new one.
         assertEquals(
-            "com.android.settings_2.png",
+            "com.android.settings_2_${IconTreatment.DEFAULT}.png",
             IconCache.fileName("com.android.settings", 2L)
         )
     }
 
     @Test
-    fun `fileName is stable for the same package and versionCode`() {
+    fun `fileName is stable for the same package, versionCode and treatment`() {
         val first = IconCache.fileName("com.example.app", 42L)
         val second = IconCache.fileName("com.example.app", 42L)
         assertTrue(first == second)
+    }
+
+    @Test
+    fun `fileName encodes the icon treatment, so changing it in Settings orphans the old key`() {
+        val maskAll = IconCache.fileName("com.example.app", 1L, IconTreatment.MASK_ALL)
+        val adaptiveOnly = IconCache.fileName("com.example.app", 1L, IconTreatment.MASK_ADAPTIVE_ONLY)
+        val none = IconCache.fileName("com.example.app", 1L, IconTreatment.NONE)
+
+        assertTrue(maskAll != adaptiveOnly)
+        assertTrue(adaptiveOnly != none)
+        assertTrue(maskAll != none)
+
+        // Simulate: cache was built under 'mask-all', user switches to 'none' — the
+        // old file no longer matches the single valid key for the new treatment.
+        val existing = listOf(maskAll)
+        val validUnderNewTreatment = setOf(none)
+        assertEquals(listOf(maskAll), IconCache.orphanedFiles(existing, validUnderNewTreatment))
+    }
+
+    @Test
+    fun `totalSizeBytes sums file sizes, and is zero for an empty cache`() {
+        assertEquals(0L, IconCache.totalSizeBytes(emptyList()))
+        assertEquals(150L, IconCache.totalSizeBytes(listOf(100L, 50L)))
     }
 
     @Test

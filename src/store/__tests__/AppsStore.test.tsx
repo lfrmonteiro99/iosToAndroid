@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, act } from '@testing-library/react-native';
+import { renderHook, act, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppsProvider, useApps } from '../AppsStore';
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- default export of the jest-mocked module, needed to control getInstalledApps() resolution timing per test
@@ -114,5 +114,134 @@ describe('AppsStore — paints from the cached apps index without waiting for th
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.apps).toEqual(cachedApps);
+  });
+});
+
+describe('AppsStore — icon cache (#486: treatment threading, size, manual rebuild)', () => {
+  beforeEach(() => {
+    (LauncherModule.getIconCacheSizeBytes as jest.Mock).mockResolvedValue(0);
+    (LauncherModule.clearIconCache as jest.Mock).mockResolvedValue(0);
+    (LauncherModule.getAppInfo as jest.Mock).mockResolvedValue(null);
+  });
+
+  it('fetches the icon cache size on mount and exposes it as iconCacheSizeBytes', async () => {
+    (LauncherModule.getIconCacheSizeBytes as jest.Mock).mockResolvedValue(2048);
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.iconCacheSizeBytes).toBe(2048);
+  });
+
+  it('passes the iconTreatment prop through to getInstalledApps', async () => {
+    const treatedWrapper = ({ children }: { children: React.ReactNode }) => (
+      <AppsProvider iconTreatment="mask-all">{children}</AppsProvider>
+    );
+
+    renderHook(() => useApps(), { wrapper: treatedWrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith('mask-all');
+  });
+
+  it('defaults to mask-adaptive-only when no iconTreatment prop is passed (every pre-#486 test wraps AppsProvider this way)', async () => {
+    renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith('mask-adaptive-only');
+  });
+
+  it('rebuildIconCache clears the cache, redraws every installed app one at a time, then refreshes the size', async () => {
+    const nativeApps = [
+      { name: 'App A', packageName: 'com.example.a', icon: 'file:///a.png', isSystem: false },
+      { name: 'App B', packageName: 'com.example.b', icon: 'file:///b.png', isSystem: false },
+    ];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(nativeApps);
+    (LauncherModule.getIconCacheSizeBytes as jest.Mock)
+      .mockResolvedValueOnce(0)      // initial mount read
+      .mockResolvedValueOnce(4096);  // post-rebuild read
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    expect(result.current.apps).toEqual(nativeApps);
+
+    await act(async () => {
+      await result.current.rebuildIconCache();
+    });
+
+    expect(LauncherModule.clearIconCache).toHaveBeenCalledTimes(1);
+    // One getAppInfo call per installed app, redrawing after the clear.
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.a', 'mask-adaptive-only');
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.b', 'mask-adaptive-only');
+    expect(result.current.isRebuildingIconCache).toBe(false);
+    expect(result.current.iconCacheRebuildProgress).toBeNull();
+    expect(result.current.iconCacheSizeBytes).toBe(4096);
+  });
+
+  it('reports incremental progress while rebuilding, not just a 0-to-100 jump', async () => {
+    const nativeApps = [
+      { name: 'App A', packageName: 'com.example.a', icon: 'file:///a.png', isSystem: false },
+      { name: 'App B', packageName: 'com.example.b', icon: 'file:///b.png', isSystem: false },
+    ];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(nativeApps);
+
+    let resolveFirstRedraw: (v: unknown) => void = () => {};
+    (LauncherModule.getAppInfo as jest.Mock)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstRedraw = resolve; }))
+      .mockResolvedValue(null);
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    let rebuildPromise!: Promise<void>;
+    act(() => {
+      rebuildPromise = result.current.rebuildIconCache();
+    });
+
+    // Still awaiting the first package's redraw — progress is 0 of 2, not done.
+    await waitFor(() => {
+      expect(result.current.isRebuildingIconCache).toBe(true);
+      expect(result.current.iconCacheRebuildProgress).toEqual({ done: 0, total: 2 });
+    });
+
+    await act(async () => {
+      resolveFirstRedraw(null);
+      await rebuildPromise;
+    });
+
+    expect(result.current.isRebuildingIconCache).toBe(false);
+  });
+
+  it('does not start a second rebuild while one is already in flight', async () => {
+    let resolveClear: (v: unknown) => void = () => {};
+    (LauncherModule.clearIconCache as jest.Mock).mockImplementation(
+      () => new Promise((resolve) => { resolveClear = resolve; }),
+    );
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    let firstCall!: Promise<void>;
+    let secondCall!: Promise<void>;
+    act(() => {
+      firstCall = result.current.rebuildIconCache();
+      secondCall = result.current.rebuildIconCache(); // ignored — a rebuild is already running
+    });
+
+    // clearIconCache() is behind an await inside rebuildIconCache, so it is not
+    // called until the microtask queue drains — waitFor flushes that before asserting.
+    await waitFor(() => expect(LauncherModule.clearIconCache).toHaveBeenCalled());
+    expect(LauncherModule.clearIconCache).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveClear(0);
+      await firstCall;
+      await secondCall;
+    });
   });
 });

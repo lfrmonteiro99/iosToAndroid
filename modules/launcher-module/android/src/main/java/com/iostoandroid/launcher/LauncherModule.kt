@@ -91,7 +91,11 @@ class LauncherModule : Module() {
 
         // ── Apps ─────────────────────────────────────────────────────────
 
-        AsyncFunction("getInstalledApps") {
+        AsyncFunction("getInstalledApps") { treatmentArg: String? ->
+            // #486: qual mascara aplicar entra na chave da cache (IconCache.fileName),
+            // por isso mudar o tratamento nas Definicoes invalida os PNGs antigos so
+            // por deixarem de corresponder a nenhuma chave valida — sem passo extra.
+            val treatment = treatmentArg ?: IconTreatment.DEFAULT
             val pm = context.packageManager
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
@@ -116,11 +120,11 @@ class LauncherModule : Module() {
                 val packageName = resolveInfo.activityInfo.packageName
                 val icon = try {
                     val versionCode = getVersionCode(pm, packageName)
-                    val fileName = IconCache.fileName(packageName, versionCode)
+                    val fileName = IconCache.fileName(packageName, versionCode, treatment)
                     validIconFileNames.add(fileName)
                     val iconFile = File(iconsDir, fileName)
                     if (!iconFile.exists()) {
-                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile, treatment)
                     }
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
@@ -158,11 +162,13 @@ class LauncherModule : Module() {
             apps
         }
 
-        AsyncFunction("getAppInfo") { packageName: String ->
+        AsyncFunction("getAppInfo") { packageName: String, treatmentArg: String? ->
             // Single-package equivalent of getInstalledApps: used to refresh only
             // the package a PACKAGE_* broadcast named (#485) instead of rescanning
             // every installed app. Returns null when the package is gone or has no
-            // launcher activity, so JS can drop the event.
+            // launcher activity, so JS can drop the event. Also the redraw step
+            // rebuildIconCache() (#486) calls once per package after clearIconCache.
+            val treatment = treatmentArg ?: IconTreatment.DEFAULT
             try {
                 val pm = context.packageManager
                 val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
@@ -176,10 +182,10 @@ class LauncherModule : Module() {
                     val appInfo = resolveInfo.activityInfo.applicationInfo
                     val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
                     val icon = try {
-                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName))
+                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName), treatment)
                         val iconFile = File(iconsDir, fileName)
                         if (!iconFile.exists()) {
-                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile, treatment)
                         }
                         "file://" + iconFile.absolutePath
                     } catch (e: Exception) { "" }
@@ -243,6 +249,22 @@ class LauncherModule : Module() {
                 context.startActivity(intent)
                 true
             } catch (e: Exception) { false }
+        }
+
+        // Manual escape hatch (#486) for when the versionCode/treatment cache key
+        // doesn't invalidate a stale icon on its own. Deletes every cached PNG;
+        // callers (AppsStore.rebuildIconCache) redraw them via getInstalledApps /
+        // getAppInfo afterwards. Returns the number of files actually deleted.
+        AsyncFunction("clearIconCache") {
+            val iconsDir = File(context.filesDir, "icons")
+            val files = iconsDir.listFiles() ?: emptyArray()
+            files.count { it.delete() }
+        }
+
+        AsyncFunction("getIconCacheSizeBytes") {
+            val iconsDir = File(context.filesDir, "icons")
+            val files = iconsDir.listFiles() ?: emptyArray()
+            IconCache.totalSizeBytes(files.map { it.length() })
         }
 
         AsyncFunction("openLauncherSettings") {
@@ -1333,8 +1355,8 @@ class LauncherModule : Module() {
         }
     }
 
-    private fun writeIconToFile(drawable: Drawable, file: File) {
-        val bitmap = applySquircleMask(drawableToBitmap(drawable))
+    private fun writeIconToFile(drawable: Drawable, file: File, treatment: String = IconTreatment.DEFAULT) {
+        val bitmap = renderIcon(drawable, treatment)
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         FileOutputStream(file).use { out ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
@@ -1342,8 +1364,8 @@ class LauncherModule : Module() {
         if (bitmap != scaledBitmap) scaledBitmap.recycle()
     }
 
-    private fun drawableToBase64(drawable: Drawable): String {
-        val bitmap = applySquircleMask(drawableToBitmap(drawable))
+    private fun drawableToBase64(drawable: Drawable, treatment: String = IconTreatment.DEFAULT): String {
+        val bitmap = renderIcon(drawable, treatment)
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         val outputStream = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream)
@@ -1352,32 +1374,37 @@ class LauncherModule : Module() {
         return "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
-    private fun drawableToBitmap(drawable: Drawable): Bitmap {
+    /**
+     * Renders [drawable] to a square bitmap, honouring [treatment] (#486) —
+     * see [IconTreatment.shouldMask] for the adaptive/non-adaptive distinction.
+     */
+    private fun renderIcon(drawable: Drawable, treatment: String): Bitmap {
+        val isAdaptive = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable
+        val shouldMask = IconTreatment.shouldMask(isAdaptive, treatment)
+        if (isAdaptive) {
+            // AdaptiveIconDrawable.draw() composites background+foreground using
+            // whatever mask the OS (or OEM launcher) has configured, so drawing it
+            // directly here would still yield a device-dependent shape — the exact
+            // inconsistency #484 exists to fix. Compose it ourselves instead; only
+            // fall back to the generic path below when the icon is malformed
+            // (composeAdaptiveIcon returns null, e.g. no background layer).
+            composeAdaptiveIcon(drawable as AdaptiveIconDrawable, shouldMask)?.let { return it }
+        }
+        val square = squareCropBitmap(drawable)
+        return if (shouldMask) applySquircleMask(square) else square
+    }
+
+    /**
+     * Center-crop para quadrado (#480): pega no maior quadrado centrado da
+     * origem e escala-o. Nunca distorce nem mete barras transparentes, por
+     * isso um icone-banner mantem as proporcoes e e' so cortado antes da
+     * mascara. Um icone redondo continua a ficar com cantos vazios — o #480
+     * diz explicitamente que nao resolve isso.
+     */
+    private fun squareCropBitmap(drawable: Drawable): Bitmap {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             return drawable.bitmap
         }
-        // AdaptiveIconDrawable.draw() composites background+foreground using
-        // whatever mask the OS (or OEM launcher) has configured, so drawing it
-        // directly here would still yield a device-dependent shape — the exact
-        // inconsistency #484 exists to fix. Compose it ourselves instead; only
-        // fall back to the generic path below when the icon is malformed
-        // (composeAdaptiveIcon returns null, e.g. no background layer).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
-            // Este caminho ja devolve o bitmap mascarado pelo compositor do #484,
-            // e o call site volta a passar tudo pelo applySquircleMask do #480.
-            // Aplicar duas vezes e' idempotente NA FORMA: os dois usam o mesmo
-            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 4.7 e o
-            // n = 4.7 do applySquircleMask) e o mesmo gerador de pontos, portanto a
-            // segunda mascara recorta exactamente a mesma regiao. Se algum dia os
-            // expoentes divergirem, isto passa a cortar duas formas diferentes —
-            // e a razao pela qual ambos os sitios citam a constante.
-            composeAdaptiveIcon(drawable)?.let { return it }
-        }
-        // Center-crop para quadrado (#480): pega no maior quadrado centrado da
-        // origem e escala-o. Nunca distorce nem mete barras transparentes, por
-        // isso um icone-banner mantem as proporcoes e e' so cortado antes da
-        // mascara. Um icone redondo continua a ficar com cantos vazios — o #480
-        // diz explicitamente que nao resolve isso.
         val srcW = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
         val srcH = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
         val side = srcW.coerceAtMost(srcH)
@@ -1447,7 +1474,7 @@ class LauncherModule : Module() {
         }
     }
 
-    private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable): Bitmap? {
+    private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable, shouldMask: Boolean = true): Bitmap? {
         val background = drawable.background ?: return null
         val foreground = drawable.foreground
 
@@ -1455,18 +1482,24 @@ class LauncherModule : Module() {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat())
-        val maskPath = Path().apply {
-            moveTo(maskPoints[0].first, maskPoints[0].second)
-            maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
-            close()
+        // shouldMask=false (#486 'none') skips the squircle clip: the background
+        // draws full-bleed across the square canvas, the pre-#484 OS default.
+        if (shouldMask) {
+            val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat())
+            val maskPath = Path().apply {
+                moveTo(maskPoints[0].first, maskPoints[0].second)
+                maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
+                close()
+            }
+            canvas.save()
+            canvas.clipPath(maskPath)
+            background.setBounds(0, 0, size, size)
+            background.draw(canvas)
+            canvas.restore()
+        } else {
+            background.setBounds(0, 0, size, size)
+            background.draw(canvas)
         }
-
-        canvas.save()
-        canvas.clipPath(maskPath)
-        background.setBounds(0, 0, size, size)
-        background.draw(canvas)
-        canvas.restore()
 
         if (foreground != null) {
             val bounds = AdaptiveIconCompositor.foregroundBounds(size)

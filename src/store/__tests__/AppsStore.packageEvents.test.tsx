@@ -62,7 +62,9 @@ describe('AppsStore — reacts to package install/uninstall broadcasts', () => {
       'com.example.banana',
       'com.example.cherry',
     ]);
-    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.banana');
+    // #486: getAppInfo now also receives the current icon treatment (default when
+    // no iconTreatment prop is passed, as in this wrapper).
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.banana', 'mask-adaptive-only');
     expect(LauncherModule.getInstalledApps).not.toHaveBeenCalled();
   });
 

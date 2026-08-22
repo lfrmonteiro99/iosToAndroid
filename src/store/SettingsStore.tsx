@@ -62,6 +62,13 @@ export interface SettingsState {
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
+  /**
+   * Whether the squircle mask (#480) is applied to app icons before caching.
+   * 'mask-adaptive-only' leaves already-circular/self-shaped icons untouched
+   * (masking those crops visible corners empty), 'mask-all' masks every icon
+   * (the pre-#486 behaviour), 'none' is the unmasked baseline.
+   */
+  iconTreatment: 'mask-all' | 'mask-adaptive-only' | 'none';
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -120,6 +127,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   updateAvailable: false,
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
+  iconTreatment: 'mask-adaptive-only',
 };
 
 interface SettingsContextValue {
