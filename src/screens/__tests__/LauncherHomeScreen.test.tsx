@@ -487,3 +487,44 @@ describe('resolveHomePressAction (#508)', () => {
     expect(resolveHomePressAction({ isFolderOpen: false, isOnFirstPage: false })).toBe('scrollToFirstPage');
   });
 });
+
+// ---------------------------------------------------------------------------
+// #490: Pagination ScrollView decelerationRate must match iOS spec (0.998)
+// to ensure proper scroll deceleration and page snapping on Android.
+// The fix adds `decelerationRate={0.998}` to the horizontal pagination
+// ScrollView (§3.3 of ESPECIFICACAO.md).
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  function mockLoadedApps(over: Partial<ReturnType<typeof AppsStore.useApps>> = {}) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      ...over,
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  it('sets decelerationRate to 0.998 on the pagination ScrollView', () => {
+    mockLoadedApps();
+    const { getByTestId } = render(<LauncherHomeScreen />);
+
+    const paginationScrollView = getByTestId('launcher-pagination-scroll');
+    expect(paginationScrollView.props.decelerationRate).toBe(0.998);
+  });
+});
