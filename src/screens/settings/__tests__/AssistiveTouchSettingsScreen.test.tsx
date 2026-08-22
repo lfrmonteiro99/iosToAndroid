@@ -43,6 +43,14 @@ describe('AssistiveTouchSettingsScreen', () => {
     expect(toJSON()).toBeTruthy();
   });
 
+  // Real interaction: the header back button ("Accessibility") calls
+  // navigation.goBack(). This is the unique occurrence of that text in the tree.
+  it('navigates back when the Accessibility back button is pressed', () => {
+    const { getByText } = render(<AssistiveTouchSettingsScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Accessibility'));
+    expect(mockNavigation.goBack).toHaveBeenCalled();
+  });
+
   it('renders the master switch and customization section when enabled', () => {
     const { getByText, getAllByRole } = render(
       <AssistiveTouchSettingsScreen navigation={mockNavigation as never} />,
