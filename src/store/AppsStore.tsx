@@ -119,6 +119,14 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
 };
 
+// Single source of truth for this app's own virtual built-ins. Every entry in
+// VIRTUAL_APPS_MAP has isSystem:false, so screens must exclude them by package
+// name, never by isSystem — otherwise the App Store's Updates list (and any
+// other "real installed apps" view) would surface our own fake packages.
+export const VIRTUAL_APP_PACKAGE_NAMES: ReadonlySet<string> = new Set(
+  Object.keys(VIRTUAL_APPS_MAP),
+);
+
 // Default dock apps — our built-in screens
 const DEFAULT_DOCK = [
   'com.iostoandroid.phone',
