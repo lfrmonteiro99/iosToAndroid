@@ -58,7 +58,7 @@ import { NotificationCenterOverlay } from '../components/NotificationCenterOverl
 import { SpotlightReveal } from '../components/SpotlightReveal';
 import { AppLaunchOverlay } from '../components/AppLaunchOverlay';
 import type { LaunchBounds } from '../components/AppLaunchOverlay';
-import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
+import { zones, gestureConfig, dpPerMsToPtPerSec, springForAppLaunchDuration } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
@@ -758,6 +758,13 @@ export function LauncherHomeScreen() {
     phase: 'expand' | 'collapse';
   } | null>(null);
 
+  // Spring physics for the icon-expand overlay, derived from the user's
+  // chosen appLaunchDurationMs (#512 §6.3) — still a spring at any duration.
+  const appLaunchSpringConfig = useMemo(
+    () => springForAppLaunchDuration(settings.appLaunchDurationMs),
+    [settings.appLaunchDurationMs],
+  );
+
   // Fires exactly when the expand spring settles — this is the intent trigger
   // point, not a setTimeout guess (§6.3). A failed launch collapses the
   // overlay back to the icon instead of leaving it stuck full-screen.
@@ -790,9 +797,19 @@ export function LauncherHomeScreen() {
       return;
     }
     // No measure fn (folder icons open inside a Modal — a separate native
-    // window that can't host a screen-spanning overlay) or reduceMotion:
-    // launch immediately, no expand, no measurement round-trip at all.
-    if (!measure || reduceMotion) {
+    // window that can't host a screen-spanning overlay), reduceMotion, or
+    // appLaunchAnimation off: launch immediately, no expand, no measurement
+    // round-trip at all.
+    //
+    // Precedence (#512 §6.3): reduceMotion — the stand-in for the future
+    // `motionIntensity: 'off'` (epic #467, not yet in SettingsStore) — always
+    // wins and disables the expand regardless of appLaunchAnimation.
+    // appLaunchAnimation: false only disables this one animation and leaves
+    // everything else reduceMotion also gates untouched. Either condition
+    // alone is enough to skip the overlay; both route through launchApp,
+    // which is where LauncherModule.kt's Android transition suppression
+    // lives (unconditional there), so it is never affected by this choice.
+    if (!measure || reduceMotion || !settings.appLaunchAnimation) {
       launchApp(app.packageName);
       return;
     }
@@ -803,7 +820,7 @@ export function LauncherHomeScreen() {
         launchApp(app.packageName);
       }
     });
-  }, [navigation, launchApp, reduceMotion]);
+  }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -1669,6 +1686,7 @@ export function LauncherHomeScreen() {
           phase={launchTransition.phase}
           onExpandComplete={handleExpandComplete}
           onCollapseComplete={handleCollapseComplete}
+          springConfig={appLaunchSpringConfig}
         />
       )}
       </Animated.View>

@@ -70,6 +70,16 @@ export interface SettingsState {
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
   /**
+   * Whether the icon-expand animation plays when opening an app (§6.3).
+   * Independent of `reduceMotion`: turning this off skips only the
+   * icon-expand overlay, not other motion in the app. `reduceMotion` (or,
+   * once #467 lands, `motionIntensity: 'off'`) still takes precedence over
+   * this — see the precedence table in LauncherHomeScreen.handleAppPress.
+   */
+  appLaunchAnimation: boolean;
+  /** Target duration of the icon-expand animation in ms, 150–450 (§6.3, default 280 = value [E]). */
+  appLaunchDurationMs: number;
+  /**
    * Forma da máscara dos ícones do launcher (§1.6). 'original' = sem máscara,
    * o drawable como o sistema o dá — é também o baseline de comparação.
    */
@@ -138,6 +148,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   updateAvailable: false,
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
+  appLaunchAnimation: true,
+  appLaunchDurationMs: 280,
   iconShape: 'squircle',
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
 };

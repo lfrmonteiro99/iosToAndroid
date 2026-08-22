@@ -91,6 +91,32 @@ export const gestureConfig = {
   velocityClampDpPerMs: 4.0,
 } as const;
 
+// Maps a user-chosen app-launch duration (settings.appLaunchDurationMs,
+// 150-450ms, §6.3) to a spring config that actually settles around that
+// duration — the animation stays a spring (§3.2 regra 1), never a
+// withTiming, only its stiffness/damping change (#512).
+//
+// Physics: for a unit-mass spring, settling time is inversely proportional
+// to the natural frequency w0 = sqrt(stiffness), so rescaling duration by a
+// factor `r = base/target` scales stiffness by r^2 and damping by r — this
+// keeps the damping ratio (damping / (2*sqrt(stiffness*mass))), and
+// therefore the felt "character" of the motion, identical at every
+// duration; only the speed changes. At the 280ms default this reproduces
+// gestureConfig.spring.appLaunch exactly.
+const APP_LAUNCH_BASE_DURATION_MS = 280;
+
+export function springForAppLaunchDuration(
+  durationMs: number,
+): { stiffness: number; damping: number; mass: number } {
+  const base = gestureConfig.spring.appLaunch;
+  const ratio = APP_LAUNCH_BASE_DURATION_MS / durationMs;
+  return {
+    stiffness: base.stiffness * ratio * ratio,
+    damping: base.damping * ratio,
+    mass: base.mass,
+  };
+}
+
 export function dpPerMsToPtPerSec(v: number): number {
   return v * 1000;
 }

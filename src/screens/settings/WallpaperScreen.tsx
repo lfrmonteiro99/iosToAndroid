@@ -11,6 +11,7 @@ import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoSwitch,
   CupertinoSegmentedControl,
   CupertinoSlider,
   useAlert,
@@ -252,6 +253,47 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
             />
           </CupertinoListSection>
         </View>
+
+        {/* App opening animation (#512 §6.3) */}
+        <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
+          <CupertinoListSection
+            header="App Opening"
+            footer={
+              settings.appLaunchAnimation
+                ? `Apps expand from their icon over ${Math.round(settings.appLaunchDurationMs)}ms when opening.`
+                : 'Apps open instantly, with no expand animation. The system open transition stays suppressed either way.'
+            }
+          >
+            <CupertinoListTile
+              title="Animate App Opening"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.appLaunchAnimation}
+                  onValueChange={(v) => update('appLaunchAnimation', v)}
+                />
+              }
+              showChevron={false}
+            />
+            {settings.appLaunchAnimation && (
+              <View style={styles.sliderRow}>
+                <Text style={[typography.footnote, { color: colors.secondaryLabel, width: 40 }]}>
+                  Fast
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <CupertinoSlider
+                    value={settings.appLaunchDurationMs}
+                    onValueChange={(v) => update('appLaunchDurationMs', Math.round(v))}
+                    minimumValue={150}
+                    maximumValue={450}
+                  />
+                </View>
+                <Text style={[typography.footnote, { color: colors.secondaryLabel, width: 40, textAlign: 'right' }]}>
+                  Slow
+                </Text>
+              </View>
+            )}
+          </CupertinoListSection>
+        </View>
       </ScrollView>
     </View>
   );
@@ -269,7 +311,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  sliderRow: { paddingHorizontal: 16, paddingBottom: 16 },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
   gridContainer: {
     marginBottom: 8,
   },
