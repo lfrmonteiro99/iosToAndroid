@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, within } from '../../test-utils';
 import {
   LauncherHomeScreen,
   NonAndroidFallback,
@@ -11,6 +11,7 @@ import {
 } from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
+import { Shape } from '../../theme/CupertinoTheme';
 
 function flattenStyle(style: unknown): Record<string, unknown>[] {
   if (Array.isArray(style)) return style.flat(Infinity).filter(Boolean) as Record<string, unknown>[];
@@ -21,6 +22,45 @@ describe('LauncherHomeScreen', () => {
   it('renders without crashing', () => {
     const { toJSON } = render(<LauncherHomeScreen />);
     expect(toJSON()).toBeTruthy();
+  });
+
+  // #481: dock corner radius must consume Shape.dock (34), not the old
+  // hand-picked literal (22) — 35% below spec §1.6.
+  it('renders the dock at the Shape.dock radius (34)', () => {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+
+    const { UNSAFE_getByType } = render(<LauncherHomeScreen />);
+    const dockBlur = UNSAFE_getByType('BlurView' as never);
+    const flat = flattenStyle(dockBlur.props.style);
+    const radiusStyle = flat.find((s) => 'borderRadius' in s) as { borderRadius: number } | undefined;
+
+    expect(radiusStyle).toBeDefined();
+    expect(radiusStyle?.borderRadius).toBe(Shape.dock.radius);
+    expect(radiusStyle?.borderRadius).toBe(34);
+
+    jest.restoreAllMocks();
   });
 
   it('renders the home screen container', () => {
@@ -185,6 +225,10 @@ describe('LauncherHomeScreen wallpaper parallax (#433)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
 
     const { getByTestId } = render(<LauncherHomeScreen />);
@@ -251,6 +295,10 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
     return { launchApp };
   }
@@ -366,6 +414,10 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
       ...over,
     } as ReturnType<typeof AppsStore.useApps>);
   }
@@ -473,5 +525,127 @@ describe('resolveHomePressAction (#508)', () => {
   // isOnFirstPage: false, identical to being on any other non-first page.
   it('treats being on the App Library page the same as any other non-first page', () => {
     expect(resolveHomePressAction({ isFolderOpen: false, isOnFirstPage: false })).toBe('scrollToFirstPage');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #490: Pagination ScrollView decelerationRate must match iOS spec (0.998)
+// to ensure proper scroll deceleration and page snapping on Android.
+// The fix adds `decelerationRate={0.998}` to the horizontal pagination
+// ScrollView (§3.3 of ESPECIFICACAO.md).
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  function mockLoadedApps(over: Partial<ReturnType<typeof AppsStore.useApps>> = {}) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      ...over,
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  it('sets decelerationRate to 0.998 on the pagination ScrollView', () => {
+    mockLoadedApps();
+    const { getByTestId } = render(<LauncherHomeScreen />);
+
+    const paginationScrollView = getByTestId('launcher-pager');
+    expect(paginationScrollView.props.decelerationRate).toBe(0.998);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #501: the dock reused the same AppIcon rendered for the home grid, which
+// always draws a name label below the icon — the iOS dock has no labels.
+// This inflated the dock capsule to ~108pt (padding 20 + the grid's 88pt
+// label-inclusive wrapper) instead of the ~96pt from §2. AppIcon gets a
+// `showLabel` prop (default true, so the grid is untouched) instead of a
+// second component, per the issue's explicit "um só AppIcon" requirement.
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen dock has no app-name labels (#501)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  const dockApp: AppsStore.InstalledApp = {
+    name: 'DockOnlyApp',
+    packageName: 'com.example.dockonly',
+    icon: '',
+    isSystem: false,
+  };
+  const gridApp: AppsStore.InstalledApp = {
+    name: 'GridOnlyApp',
+    packageName: 'com.example.gridonly',
+    icon: '',
+    isSystem: false,
+  };
+
+  function mockApps(dockApps: AppsStore.InstalledApp[], nonDockApps: AppsStore.InstalledApp[]) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [...dockApps, ...nonDockApps],
+      homeApps: [],
+      dockApps,
+      nonDockApps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  it('does not render the app name text under a dock icon', () => {
+    // Scoped to the dock icon's own subtree (`within`), not the whole tree:
+    // `apps` also feeds the App Library page (#434), which lists every app —
+    // including dock ones — by name regardless of this fix, so a global
+    // queryByText would find that unrelated match and prove nothing about
+    // the dock icon itself.
+    mockApps([dockApp], [gridApp]);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+
+    const dockIcon = getByLabelText('Open DockOnlyApp');
+    expect(dockIcon).toBeTruthy();
+    expect(within(dockIcon).queryByText('DockOnlyApp')).toBeNull();
+  });
+
+  it('still renders the app name text under a home-grid icon (grid is unaffected)', () => {
+    mockApps([dockApp], [gridApp]);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+
+    const gridIcon = getByLabelText('Open GridOnlyApp');
+    expect(within(gridIcon).getByText('GridOnlyApp')).toBeTruthy();
+  });
+
+  it('keeps the dock icon accessible press target intact without a label', () => {
+    mockApps([dockApp], [gridApp]);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+    const icon = getByLabelText('Open DockOnlyApp');
+    expect(icon.props.accessibilityRole).toBe('button');
+    expect(() => fireEvent.press(icon)).not.toThrow();
   });
 });

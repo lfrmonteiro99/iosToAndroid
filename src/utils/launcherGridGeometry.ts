@@ -31,32 +31,45 @@ export type LauncherGridGeometry = {
 /**
  * Deriva toda a geometria da grelha a partir da largura do ecrã.
  *
+ * `cols` e `iconScale` são opcionais (issue #503 — densidade de grelha
+ * configurável): omitidos, mantêm o comportamento histórico de 4 colunas e
+ * ícone a 0.153 x W exactamente (#500). Quando fornecidos, o ícone continua
+ * derivado de 0.153 x W (escalado por `iconScale`) e é depois limitado à
+ * célula da coluna, que por sua vez encolhe com mais colunas — por isso mais
+ * colunas nunca produzem sobreposição, apenas ícones mais pequenos.
+ *
  * O arredondamento do ícone e da margem é feito para baixo quando a soma
  * `iconSize * cols + horizontalPadding * 2` excederia a largura disponível, de
  * modo a que a última coluna nunca seja cortada.
  */
-export function computeLauncherGridGeometry(screenWidth: number): LauncherGridGeometry {
+export function computeLauncherGridGeometry(
+  screenWidth: number,
+  cols: number = 4,
+  iconScale: number = 1,
+): LauncherGridGeometry {
   const width = Math.max(1, screenWidth);
-  const cols = 4;
+  const safeCols = Math.max(1, Math.round(cols));
 
   const horizontalPadding = Math.max(
     0,
     Math.min(
       Math.round(width * GRID_PADDING_RATIO),
       // Nunca deixar a área de conteúdo sem espaço, mesmo em larguras absurdas.
-      Math.floor((width - cols) / 2),
+      Math.floor((width - safeCols) / 2),
     ),
   );
 
-  const cellWidth = (width - horizontalPadding * 2) / cols;
-  // O ícone tem de caber na célula: se o valor da especificação não couber
-  // (larguras muito estreitas), fica limitado pela célula em vez de transbordar.
-  // Em larguras absurdamente pequenas (< 4dp com cols=4), permite degradação
-  // a iconSize=0 em vez de quebrar o constraint de caber no ecrã.
-  const iconSize = Math.max(0, Math.min(Math.round(width * ICON_SIZE_RATIO), Math.floor(cellWidth)));
+  const cellWidth = (width - horizontalPadding * 2) / safeCols;
+  // O ícone tem de caber na célula: se o valor da especificação (escalado) não
+  // couber (larguras muito estreitas ou mais colunas), fica limitado pela
+  // célula em vez de transbordar/sobrepor a coluna seguinte.
+  const iconSize = Math.max(
+    0,
+    Math.min(Math.round(width * ICON_SIZE_RATIO * iconScale), Math.floor(cellWidth)),
+  );
 
   return {
-    cols,
+    cols: safeCols,
     iconSize,
     horizontalPadding,
     cellWidth,

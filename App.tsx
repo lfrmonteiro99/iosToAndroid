@@ -15,6 +15,7 @@ import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
 import { DeviceProvider, useDevice } from './src/store/DeviceStore';
 import { FoldersProvider } from './src/store/FoldersStore';
+import { BookmarksProvider } from './src/store/BookmarksStore';
 import { ReadingListProvider } from './src/store/ReadingListStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -351,6 +352,17 @@ function ReachabilityShifter({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Forwards settings.iconTreatment (#486) into AppsProvider as a prop instead
+ * of AppsProvider calling useSettings() itself — every existing AppsStore
+ * test mounts a bare <AppsProvider> with no SettingsProvider above it, and
+ * this way that keeps working unchanged.
+ */
+function AppsProviderWithIconTreatment({ children }: { children: React.ReactNode }) {
+  const { settings } = useSettings();
+  return <AppsProvider iconTreatment={settings.iconTreatment}>{children}</AppsProvider>;
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -359,9 +371,10 @@ export default function App() {
           <ThemeProvider>
             <ContactsProvider>
               <ProfileProvider>
-                <AppsProvider>
+                <AppsProviderWithIconTreatment>
                 <DeviceProvider>
                 <FoldersProvider>
+                <BookmarksProvider>
                 <ReadingListProvider>
                 <AssistiveTouchProvider>
                 <ErrorBoundary>
@@ -371,9 +384,10 @@ export default function App() {
                 </ErrorBoundary>
                 </AssistiveTouchProvider>
                 </ReadingListProvider>
+                </BookmarksProvider>
                 </FoldersProvider>
                 </DeviceProvider>
-                </AppsProvider>
+                </AppsProviderWithIconTreatment>
               </ProfileProvider>
             </ContactsProvider>
           </ThemeProvider>

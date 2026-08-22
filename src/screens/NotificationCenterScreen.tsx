@@ -19,6 +19,7 @@ import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { Glass } from '../theme/CupertinoTheme';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import { GlassSurface, useAlert } from '../components';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 
@@ -324,10 +325,9 @@ export function NotificationCenterScreen() {
                             },
                           ]}
                         >
-                          <Pressable
+                          <CupertinoPressable
                             onPress={() => handleNotifCardTap(notif)}
                             onLongPress={() => handleLongPress(notif)}
-                            style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
                             accessibilityLabel={`${notif.title || group.appName} notification from ${group.appName}`}
                             accessibilityRole="button"
                           >
@@ -429,7 +429,7 @@ export function NotificationCenterScreen() {
                                 </View>
                               )}
                             </View>
-                          </Pressable>
+                          </CupertinoPressable>
                         </CupertinoSwipeableRow>
                       );
                     })}

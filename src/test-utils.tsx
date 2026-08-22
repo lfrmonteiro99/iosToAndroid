@@ -7,6 +7,7 @@ import { ProfileProvider } from './store/ProfileStore';
 import { AppsProvider } from './store/AppsStore';
 import { DeviceProvider } from './store/DeviceStore';
 import { FoldersProvider } from './store/FoldersStore';
+import { BookmarksProvider } from './store/BookmarksStore';
 import { LocationProvider } from './store/LocationStore';
 import { ReadingListProvider } from './store/ReadingListStore';
 
@@ -30,11 +31,13 @@ function AllProviders({ children }: { children: React.ReactNode }) {
             <AppsProvider>
               <DeviceProvider>
                 <FoldersProvider>
+                  <BookmarksProvider>
                   <LocationProvider>
                     <ReadingListProvider>
                       {children}
                     </ReadingListProvider>
                   </LocationProvider>
+                  </BookmarksProvider>
                 </FoldersProvider>
               </DeviceProvider>
             </AppsProvider>

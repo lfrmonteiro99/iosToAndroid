@@ -20,6 +20,7 @@ export { AlertProvider, useAlert } from './AlertProvider';
 export { CupertinoSkeleton, SkeletonListRow, SkeletonCard } from './CupertinoSkeleton';
 export { CupertinoShareSheet } from './CupertinoShareSheet';
 export { BrowserReadingList } from './BrowserReadingList';
+export { BrowserBookmarksList } from './BrowserBookmarksList';
 export { NotificationBanner } from './NotificationBanner';
 export type { BannerNotification } from './NotificationBanner';
 export { HomeIndicator } from './HomeIndicator';
@@ -27,7 +28,7 @@ export { GestureHost, useGestureHost, useOptionalGestureHost } from './GestureHo
 export type { GestureHostMode } from './GestureHost';
 export { BackEdgeSwipe } from './BackEdgeSwipe';
 export { QuickSwitchHomeBar } from './QuickSwitchHomeBar';
-export { AssistiveTouch } from './AssistiveTouch';
+export { AssistiveTouch, MENU_GEOMETRY } from './AssistiveTouch';
 export { ControlCenterOverlay } from './ControlCenterOverlay';
 export { NotificationCenterOverlay } from './NotificationCenterOverlay';
 export { SpotlightReveal } from './SpotlightReveal';

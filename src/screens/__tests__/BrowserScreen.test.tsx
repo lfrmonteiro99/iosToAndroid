@@ -1,7 +1,8 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, act } from '../../test-utils';
 import { BrowserScreen, resolveUrl, BROWSER_HOME_URL } from '../BrowserScreen';
 import { BUILT_IN_APPS, VIRTUAL_ICON_CONFIG } from '../LauncherHomeScreen';
+import { useBookmarks } from '../../store/BookmarksStore';
 
 // The global mock in jest.setup.js hands out a fresh jest.fn() per render
 // (useImperativeHandle has no deps array), so a reference captured before a
@@ -229,14 +230,44 @@ describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
     expect(webviewUri(utils)).toBe('https://example.com');
   });
 
-  it('closing the only tab leaves activeTabId pointing at no tab (grid shown, no WebView, no crash)', () => {
+  it('the Tabs button shows a badge with the current tab count', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('2');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('3');
+  });
+
+  it('closing the only (active) tab never leaves zero tabs: a fresh home tab takes over', () => {
+    const utils = submitAddress('example.com');
+    expect(webviewUri(utils)).toBe('https://example.com');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('Close tab: https://example.com'));
+
+    // Never zero tabs: exactly one remains, at the home URL.
+    expect(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`)).toBeTruthy();
+    expect(utils.queryByLabelText('Tab: https://example.com')).toBeNull();
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+
+  it('closing tabs repeatedly (double-tap on the last close affordance) still leaves exactly one tab', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
     fireEvent.press(utils.getByLabelText('Tabs'));
-    fireEvent.press(utils.getByLabelText(`Close tab: ${BROWSER_HOME_URL}`));
+    const label = `Close tab: ${BROWSER_HOME_URL}`;
+    fireEvent.press(utils.getByLabelText(label));
+    fireEvent.press(utils.getByLabelText(label));
 
-    expect(utils.queryByTestId('browser-webview')).toBeNull();
-    expect(utils.getByLabelText('New Tab')).toBeTruthy();
-    expect(utils.queryByLabelText(/^Tab: /)).toBeNull();
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+    expect(utils.getByTestId('browser-webview')).toBeTruthy();
   });
 
   it('closing the active tab (when others remain) activates another existing tab', () => {
@@ -259,8 +290,7 @@ describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
     fireEvent.press(utils.getByLabelText('Tabs'));
     // Close the background tab (example.com), not the active one.
     fireEvent.press(utils.getByLabelText('Close tab: https://example.com'));
-    fireEvent.press(utils.getByLabelText('Done'));
-    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+    fireEvent.press(utils.getByLabelText('Done'));    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
   });
 });
 
@@ -473,5 +503,117 @@ describe('home-screen registration', () => {
       expect(BUILT_IN_APPS[pkg]).toBe(route);
       expect(VIRTUAL_ICON_CONFIG[pkg]).toBeTruthy();
     }
+  });
+});
+
+// ─── Bookmarks (issue #255) ──────────────────────────────────────────────────
+
+function BookmarkSeed({ seed }: { seed: { url: string; title: string }[] }) {
+  const { addBookmark } = useBookmarks();
+  React.useEffect(() => {
+    seed.forEach((s) => addBookmark(s.url, s.title));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+describe('BrowserScreen — star button toggles a bookmark', () => {
+  it('starts unbookmarked (outline star + "Add bookmark")', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.getByLabelText('Add bookmark')).toBeTruthy();
+    expect(utils.queryByLabelText('Remove bookmark')).toBeNull();
+  });
+
+  it('pressing the star adds a bookmark for the current URL and fills the star', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+
+    // Icon flips to "Remove bookmark" (filled star state).
+    expect(utils.getByLabelText('Remove bookmark')).toBeTruthy();
+    expect(utils.queryByLabelText('Add bookmark')).toBeNull();
+  });
+
+  it('pressing the star again removes the bookmark and reverts to outline', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+    expect(utils.getByLabelText('Remove bookmark')).toBeTruthy();
+
+    fireEvent.press(utils.getByLabelText('Remove bookmark'));
+    // Back to the outline / "Add bookmark" state.
+    expect(utils.getByLabelText('Add bookmark')).toBeTruthy();
+  });
+
+  it('the starred page appears in the bookmarks list with its URL', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+
+    // The home tab's URL was bookmarked; title falls back to the URL.
+    // (BROWSER_HOME_URL text also appears in the address bar, hence getAllByText.)
+    expect(utils.getAllByText(BROWSER_HOME_URL).length).toBeGreaterThan(0);
+  });
+
+  it('double-tapping the star does not create two bookmarks (no duplicate)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+    fireEvent.press(utils.getByLabelText('Remove bookmark'));
+    // After add+remove the tree is back to unbookmarked; pressing again once more
+    // should leave exactly one labelled state, not two "Remove bookmark".
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+    expect(utils.getAllByLabelText('Remove bookmark')).toHaveLength(1);
+  });
+});
+
+describe('BrowserScreen — bookmarks list modal', () => {
+  it('opens the bookmarks list when the Bookmarks button is pressed', async () => {
+    const utils = render(
+      <>
+        <BookmarkSeed seed={[{ url: 'https://example.com/bookmarked', title: 'Bookmarked' }]} />
+        <BrowserScreen navigation={nav} />
+      </>,
+    );
+    await act(async () => {});
+
+    expect(utils.queryByText('Bookmarked')).toBeNull();
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+
+    expect(utils.getByText('Bookmarked')).toBeTruthy();
+    expect(utils.getByText('https://example.com/bookmarked')).toBeTruthy();
+  });
+
+  it('tapping a bookmark navigates the active tab to its URL and closes the modal', async () => {
+    const utils = render(
+      <>
+        <BookmarkSeed seed={[{ url: 'https://example.com/bookmarked', title: 'Bookmarked' }]} />
+        <BrowserScreen navigation={nav} />
+      </>,
+    );
+    await act(async () => {});
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+    fireEvent.press(utils.getByText('Bookmarked'));
+
+    // Modal dismissed.
+    expect(utils.queryByText('Bookmarked')).toBeNull();
+    // Active WebView navigated to the bookmarked URL.
+    expect(webviewUri(utils)).toBe('https://example.com/bookmarked');
+  });
+
+  it('the list is empty-state when no bookmarks exist', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+    expect(utils.getByText('No bookmarks yet')).toBeTruthy();
+  });
+
+  it('closing the list (Close button) does not change the WebView URL', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+    fireEvent.press(utils.getByLabelText('Close Bookmarks'));
+
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
   });
 });

@@ -17,6 +17,8 @@ import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 import { CupertinoShareSheet } from '../components/CupertinoShareSheet';
 import { BrowserTabGrid, BrowserTab } from '../components/BrowserTabGrid';
+import { BrowserBookmarksList } from '../components/BrowserBookmarksList';
+import { useBookmarks } from '../store/BookmarksStore';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -66,6 +68,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
 
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createTab(BROWSER_HOME_URL)]);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -74,6 +77,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showBookmarksList, setShowBookmarksList] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
@@ -105,6 +109,27 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     hapticImpact();
     setShowShareSheet(true);
   }, []);
+
+  const handleToggleBookmark = useCallback(() => {
+    if (!currentUrl) return;
+    hapticImpact();
+    if (isBookmarked(currentUrl)) {
+      const existing = bookmarks.find((bm) => bm.url === currentUrl);
+      if (existing) removeBookmark(existing.id);
+    } else {
+      addBookmark(currentUrl, pageTitle);
+    }
+  }, [currentUrl, pageTitle, isBookmarked, bookmarks, addBookmark, removeBookmark]);
+
+  const handleOpenBookmarks = useCallback(() => {
+    hapticImpact();
+    setShowBookmarksList(true);
+  }, []);
+
+  const handleNavigateToBookmark = useCallback((url: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, url } : t)));
+    setInputUrl(url);
+  }, [activeTabId]);
 
   const handleNavigationStateChange = useCallback(
     (navState: WebViewNavigation) => {
@@ -156,11 +181,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const handleCloseTab = useCallback(
     (id: string) => {
       setTabs((prev) => {
-        const next = prev.filter((t) => t.id !== id);
-        if (id === activeTabId) {
+        const remaining = prev.filter((t) => t.id !== id);
+        // Invariant: the browser never has zero tabs open. Closing the last one
+        // replaces it with a fresh home tab rather than leaving an empty state.
+        const next = remaining.length > 0 ? remaining : [createTab(BROWSER_HOME_URL)];
+        if (id === activeTabId || remaining.length === 0) {
           const fallback = next[0];
-          setActiveTabId(fallback?.id ?? '');
-          setInputUrl(fallback?.url ?? BROWSER_HOME_URL);
+          setActiveTabId(fallback.id);
+          setInputUrl(fallback.url);
         }
         return next;
       });
@@ -237,12 +265,30 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           <Ionicons name="refresh" size={22} color={BROWSER_ACCENT} />
         </Pressable>
         <Pressable
+          onPress={handleToggleBookmark}
+          hitSlop={8}
+          accessibilityLabel={isBookmarked(currentUrl) ? 'Remove bookmark' : 'Add bookmark'}
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isBookmarked(currentUrl) ? 'star' : 'star-outline'}
+            size={22}
+            color={BROWSER_ACCENT}
+          />
+        </Pressable>
+        <Pressable
           onPress={handleShowTabGrid}
           hitSlop={8}
           accessibilityLabel="Tabs"
           accessibilityRole="button"
+          style={styles.tabsButton}
         >
           <Ionicons name="albums-outline" size={22} color={BROWSER_ACCENT} />
+          <View style={styles.tabsBadge}>
+            <Text testID="browser-tabs-badge" style={styles.tabsBadgeText}>
+              {String(tabs.length)}
+            </Text>
+          </View>
         </Pressable>
         <Pressable
           onPress={handleShare}
@@ -327,7 +373,22 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
             style={{ opacity: canGoForward ? 1 : 0.3 }}
           />
         </Pressable>
+        <Pressable
+          onPress={handleOpenBookmarks}
+          hitSlop={8}
+          accessibilityLabel="Bookmarks"
+          accessibilityRole="button"
+        >
+          <Ionicons name="bookmark-outline" size={24} color={BROWSER_ACCENT} />
+        </Pressable>
       </View>
+
+      <BrowserBookmarksList
+        visible={showBookmarksList}
+        bookmarks={bookmarks}
+        onClose={() => setShowBookmarksList(false)}
+        onNavigate={handleNavigateToBookmark}
+      />
     </View>
   );
 }
@@ -360,6 +421,22 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
     progressTrack: { height: 2, backgroundColor: 'transparent' },
     progressBar: { height: 2, backgroundColor: BROWSER_ACCENT },
     webview: { flex: 1 },
+    tabsButton: { justifyContent: 'center', alignItems: 'center' },
+    tabsBadge: {
+      minWidth: 16,
+      paddingHorizontal: 3,
+      borderRadius: 8,
+      backgroundColor: BROWSER_ACCENT,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 1,
+    },
+    tabsBadgeText: {
+      ...Typography.caption2,
+      color: '#FFFFFF',
+      fontWeight: '700',
+      textAlign: 'center',
+    },
     bottomToolbar: {
       position: 'absolute',
       left: 0,

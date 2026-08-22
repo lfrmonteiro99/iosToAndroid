@@ -39,6 +39,7 @@ import { useApps, InstalledApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { Shape } from '../theme/CupertinoTheme';
 import { useDevice } from '../store/DeviceStore';
 import { useFolders, AppFolder } from '../store/FoldersStore';
 import {
@@ -57,15 +58,19 @@ import { NotificationCenterOverlay } from '../components/NotificationCenterOverl
 import { SpotlightReveal } from '../components/SpotlightReveal';
 import { AppLaunchOverlay } from '../components/AppLaunchOverlay';
 import type { LaunchBounds } from '../components/AppLaunchOverlay';
-import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
+import { zones, gestureConfig, dpPerMsToPtPerSec, springForAppLaunchDuration } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { launcherIconPress } from '../theme/springPresets';
+import { CUPERTINO_PRESS_SCALE } from '../hooks/useCupertinoPress';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import { markGridVisible, markWarmStartBegin } from '../utils/perfMetrics';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
+import { clampWithRubberBand } from '../theme/motion';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -73,16 +78,24 @@ import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+// Default geometry (4 cols, scale 1) — dock, folder-overlay icons, and this
+// module's own exports intentionally stay pinned to this regardless of the
+// user's grid density settings (issue #503). The actual home-screen grid
+// derives its live geometry from settings inside LauncherHomeScreen() below
+// via `gridGeometry` (computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale)).
 const GRID_GEOMETRY = computeLauncherGridGeometry(SCREEN_WIDTH);
-const COLS = GRID_GEOMETRY.cols;
-const ROWS = 6;
-const APPS_PER_PAGE = COLS * ROWS; // 24
 // Derivados da largura do ecrã (§2) — ver src/utils/launcherGridGeometry.ts.
 export const ICON_SIZE = GRID_GEOMETRY.iconSize;
 export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
 export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
-const CELL_WIDTH = GRID_GEOMETRY.cellWidth;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
+// #501: o dock não tem label por baixo do ícone (ao contrário da grelha), por
+// isso a sua altura visual é ICON_SIZE + este padding * 2, nunca um número
+// escolhido à parte — a 393dp dá 60 + 18*2 = 96, batendo com a §2 ("Dock:
+// altura ≈96") e escalando com o ícone em qualquer outra largura.
+export const DOCK_VERTICAL_PADDING = 18;
+// §2: "Dock: inset lateral" = 10.
+export const DOCK_HORIZONTAL_INSET = 10;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -107,6 +120,26 @@ export function computeWallpaperTranslateX(
   'worklet';
   const progress = Math.min(1, Math.max(0, scrollX / Math.max(1, maxScrollX)));
   return overhang * (1 - 2 * progress);
+}
+
+// Rubber-band overscroll da paginação (#489, §3.3).
+//
+// A `ScrollView` do Android não reporta um offset proporcional ao arrasto para
+// além do limite (`View.overScrollBy` limita o desvio a
+// `ViewConfiguration.getScaledOverscrollDistance()`, uma constante pequena), por
+// isso a resistência elástica não pode vir de `onScroll`. Vem da distância real
+// do dedo (`translationX` de um `Gesture.Pan`) convertida pela fórmula pura de
+// `src/theme/motion.ts` (#488).
+//
+// `dimension` é a largura da página (cada página mede exactamente SCREEN_WIDTH),
+// o que dá o mesmo limite assimptótico (`dimension / RUBBER_C`) do UIScrollView.
+export function computePagerRubberBandOffset(
+  translationX: number,
+  dimension: number,
+): number {
+  // Corre dentro de `.onUpdate` / `useAnimatedStyle`, ou seja na thread de UI.
+  'worklet';
+  return clampWithRubberBand(translationX, 0, 0, dimension);
 }
 
 // Built-in app routing: packageName → navigation screen name
@@ -272,16 +305,50 @@ type MeasureBounds = () => Promise<LaunchBounds | undefined>;
 interface AppIconProps {
   app: InstalledApp;
   cellWidth: number;
-  onPress: (measure: MeasureBounds) => void;
-  onLongPress: () => void;
+  onPress: (app: InstalledApp, measure: MeasureBounds) => void;
+  onLongPress: (app: InstalledApp) => void;
   isJiggling?: boolean;
-  onDelete?: () => void;
+  onDelete?: (app: InstalledApp) => void;
   badge?: number;
   textScale?: number;
+  /** Icon square side, in dp. Defaults to the fixed 393dp-reference size so
+   * dock and folder-overlay call sites (unaffected by grid density, #503)
+   * keep their existing look without passing this explicitly. */
+  iconSize?: number;
+  iconRadius?: number;
+  /** Whether the app name renders under the icon (issue #503). #501: the dock
+   * reuses AppIcon but has no name label under the icon. */
+  showLabel?: boolean;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
+// React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
+// e voltava a chamar useAnimatedStyle/useSharedValue — sempre que
+// LauncherHomeScreen re-renderizava por qualquer motivo, incluindo um
+// simples avanço de página (setCurrentPage). `onPress`/`onLongPress`/`onDelete`
+// recebem agora `app` como argumento em vez de o capturarem por closure, para
+// que o pai possa passar a mesma referência de função (useCallback) a todas
+// as instâncias em vez de criar uma arrow function nova por ícone a cada render
+// — sem isso o memo não teria qualquer efeito, porque a prop `onPress` nunca
+// seria igual à do render anterior.
+const AppIcon = React.memo(function AppIcon({
+  app,
+  cellWidth,
+  onPress,
+  onLongPress,
+  isJiggling,
+  onDelete,
+  badge,
+  textScale = 1,
+  iconSize = ICON_SIZE,
+  iconRadius = ICON_RADIUS,
+  showLabel = true,
+}: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
+  // Label block (margin + text line) measured at the 393dp reference so the
+  // default (cols=4, scale=1, labels on) cell height matches the historical
+  // fixed 88 exactly: 5 (paddingTop) + 60 (iconSize) + 23 = 88.
+  const wrapperHeight = 5 + iconSize + (showLabel ? 23 : 0);
+  const iconBoxSize = { width: iconSize, height: iconSize, borderRadius: iconRadius };
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
   const iconRef = useRef<View>(null);
@@ -307,8 +374,12 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   }), []);
 
   const handlePress = useCallback(() => {
-    onPress(measureBounds);
-  }, [onPress, measureBounds]);
+    onPress(app, measureBounds);
+  }, [onPress, app, measureBounds]);
+
+  const handleLongPress = useCallback(() => {
+    onLongPress(app);
+  }, [onLongPress, app]);
 
   useEffect(() => {
     if (isJiggling) {
@@ -335,23 +406,26 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   const handlePressIn = useCallback(() => {
     if (isJiggling) return;
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
+    // §3.2 shared press scale (issue #496). Was an ad hoc 0.85; the icon keeps
+    // its own shared value because the press scale is composed with the jiggle
+    // rotation in the same animated style.
+    pressScale.value = withSpring(CUPERTINO_PRESS_SCALE, launcherIconPress);
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [isJiggling, pressScale]);
 
   const handlePressOut = useCallback(() => {
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(1.0, { damping: 12, stiffness: 200 });
+    pressScale.value = withSpring(1.0, launcherIconPress);
   }, [pressScale]);
 
   return (
     <Pressable
       ref={iconRef}
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }, !showLabel && styles.appIconWrapperCompact]}
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      onLongPress={onLongPress}
+      onLongPress={handleLongPress}
       accessibilityLabel={`Open ${app.name}`}
       accessibilityRole="button"
     >
@@ -359,26 +433,28 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
         {virtualCfg ? (
           virtualCfg.gradient ? (
             <LinearGradient
+              testID={`app-icon-box-${app.packageName}`}
               colors={virtualCfg.gradient}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
-              style={styles.appIconPlaceholder}
+              style={[styles.appIconPlaceholder, iconBoxSize]}
             >
               <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
             </LinearGradient>
           ) : (
-            <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
+            <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize, { backgroundColor: virtualCfg.bg }]}>
               <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
             </View>
           )
         ) : app.icon ? (
           <Image
+            testID={`app-icon-box-${app.packageName}`}
             source={{ uri: app.icon }}
-            style={styles.appIconImage}
+            style={[styles.appIconImage, iconBoxSize]}
             resizeMode="contain"
           />
         ) : (
-          <View style={styles.appIconPlaceholder}>
+          <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize]}>
             <Ionicons name="apps" size={28} color="#fff" />
           </View>
         )}
@@ -386,7 +462,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           <View style={{
             position: 'absolute',
             top: 0,
-            right: (cellWidth - ICON_SIZE) / 2 - 4,
+            right: (cellWidth - iconSize) / 2 - 4,
             backgroundColor: '#FF3B30',
             borderRadius: 9,
             minWidth: 18,
@@ -407,7 +483,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
             style={styles.jiggleDeleteBtn}
             onPress={(e) => {
               e.stopPropagation?.();
-              onDelete?.();
+              onDelete?.(app);
             }}
             hitSlop={4}
             accessibilityLabel={`Remove ${app.name}`}
@@ -417,12 +493,14 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           </Pressable>
         )}
       </Animated.View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
-        {app.name}
-      </Text>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
+          {app.name}
+        </Text>
+      )}
     </Pressable>
   );
-}
+});
 
 interface PageDotsProps {
   total: number;
@@ -458,42 +536,78 @@ type GridItem =
 // FolderIcon
 // ---------------------------------------------------------------------------
 
-function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
+// React.memo (#518): mesma razão que AppIcon acima. `onPress` recebe `folder`
+// como argumento em vez de o capturar por closure, para o pai poder passar
+// um useCallback estável a todas as instâncias.
+const FolderIcon = React.memo(function FolderIcon({
+  folder,
+  cellWidth,
+  apps,
+  onPress,
+  onLongPress,
+  textScale = 1,
+  iconSize = ICON_SIZE,
+  iconRadius = ICON_RADIUS,
+  showLabel = true,
+}: {
   folder: AppFolder;
   cellWidth: number;
   apps: InstalledApp[];
-  onPress: () => void;
+  onPress: (folder: AppFolder) => void;
   onLongPress: () => void;
   textScale?: number;
+  iconSize?: number;
+  iconRadius?: number;
+  showLabel?: boolean;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean)
     .slice(0, 9) as InstalledApp[];
 
+  const handlePress = useCallback(() => {
+    onPress(folder);
+  }, [onPress, folder]);
+
+  const wrapperHeight = 5 + iconSize + (showLabel ? 23 : 0);
+  // Mini-icons scale with the folder icon so they never overflow it — the
+  // folder box itself always equals iconSize (issue #503: more grid columns
+  // shrink the cell, and a fixed 60dp folder icon would then overlap the
+  // next column).
+  const miniSize = Math.max(6, Math.round(iconSize * (14 / 60)));
+  const miniRadius = Math.max(1, Math.round(miniSize * (3 / 14)));
+
   return (
-    <Pressable
-      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
-      onPress={onPress}
+    <CupertinoPressable
+      style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }]}
+      onPress={handlePress}
       onLongPress={onLongPress}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
     >
-      <View style={[styles.folderIcon, { backgroundColor: folder.color }]}>
+      <View
+        testID={`folder-icon-box-${folder.id}`}
+        style={[
+          styles.folderIcon,
+          { width: iconSize, height: iconSize, borderRadius: iconRadius, backgroundColor: folder.color },
+        ]}
+      >
         <View style={styles.folderGrid}>
           {folderApps.map((app, i) =>
             app?.icon ? (
-              <Image key={i} source={{ uri: app.icon }} style={styles.folderMiniIcon} />
+              <Image key={i} source={{ uri: app.icon }} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }]} />
             ) : (
-              <View key={i} style={[styles.folderMiniIcon, { backgroundColor: 'rgba(255,255,255,0.3)' }]} />
+              <View key={i} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius, backgroundColor: 'rgba(255,255,255,0.3)' }]} />
             )
           )}
         </View>
       </View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
-    </Pressable>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
+      )}
+    </CupertinoPressable>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // FolderOverlay
@@ -669,6 +783,17 @@ export function LauncherHomeScreen() {
   const colors = launcherTheme.colors;
   const alert = useAlert();
 
+  // Grid density (issue #503): columns/icon-scale reshape the geometry, so
+  // they're derived per-render from settings instead of the module-level
+  // defaults above (which stay 4 cols / scale 1, for callers — dock, folder
+  // overlay, the geometry test module-export check — that intentionally
+  // don't follow user density preferences).
+  const gridGeometry = useMemo(
+    () => computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale),
+    [settings.gridColumns, settings.iconSizeScale],
+  );
+  const appsPerPage = gridGeometry.cols * settings.gridRows;
+
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
 
@@ -704,6 +829,13 @@ export function LauncherHomeScreen() {
     phase: 'expand' | 'collapse';
   } | null>(null);
 
+  // Spring physics for the icon-expand overlay, derived from the user's
+  // chosen appLaunchDurationMs (#512 §6.3) — still a spring at any duration.
+  const appLaunchSpringConfig = useMemo(
+    () => springForAppLaunchDuration(settings.appLaunchDurationMs),
+    [settings.appLaunchDurationMs],
+  );
+
   // Fires exactly when the expand spring settles — this is the intent trigger
   // point, not a setTimeout guess (§6.3). A failed launch collapses the
   // overlay back to the icon instead of leaving it stuck full-screen.
@@ -736,9 +868,19 @@ export function LauncherHomeScreen() {
       return;
     }
     // No measure fn (folder icons open inside a Modal — a separate native
-    // window that can't host a screen-spanning overlay) or reduceMotion:
-    // launch immediately, no expand, no measurement round-trip at all.
-    if (!measure || reduceMotion) {
+    // window that can't host a screen-spanning overlay), reduceMotion, or
+    // appLaunchAnimation off: launch immediately, no expand, no measurement
+    // round-trip at all.
+    //
+    // Precedence (#512 §6.3): reduceMotion — the stand-in for the future
+    // `motionIntensity: 'off'` (epic #467, not yet in SettingsStore) — always
+    // wins and disables the expand regardless of appLaunchAnimation.
+    // appLaunchAnimation: false only disables this one animation and leaves
+    // everything else reduceMotion also gates untouched. Either condition
+    // alone is enough to skip the overlay; both route through launchApp,
+    // which is where LauncherModule.kt's Android transition suppression
+    // lives (unconditional there), so it is never affected by this choice.
+    if (!measure || reduceMotion || !settings.appLaunchAnimation) {
       launchApp(app.packageName);
       return;
     }
@@ -749,7 +891,7 @@ export function LauncherHomeScreen() {
         launchApp(app.packageName);
       }
     });
-  }, [navigation, launchApp, reduceMotion]);
+  }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -782,6 +924,20 @@ export function LauncherHomeScreen() {
   // Mirror of `canSpotlight` (computed from React state further below) so
   // worklets can gate the gesture without touching JS state.
   const canSpotlightShared = useSharedValue(true);
+
+  // Rubber-band overscroll das bordas do pager (#489). Dois SharedValues, um por
+  // borda: o conteúdo da página activa desloca-se pela curva da §3.3 enquanto o
+  // dedo arrasta para fora dos limites, e volta a 0 com mola ao soltar.
+  const firstPageOverscrollX = useSharedValue(0);
+  const lastPageOverscrollX = useSharedValue(0);
+
+  const firstPageOverscrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: firstPageOverscrollX.value }],
+  }));
+  const lastPageOverscrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: lastPageOverscrollX.value }],
+  }));
+
 
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
@@ -899,6 +1055,24 @@ export function LauncherHomeScreen() {
     hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     openActionSheet(app);
   }, [isJiggling, openActionSheet]);
+
+  // Stable across renders (#518) — passadas directamente a AppIcon/FolderIcon
+  // em vez de uma arrow function nova por ícone a cada render, para que
+  // React.memo consiga mesmo evitar o re-render em transições de página.
+  const handleDeleteApp = useCallback((app: InstalledApp) => {
+    removeFromHome(app.packageName);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, [removeFromHome]);
+
+  const handleOpenFolder = useCallback((folder: AppFolder) => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setOpenFolder(folder);
+  }, []);
+
+  const handleFolderLongPress = useCallback(() => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsJiggling(true);
+  }, []);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -1050,15 +1224,27 @@ export function LauncherHomeScreen() {
     return items;
   }, [nonDockApps, dockApps, folders]);
 
-  // Paginate grid items
-  const pages: GridItem[][] = [];
-  for (let i = 0; i < gridItems.length; i += APPS_PER_PAGE) {
-    pages.push(gridItems.slice(i, i + APPS_PER_PAGE));
-  }
-  // Ensure at least one page
-  if (pages.length === 0) {
-    pages.push([]);
-  }
+  // Paginate grid items — memoizado (#518): sem isto, este array era
+  // recriado em TODO o render (incluindo o causado por um simples avanço de
+  // página via setCurrentPage), o que por si só invalidava qualquer
+  // memoização de AppIcon/FolderIcon a jusante — `pages.map` produzia
+  // sempre uma árvore de elementos nova, mesmo quando gridItems não mudou.
+  // Slicing the same flat, order-stable `gridItems` list at a different chunk
+  // size (appsPerPage derives from settings, issue #503) re-packs pages
+  // without ever reordering an app — there is no per-page stored position to
+  // migrate (issue #503).
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const pages: GridItem[][] = useMemo(() => {
+    const out: GridItem[][] = [];
+    for (let i = 0; i < gridItems.length; i += appsPerPage) {
+      out.push(gridItems.slice(i, i + appsPerPage));
+    }
+    // Ensure at least one page
+    if (out.length === 0) {
+      out.push([]);
+    }
+    return out;
+  }, [gridItems, appsPerPage]);
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
@@ -1223,6 +1409,22 @@ export function LauncherHomeScreen() {
     return options;
   })();
 
+  // Borda da última página (App Library) — #489. Direcção/página que nenhum
+  // outro gesto reclama: `activeOffsetX([-20, Infinity])` activa só para
+  // arrastos para a ESQUERDA, e só na última página, por isso a paginação
+  // normal do `ScrollView` fica intacta em todas as outras páginas.
+  const lastPageRubberBandGesture = Gesture.Pan()
+    .enabled(currentPage === totalPages - 1)
+    .activeOffsetX([-20, Infinity])
+    .onUpdate((event) => {
+      'worklet';
+      lastPageOverscrollX.value = computePagerRubberBandOffset(event.translationX, SCREEN_WIDTH);
+    })
+    .onFinalize(() => {
+      'worklet';
+      lastPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
+    });
+
   // Right-swipe on the first home page → Today View (#455).
   //
   // TodayViewScreen was registered in RootStackParamList and given a
@@ -1237,16 +1439,28 @@ export function LauncherHomeScreen() {
   const todayViewGesture = Gesture.Pan()
     .enabled(canSpotlight && currentPage === 0)
     .activeOffsetX([-Infinity, 20])
+    .onUpdate((event) => {
+      'worklet';
+      // Resistência elástica na borda esquerda (#489). O gesto não tinha
+      // `.onUpdate`: arrastar para a direita na página 0 não dava feedback
+      // nenhum durante o arrasto. O deslocamento é sub-linear desde o primeiro
+      // pixel e satura em `SCREEN_WIDTH / RUBBER_C`.
+      firstPageOverscrollX.value = computePagerRubberBandOffset(event.translationX, SCREEN_WIDTH);
+    })
     .onEnd((event) => {
       'worklet';
       const progress = Math.max(0, event.translationX) / gestureConfig.todayViewCommitDp;
       if (commitForTodayView({ progress, velocity: 0, holdMs: 0 }) !== 'none') {
         runOnJS(navigateTo)('TodayView');
       }
+    })
+    .onFinalize(() => {
+      'worklet';
+      firstPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
   return (
-    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture)}>
+    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture, lastPageRubberBandGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
         <Animated.View
@@ -1280,14 +1494,14 @@ export function LauncherHomeScreen() {
       {!isDefaultLauncher && !isJiggling && (
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
-          <Pressable
-            style={({ pressed }) => [styles.defaultBannerButton, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
+          <CupertinoPressable
+            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
             <Text style={[styles.defaultBannerButtonText, { fontSize: 12 * textScale }]}>Set Now</Text>
-          </Pressable>
+          </CupertinoPressable>
         </View>
       )}
 
@@ -1357,9 +1571,11 @@ export function LauncherHomeScreen() {
       {/* Swipeable app pages                                                */}
       {/* ---------------------------------------------------------------- */}
       <ScrollView
+        testID="launcher-pager"
         ref={scrollViewRef}
         horizontal
         pagingEnabled
+        decelerationRate={0.998}
         showsHorizontalScrollIndicator={false}
         onScroll={handlePageScroll}
         scrollEventThrottle={16}
@@ -1369,7 +1585,10 @@ export function LauncherHomeScreen() {
         scrollEnabled={!isJiggling}
       >
         {pages.map((pageItems, pageIndex) => (
-          <View key={pageIndex} style={styles.page}>
+          <Animated.View
+            key={pageIndex}
+            style={[styles.page, { paddingHorizontal: gridGeometry.horizontalPadding }, pageIndex === 0 ? firstPageOverscrollStyle : null]}
+          >
             <View
               testID={`launcher-page-grid-${pageIndex}`}
               style={styles.pageGrid}
@@ -1388,11 +1607,14 @@ export function LauncherHomeScreen() {
                     <FolderIcon
                       key={`folder-${item.folder.id}`}
                       folder={item.folder}
-                      cellWidth={CELL_WIDTH}
+                      cellWidth={gridGeometry.cellWidth}
+                      iconSize={gridGeometry.iconSize}
+                      iconRadius={gridGeometry.iconRadius}
+                      showLabel={settings.showIconLabels}
                       apps={apps}
                       textScale={textScale}
-                      onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setOpenFolder(item.folder); }}
-                      onLongPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setIsJiggling(true); }}
+                      onPress={handleOpenFolder}
+                      onLongPress={handleFolderLongPress}
                     />
                   );
                 }
@@ -1400,29 +1622,32 @@ export function LauncherHomeScreen() {
                   <AppIcon
                     key={item.app.packageName}
                     app={item.app}
-                    cellWidth={CELL_WIDTH}
+                    cellWidth={gridGeometry.cellWidth}
+                    iconSize={gridGeometry.iconSize}
+                    iconRadius={gridGeometry.iconRadius}
+                    showLabel={settings.showIconLabels}
                     textScale={textScale}
-                    onPress={(measure) => handleAppPress(item.app, measure)}
-                    onLongPress={() => handleLongPress(item.app)}
+                    onPress={handleAppPress}
+                    onLongPress={handleLongPress}
                     isJiggling={isJiggling}
                     badge={badgeCounts[item.app.packageName]}
-                    onDelete={() => {
-                      removeFromHome(item.app.packageName);
-                      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    }}
+                    onDelete={handleDeleteApp}
                   />
                 );
               })}
             </View>
-          </View>
+          </Animated.View>
         ))}
 
         {/* App Library page — the App Library IS the last swipeable page
             (#434), rendered inline via the shared AppLibraryContent instead
             of a tap-through placeholder. */}
-        <View key="app-library" style={[styles.page, styles.appLibraryPage]}>
+        <Animated.View
+          key="app-library"
+          style={[styles.page, styles.appLibraryPage, lastPageOverscrollStyle]}
+        >
           <AppLibraryContent />
-        </View>
+        </Animated.View>
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
@@ -1454,14 +1679,12 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
-                onPress={(measure) => handleAppPress(app, measure)}
-                onLongPress={() => handleLongPress(app)}
+                showLabel={false}
+                onPress={handleAppPress}
+                onLongPress={handleLongPress}
                 isJiggling={isJiggling}
                 badge={badgeCounts[app.packageName]}
-                onDelete={() => {
-                  removeFromHome(app.packageName);
-                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                }}
+                onDelete={handleDeleteApp}
               />
             ))}
             {/* Fill empty dock slots */}
@@ -1544,6 +1767,7 @@ export function LauncherHomeScreen() {
           phase={launchTransition.phase}
           onExpandComplete={handleExpandComplete}
           onCollapseComplete={handleCollapseComplete}
+          springConfig={appLaunchSpringConfig}
         />
       )}
       </Animated.View>
@@ -1654,6 +1878,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 5,
   },
+  // #501: dock variant (showLabel=false) — no label below the icon, so the
+  // wrapper is exactly the icon's own height instead of the grid's 88.
+  appIconWrapperCompact: {
+    height: ICON_SIZE,
+    paddingTop: 0,
+  },
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
@@ -1670,14 +1900,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   appIconLabel: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 11,
     fontWeight: '500',
     color: '#ffffff',
     textAlign: 'center',
     width: '90%',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 3,
   },
 
@@ -1687,28 +1917,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
-    gap: 4,
+    gap: 9,
   },
   pageDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   pageDotFilled: {
     backgroundColor: '#ffffff',
   },
   pageDotEmpty: {
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
   // Dock
   dockOuter: {
-    paddingHorizontal: 12,
+    paddingHorizontal: DOCK_HORIZONTAL_INSET,
   },
   dockBlur: {
     overflow: 'hidden',
-    borderRadius: 22,
-    paddingVertical: 10,
+    borderRadius: Shape.dock.radius,
+    paddingVertical: DOCK_VERTICAL_PADDING,
     paddingHorizontal: 16,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
