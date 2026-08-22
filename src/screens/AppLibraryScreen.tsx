@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
@@ -192,6 +193,13 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
   const largeApps = hasQuadrant ? apps.slice(0, 3) : apps.slice(0, 4);
   const miniApps = hasQuadrant ? apps.slice(3, 3 + MAX_QUADRANT_MINIS) : [];
 
+  // DEVIATION from the scale+dim primitive: the category card keeps the
+  // pressed-background convention (§3.2 convention 4), now using the shared
+  // token. Two reasons — a large tile that shrinks reads wrong next to the
+  // launcher grid, and the App Library is mounted inside the launcher pager,
+  // where an animated style per card would make a page transition's
+  // useAnimatedStyle cost grow with the number of categories (the exact
+  // invariant #518 protects). The ad hoc 0.8 opacity is gone either way.
   return (
     <Pressable
       onPress={onPress}
@@ -199,8 +207,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
         styles.categoryCard,
         {
           width: cardWidth,
-          backgroundColor: colors.secondarySystemGroupedBackground,
-          opacity: pressed ? 0.8 : 1,
+          backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground,
         },
       ]}
       accessibilityLabel={`${title} category, ${apps.length} app${apps.length !== 1 ? 's' : ''}`}
@@ -378,15 +385,15 @@ const SearchResults = React.memo(function SearchResults({
         />
       }
       renderItem={({ item }) => (
-        <Pressable
+        <CupertinoPressable
           onPress={() => onLaunch(item.packageName)}
-          style={({ pressed }) => [styles.searchRow, { opacity: pressed ? 0.7 : 1 }]}
+          style={styles.searchRow}
           accessibilityLabel={`Open ${item.name}, App Library`}
           accessibilityRole="button"
         >
           <AppIcon app={item} size={46} />
           <Text style={[typography.callout, styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
-        </Pressable>
+        </CupertinoPressable>
       )}
     />
   );

@@ -189,8 +189,7 @@ export function ContactDetailScreen({ navigation, route }: ContactDetailScreenPr
               style={({ pressed }) => [
                 styles.actionButton,
                 {
-                  backgroundColor: pressed ? colors.systemGray4 : colors.secondarySystemGroupedBackground,
-                  opacity: pressed ? 0.7 : 1,
+                  backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground,
                 },
               ]}
               accessibilityLabel={btn.label}

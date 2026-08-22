@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import {
   CupertinoNavigationBar,
   CupertinoSearchBar,
@@ -43,6 +44,11 @@ interface RecentLocation {
 const STORAGE_KEY = '@iostoandroid/maps_recents';
 const DEMO_BANNER_KEY = '@iostoandroid/maps_demo_dismissed';
 const MAPS_ACCENT = '#007AFF';
+
+// DEVIATION from the §3.2 default press dim (0.40) — see the call site on the
+// current-location FAB: at 0.40 a white floating button over the map reads as
+// disappearing rather than as pressed.
+const MAPS_FAB_PRESS = { opacity: 0.7 } as const;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -441,19 +447,18 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
           </View>
 
           {/* Current Location FAB */}
-          <Pressable
+          <CupertinoPressable
             onPress={handleCurrentLocation}
-            style={({ pressed }) => [
-              styles.locationButton,
-              {
-                backgroundColor: pressed ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.95)',
-              },
-            ]}
+            style={[styles.locationButton, { backgroundColor: 'rgba(255,255,255,0.95)' }]}
+            // DEVIATION: this floating action button sits on top of the map, so
+            // the default 0.40 dim would read as the button vanishing against the
+            // wallpaper. 0.70 keeps it legible while still reading as pressed.
+            pressOptions={MAPS_FAB_PRESS}
             accessibilityLabel="Current location"
             accessibilityRole="button"
           >
             <Ionicons name="navigate" size={20} color={MAPS_ACCENT} />
-          </Pressable>
+          </CupertinoPressable>
         </LinearGradient>
       </View>
 

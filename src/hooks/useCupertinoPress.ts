@@ -50,8 +50,15 @@ export interface CupertinoPressResult {
   onPressOut: () => void;
 }
 
-const DEFAULT_OPACITY = 0.4;
-const DEFAULT_SCALE = 0.96;
+/** §3.2 press dim for icon/button surfaces. Exported so non-Pressable call
+ *  sites (e.g. the launcher icon, which composes press scale with its jiggle
+ *  rotation) use the same numbers instead of their own. */
+export const CUPERTINO_PRESS_OPACITY = 0.4;
+/** §3.2 press scale. */
+export const CUPERTINO_PRESS_SCALE = 0.96;
+
+const DEFAULT_OPACITY = CUPERTINO_PRESS_OPACITY;
+const DEFAULT_SCALE = CUPERTINO_PRESS_SCALE;
 
 export function useCupertinoPress(
   enabled = true,
