@@ -73,6 +73,14 @@ export interface SettingsState {
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
+  /** Home-screen grid columns (§2 derivation, issue #503). */
+  gridColumns: 3 | 4 | 5 | 6;
+  /** Home-screen grid rows per page (issue #503). */
+  gridRows: 4 | 5 | 6 | 7;
+  /** Multiplier over the spec's 0.153 x screen-width icon size (issue #503). */
+  iconSizeScale: number;
+  /** Whether app names render under grid icons (issue #503). */
+  showIconLabels: boolean;
   /**
    * Whether the icon-expand animation plays when opening an app (§6.3).
    * Independent of `reduceMotion`: turning this off skips only the
@@ -159,6 +167,10 @@ export const DEFAULT_SETTINGS: SettingsState = {
   updateAvailable: false,
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
+  gridColumns: 4,
+  gridRows: 6,
+  iconSizeScale: 1.0,
+  showIconLabels: true,
   appLaunchAnimation: true,
   appLaunchDurationMs: 280,
   iconShape: 'squircle',
