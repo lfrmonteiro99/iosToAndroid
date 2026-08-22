@@ -742,6 +742,21 @@ export function addSpeechResultListener(
 }
 
 /**
+ * Subscribe to partial (in-flight) speech-to-text results.
+ * Fires repeatedly while the user is still speaking so callers can render a
+ * live transcript before the recognizer commits with onSpeechResult.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechPartialResultListener(
+  listener: (text: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechPartialResult', (n: { text: string }) => {
+    listener(n.text);
+  });
+  return () => sub.remove();
+}
+
+/**
  * Subscribe to speech-recognition errors emitted by the native recognizer.
  * The callback receives the error message (string).
  * Returns an unsubscribe function — call it in the useEffect cleanup.
