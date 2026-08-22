@@ -1,10 +1,13 @@
 import React from 'react';
 import * as Reanimated from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import MockNativeMethods from 'react-native/jest/MockNativeMethods';
 import { render, fireEvent, act } from '../../test-utils';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
 import * as AppsStore from '../../store/AppsStore';
 import * as GestureReduceMotionModule from '../../utils/useGestureReduceMotion';
+import * as SettingsStore from '../../store/SettingsStore';
+import { DEFAULT_SETTINGS } from '../../store/SettingsStore';
 
 // #509 §6.3: tapping an app icon must expand it to full screen from the icon's
 // own on-screen position, fire the real launch exactly when that expand spring
@@ -50,8 +53,29 @@ function mockApps(app: AppsStore.InstalledApp, launchApp = jest.fn(() => Promise
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    iconCacheSizeBytes: 0,
+    isRebuildingIconCache: false,
+    iconCacheRebuildProgress: null,
+    rebuildIconCache: jest.fn(() => Promise.resolve()),
   } as ReturnType<typeof AppsStore.useApps>);
   return launchApp;
+}
+
+// Full replacement of useSettings — mirrors the useApps() mock above so the
+// screen's OTHER settings reads (wallpaperIndex, focusMode, batteryPercentage,
+// and useGestureReduceMotion's own internal useSettings() call) keep getting
+// a complete, valid SettingsState instead of undefined field crashes.
+function mockSettings(overrides: Partial<SettingsStore.SettingsState>) {
+  jest.spyOn(SettingsStore, 'useSettings').mockReturnValue({
+    settings: { ...DEFAULT_SETTINGS, ...overrides },
+    update: jest.fn(),
+    updateMany: jest.fn(),
+    reset: jest.fn(),
+    syncFromDevice: jest.fn(() => Promise.resolve()),
+    isReady: true,
+    activeFocusMode: null,
+    setFocusMode: jest.fn(),
+  });
 }
 
 function mockMeasure(bounds: { x: number; y: number; width: number; height: number } | 'never') {
@@ -207,5 +231,75 @@ describe('LauncherHomeScreen app-launch expand transition (#509)', () => {
     });
 
     expect(queryByTestId('app-launch-overlay')).toBeNull();
+  });
+
+  // #512 §6.3: appLaunchAnimation exposes the icon-expand animation as an
+  // on/off preference, independent of reduceMotion. Two things must hold:
+  // (1) turning it off skips the JS-side overlay but still routes through
+  // launchApp — which is where the Android system-transition suppression
+  // lives (LauncherModule.kt's makeCustomAnimation(0,0), unconditional) — so
+  // disabling this animation must never let the ugly OS transition back in.
+  // (2) haptic feedback fires regardless of the setting (§3.2 regra 4).
+  describe('appLaunchAnimation setting (#512 §6.3)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('appLaunchAnimation: false launches immediately with no overlay (still suppresses the Android transition via launchApp)', () => {
+      mockSettings({ appLaunchAnimation: false });
+      mockSpringNeverSettles();
+      mockMeasure({ x: 12, y: 34, width: 60, height: 60 });
+      const launchApp = mockApps(APP);
+
+      const { getByLabelText, queryByTestId } = render(<LauncherHomeScreen />);
+      fireEvent.press(getByLabelText(`Open ${APP.name}`));
+
+      expect(launchApp).toHaveBeenCalledWith(APP.packageName);
+      expect(queryByTestId('app-launch-overlay')).toBeNull();
+    });
+
+    it('appLaunchAnimation: true (default) still shows the overlay when reduceMotion is off', async () => {
+      mockSettings({ appLaunchAnimation: true });
+      mockSpringNeverSettles();
+      mockMeasure({ x: 12, y: 34, width: 60, height: 60 });
+      mockApps(APP);
+
+      const { getByLabelText, getByTestId } = render(<LauncherHomeScreen />);
+      fireEvent.press(getByLabelText(`Open ${APP.name}`));
+      await act(async () => { await Promise.resolve(); });
+
+      expect(getByTestId('app-launch-overlay')).toBeTruthy();
+    });
+
+    it('reduceMotion wins over appLaunchAnimation: true — the future motionIntensity:"off" precedence, honoured today via reduceMotion', () => {
+      mockSettings({ appLaunchAnimation: true, reduceMotion: true });
+      mockSpringNeverSettles();
+      mockMeasure({ x: 12, y: 34, width: 60, height: 60 });
+      const launchApp = mockApps(APP);
+
+      const { getByLabelText, queryByTestId } = render(<LauncherHomeScreen />);
+      fireEvent.press(getByLabelText(`Open ${APP.name}`));
+
+      expect(launchApp).toHaveBeenCalledWith(APP.packageName);
+      expect(queryByTestId('app-launch-overlay')).toBeNull();
+    });
+
+    it('fires haptic feedback on press when appLaunchAnimation is false, same as when it is true', () => {
+      const impactSpy = jest.spyOn(Haptics, 'impactAsync').mockResolvedValue();
+      mockSettings({ appLaunchAnimation: false });
+      mockSpringNeverSettles();
+      mockMeasure({ x: 12, y: 34, width: 60, height: 60 });
+      mockApps(APP);
+
+      const { getByLabelText } = render(<LauncherHomeScreen />);
+      // Other trees left mounted by earlier tests in this file (RTL doesn't
+      // unmount between `it`s here) can pick up unrelated haptic calls of
+      // their own; clear right before the action under test so only THIS
+      // press is being measured.
+      impactSpy.mockClear();
+      fireEvent.press(getByLabelText(`Open ${APP.name}`));
+
+      expect(impactSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });

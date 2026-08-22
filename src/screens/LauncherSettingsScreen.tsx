@@ -17,6 +17,8 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoButton,
+  CupertinoSegmentedControl,
+  CupertinoSlider,
   useAlert,
 } from '../components';
 import { logger } from '../utils/logger';
@@ -61,6 +63,10 @@ const DEFAULT_DOCK = [
 const LOCK_PIN_KEY = 'lock_pin';
 const LOCK_PIN_STORAGE_KEY = '@iostoandroid/lock_pin';
 const LOCK_PIN_LEGACY_KEY = '@lock_pin';
+
+// Home-screen grid density options (issue #503).
+const GRID_COLUMN_VALUES = [3, 4, 5, 6] as const;
+const GRID_ROW_VALUES = [4, 5, 6, 7] as const;
 
 const DOCK_LABELS: Record<string, string> = {
   'com.iostoandroid.phone': 'Phone',
@@ -279,10 +285,22 @@ export function LauncherSettingsScreen() {
         <CupertinoListTile
           title="App Icon Size"
           leading={{ name: 'apps', color: '#fff', backgroundColor: colors.accent }}
-          trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>Default</Text>}
+          trailing={
+            <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+              {Math.round(settings.iconSizeScale * 100)}%
+            </Text>
+          }
           showChevron={false}
           isLast
         />
+        <View style={styles.sliderRow}>
+          <CupertinoSlider
+            value={settings.iconSizeScale}
+            onValueChange={(v) => update('iconSizeScale', v)}
+            minimumValue={0.8}
+            maximumValue={1.2}
+          />
+        </View>
       </CupertinoListSection>
 
       {/* ── Home Screen ────────────────────────────────────────── */}
@@ -313,11 +331,22 @@ export function LauncherSettingsScreen() {
           title="Show Search Label"
           leading={{ name: 'search', color: '#fff', backgroundColor: '#5AC8FA' }}
           showChevron={false}
-          isLast
           trailing={
             <CupertinoSwitch
               value={settings.showSearchLabel}
               onValueChange={(v) => update('showSearchLabel', v)}
+            />
+          }
+        />
+        <CupertinoListTile
+          title="Show App Names"
+          leading={{ name: 'text-outline', color: '#fff', backgroundColor: '#8E8E93' }}
+          showChevron={false}
+          isLast
+          trailing={
+            <CupertinoSwitch
+              value={settings.showIconLabels}
+              onValueChange={(v) => update('showIconLabels', v)}
             />
           }
         />
@@ -346,6 +375,22 @@ export function LauncherSettingsScreen() {
 
       {/* ── App Grid ───────────────────────────────────────────── */}
       <CupertinoListSection header="App Grid">
+        <View style={styles.gridControlRow}>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>Columns</Text>
+          <CupertinoSegmentedControl
+            values={GRID_COLUMN_VALUES.map(String)}
+            selectedIndex={GRID_COLUMN_VALUES.indexOf(settings.gridColumns)}
+            onChange={(i) => update('gridColumns', GRID_COLUMN_VALUES[i])}
+          />
+        </View>
+        <View style={styles.gridControlRow}>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>Rows</Text>
+          <CupertinoSegmentedControl
+            values={GRID_ROW_VALUES.map(String)}
+            selectedIndex={GRID_ROW_VALUES.indexOf(settings.gridRows)}
+            onChange={(i) => update('gridRows', GRID_ROW_VALUES[i])}
+          />
+        </View>
         <View style={styles.buttonRow}>
           <CupertinoButton
             title="Reset Home Layout"
@@ -509,6 +554,15 @@ const styles = StyleSheet.create({
   buttonRow: {
     paddingHorizontal: 16,
     paddingVertical: 4,
+  },
+  sliderRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  gridControlRow: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   modalOverlay: {
     flex: 1,

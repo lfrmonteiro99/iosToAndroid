@@ -259,6 +259,73 @@ describe('useCupertinoPress — disabled (enabled=false)', () => {
   });
 });
 
+describe('useCupertinoPress — pressFeedback modes (#497)', () => {
+  it('scale-opacity: scale 0.96 + opacity 0.40 when fully pressed (unchanged default)', () => {
+    const { result, rerender } = renderHook(
+      () => useCupertinoPress(true, { pressFeedback: 'scale-opacity', reduceMotion: false }),
+      { wrapper },
+    );
+    act(() => {
+      result.current.onPressIn();
+      resetRender();
+      rerender({});
+    });
+
+    const style = readStyle(result.current.style);
+    expect(style.transform?.[0].scale).toBeCloseTo(DEFAULT_SCALE, 5);
+    expect(style.opacity).toBeCloseTo(DEFAULT_OPACITY, 5);
+  });
+
+  it('opacity: dims to 0.40 but omits the scale transform when fully pressed', () => {
+    const { result, rerender } = renderHook(
+      () => useCupertinoPress(true, { pressFeedback: 'opacity', reduceMotion: false }),
+      { wrapper },
+    );
+    act(() => {
+      result.current.onPressIn();
+      resetRender();
+      rerender({});
+    });
+
+    const style = readStyle(result.current.style);
+    expect(style.transform).toBeUndefined();
+    expect(style.opacity).toBeCloseTo(DEFAULT_OPACITY, 5);
+  });
+
+  it('none: stays at rest (scale 1 / opacity 1) even when fully pressed', () => {
+    const { result, rerender } = renderHook(
+      () => useCupertinoPress(true, { pressFeedback: 'none', reduceMotion: false }),
+      { wrapper },
+    );
+    act(() => {
+      result.current.onPressIn();
+      resetRender();
+      rerender({});
+    });
+
+    const style = readStyle(result.current.style);
+    expect(style.transform?.[0].scale).toBeCloseTo(1, 5);
+    expect(style.opacity).toBeCloseTo(1, 5);
+  });
+
+  it('none: an opacityOnly surface (list row) also stays at opacity 1, still omits transform', () => {
+    const { result, rerender } = renderHook(
+      () => useCupertinoPress(true, { pressFeedback: 'none', opacityOnly: true, reduceMotion: false }),
+      { wrapper },
+    );
+    act(() => {
+      result.current.onPressIn();
+      resetRender();
+      rerender({});
+    });
+
+    const style = readStyle(result.current.style);
+    expect(style.transform).toBeUndefined();
+    expect(style.opacity).toBeCloseTo(1, 5);
+  });
+
+});
+
 describe('useCupertinoPress — double press / release ordering', () => {
   it('survives press, press again, then release without throwing', () => {
     const { result, rerender } = renderHook(

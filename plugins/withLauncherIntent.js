@@ -20,6 +20,10 @@ module.exports = function withLauncherIntent(config) {
 
     if (!mainActivity) return config;
 
+    // Add stateNotNeeded and excludeFromRecents attributes per §6.1
+    mainActivity.$["android:stateNotNeeded"] = "true";
+    mainActivity.$["android:excludeFromRecents"] = "true";
+
     // Ensure intent-filter array exists
     if (!mainActivity["intent-filter"]) {
       mainActivity["intent-filter"] = [];

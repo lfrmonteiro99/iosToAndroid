@@ -285,6 +285,11 @@ jest.mock('./modules/launcher-module/src', () => ({
   addHomePressedListener: jest.fn(() => jest.fn()),
   // AppsProvider subscribes to package install/remove/replace events (#485).
   addPackageChangedListener: jest.fn(() => jest.fn()),
+  // SiriScreen subscribes to these when the mic is tapped. Return a no-op
+  // unsubscribe so mount/unmount cycles don't blow up in tests.
+  addSpeechResultListener: jest.fn(() => jest.fn()),
+  addSpeechPartialResultListener: jest.fn(() => jest.fn()),
+  addSpeechErrorListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
@@ -321,11 +326,16 @@ jest.mock('./modules/launcher-module/src', () => ({
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
+    clearIconCache: jest.fn(() => Promise.resolve(0)),
+    getIconCacheSizeBytes: jest.fn(() => Promise.resolve(0)),
     getInstalledKeyboards: jest.fn(() => Promise.resolve([])),
     getRingtone: jest.fn(() => Promise.resolve('')),
     canWriteSystemSettings: jest.fn(() => Promise.resolve(false)),
     openWriteSettingsAccess: jest.fn(() => Promise.resolve(true)),
     setRingtone: jest.fn(() => Promise.resolve(false)),
+    startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
   },
 }));
 

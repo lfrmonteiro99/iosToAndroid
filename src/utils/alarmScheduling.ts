@@ -175,13 +175,19 @@ export async function rescheduleOneShotAlarms(): Promise<Alarm[] | null> {
  * degrades to an empty id list and the alarm is still persisted enabled, the same
  * state rescheduleOneShotAlarms already tolerates.
  */
+// Monotonic suffix keeps ids distinct when two quick alarms are created within
+// the same millisecond (back-to-back assistant commands): Date.now() alone
+// collides there, and duplicate ids would make cancelling/toggling one alarm
+// affect the other.
+let quickAlarmSeq = 0;
+
 export async function createQuickAlarm(
   hour: number,
   minute: number,
   label?: string,
 ): Promise<Alarm> {
   const alarm: Alarm = {
-    id: Date.now().toString(),
+    id: `${Date.now()}-${quickAlarmSeq++}`,
     hour,
     minute,
     label: label?.trim() || 'Alarm',

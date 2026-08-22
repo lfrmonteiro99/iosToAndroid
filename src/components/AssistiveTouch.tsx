@@ -13,6 +13,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { GlassSurface } from './GlassSurface';
+import { useAlert } from './AlertProvider';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
@@ -21,12 +22,32 @@ import {
   MenuItemId,
 } from '../store/AssistiveTouchStore';
 import { useTheme } from '../theme/ThemeContext';
+import { CupertinoPressable } from './CupertinoPressable';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 import { IDLE_DIM_MS } from '../utils/gestureConfig';
+import { assistiveTouchSnap, assistiveTouchMenuReveal } from '../theme/springPresets';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const SNAP_SPRING = { damping: 18, stiffness: 220 } as const;
+const SNAP_SPRING = assistiveTouchSnap;
+
+/**
+ * Radial-menu popover geometry. Shared by the anchor maths and the grid styles
+ * so the cells provably fit: the popover clips its overflow, so a cell size the
+ * content box cannot hold silently drops menu items instead of wrapping them
+ * into view.
+ */
+export const MENU_GEOMETRY = {
+  /** Popover box side; the menu is square so the ring stays circular. */
+  size: 240,
+  padding: 10,
+  /** Item badge side (icon + label bubble). */
+  cellSize: 62,
+  /** Ring radius from the popover centre to each item's centre. */
+  radius: 78,
+  /** Top-level menu capacity, mirrored by the settings screen. */
+  maxItems: 6,
+} as const;
 
 // ─── Menu item catalog ──────────────────────────────────────────────────────
 
@@ -38,17 +59,22 @@ interface MenuItemDef {
 }
 
 const MENU_CATALOG: Record<MenuItemId, MenuItemDef> = {
-  home:             { id: 'home',             label: 'Home',           icon: 'home',               action: 'home' },
-  multitask:        { id: 'multitask',        label: 'App Switcher',   icon: 'copy-outline',       action: 'multitask' },
-  notifications:    { id: 'notifications',    label: 'Notifications',  icon: 'notifications',      action: 'notifications' },
-  controlCenter:    { id: 'controlCenter',    label: 'Control Centre', icon: 'options',            action: 'controlCenter' },
-  spotlight:        { id: 'spotlight',        label: 'Spotlight',      icon: 'search',             action: 'spotlight' },
-  settings:         { id: 'settings',         label: 'Settings',       icon: 'settings-sharp',     action: 'settings' },
-  siri:             { id: 'siri',             label: 'Siri',           icon: 'mic',                action: 'siri' },
-  screenshot:       { id: 'screenshot',       label: 'Screenshot',     icon: 'camera-outline',     action: 'screenshot' },
-  lock:             { id: 'lock',             label: 'Lock Screen',    icon: 'lock-closed',        action: 'lock' },
-  reachability:     { id: 'reachability',     label: 'Reachability',   icon: 'arrow-down',         action: 'reachability' },
-  hideTemporarily:  { id: 'hideTemporarily',  label: 'Hide',           icon: 'eye-off',            action: 'hideTemporarily' },
+  home:             { id: 'home',             label: 'Home',              icon: 'home',                     action: 'home' },
+  multitask:        { id: 'multitask',        label: 'App Switcher',      icon: 'copy-outline',             action: 'multitask' },
+  notifications:    { id: 'notifications',    label: 'Notification Centre', icon: 'notifications',         action: 'notifications' },
+  controlCenter:    { id: 'controlCenter',    label: 'Control Centre',    icon: 'options',                  action: 'controlCenter' },
+  spotlight:        { id: 'spotlight',        label: 'Spotlight',         icon: 'search',                   action: 'spotlight' },
+  settings:         { id: 'settings',         label: 'Settings',          icon: 'settings-sharp',           action: 'settings' },
+  siri:             { id: 'siri',             label: 'Siri',              icon: 'mic',                      action: 'siri' },
+  screenshot:       { id: 'screenshot',       label: 'Screenshot',        icon: 'camera-outline',           action: 'screenshot' },
+  lock:             { id: 'lock',             label: 'Lock Screen',       icon: 'lock-closed',              action: 'lock' },
+  reachability:     { id: 'reachability',     label: 'Reachability',      icon: 'arrow-down',               action: 'reachability' },
+  hideTemporarily:  { id: 'hideTemporarily',  label: 'Hide',              icon: 'eye-off',                  action: 'hideTemporarily' },
+  camera:           { id: 'camera',           label: 'Camera',            icon: 'camera',                   action: 'camera' },
+  flashlight:       { id: 'flashlight',       label: 'Torch',             icon: 'flashlight',               action: 'flashlight' },
+  accessibility:    { id: 'accessibility',    label: 'Accessibility',     icon: 'accessibility',            action: 'accessibility' },
+  device:           { id: 'device',           label: 'Device',            icon: 'phone-portrait-outline',   action: 'device' },
+  custom:           { id: 'custom',           label: 'Custom',            icon: 'star',                     action: 'custom' },
 };
 
 // ─── Context-aware menu overrides ───────────────────────────────────────────
@@ -99,6 +125,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     reachabilityActive,
     setReachabilityActive,
   } = useAssistiveTouch();
+  const alert = useAlert();
 
   // ── Current route (for context menu + auto-hide) ──────────────────────────
   // Starts undefined: reading getCurrentRoute() before the NavigationContainer
@@ -173,7 +200,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     fullyOpenTimer.current = setTimeout(() => setFullyOpen(true), 150);
     menuScale.value = reduceMotion
       ? withTiming(1, { duration: 150 })
-      : withSpring(1, { damping: 14, stiffness: 220 });
+      : withSpring(1, assistiveTouchMenuReveal);
     menuOpacity.value = withTiming(1, { duration: 160 });
     wake();
   }, [menuScale, menuOpacity, wake, hapticFeedback, reduceMotion]);
@@ -242,12 +269,57 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
         case 'hideTemporarily':
           hideTemporarily(10000);
           break;
+        case 'camera':          navigate('Camera'); break;
+        case 'accessibility':   navigate('Accessibility'); break;
+        case 'flashlight': {
+          try {
+            const mod = (await import('../../modules/launcher-module/src')).default;
+            const on = await mod.isFlashlightOn();
+            await mod.setFlashlight(!on);
+          } catch { /* torch may be unavailable */ }
+          break;
+        }
+        case 'volumeUp':
+        case 'volumeDown': {
+          try {
+            const mod = (await import('../../modules/launcher-module/src')).default;
+            const v = await mod.getVolume();
+            const next = action === 'volumeUp' ? Math.min(1, v + 0.1) : Math.max(0, v - 0.1);
+            await mod.setVolume(next);
+          } catch { /* volume rail unavailable */ }
+          break;
+        }
+        case 'mute': {
+          try {
+            const mod = (await import('../../modules/launcher-module/src')).default;
+            await mod.setVolume(0);
+          } catch { /* unavailable */ }
+          break;
+        }
+        case 'device':
+          // iOS's Device is a sub-menu. We serve the same actions as a
+          // Cupertino alert so a second tap can still commit one of them.
+          alert('Device', undefined, [
+            { text: 'Lock Screen',   onPress: () => runAction('lock') },
+            { text: 'Volume Up',     onPress: () => runAction('volumeUp') },
+            { text: 'Volume Down',   onPress: () => runAction('volumeDown') },
+            { text: 'Mute',          onPress: () => runAction('mute') },
+            { text: 'Torch',         onPress: () => runAction('flashlight') },
+            { text: 'Cancel',        style: 'cancel' },
+          ]);
+          break;
+        case 'custom':
+          alert('Custom', 'Custom gestures are not supported yet.');
+          break;
         case 'none':
         default:
           break;
       }
     },
-    [openMenu, closeMenu, navigate, reachabilityActive, setReachabilityActive, hideTemporarily, hapticFeedback],
+    // runAction references itself for the device sub-menu; the ref is late-
+    // bound so this stays a valid stable useCallback dep list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [openMenu, closeMenu, navigate, reachabilityActive, setReachabilityActive, hideTemporarily, hapticFeedback, alert],
   );
 
   // ── Drag gesture ──────────────────────────────────────────────────────────
@@ -353,9 +425,9 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
       // Prepend the override, drop any pre-existing entry with the same id
       const override = CONTEXT_OVERRIDES[currentRoute] as MenuItemDef;
       const filtered = items.filter((m) => m.id !== override.id);
-      return [override, ...filtered].slice(0, 6);
+      return [override, ...filtered].slice(0, MENU_GEOMETRY.maxItems);
     }
-    return items.slice(0, 6);
+    return items.slice(0, MENU_GEOMETRY.maxItems);
   }, [menuItems, contextAwareMenu, currentRoute]);
 
   if (!visible) return null;
@@ -424,23 +496,24 @@ interface RadialMenuProps {
 }
 
 function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: RadialMenuProps) {
-  // The menu is a 2x3 grid popover, not a true radial layout — iOS
-  // AssistiveTouch uses a grid and it tests better at small scale. We
-  // position the popover to the side of the button that has more space.
+  // iOS AssistiveTouch arranges items around a central point, not in a
+  // grid — items sit on a circle so a 6-item menu reads as a hexagon
+  // instead of a truncated 2×3 rectangle.
   const anchorStyle = useAnimatedStyle(() => {
     const cx = anchorX.value + buttonSize / 2;
     const cy = anchorY.value + buttonSize / 2;
     const preferLeft = cx > SCREEN_W / 2;
-    const popWidth = 240;
-    const popHeight = 200;
+    const pop = MENU_GEOMETRY.size;
     const gap = 14;
-    const x = preferLeft ? cx - popWidth - gap : cx + gap;
-    const y = Math.max(40, Math.min(SCREEN_H - popHeight - 40, cy - popHeight / 2));
+    const x = preferLeft ? cx - pop - gap : cx + gap;
+    const y = Math.max(40, Math.min(SCREEN_H - pop - 40, cy - pop / 2));
     return { transform: [{ translateX: x }, { translateY: y }] };
   });
 
-  const cellBg = isDark ? 'rgba(60,60,64,0.35)' : 'rgba(255,255,255,0.25)';
+  const cellBg = isDark ? 'rgba(60,60,64,0.55)' : 'rgba(255,255,255,0.55)';
   const iconColor = isDark ? '#fff' : '#000';
+  const centre = MENU_GEOMETRY.size / 2;
+  const N = items.length;
 
   return (
     <Animated.View style={[styles.menu, anchorStyle]}>
@@ -449,21 +522,34 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
         tint={isDark ? 'dark' : 'light'}
         style={styles.menuBlur}
       >
-        <View style={styles.menuGrid}>
-          {items.map((item) => (
-            <Pressable
-              key={item.id}
-              style={({ pressed }) => [styles.menuCell, { backgroundColor: cellBg, opacity: pressed ? 0.65 : 1 }]}
-              onPress={() => onPick(item)}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-            >
-              <Ionicons name={item.icon} size={22} color={iconColor} />
-              <Text style={[styles.menuLabel, { color: iconColor }]} numberOfLines={1}>
-                {item.label}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.menuRing}>
+          {items.map((item, i) => {
+            // First item at 12 o'clock, then clockwise.
+            const angle = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, N);
+            const x = centre + MENU_GEOMETRY.radius * Math.cos(angle) - MENU_GEOMETRY.cellSize / 2;
+            const y = centre + MENU_GEOMETRY.radius * Math.sin(angle) - MENU_GEOMETRY.cellSize / 2;
+            return (
+              <CupertinoPressable
+                key={item.id}
+                style={[
+                  styles.menuCell,
+                  {
+                    backgroundColor: cellBg,
+                    left: x,
+                    top: y,
+                  },
+                ]}
+                onPress={() => onPick(item)}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+              >
+                <Ionicons name={item.icon} size={22} color={iconColor} />
+                <Text style={[styles.menuLabel, { color: iconColor }]} numberOfLines={1}>
+                  {item.label}
+                </Text>
+              </CupertinoPressable>
+            );
+          })}
         </View>
       </GlassSurface>
     </Animated.View>
@@ -507,33 +593,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 240,
-    height: 200,
-    borderRadius: 20,
+    width: MENU_GEOMETRY.size,
+    height: MENU_GEOMETRY.size,
+    borderRadius: MENU_GEOMETRY.size / 2,
     overflow: 'hidden',
     zIndex: 55,
   },
   menuBlur: {
     flex: 1,
-    padding: 10,
   },
-  menuGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  menuRing: {
+    flex: 1,
   },
   menuCell: {
-    width: '32%',
-    height: 88,
-    borderRadius: 14,
+    position: 'absolute',
+    width: MENU_GEOMETRY.cellSize,
+    height: MENU_GEOMETRY.cellSize,
+    borderRadius: MENU_GEOMETRY.cellSize / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 2,
   },
   menuLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     textAlign: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
 });

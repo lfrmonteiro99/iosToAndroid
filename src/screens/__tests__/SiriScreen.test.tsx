@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '../../test-utils';
+import { render, fireEvent, waitFor, act } from '../../test-utils';
 import { SiriScreen } from '../SiriScreen';
 import type { AppNavigationProp } from '../../navigation/types';
 import type { InstalledApp } from '../../store/AppsStore';
@@ -243,5 +243,143 @@ describe('SiriScreen', () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
     expect(() => submit('Open Calculator')).not.toThrow();
     expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
+  });
+});
+
+// ── Voice input ────────────────────────────────────────────────────────────
+// Hoisted mock of the launcher module. Tests then reach into
+// jest.requireMock(...) to capture the listener callbacks and to drive them.
+jest.mock('../../../modules/launcher-module/src', () => {
+  const listeners: {
+    result?: (t: string) => void;
+    partial?: (t: string) => void;
+    error?: (e: string) => void;
+  } = {};
+  return {
+    __esModule: true,
+    addHomePressedListener: jest.fn(() => jest.fn()),
+    addPackageChangedListener: jest.fn(() => jest.fn()),
+    addSpeechResultListener: jest.fn((fn: (t: string) => void) => {
+      listeners.result = fn;
+      return jest.fn();
+    }),
+    addSpeechPartialResultListener: jest.fn((fn: (t: string) => void) => {
+      listeners.partial = fn;
+      return jest.fn();
+    }),
+    addSpeechErrorListener: jest.fn((fn: (e: string) => void) => {
+      listeners.error = fn;
+      return jest.fn();
+    }),
+    __listeners: listeners,
+    default: {
+      // Fill in the AppsStore-touched surfaces so its background refresh does
+      // not spam "not a function" during these tests. Everything else is
+      // stubbed to a benign resolved value.
+      getInstalledApps: jest.fn(() => Promise.resolve([])),
+      isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
+      getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+      stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+      isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    },
+  };
+});
+
+describe('SiriScreen voice input', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const launcher = jest.requireMock('../../../modules/launcher-module/src');
+  const listeners = launcher.__listeners as {
+    result?: (t: string) => void;
+    partial?: (t: string) => void;
+    error?: (e: string) => void;
+  };
+
+  beforeEach(() => {
+    launcher.default.startSpeechRecognition.mockClear();
+    launcher.default.stopSpeechRecognition.mockClear();
+    launcher.default.isSpeechRecognitionAvailable.mockClear();
+    launcher.default.isSpeechRecognitionAvailable.mockResolvedValue(true);
+    listeners.result = undefined;
+    listeners.partial = undefined;
+    listeners.error = undefined;
+  });
+
+  async function renderScreen() {
+    const nav = makeNav();
+    const utils = render(<SiriScreen navigation={nav} />);
+    // Let the availability effect and the AppsStore background load settle.
+    await new Promise((r) => setTimeout(r, 0));
+    return { ...utils, nav };
+  }
+
+  async function tapMic(getByLabelText: (l: string) => unknown) {
+    await fireEvent.press(getByLabelText('Start voice input'));
+    // Allow the async permission + start chain to resolve and the listener
+    // effect to attach.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  it('exposes a mic button labelled for a voice-off state initially', async () => {
+    const { getByLabelText } = await renderScreen();
+    expect(getByLabelText('Start voice input')).toBeTruthy();
+  });
+
+  it('tapping the mic calls startSpeechRecognition and shows the listening state', async () => {
+    const { getByLabelText, getByText } = await renderScreen();
+    await tapMic(getByLabelText);
+    expect(launcher.default.startSpeechRecognition).toHaveBeenCalled();
+    expect(getByText('Listening…')).toBeTruthy();
+    expect(getByLabelText('Stop listening')).toBeTruthy();
+  });
+
+  it('an incoming final speech result runs the same command pipeline as typed input', async () => {
+    const { getByLabelText } = await renderScreen();
+    await tapMic(getByLabelText);
+    expect(listeners.result).toBeDefined();
+    await act(async () => { listeners.result?.('Open Calculator'); });
+    expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
+  });
+
+  it('a partial result populates the text field so the user sees the transcript', async () => {
+    const { getByLabelText } = await renderScreen();
+    await tapMic(getByLabelText);
+    expect(listeners.partial).toBeDefined();
+    await act(async () => { listeners.partial?.('open cal'); });
+    expect(getByLabelText('Ask Siri').props.value).toBe('open cal');
+  });
+
+  it('a speech error stops listening and surfaces the message', async () => {
+    const { getByLabelText, getByText } = await renderScreen();
+    await tapMic(getByLabelText);
+    expect(listeners.error).toBeDefined();
+    await act(async () => { listeners.error?.('no-match'); });
+    expect(getByText(/Couldn't hear you/i)).toBeTruthy();
+    expect(getByLabelText('Start voice input')).toBeTruthy();
+  });
+
+  it('tapping the mic while listening calls stopSpeechRecognition', async () => {
+    const { getByLabelText } = await renderScreen();
+    await tapMic(getByLabelText);
+    await fireEvent.press(getByLabelText('Stop listening'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(launcher.default.stopSpeechRecognition).toHaveBeenCalled();
+  });
+
+  it('when the recognizer is unavailable, tapping the mic does not start listening', async () => {
+    // isSpeechRecognitionAvailable resolves to false BEFORE render so the
+    // effect stores voiceAvailable=false. The warning itself is an alert, and
+    // asserting its text needs an AlertProvider in the tree — the point of
+    // this test is the guard, not the alert plumbing.
+    launcher.default.isSpeechRecognitionAvailable.mockResolvedValueOnce(false);
+    const { getByLabelText } = await renderScreen();
+    // Let the availability effect's three microtasks settle.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    await fireEvent.press(getByLabelText('Start voice input'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(launcher.default.startSpeechRecognition).not.toHaveBeenCalled();
   });
 });
