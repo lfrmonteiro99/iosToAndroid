@@ -39,6 +39,7 @@ import { useApps, InstalledApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { Shape } from '../theme/CupertinoTheme';
 import { useDevice } from '../store/DeviceStore';
 import { useFolders, AppFolder } from '../store/FoldersStore';
 import {
@@ -1751,7 +1752,7 @@ const styles = StyleSheet.create({
   },
   dockBlur: {
     overflow: 'hidden',
-    borderRadius: 22,
+    borderRadius: Shape.dock.radius,
     paddingVertical: 10,
     paddingHorizontal: 16,
     backgroundColor: 'rgba(0,0,0,0.3)',
