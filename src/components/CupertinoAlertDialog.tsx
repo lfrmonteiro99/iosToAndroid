@@ -7,8 +7,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
-import { BorderRadius } from '../theme/CupertinoTheme';
+import { Shape } from '../theme/CupertinoTheme';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { alertDialogPresent } from '../theme/springPresets';
 
 interface AlertAction {
   label: string;
@@ -40,7 +41,7 @@ export function CupertinoAlertDialog({
 
   useEffect(() => {
     if (visible) {
-      scale.value = reduceMotion ? withTiming(1, { duration: 150 }) : withSpring(1, { damping: 25, stiffness: 500 });
+      scale.value = reduceMotion ? withTiming(1, { duration: 150 }) : withSpring(1, alertDialogPresent);
       opacity.value = withTiming(1, { duration: 200 });
     } else {
       scale.value = withTiming(1.2, { duration: 150 });
@@ -78,11 +79,12 @@ export function CupertinoAlertDialog({
         </Animated.View>
 
         <Animated.View
+          testID="alert-dialog"
           style={[
             styles.dialog,
             {
               backgroundColor: dialogBg,
-              borderRadius: BorderRadius.card14,
+              borderRadius: Shape.card.radius,
             },
             dialogStyle,
           ]}
@@ -129,7 +131,7 @@ export function CupertinoAlertDialog({
                 style={({ pressed }) => [
                   styles.actionButton,
                   {
-                    backgroundColor: pressed ? colors.systemGray5 : 'transparent',
+                    backgroundColor: pressed ? colors.pressedRowBackground : 'transparent',
                     borderLeftWidth:
                       isHorizontal && index > 0 ? StyleSheet.hairlineWidth : 0,
                     borderTopWidth:

@@ -1,9 +1,15 @@
 import React from 'react';
 import { render, fireEvent } from '../../test-utils';
 import { CupertinoShareSheet } from '../CupertinoShareSheet';
+import { Shape } from '../../theme/CupertinoTheme';
 
 const mockOnClose = jest.fn();
 const mockOnAdd = jest.fn();
+
+function flattenStyle(style: unknown): Record<string, unknown>[] {
+  if (Array.isArray(style)) return style.flat(Infinity).filter(Boolean) as Record<string, unknown>[];
+  return style ? [style as Record<string, unknown>] : [];
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -102,5 +108,24 @@ describe('CupertinoShareSheet', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
     // With no reading-list handler, the reading-list option must stay absent.
     expect(mockOnAdd).not.toHaveBeenCalled();
+  });
+
+  // #481: the sheet's top corners must consume Shape.sheet (13), not the old
+  // literal (16) — outside the §1.6 range of 10–13.
+  it('renders the sheet top corners at the Shape.sheet radius (13)', () => {
+    const { getByTestId } = render(
+      <CupertinoShareSheet visible onClose={mockOnClose} title="Page" url="https://example.com" />,
+    );
+
+    const sheet = getByTestId('share-sheet');
+    const flat = flattenStyle(sheet.props.style);
+    const radiusStyle = flat.find((s) => 'borderTopLeftRadius' in s) as
+      | { borderTopLeftRadius: number; borderTopRightRadius: number }
+      | undefined;
+
+    expect(radiusStyle).toBeDefined();
+    expect(radiusStyle?.borderTopLeftRadius).toBe(Shape.sheet.radius);
+    expect(radiusStyle?.borderTopRightRadius).toBe(Shape.sheet.radius);
+    expect(radiusStyle?.borderTopLeftRadius).toBe(13);
   });
 });

@@ -46,7 +46,7 @@ const ContactRow = React.memo(function ContactRow({
       style={({ pressed }) => [
         styles.row,
         {
-          backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground,
+          backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground,
         },
       ]}
       onPress={onPress}

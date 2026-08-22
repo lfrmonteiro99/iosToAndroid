@@ -242,6 +242,58 @@ describe('SettingsStore iconTreatment (#486: icon mask treatment + cache rebuild
   });
 });
 
+describe('SettingsStore pressFeedback (#497: touch feedback intensity)', () => {
+  it('defaults to scale-opacity when nothing is stored', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.pressFeedback).toBe('scale-opacity');
+    expect(DEFAULT_SETTINGS.pressFeedback).toBe('scale-opacity');
+  });
+
+  it.each(['scale-opacity', 'opacity', 'none'] as const)(
+    'update() switches pressFeedback to %s',
+    async (mode) => {
+      const { result } = renderHook(() => useSettings(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.update('pressFeedback', mode);
+      });
+
+      expect(result.current.settings.pressFeedback).toBe(mode);
+      // Unrelated defaults preserved
+      expect(result.current.settings.fontChoice).toBe(DEFAULT_SETTINGS.fontChoice);
+    },
+  );
+
+  it('persists pressFeedback to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('pressFeedback', 'none');
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"pressFeedback":"none"'),
+    );
+  });
+
+  it('hydrates a persisted pressFeedback from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, pressFeedback: 'opacity' });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.pressFeedback).toBe('opacity');
+  });
+});
+
 describe('SettingsProvider device sync gate (M10: no stale first render)', () => {
   it('renders nothing until the first device sync completes, then paints the synced SSID — never the seed value', async () => {
     // Capture the resolver up front — the Promise (and its resolve fn) must

@@ -19,7 +19,7 @@ exports[`CupertinoCard renders with title and subtitle 1`] = `
       },
       {
         "backgroundColor": "#FFFFFF",
-        "borderRadius": 12,
+        "borderRadius": 10,
         "padding": 16,
       },
       undefined,
@@ -89,7 +89,7 @@ exports[`CupertinoCard renders without title 1`] = `
       },
       {
         "backgroundColor": "#FFFFFF",
-        "borderRadius": 12,
+        "borderRadius": 10,
         "padding": 16,
       },
       undefined,

@@ -58,6 +58,11 @@ export const SystemColors = {
     // Separator
     separator: 'rgba(60, 60, 67, 0.29)',
     opaqueSeparator: '#C6C6C8',
+
+    // Pressed list row background (convention 4 of §3.2 — a pressed full-width
+    // list row darkens its background instead of scaling/dimming). Single token
+    // so every list row uses the same pressed colour.
+    pressedRowBackground: '#E5E5EA',
   },
   dark: {
     systemBlue: '#0A84FF',
@@ -115,6 +120,9 @@ export const SystemColors = {
     // Separator
     separator: 'rgba(84, 84, 88, 0.6)',
     opaqueSeparator: '#38383A',
+
+    // Pressed list row background — see the light counterpart above.
+    pressedRowBackground: '#2C2C2E',
   },
 };
 
@@ -376,7 +384,21 @@ export const Shadows = StyleSheet.create({
   },
 });
 
-// Animation constants matching iOS spring dynamics
+/**
+ * @deprecated Legacy spring vocabulary (issue #492) — do not add new consumers.
+ * New code should import a named preset from `src/theme/springPresets.ts` instead.
+ * Kept as-is, values unchanged, until existing consumers migrate: aligning these to
+ * the new vocabulary's numbers would change on-screen behaviour, and #492's ressalva
+ * forbids that without a before/after capture.
+ *
+ * Nearest-by-usage mapping to the new vocabulary (name only — NOT equal in value,
+ * see springPresets.ts for the actual numbers):
+ *   springBouncy  (d10/s150) → wobble      (playful overshoot)
+ *   springSnappy  (d20/s400) → snap        (fast, decisive settle)
+ *   springGentle  (d25/s200) → sheet       (soft modal presentation)
+ *   defaultSpring (d20/s300) → interactive (control feedback: switch, segmented control)
+ *   gentleSpring  (d15/s150) → navigation  (screen-level transition)
+ */
 export const AnimationConfig = {
   springBouncy: { damping: 10, stiffness: 150, mass: 1 },
   springSnappy: { damping: 20, stiffness: 400, mass: 1 },

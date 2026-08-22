@@ -3,6 +3,17 @@ import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LauncherModuleType } from '../../modules/launcher-module/src';
 import { setHapticsEnabled } from '../utils/haptics';
+import {
+  type IconShape,
+  DEFAULT_ICON_SHAPE_EXPONENT,
+  normalizeIconShape,
+  clampIconShapeExponent,
+  setIconMask,
+} from '../utils/iconShape';
+import {
+  type CategoryOverrideSettings,
+  DEFAULT_CATEGORY_OVERRIDES,
+} from '../utils/categoryOverrides';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -69,6 +80,43 @@ export interface SettingsState {
    * (the pre-#486 behaviour), 'none' is the unmasked baseline.
    */
   iconTreatment: 'mask-all' | 'mask-adaptive-only' | 'none';
+  pressFeedback: 'scale-opacity' | 'opacity' | 'none';
+  /** Home-screen grid columns (§2 derivation, issue #503). */
+  gridColumns: 3 | 4 | 5 | 6;
+  /** Home-screen grid rows per page (issue #503). */
+  gridRows: 4 | 5 | 6 | 7;
+  /** Multiplier over the spec's 0.153 x screen-width icon size (issue #503). */
+  iconSizeScale: number;
+  /** Whether app names render under grid icons (issue #503). */
+  showIconLabels: boolean;
+  /**
+   * Whether the icon-expand animation plays when opening an app (§6.3).
+   * Independent of `reduceMotion`: turning this off skips only the
+   * icon-expand overlay, not other motion in the app. `reduceMotion` (or,
+   * once #467 lands, `motionIntensity: 'off'`) still takes precedence over
+   * this — see the precedence table in LauncherHomeScreen.handleAppPress.
+   */
+  appLaunchAnimation: boolean;
+  /** Target duration of the icon-expand animation in ms, 150–450 (§6.3, default 280 = value [E]). */
+  appLaunchDurationMs: number;
+  /**
+   * Forma da máscara dos ícones do launcher (§1.6). 'original' = sem máscara,
+   * o drawable como o sistema o dá — é também o baseline de comparação.
+   */
+  iconShape: IconShape;
+  /**
+   * Expoente do superelipse do squircle. Gama útil 2.0–8.0; a especificação
+   * admite que 4.7 é um palpite que precisa de aferição, daí ser regulável.
+   * Só afecta a forma 'squircle' (ver effectiveIconExponent).
+   */
+  iconShapeExponent: number;
+  /**
+   * Overrides de categorias da App Library (#516): ocultar, renomear, reordenar
+   * categorias e recategorizar apps individualmente. Toda a lógica opera sobre
+   * chaves estáveis (ex.: 'social'), nunca sobre o nome exibido, para que
+   * renomear não parta a atribuição.
+   */
+  categoryOverrides: CategoryOverrideSettings;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -128,6 +176,16 @@ export const DEFAULT_SETTINGS: SettingsState = {
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
   iconTreatment: 'mask-adaptive-only',
+  pressFeedback: 'scale-opacity',
+  gridColumns: 4,
+  gridRows: 6,
+  iconSizeScale: 1.0,
+  showIconLabels: true,
+  appLaunchAnimation: true,
+  appLaunchDurationMs: 280,
+  iconShape: 'squircle',
+  iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
+  categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
 };
 
 interface SettingsContextValue {
@@ -173,7 +231,18 @@ export function SettingsProvider({
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored) {
-        try { setSettings((prev) => ({ ...prev, ...JSON.parse(stored) })); } catch { /* ignore */ }
+        try {
+          const parsed = JSON.parse(stored);
+          setSettings((prev) => ({
+            ...prev,
+            ...parsed,
+            // A forma e o expoente descem até ao Kotlin e definem a chave da
+            // cache de ícones: um valor corrompido no AsyncStorage produziria
+            // uma máscara indefinida, por isso normaliza-se na leitura.
+            iconShape: normalizeIconShape(parsed?.iconShape),
+            iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
+          }));
+        } catch { /* ignore */ }
       }
       setIsReady(true);
     });
@@ -261,6 +330,13 @@ export function SettingsProvider({
   useEffect(() => {
     setHapticsEnabled(settings.vibration !== false);
   }, [settings.vibration]);
+
+  // Publica a forma dos ícones (#482) para o AppsStore, que a passa à ponte
+  // nativa. setIconMask é no-op quando a chave de cache não muda, por isso
+  // reescolher a mesma forma não dispara um varrimento novo.
+  useEffect(() => {
+    setIconMask(settings.iconShape, settings.iconShapeExponent);
+  }, [settings.iconShape, settings.iconShapeExponent]);
 
   const update = useCallback(<K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));

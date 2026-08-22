@@ -13,15 +13,16 @@ class IconCacheTest {
 
     @Test
     fun `fileName encodes packageName and versionCode so an app update gets a new key`() {
-        // #486 adds the icon treatment to the key; the no-arg call uses the default.
+        // #482/#486 fold shape key and icon treatment into the key; the no-arg
+        // call uses both defaults.
         assertEquals(
-            "com.android.settings_1_${IconTreatment.DEFAULT}.png",
+            "com.android.settings_1_${IconCache.DEFAULT_SHAPE_KEY}_${IconTreatment.DEFAULT}.png",
             IconCache.fileName("com.android.settings", 1L)
         )
         // Same package, new versionCode after an update — different key entirely,
         // so the stale PNG is never mistaken for the new one.
         assertEquals(
-            "com.android.settings_2_${IconTreatment.DEFAULT}.png",
+            "com.android.settings_2_${IconCache.DEFAULT_SHAPE_KEY}_${IconTreatment.DEFAULT}.png",
             IconCache.fileName("com.android.settings", 2L)
         )
     }
@@ -35,9 +36,9 @@ class IconCacheTest {
 
     @Test
     fun `fileName encodes the icon treatment, so changing it in Settings orphans the old key`() {
-        val maskAll = IconCache.fileName("com.example.app", 1L, IconTreatment.MASK_ALL)
-        val adaptiveOnly = IconCache.fileName("com.example.app", 1L, IconTreatment.MASK_ADAPTIVE_ONLY)
-        val none = IconCache.fileName("com.example.app", 1L, IconTreatment.NONE)
+        val maskAll = IconCache.fileName("com.example.app", 1L, treatment = IconTreatment.MASK_ALL)
+        val adaptiveOnly = IconCache.fileName("com.example.app", 1L, treatment = IconTreatment.MASK_ADAPTIVE_ONLY)
+        val none = IconCache.fileName("com.example.app", 1L, treatment = IconTreatment.NONE)
 
         assertTrue(maskAll != adaptiveOnly)
         assertTrue(adaptiveOnly != none)

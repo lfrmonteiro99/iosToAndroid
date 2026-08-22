@@ -91,10 +91,12 @@ class LauncherModule : Module() {
 
         // ── Apps ─────────────────────────────────────────────────────────
 
-        AsyncFunction("getInstalledApps") { treatmentArg: String? ->
-            // #486: qual mascara aplicar entra na chave da cache (IconCache.fileName),
-            // por isso mudar o tratamento nas Definicoes invalida os PNGs antigos so
-            // por deixarem de corresponder a nenhuma chave valida — sem passo extra.
+        AsyncFunction("getInstalledApps") { maskArg: Map<String, Any?>?, treatmentArg: String? ->
+            // #482: a forma da máscara vem de JS. #486: o tratamento (quem é
+            // mascarado) também. Ambos entram na chave da cache
+            // (IconCache.fileName), por isso mudar qualquer um deixa os PNGs
+            // antigos órfãos e força um redesenho — sem passo extra.
+            val mask = IconMaskSpec.from(maskArg)
             val treatment = treatmentArg ?: IconTreatment.DEFAULT
             val pm = context.packageManager
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
@@ -120,11 +122,11 @@ class LauncherModule : Module() {
                 val packageName = resolveInfo.activityInfo.packageName
                 val icon = try {
                     val versionCode = getVersionCode(pm, packageName)
-                    val fileName = IconCache.fileName(packageName, versionCode, treatment)
+                    val fileName = IconCache.fileName(packageName, versionCode, mask.cacheKey, treatment)
                     validIconFileNames.add(fileName)
                     val iconFile = File(iconsDir, fileName)
                     if (!iconFile.exists()) {
-                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile, treatment)
+                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile, mask, treatment)
                     }
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
@@ -162,7 +164,8 @@ class LauncherModule : Module() {
             apps
         }
 
-        AsyncFunction("getAppInfo") { packageName: String, treatmentArg: String? ->
+        AsyncFunction("getAppInfo") { packageName: String, maskArg: Map<String, Any?>?, treatmentArg: String? ->
+            val mask = IconMaskSpec.from(maskArg)
             // Single-package equivalent of getInstalledApps: used to refresh only
             // the package a PACKAGE_* broadcast named (#485) instead of rescanning
             // every installed app. Returns null when the package is gone or has no
@@ -182,10 +185,10 @@ class LauncherModule : Module() {
                     val appInfo = resolveInfo.activityInfo.applicationInfo
                     val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
                     val icon = try {
-                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName), treatment)
+                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName), mask.cacheKey, treatment)
                         val iconFile = File(iconsDir, fileName)
                         if (!iconFile.exists()) {
-                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile, treatment)
+                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile, mask, treatment)
                         }
                         "file://" + iconFile.absolutePath
                     } catch (e: Exception) { "" }
@@ -227,11 +230,11 @@ class LauncherModule : Module() {
             true
         }
 
-        AsyncFunction("getAppIcon") { packageName: String ->
+        AsyncFunction("getAppIcon") { packageName: String, maskArg: Map<String, Any?>? ->
             try {
                 val pm = context.packageManager
                 val icon = pm.getApplicationIcon(packageName)
-                drawableToBase64(icon)
+                drawableToBase64(icon, IconMaskSpec.from(maskArg))
             } catch (e: Exception) { "" }
         }
 
@@ -1355,8 +1358,13 @@ class LauncherModule : Module() {
         }
     }
 
-    private fun writeIconToFile(drawable: Drawable, file: File, treatment: String = IconTreatment.DEFAULT) {
-        val bitmap = renderIcon(drawable, treatment)
+    private fun writeIconToFile(
+        drawable: Drawable,
+        file: File,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        treatment: String = IconTreatment.DEFAULT
+    ) {
+        val bitmap = renderIcon(drawable, mask, treatment)
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         FileOutputStream(file).use { out ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
@@ -1364,8 +1372,12 @@ class LauncherModule : Module() {
         if (bitmap != scaledBitmap) scaledBitmap.recycle()
     }
 
-    private fun drawableToBase64(drawable: Drawable, treatment: String = IconTreatment.DEFAULT): String {
-        val bitmap = renderIcon(drawable, treatment)
+    private fun drawableToBase64(
+        drawable: Drawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        treatment: String = IconTreatment.DEFAULT
+    ): String {
+        val bitmap = renderIcon(drawable, mask, treatment)
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         val outputStream = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream)
@@ -1375,36 +1387,51 @@ class LauncherModule : Module() {
     }
 
     /**
-     * Renders [drawable] to a square bitmap, honouring [treatment] (#486) —
-     * see [IconTreatment.shouldMask] for the adaptive/non-adaptive distinction.
+     * Renders [drawable] to a square bitmap, honouring [treatment] (#486 — see
+     * [IconTreatment.shouldMask] for the adaptive/non-adaptive distinction) and
+     * [mask] (#482 — the shape/exponent applied to the result).
      */
-    private fun renderIcon(drawable: Drawable, treatment: String): Bitmap {
+    private fun renderIcon(
+        drawable: Drawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        treatment: String = IconTreatment.DEFAULT
+    ): Bitmap {
         val isAdaptive = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable
         val shouldMask = IconTreatment.shouldMask(isAdaptive, treatment)
-        if (isAdaptive) {
-            // AdaptiveIconDrawable.draw() composites background+foreground using
-            // whatever mask the OS (or OEM launcher) has configured, so drawing it
-            // directly here would still yield a device-dependent shape — the exact
-            // inconsistency #484 exists to fix. Compose it ourselves instead; only
-            // fall back to the generic path below when the icon is malformed
-            // (composeAdaptiveIcon returns null, e.g. no background layer).
-            composeAdaptiveIcon(drawable as AdaptiveIconDrawable, shouldMask)?.let { return it }
-        }
-        val square = squareCropBitmap(drawable)
-        return if (shouldMask) applySquircleMask(square) else square
+        val square = drawableToBitmap(drawable, mask, shouldMask)
+        return if (shouldMask) maskIcon(square, mask) else square
     }
 
-    /**
-     * Center-crop para quadrado (#480): pega no maior quadrado centrado da
-     * origem e escala-o. Nunca distorce nem mete barras transparentes, por
-     * isso um icone-banner mantem as proporcoes e e' so cortado antes da
-     * mascara. Um icone redondo continua a ficar com cantos vazios — o #480
-     * diz explicitamente que nao resolve isso.
-     */
-    private fun squareCropBitmap(drawable: Drawable): Bitmap {
+    private fun drawableToBitmap(
+        drawable: Drawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        shouldMask: Boolean = true
+    ): Bitmap {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             return drawable.bitmap
         }
+        // AdaptiveIconDrawable.draw() composites background+foreground using
+        // whatever mask the OS (or OEM launcher) has configured, so drawing it
+        // directly here would still yield a device-dependent shape — the exact
+        // inconsistency #484 exists to fix. Compose it ourselves instead; only
+        // fall back to the generic path below when the icon is malformed
+        // (composeAdaptiveIcon returns null, e.g. no background layer).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
+            // Este caminho ja devolve o bitmap mascarado pelo compositor do #484,
+            // e o call site volta a passar tudo pelo applySquircleMask do #480.
+            // Aplicar duas vezes e' idempotente NA FORMA: os dois usam o mesmo
+            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 4.7 e o
+            // n = 4.7 do applySquircleMask) e o mesmo gerador de pontos, portanto a
+            // segunda mascara recorta exactamente a mesma regiao. Se algum dia os
+            // expoentes divergirem, isto passa a cortar duas formas diferentes —
+            // e a razao pela qual ambos os sitios citam a constante.
+            composeAdaptiveIcon(drawable, mask, shouldMask)?.let { return it }
+        }
+        // Center-crop para quadrado (#480): pega no maior quadrado centrado da
+        // origem e escala-o. Nunca distorce nem mete barras transparentes, por
+        // isso um icone-banner mantem as proporcoes e e' so cortado antes da
+        // mascara. Um icone redondo continua a ficar com cantos vazios — o #480
+        // diz explicitamente que nao resolve isso.
         val srcW = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
         val srcH = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
         val side = srcW.coerceAtMost(srcH)
@@ -1450,6 +1477,17 @@ class LauncherModule : Module() {
      *    after masking; that is the known-incomplete "dominant color" item of
      *    epic #465 and is explicitly out of scope here (#480 does not fix it).
      */
+    /**
+     * Applies [mask] to [src]: the superellipse mask at the requested exponent,
+     * or the bitmap untouched when the mask is 'original'. This is the single
+     * place where "no mask" is honoured — the drawable then reaches the caller
+     * exactly as the system gave it.
+     */
+    private fun maskIcon(src: Bitmap, mask: IconMaskSpec): Bitmap {
+        val exponent = mask.exponent ?: return src
+        return applySquircleMask(src, exponent)
+    }
+
     private fun applySquircleMask(src: Bitmap, n: Double = 4.7): Bitmap {
         val size = src.width.coerceAtMost(src.height)
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -1474,7 +1512,11 @@ class LauncherModule : Module() {
         }
     }
 
-    private fun composeAdaptiveIcon(drawable: AdaptiveIconDrawable, shouldMask: Boolean = true): Bitmap? {
+    private fun composeAdaptiveIcon(
+        drawable: AdaptiveIconDrawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        shouldMask: Boolean = true
+    ): Bitmap? {
         val background = drawable.background ?: return null
         val foreground = drawable.foreground
 
@@ -1482,24 +1524,23 @@ class LauncherModule : Module() {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // shouldMask=false (#486 'none') skips the squircle clip: the background
-        // draws full-bleed across the square canvas, the pre-#484 OS default.
-        if (shouldMask) {
-            val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat())
+        // shouldMask=false (#486 'none') ou mask 'original' (exponent null) não
+        // recortam nada: o fundo é desenhado inteiro e o resultado é o composite
+        // do sistema sem silhueta imposta.
+        val exponent = if (shouldMask) mask.exponent else null
+        canvas.save()
+        if (exponent != null) {
+            val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat(), exponent)
             val maskPath = Path().apply {
                 moveTo(maskPoints[0].first, maskPoints[0].second)
                 maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
                 close()
             }
-            canvas.save()
             canvas.clipPath(maskPath)
-            background.setBounds(0, 0, size, size)
-            background.draw(canvas)
-            canvas.restore()
-        } else {
-            background.setBounds(0, 0, size, size)
-            background.draw(canvas)
         }
+        background.setBounds(0, 0, size, size)
+        background.draw(canvas)
+        canvas.restore()
 
         if (foreground != null) {
             val bounds = AdaptiveIconCompositor.foregroundBounds(size)

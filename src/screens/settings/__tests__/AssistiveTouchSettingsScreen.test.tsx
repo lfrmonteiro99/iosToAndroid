@@ -43,6 +43,14 @@ describe('AssistiveTouchSettingsScreen', () => {
     expect(toJSON()).toBeTruthy();
   });
 
+  // Real interaction: the header back button ("Accessibility") calls
+  // navigation.goBack(). This is the unique occurrence of that text in the tree.
+  it('navigates back when the Accessibility back button is pressed', () => {
+    const { getByText } = render(<AssistiveTouchSettingsScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Accessibility'));
+    expect(mockNavigation.goBack).toHaveBeenCalled();
+  });
+
   it('renders the master switch and customization section when enabled', () => {
     const { getByText, getAllByRole } = render(
       <AssistiveTouchSettingsScreen navigation={mockNavigation as never} />,
@@ -133,5 +141,50 @@ describe('AssistiveTouchSettingsScreen top-level menu', () => {
     fireEvent.press(getByText('Single-Tap'));
     fireEvent.press(getByText('Siri'));
     expect(mockUpdate).toHaveBeenCalledWith({ singleTapAction: 'siri' });
+  });
+});
+
+// ── Expanded catalog ────────────────────────────────────────────────────────
+describe('AssistiveTouchSettingsScreen expanded action catalog', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseAssistive.mockReturnValue(assistive());
+  });
+
+  function renderScreen() {
+    return render(
+      <AlertProvider>
+        <AssistiveTouchSettingsScreen navigation={mockNavigation as never} />
+      </AlertProvider>,
+    );
+  }
+
+  it.each([
+    ['Camera',      'camera'],
+    ['Torch',       'flashlight'],
+    ['Volume Up',   'volumeUp'],
+    ['Volume Down', 'volumeDown'],
+    ['Mute',        'mute'],
+    ['Accessibility', 'accessibility'],
+    ['Device',      'device'],
+    ['Custom',      'custom'],
+  ])('the action picker offers %s and maps it to Single-Tap', (label, id) => {
+    const { getByText, getAllByText } = renderScreen();
+    fireEvent.press(getByText('Single-Tap'));
+    // The label may also appear elsewhere (nav back button, list header): the
+    // picker option is the LAST match, added when the alert modal renders.
+    const matches = getAllByText(label);
+    fireEvent.press(matches[matches.length - 1]);
+    expect(mockUpdate).toHaveBeenCalledWith({ singleTapAction: id });
+  });
+
+  it('Add Item offers the new menu categories once slots open up', () => {
+    mockUseAssistive.mockReturnValue(assistive({ menuItems: ['home'] }));
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Add Item'));
+    // Any of the new categories must be reachable from the picker.
+    expect(getByText('Camera')).toBeTruthy();
+    expect(getByText('Device')).toBeTruthy();
+    expect(getByText('Custom')).toBeTruthy();
   });
 });

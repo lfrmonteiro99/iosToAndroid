@@ -27,6 +27,13 @@ interface AppLaunchOverlayProps {
   onExpandComplete: () => void;
   /** Fired once the collapse spring settles, so the caller can unmount the overlay. */
   onCollapseComplete?: () => void;
+  /**
+   * Spring config driving the expand/collapse motion. Defaults to
+   * `gestureConfig.spring.appLaunch`. Callers derive this from
+   * `settings.appLaunchDurationMs` via `springForAppLaunchDuration` (#512
+   * §6.3) so the animation stays a spring at every user-chosen duration.
+   */
+  springConfig?: { stiffness: number; damping: number; mass: number };
 }
 
 // Linear interpolation from the icon's on-screen rect to a full-screen rect,
@@ -50,19 +57,26 @@ export function interpolateLaunchFrame(
 
 const ICON_BORDER_RADIUS = 14;
 
-export function AppLaunchOverlay({ icon, bounds, phase, onExpandComplete, onCollapseComplete }: AppLaunchOverlayProps) {
+export function AppLaunchOverlay({
+  icon,
+  bounds,
+  phase,
+  onExpandComplete,
+  onCollapseComplete,
+  springConfig = gestureConfig.spring.appLaunch,
+}: AppLaunchOverlayProps) {
   const progress = useSharedValue(0);
 
   useEffect(() => {
     if (phase === 'expand') {
-      progress.value = withSpring(1, gestureConfig.spring.appLaunch, (finished) => {
+      progress.value = withSpring(1, springConfig, (finished) => {
         'worklet';
         if (finished) {
           runOnJS(onExpandComplete)();
         }
       });
     } else {
-      progress.value = withSpring(0, gestureConfig.spring.appLaunch, (finished) => {
+      progress.value = withSpring(0, springConfig, (finished) => {
         'worklet';
         if (finished && onCollapseComplete) {
           runOnJS(onCollapseComplete)();

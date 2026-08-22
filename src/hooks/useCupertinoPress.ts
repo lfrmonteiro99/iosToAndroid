@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useSharedValue, useAnimatedStyle, interpolate } from 'react-native-reanimated';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
+import { useSettings, SettingsState } from '../store/SettingsStore';
 
 // useCupertinoPress — shared touch-feedback primitive for iOS-style press states.
 //
@@ -39,6 +40,8 @@ export interface UseCupertinoPressOptions {
   opacityOnly?: boolean;
   /** Override the device reduceMotion setting; defaults to settings.reduceMotion. */
   reduceMotion?: boolean;
+  /** Override the device pressFeedback setting; defaults to settings.pressFeedback. */
+  pressFeedback?: SettingsState['pressFeedback'];
 }
 
 export interface CupertinoPressResult {
@@ -50,8 +53,15 @@ export interface CupertinoPressResult {
   onPressOut: () => void;
 }
 
-const DEFAULT_OPACITY = 0.4;
-const DEFAULT_SCALE = 0.96;
+/** §3.2 press dim for icon/button surfaces. Exported so non-Pressable call
+ *  sites (e.g. the launcher icon, which composes press scale with its jiggle
+ *  rotation) use the same numbers instead of their own. */
+export const CUPERTINO_PRESS_OPACITY = 0.4;
+/** §3.2 press scale. */
+export const CUPERTINO_PRESS_SCALE = 0.96;
+
+const DEFAULT_OPACITY = CUPERTINO_PRESS_OPACITY;
+const DEFAULT_SCALE = CUPERTINO_PRESS_SCALE;
 
 export function useCupertinoPress(
   enabled = true,
@@ -62,19 +72,33 @@ export function useCupertinoPress(
     scale = DEFAULT_SCALE,
     opacityOnly = false,
     reduceMotion: reduceMotionOverride,
+    pressFeedback: pressFeedbackOverride,
   } = options;
 
+  const { settings } = useSettings();
   const deviceReduceMotion = useGestureReduceMotion();
   const reduceMotion = reduceMotionOverride ?? deviceReduceMotion;
+
+  const pressFeedback = pressFeedbackOverride ?? settings.pressFeedback;
+  // 'opacity' collapses any surface to dim-only, same as an explicit opacityOnly
+  // call site. 'none' keeps the interpolation targets pinned to the resting
+  // values (1/1) — the transform key still appears/disappears exactly as it
+  // would without this setting, only its *effect* is neutralised. This is
+  // deliberate: 'none' must not silence the haptic in CupertinoButton, which
+  // fires from a separate onPress handler untouched by this hook (§3.2.4 —
+  // cutting animation must never cut haptics).
+  const effectiveOpacityOnly = opacityOnly || pressFeedback === 'opacity';
+  const targetOpacity = pressFeedback === 'none' ? 1 : opacity;
+  const targetScale = pressFeedback === 'none' ? 1 : scale;
 
   const pressed = useSharedValue(0);
 
   const style = useAnimatedStyle(() => {
     const next: { transform?: Array<{ scale: number }>; opacity: number } = {
-      opacity: interpolate(pressed.value, [0, 1], [1, opacity]),
+      opacity: interpolate(pressed.value, [0, 1], [1, targetOpacity]),
     };
-    if (!opacityOnly) {
-      next.transform = [{ scale: interpolate(pressed.value, [0, 1], [1, scale]) }];
+    if (!effectiveOpacityOnly) {
+      next.transform = [{ scale: interpolate(pressed.value, [0, 1], [1, targetScale]) }];
     }
     return next;
   });
