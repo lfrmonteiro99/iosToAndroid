@@ -86,6 +86,13 @@ export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
 export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
 const CELL_WIDTH = GRID_GEOMETRY.cellWidth;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
+// #501: o dock não tem label por baixo do ícone (ao contrário da grelha), por
+// isso a sua altura visual é ICON_SIZE + este padding * 2, nunca um número
+// escolhido à parte — a 393dp dá 60 + 18*2 = 96, batendo com a §2 ("Dock:
+// altura ≈96") e escalando com o ícone em qualquer outra largura.
+export const DOCK_VERTICAL_PADDING = 18;
+// §2: "Dock: inset lateral" = 10.
+export const DOCK_HORIZONTAL_INSET = 10;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -301,6 +308,8 @@ interface AppIconProps {
   onDelete?: (app: InstalledApp) => void;
   badge?: number;
   textScale?: number;
+  /** #501: the dock reuses AppIcon but has no name label under the icon. */
+  showLabel?: boolean;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -312,7 +321,7 @@ interface AppIconProps {
 // as instâncias em vez de criar uma arrow function nova por ícone a cada render
 // — sem isso o memo não teria qualquer efeito, porque a prop `onPress` nunca
 // seria igual à do render anterior.
-const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
+const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1, showLabel = true }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
@@ -383,7 +392,7 @@ const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPre
   return (
     <Pressable
       ref={iconRef}
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={[styles.appIconWrapper, { width: cellWidth }, !showLabel && styles.appIconWrapperCompact]}
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -453,9 +462,11 @@ const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPre
           </Pressable>
         )}
       </Animated.View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
-        {app.name}
-      </Text>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
+          {app.name}
+        </Text>
+      )}
     </Pressable>
   );
 });
@@ -1480,7 +1491,6 @@ export function LauncherHomeScreen() {
         style={styles.pagerContainer}
         contentContainerStyle={styles.pagerContent}
         scrollEnabled={!isJiggling}
-        testID="launcher-pagination-scroll"
       >
         {pages.map((pageItems, pageIndex) => (
           <Animated.View
@@ -1571,6 +1581,7 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
+                showLabel={false}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
@@ -1768,6 +1779,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 5,
   },
+  // #501: dock variant (showLabel=false) — no label below the icon, so the
+  // wrapper is exactly the icon's own height instead of the grid's 88.
+  appIconWrapperCompact: {
+    height: ICON_SIZE,
+    paddingTop: 0,
+  },
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
@@ -1817,12 +1834,12 @@ const styles = StyleSheet.create({
 
   // Dock
   dockOuter: {
-    paddingHorizontal: 12,
+    paddingHorizontal: DOCK_HORIZONTAL_INSET,
   },
   dockBlur: {
     overflow: 'hidden',
     borderRadius: Shape.dock.radius,
-    paddingVertical: 10,
+    paddingVertical: DOCK_VERTICAL_PADDING,
     paddingHorizontal: 16,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
