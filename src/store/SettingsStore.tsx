@@ -62,6 +62,7 @@ export interface SettingsState {
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
+  pressFeedback: 'scale-opacity' | 'opacity' | 'none';
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -120,6 +121,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   updateAvailable: false,
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
+  pressFeedback: 'scale-opacity',
 };
 
 interface SettingsContextValue {
