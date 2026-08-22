@@ -19,6 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { parseCommand } from '../assistant/commandParser';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+import { createQuickAlarm } from '../utils/alarmScheduling';
 import { useAlert, SiriWaveform } from '../components';
 import { withAutoLockSuppressed } from '../utils/permissions';
 
@@ -142,9 +143,21 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
       case 'WHAT_TIME':
         setResponse(`It's ${formatAssistantTime(new Date())}`);
         return;
-      case 'SET_ALARM':
-        setResponse(`Setting alarms ${NOT_SUPPORTED.replace("That's ", '')}`);
+      case 'SET_ALARM': {
+        const when = new Date();
+        when.setHours(command.hour, command.minute, 0, 0);
+        // Fire-and-catch like launchApp: persistence must not block the handler,
+        // and the confirmation only claims success once the alarm is stored.
+        createQuickAlarm(command.hour, command.minute)
+          .then(() => {
+            setResponse(`Alarm set for ${formatAssistantTime(when)}`);
+          })
+          .catch((e) => {
+            logger.warn('SiriScreen', 'createQuickAlarm failed', e);
+            setResponse("Couldn't set that alarm.");
+          });
         return;
+      }
       case 'UNRECOGNIZED':
       default:
         setResponse(NOT_SUPPORTED);

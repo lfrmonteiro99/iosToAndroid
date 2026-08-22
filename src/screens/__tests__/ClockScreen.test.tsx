@@ -4,6 +4,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { ClockScreen } from '../ClockScreen';
+import { createQuickAlarm } from '../../utils/alarmScheduling';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
@@ -502,5 +503,46 @@ describe('ClockScreen world clock — foreground refresh (pre-existing behaviour
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Assistant-created alarms (issue #259)
+//
+// createQuickAlarm writes straight to storage from outside the component tree
+// (the Siri screen is a transparent modal over a still-mounted ClockScreen), so
+// a mounted AlarmTab has to learn about the new alarm through the module's
+// listeners instead of only on mount.
+// ---------------------------------------------------------------------------
+describe('ClockScreen alarms — created by the assistant', () => {
+  it('shows an alarm added by createQuickAlarm on an already mounted Alarm tab', async () => {
+    seedAlarms([ONE_SHOT_ALARM]);
+    const api = await renderAlarmTab();
+
+    await act(async () => {
+      await createQuickAlarm(19, 0);
+    });
+
+    await waitFor(() => expect(api.getByText('7:00 PM')).toBeTruthy());
+    // The manually seeded alarm is still listed: append, not replace.
+    expect(api.getByText('7:00 AM')).toBeTruthy();
+  });
+
+  it('persists the assistant alarm alongside the existing ones', async () => {
+    seedAlarms([ONE_SHOT_ALARM]);
+    await renderAlarmTab();
+
+    await act(async () => {
+      await createQuickAlarm(19, 0);
+    });
+
+    const saved = savedAlarms();
+    expect(saved).not.toBeNull();
+    expect(saved!.map((a) => [a.hour, a.minute])).toEqual([
+      [7, 0],
+      [19, 0],
+    ]);
+    expect(saved![1].days).toEqual([]);
+    expect(saved![1].enabled).toBe(true);
   });
 });
