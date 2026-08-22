@@ -182,6 +182,66 @@ describe('SettingsStore fontChoice (#477: Inter or system typeface)', () => {
   });
 });
 
+describe('SettingsStore iconTreatment (#486: icon mask treatment + cache rebuild)', () => {
+  it('defaults to mask-adaptive-only when nothing is stored', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.iconTreatment).toBe('mask-adaptive-only');
+    expect(DEFAULT_SETTINGS.iconTreatment).toBe('mask-adaptive-only');
+  });
+
+  it('update() switches iconTreatment to mask-all', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('iconTreatment', 'mask-all');
+    });
+
+    expect(result.current.settings.iconTreatment).toBe('mask-all');
+    // Unrelated defaults preserved
+    expect(result.current.settings.wallpaperIndex).toBe(DEFAULT_SETTINGS.wallpaperIndex);
+  });
+
+  it('update() switches iconTreatment to none', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('iconTreatment', 'none');
+    });
+
+    expect(result.current.settings.iconTreatment).toBe('none');
+  });
+
+  it('persists iconTreatment to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('iconTreatment', 'mask-all');
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"iconTreatment":"mask-all"'),
+    );
+  });
+
+  it('hydrates a persisted iconTreatment from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, iconTreatment: 'none' });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.iconTreatment).toBe('none');
+  });
+});
+
 describe('SettingsStore pressFeedback (#497: touch feedback intensity)', () => {
   it('defaults to scale-opacity when nothing is stored', async () => {
     const { result } = renderHook(() => useSettings(), { wrapper });

@@ -351,6 +351,17 @@ function ReachabilityShifter({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Forwards settings.iconTreatment (#486) into AppsProvider as a prop instead
+ * of AppsProvider calling useSettings() itself — every existing AppsStore
+ * test mounts a bare <AppsProvider> with no SettingsProvider above it, and
+ * this way that keeps working unchanged.
+ */
+function AppsProviderWithIconTreatment({ children }: { children: React.ReactNode }) {
+  const { settings } = useSettings();
+  return <AppsProvider iconTreatment={settings.iconTreatment}>{children}</AppsProvider>;
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -359,7 +370,7 @@ export default function App() {
           <ThemeProvider>
             <ContactsProvider>
               <ProfileProvider>
-                <AppsProvider>
+                <AppsProviderWithIconTreatment>
                 <DeviceProvider>
                 <FoldersProvider>
                 <ReadingListProvider>
@@ -373,7 +384,7 @@ export default function App() {
                 </ReadingListProvider>
                 </FoldersProvider>
                 </DeviceProvider>
-                </AppsProvider>
+                </AppsProviderWithIconTreatment>
               </ProfileProvider>
             </ContactsProvider>
           </ThemeProvider>

@@ -45,6 +45,10 @@ describe('LauncherHomeScreen', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
 
     const { UNSAFE_getByType } = render(<LauncherHomeScreen />);
@@ -221,6 +225,10 @@ describe('LauncherHomeScreen wallpaper parallax (#433)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
 
     const { getByTestId } = render(<LauncherHomeScreen />);
@@ -287,6 +295,10 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
     return { launchApp };
   }
@@ -402,6 +414,10 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
       ...over,
     } as ReturnType<typeof AppsStore.useApps>);
   }
@@ -596,6 +612,10 @@ describe('LauncherHomeScreen dock has no app-name labels (#501)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
   }
 

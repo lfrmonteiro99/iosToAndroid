@@ -19,14 +19,20 @@ object IconCache {
 
     /**
      * The cache filename for [packageName] at [versionCode], masked with
-     * [shapeKey]. Characters that are not filename-safe are stripped from the
-     * shape key so a malformed value from JS cannot escape the icons directory.
+     * [shapeKey] (#482) and rendered under [treatment] (#486 —
+     * mask-all/mask-adaptive-only/none, see [IconTreatment]). Both are folded
+     * into the key: changing the shape, the exponent or the treatment in
+     * Settings orphans the existing PNGs for free, the same way an app update
+     * already does via versionCode — no separate "invalidate" step needed.
+     * Characters that are not filename-safe are stripped from BOTH keys so a
+     * malformed value from JS cannot escape the icons directory.
      */
     fun fileName(
         packageName: String,
         versionCode: Long,
-        shapeKey: String = DEFAULT_SHAPE_KEY
-    ): String = "${packageName}_${versionCode}_${sanitizeShapeKey(shapeKey)}.png"
+        shapeKey: String = DEFAULT_SHAPE_KEY,
+        treatment: String = IconTreatment.DEFAULT
+    ): String = "${packageName}_${versionCode}_${sanitizeShapeKey(shapeKey)}_${sanitizeShapeKey(treatment)}.png"
 
     /** Keeps letters, digits, dots and dashes; everything else becomes '-'. */
     fun sanitizeShapeKey(shapeKey: String): String {
@@ -38,10 +44,14 @@ object IconCache {
 
     /**
      * Names, from [existingFileNames], that no longer correspond to any name in
-     * [validFileNames] — i.e. the app was uninstalled, or was updated to a
-     * versionCode whose icon has already been (re-)cached under a new key.
-     * Callers should delete these from disk so `filesDir` doesn't grow forever.
+     * [validFileNames] — i.e. the app was uninstalled, was updated to a
+     * versionCode whose icon has already been (re-)cached under a new key, or
+     * the icon treatment changed. Callers should delete these from disk so
+     * `filesDir` doesn't grow forever.
      */
     fun orphanedFiles(existingFileNames: List<String>, validFileNames: Set<String>): List<String> =
         existingFileNames.filterNot { validFileNames.contains(it) }
+
+    /** Sum of on-disk icon file sizes, for the cache-size row in Settings (#486). */
+    fun totalSizeBytes(fileSizes: List<Long>): Long = fileSizes.sum()
 }

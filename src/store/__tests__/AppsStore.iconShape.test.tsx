@@ -44,6 +44,8 @@ describe('AppsStore — a forma dos ícones desce até à ponte nativa (#482)', 
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
       expect.objectContaining({ shape: 'squircle', exponent: 4.7, cacheKey: 'squircle4.7' }),
+      // #486: a ponte recebe também o tratamento (default quando sem prop).
+      'mask-adaptive-only',
     );
   });
 
@@ -131,6 +133,8 @@ describe('AppsStore — a forma dos ícones desce até à ponte nativa (#482)', 
     expect(result.current.isLoading).toBe(false);
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
       expect.objectContaining({ shape: 'squircle' }),
+      // #486: sem prop, o AppsProvider usa o default 'mask-adaptive-only'.
+      'mask-adaptive-only',
     );
   });
 });

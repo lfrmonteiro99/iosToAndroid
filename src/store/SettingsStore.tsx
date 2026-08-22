@@ -73,6 +73,13 @@ export interface SettingsState {
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
+  /**
+   * Whether the squircle mask (#480) is applied to app icons before caching.
+   * 'mask-adaptive-only' leaves already-circular/self-shaped icons untouched
+   * (masking those crops visible corners empty), 'mask-all' masks every icon
+   * (the pre-#486 behaviour), 'none' is the unmasked baseline.
+   */
+  iconTreatment: 'mask-all' | 'mask-adaptive-only' | 'none';
   pressFeedback: 'scale-opacity' | 'opacity' | 'none';
   /** Home-screen grid columns (§2 derivation, issue #503). */
   gridColumns: 3 | 4 | 5 | 6;
@@ -168,6 +175,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   updateAvailable: false,
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
+  iconTreatment: 'mask-adaptive-only',
   pressFeedback: 'scale-opacity',
   gridColumns: 4,
   gridRows: 6,

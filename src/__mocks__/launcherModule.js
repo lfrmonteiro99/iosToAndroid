@@ -43,5 +43,7 @@ module.exports = {
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
+    clearIconCache: jest.fn(() => Promise.resolve(0)),
+    getIconCacheSizeBytes: jest.fn(() => Promise.resolve(0)),
   },
 };

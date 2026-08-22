@@ -77,6 +77,11 @@ interface AppsState {
   isLoading: boolean;
 }
 
+export interface IconCacheRebuildProgress {
+  done: number;
+  total: number;
+}
+
 interface AppsContextValue {
   apps: InstalledApp[];
   homeApps: HomeApp[];
@@ -98,6 +103,19 @@ interface AppsContextValue {
   clearRecents: () => void;
   isDefaultLauncher: boolean;
   openLauncherSettings: () => Promise<void>;
+  /** Total size, in bytes, of the on-disk icon cache (filesDir/icons). */
+  iconCacheSizeBytes: number;
+  /** True while rebuildIconCache() is deleting and redrawing icons. */
+  isRebuildingIconCache: boolean;
+  /** Non-null only while a rebuild is in flight. */
+  iconCacheRebuildProgress: IconCacheRebuildProgress | null;
+  /**
+   * Manual escape hatch (#486) for when the versionCode/treatment cache key
+   * doesn't invalidate a stale icon on its own: deletes every cached PNG, then
+   * redraws one icon at a time (each a separate await, so the UI thread is
+   * never blocked) reporting progress via iconCacheRebuildProgress.
+   */
+  rebuildIconCache: () => Promise<void>;
 }
 
 const AppsContext = createContext<AppsContextValue | null>(null);
@@ -135,7 +153,22 @@ const DEFAULT_DOCK = [
   'com.iostoandroid.settings',
 ];
 
-export function AppsProvider({ children }: { children: React.ReactNode }) {
+/** Mirrors SettingsState['iconTreatment']'s default (SettingsStore.tsx) and the
+ * native side's IconTreatment.DEFAULT — used when no setting has loaded yet. */
+const DEFAULT_ICON_TREATMENT = 'mask-adaptive-only';
+
+export function AppsProvider({
+  children,
+  iconTreatment = DEFAULT_ICON_TREATMENT,
+}: {
+  children: React.ReactNode;
+  /**
+   * Passed down from SettingsStore by the app shell (see App.tsx) rather than
+   * read here via useSettings(), so AppsProvider stays usable on its own —
+   * every existing AppsStore test mounts it without a SettingsProvider above.
+   */
+  iconTreatment?: string;
+}) {
   const alert = useAlert();
   const alertRef = React.useRef(alert);
   alertRef.current = alert;
@@ -147,6 +180,15 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
   });
   const [isDefault, setIsDefault] = useState(false);
   const [recentApps, setRecentApps] = useState<RecentApp[]>([]);
+  const [iconCacheSizeBytes, setIconCacheSizeBytes] = useState(0);
+  const [isRebuildingIconCache, setIsRebuildingIconCache] = useState(false);
+  const [iconCacheRebuildProgress, setIconCacheRebuildProgress] = useState<IconCacheRebuildProgress | null>(null);
+  // A ref, not just the isRebuildingIconCache state, guards re-entrancy: two
+  // rebuildIconCache() calls in the same synchronous tick (double-tap on the
+  // button) both close over the state value from the last render, so a
+  // state-only guard would let both through. The ref is set synchronously on
+  // the very first line, before the async work starts.
+  const isRebuildingRef = React.useRef(false);
 
   // Load recent apps from storage — supports legacy string[] format
   useEffect(() => {
@@ -266,7 +308,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       if (!LauncherModule) throw new Error('LauncherModule unavailable');
 
       const [apps, defaultStatus] = await Promise.all([
-        LauncherModule.getInstalledApps(iconMask),
+        LauncherModule.getInstalledApps(iconMask, iconTreatment),
         LauncherModule.isDefaultLauncher(),
       ]);
 
@@ -288,7 +330,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [resolveDock, iconMask]);
+  }, [resolveDock, iconMask, iconTreatment]);
 
   // loadApps depende de iconMask, por isso mudar a forma ou o expoente volta a
   // pedir os ícones ao nativo com a chave de cache nova — a grelha actualiza sem
@@ -335,7 +377,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         // to be re-read rather than left as-is.
         try {
           const LauncherModule = await getLauncherModule();
-          const app = await LauncherModule?.getAppInfo(packageName, iconMaskRef.current);
+          const app = await LauncherModule?.getAppInfo(packageName, iconMaskRef.current, iconTreatment);
           if (!mounted || !app) return; // not launchable, or unmounted meanwhile
           applyIndex(prev => upsertApp(prev, app));
         } catch (e) {
@@ -348,7 +390,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       unsubscribe();
     };
-  }, [resolveDock]);
+  }, [resolveDock, iconTreatment]);
 
   const persist = useCallback((dockApps: string[], homeApps: HomeApp[]) => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ dockApps, homeApps }));
@@ -420,6 +462,55 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshIconCacheSize = useCallback(async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      const LauncherModule = await getLauncherModule();
+      if (!LauncherModule) return;
+      const bytes = await LauncherModule.getIconCacheSizeBytes();
+      setIconCacheSizeBytes(typeof bytes === 'number' && Number.isFinite(bytes) ? bytes : 0);
+    } catch (e) {
+      logger.warn('AppsStore', 'getIconCacheSizeBytes failed', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshIconCacheSize();
+  }, [refreshIconCacheSize]);
+
+  // Manual rebuild (#486): delete every cached PNG, then redraw them one
+  // package at a time so isRebuildingIconCache/iconCacheRebuildProgress track
+  // real work done instead of jumping from 0 to 100 around a single batched
+  // call — and so each await yields back to the UI thread between icons.
+  const rebuildIconCache = useCallback(async () => {
+    if (Platform.OS !== 'android' || isRebuildingRef.current) return;
+    isRebuildingRef.current = true;
+    setIsRebuildingIconCache(true);
+    try {
+      const LauncherModule = await getLauncherModule();
+      if (!LauncherModule) return;
+      await LauncherModule.clearIconCache();
+      const packageNames = state.allApps.map(app => app.packageName);
+      setIconCacheRebuildProgress({ done: 0, total: packageNames.length });
+      for (let i = 0; i < packageNames.length; i++) {
+        try {
+          // O 2º argumento é a MÁSCARA (forma/expoente da #482), não o
+          // tratamento: passar o tratamento nesse slot faria o redraw usar a
+          // forma DEFAULT e ignorar a forma escolhida pelo utilizador.
+          await LauncherModule.getAppInfo(packageNames[i], iconMaskRef.current, iconTreatment);
+        } catch (e) {
+          logger.warn('AppsStore', `rebuildIconCache: redraw failed for ${packageNames[i]}`, e);
+        }
+        setIconCacheRebuildProgress({ done: i + 1, total: packageNames.length });
+      }
+      await refreshIconCacheSize();
+    } finally {
+      isRebuildingRef.current = false;
+      setIsRebuildingIconCache(false);
+      setIconCacheRebuildProgress(null);
+    }
+  }, [state.allApps, iconTreatment, refreshIconCacheSize]);
+
   const dockApps = useMemo(() =>
     state.dockApps
       .map(pkg => state.allApps.find(a => a.packageName === pkg) || VIRTUAL_APPS_MAP[pkg])
@@ -456,7 +547,11 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     // corpo do value veio do main, que ainda nao a tinha. loadApps e a
     // implementacao, como no branch original (AppsStore.tsx:345).
     refreshApps: loadApps,
-  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps]);
+    iconCacheSizeBytes,
+    isRebuildingIconCache,
+    iconCacheRebuildProgress,
+    rebuildIconCache,
+  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }
