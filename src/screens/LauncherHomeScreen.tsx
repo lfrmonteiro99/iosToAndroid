@@ -1480,7 +1480,6 @@ export function LauncherHomeScreen() {
         style={styles.pagerContainer}
         contentContainerStyle={styles.pagerContent}
         scrollEnabled={!isJiggling}
-        testID="launcher-pagination-scroll"
       >
         {pages.map((pageItems, pageIndex) => (
           <Animated.View

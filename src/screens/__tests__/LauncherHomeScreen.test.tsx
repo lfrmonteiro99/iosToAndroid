@@ -548,7 +548,7 @@ describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
     mockLoadedApps();
     const { getByTestId } = render(<LauncherHomeScreen />);
 
-    const paginationScrollView = getByTestId('launcher-pagination-scroll');
+    const paginationScrollView = getByTestId('launcher-pager');
     expect(paginationScrollView.props.decelerationRate).toBe(0.998);
   });
 });
