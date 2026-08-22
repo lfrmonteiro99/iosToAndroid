@@ -13,14 +13,15 @@ class IconCacheTest {
 
     @Test
     fun `fileName encodes packageName and versionCode so an app update gets a new key`() {
+        // A forma da máscara entra na chave desde o #482; sem argumento usa o default.
         assertEquals(
-            "com.android.settings_1.png",
+            "com.android.settings_1_${IconCache.DEFAULT_SHAPE_KEY}.png",
             IconCache.fileName("com.android.settings", 1L)
         )
         // Same package, new versionCode after an update — different key entirely,
         // so the stale PNG is never mistaken for the new one.
         assertEquals(
-            "com.android.settings_2.png",
+            "com.android.settings_2_${IconCache.DEFAULT_SHAPE_KEY}.png",
             IconCache.fileName("com.android.settings", 2L)
         )
     }
