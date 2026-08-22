@@ -35,6 +35,10 @@ function mockApps(apps: AppsStore.InstalledApp[]) {
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    iconCacheSizeBytes: 0,
+    isRebuildingIconCache: false,
+    iconCacheRebuildProgress: null,
+    rebuildIconCache: jest.fn(() => Promise.resolve()),
   } as ReturnType<typeof AppsStore.useApps>);
 }
 
@@ -353,6 +357,137 @@ describe('AppStoreScreen — Categories tab', () => {
     const { getByText, getAllByLabelText } = render(<AppStoreScreen navigation={nav} />);
     expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
     fireEvent.press(getByText('Categories'));
+    fireEvent.press(getByText('Today'));
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+  });
+});
+
+describe('AppStoreScreen — Updates tab', () => {
+  const UPDATES_NOTICE =
+    "Android cannot check for app updates automatically. Tap an app to open its Play Store page.";
+
+  it('the segmented control now offers Today, Search, Categories and Updates', () => {
+    const { getAllByText, getByText } = render(<AppStoreScreen navigation={nav} />);
+    expect(getAllByText('Today').length).toBeGreaterThan(0);
+    expect(getByText('Search')).toBeTruthy();
+    expect(getByText('Categories')).toBeTruthy();
+    expect(getByText('Updates')).toBeTruthy();
+  });
+
+  it('selecting Updates shows the honesty notice that automatic detection is unavailable', () => {
+    const { getByText, getByTestId } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    // Exact copy states the limitation plainly — no "live check" implication.
+    expect(getByText(UPDATES_NOTICE)).toBeTruthy();
+    expect(getByTestId('updates-notice')).toBeTruthy();
+  });
+
+  it('shows a non-system installed app as a row with a Check-on-Play-Store action', () => {
+    const regular: AppsStore.InstalledApp = {
+      name: 'Acme Notes',
+      packageName: 'com.acme.notes',
+      icon: '',
+      isSystem: false,
+    };
+    mockApps([regular]);
+    const { getByText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    expect(getByLabelText('Check Acme Notes on Play Store')).toBeTruthy();
+  });
+
+  it('excludes system apps from the Updates list', () => {
+    const systemApp: AppsStore.InstalledApp = {
+      name: 'Android System',
+      packageName: 'com.android.system',
+      icon: '',
+      isSystem: true,
+    };
+    mockApps([systemApp]);
+    const { getByText, queryByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    expect(queryByLabelText('Check Android System on Play Store')).toBeNull();
+  });
+
+  it('excludes this app’s own virtual built-ins from the Updates list', () => {
+    const virtualApp: AppsStore.InstalledApp = {
+      name: 'Phone',
+      packageName: 'com.iostoandroid.phone',
+      icon: '',
+      isSystem: false,
+    };
+    mockApps([virtualApp]);
+    const { getByText, queryByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    // VIRTUAL_APPS_MAP entries are isSystem:false, so isSystem alone wouldn't
+    // exclude them — the exclusion must be by package name.
+    expect(queryByLabelText('Check Phone on Play Store')).toBeNull();
+  });
+
+  it('tapping a row’s action calls Linking.openURL with the market:// deep link for that package', async () => {
+    const regular: AppsStore.InstalledApp = {
+      name: 'Acme Notes',
+      packageName: 'com.acme.notes',
+      icon: '',
+      isSystem: false,
+    };
+    mockApps([regular]);
+    const { getByText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    fireEvent.press(getByLabelText('Check Acme Notes on Play Store'));
+    await waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith('market://details?id=com.acme.notes'),
+    );
+    expect(canOpenSpy).toHaveBeenCalledWith('market://details?id=com.acme.notes');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the https listing when market:// cannot be opened (same guard as Today)', async () => {
+    canOpenSpy.mockImplementation((url: string) => Promise.resolve(url.startsWith('https:')));
+    const regular: AppsStore.InstalledApp = {
+      name: 'Acme Notes',
+      packageName: 'com.acme.notes',
+      icon: '',
+      isSystem: false,
+    };
+    mockApps([regular]);
+    const { getByText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    fireEvent.press(getByLabelText('Check Acme Notes on Play Store'));
+    await waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://play.google.com/store/apps/details?id=com.acme.notes',
+      ),
+    );
+    expect(openSpy).not.toHaveBeenCalledWith('market://details?id=com.acme.notes');
+  });
+
+  it('shows no fabricated "update available" badge or version number', () => {
+    mockApps([
+      { name: 'Acme Notes', packageName: 'com.acme.notes', icon: '', isSystem: false },
+    ]);
+    const { getByText, queryByText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    // No fabricated update state of any kind.
+    expect(queryByText(/update(s)? available/i)).toBeNull();
+    expect(getByText(UPDATES_NOTICE)).toBeTruthy();
+  });
+
+  it('shows an empty state (notice only, no rows) when there are no non-system, non-virtual apps', () => {
+    mockApps([]);
+    const { getByText, queryAllByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Updates'));
+    expect(queryAllByLabelText(/^Check .* on Play Store$/)).toHaveLength(0);
+    expect(getByText(UPDATES_NOTICE)).toBeTruthy();
+  });
+
+  it('switching Today → Updates → Today keeps the Today cards unchanged (regression guard)', () => {
+    mockApps([]);
+    const { getByText, getAllByLabelText, queryAllByLabelText } = render(
+      <AppStoreScreen navigation={nav} />,
+    );
+    expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
+    fireEvent.press(getByText('Updates'));
+    expect(queryAllByLabelText(/card$/)).toHaveLength(0);
     fireEvent.press(getByText('Today'));
     expect(getAllByLabelText(/card$/)).toHaveLength(CURATED_APPS.length);
   });

@@ -28,7 +28,7 @@ export { GestureHost, useGestureHost, useOptionalGestureHost } from './GestureHo
 export type { GestureHostMode } from './GestureHost';
 export { BackEdgeSwipe } from './BackEdgeSwipe';
 export { QuickSwitchHomeBar } from './QuickSwitchHomeBar';
-export { AssistiveTouch } from './AssistiveTouch';
+export { AssistiveTouch, MENU_GEOMETRY } from './AssistiveTouch';
 export { ControlCenterOverlay } from './ControlCenterOverlay';
 export { NotificationCenterOverlay } from './NotificationCenterOverlay';
 export { SpotlightReveal } from './SpotlightReveal';

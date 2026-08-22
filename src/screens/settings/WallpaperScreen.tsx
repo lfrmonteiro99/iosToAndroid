@@ -5,25 +5,78 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/ThemeContext';
-import { useSettings } from '../../store/SettingsStore';
+import { useSettings, type SettingsState } from '../../store/SettingsStore';
+import { useApps } from '../../store/AppsStore';
 import { NAMED_WALLPAPERS } from '../../utils/wallpapers';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoSegmentedControl,
+  CupertinoProgressBar,
+  CupertinoSwitch,
+  CupertinoSlider,
   useAlert,
 } from '../../components';
+import {
+  ICON_SHAPES,
+  ICON_SHAPE_LABELS,
+  ICON_SHAPE_EXPONENT_MIN,
+  ICON_SHAPE_EXPONENT_MAX,
+  DEFAULT_ICON_SHAPE_EXPONENT,
+  normalizeIconShape,
+  clampIconShapeExponent,
+  previewCornerRatio,
+} from '../../utils/iconShape';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const CUSTOM_WALLPAPER_KEY = '@iostoandroid/custom_wallpaper';
+
+// Order drives the segmented control's left-to-right layout.
+const ICON_TREATMENT_OPTIONS: SettingsState['iconTreatment'][] = [
+  'mask-all',
+  'mask-adaptive-only',
+  'none',
+];
+
+const ICON_TREATMENT_LABELS: Record<SettingsState['iconTreatment'], string> = {
+  'mask-all': 'All Icons',
+  'mask-adaptive-only': 'Adaptive Only',
+  none: 'None',
+};
+
+/** "0 B" / "3.2 KB" / "1.4 MB" — never a bare byte count above a few KB. */
+export function formatIconCacheSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
 
 export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const {
+    apps,
+    iconCacheSizeBytes,
+    isRebuildingIconCache,
+    iconCacheRebuildProgress,
+    rebuildIconCache,
+  } = useApps();
   const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
   const alert = useAlert();
+
+  // Forma dos ícones (#482). Vive neste ecrã porque é aqui que a aparência do
+  // ecrã inicial já se configura — ver o PR para a justificação.
+  const iconShape = normalizeIconShape(settings.iconShape);
+  const iconShapeExponent = clampIconShapeExponent(settings.iconShapeExponent);
+  const shapeIndex = Math.max(0, ICON_SHAPES.indexOf(iconShape));
+  // Pré-visualização com um ícone REAL: a primeira app instalada com ícone.
+  const previewIcon = apps.find((a) => !!a.icon)?.icon ?? null;
+  const previewRadius = PREVIEW_SIZE * previewCornerRatio(iconShape, iconShapeExponent);
+  const exponentDisabled = iconShape !== 'squircle';
 
   useEffect(() => {
     AsyncStorage.getItem(CUSTOM_WALLPAPER_KEY).then((uri) => {
@@ -36,6 +89,14 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
   const selectedWallpaper = isCustomSelected
     ? { color: '', name: 'Custom' }
     : (NAMED_WALLPAPERS[selectedIndex] ?? NAMED_WALLPAPERS[0]);
+
+  const iconTreatment = settings.iconTreatment ?? 'mask-adaptive-only';
+  const iconTreatmentIndex = ICON_TREATMENT_OPTIONS.indexOf(iconTreatment);
+
+  const handleRebuildIconCache = useCallback(() => {
+    if (isRebuildingIconCache) return;
+    rebuildIconCache();
+  }, [isRebuildingIconCache, rebuildIconCache]);
 
   const pickImage = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -151,6 +212,58 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
           Selected: {selectedWallpaper.name}
         </Text>
 
+        {/* Forma dos ícones (#482) */}
+        <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
+          <CupertinoListSection header="Icon Shape">
+            <View style={styles.shapeRow}>
+              <CupertinoSegmentedControl
+                values={ICON_SHAPE_LABELS as string[]}
+                selectedIndex={shapeIndex}
+                onChange={(index) => update('iconShape', ICON_SHAPES[index])}
+              />
+            </View>
+            <View style={styles.previewRow}>
+              {previewIcon ? (
+                <Image
+                  source={{ uri: previewIcon }}
+                  style={{ width: PREVIEW_SIZE, height: PREVIEW_SIZE, borderRadius: previewRadius }}
+                  accessibilityLabel={`Icon shape preview, ${ICON_SHAPE_LABELS[shapeIndex]}`}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: PREVIEW_SIZE,
+                    height: PREVIEW_SIZE,
+                    borderRadius: previewRadius,
+                    backgroundColor: colors.systemBlue,
+                  }}
+                  accessibilityLabel={`Icon shape preview, ${ICON_SHAPE_LABELS[shapeIndex]}`}
+                />
+              )}
+              <Text style={[typography.footnote, { color: colors.secondaryLabel }]}>
+                {iconShape === 'original'
+                  ? 'Original: system drawable, no mask'
+                  : `Exponent: ${iconShapeExponent.toFixed(1)}`}
+              </Text>
+            </View>
+            <View style={styles.sliderRow}>
+              <CupertinoSlider
+                value={iconShapeExponent}
+                minimumValue={ICON_SHAPE_EXPONENT_MIN}
+                maximumValue={ICON_SHAPE_EXPONENT_MAX}
+                disabled={exponentDisabled}
+                onValueChange={(value) =>
+                  update('iconShapeExponent', clampIconShapeExponent(value))
+                }
+              />
+            </View>
+            <CupertinoListTile
+              title="Reset Shape Exponent"
+              onPress={() => update('iconShapeExponent', DEFAULT_ICON_SHAPE_EXPONENT)}
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Set section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Set Wallpaper">
@@ -176,13 +289,125 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
             />
           </CupertinoListSection>
         </View>
+
+        {/* Icon Treatment (#486) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Icon Treatment"
+            footer="Adaptive Only masks icons with a clean background/foreground split and leaves already-round or custom-shaped icons untouched. All Icons matches the classic iOS look; None shows icons exactly as the app provides them."
+          >
+            <View style={styles.segmentedRow}>
+              <CupertinoSegmentedControl
+                values={ICON_TREATMENT_OPTIONS.map((option) => ICON_TREATMENT_LABELS[option])}
+                selectedIndex={iconTreatmentIndex}
+                onChange={(index) => update('iconTreatment', ICON_TREATMENT_OPTIONS[index])}
+              />
+            </View>
+            <CupertinoListTile
+              title="Cache Size"
+              trailing={
+                <Text
+                  accessibilityLabel={`Icon cache size: ${formatIconCacheSize(iconCacheSizeBytes)}`}
+                  style={[typography.body, { color: colors.secondaryLabel }]}
+                >
+                  {formatIconCacheSize(iconCacheSizeBytes)}
+                </Text>
+              }
+              showChevron={false}
+            />
+            <CupertinoListTile
+              title="Rebuild Icon Cache"
+              subtitle={
+                isRebuildingIconCache && iconCacheRebuildProgress
+                  ? `Rebuilding… ${iconCacheRebuildProgress.done} of ${iconCacheRebuildProgress.total}`
+                  : undefined
+              }
+              trailing={isRebuildingIconCache ? <CupertinoProgressBar
+                progress={
+                  iconCacheRebuildProgress && iconCacheRebuildProgress.total > 0
+                    ? iconCacheRebuildProgress.done / iconCacheRebuildProgress.total
+                    : 0
+                }
+                style={styles.rebuildProgressBar}
+              /> : undefined}
+              showChevron={!isRebuildingIconCache}
+              isLast
+              onPress={isRebuildingIconCache ? undefined : handleRebuildIconCache}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* App opening animation (#512 §6.3) */}
+        <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
+          <CupertinoListSection
+            header="App Opening"
+            footer={
+              settings.appLaunchAnimation
+                ? `Apps expand from their icon over ${Math.round(settings.appLaunchDurationMs)}ms when opening.`
+                : 'Apps open instantly, with no expand animation. The system open transition stays suppressed either way.'
+            }
+          >
+            <CupertinoListTile
+              title="Animate App Opening"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.appLaunchAnimation}
+                  onValueChange={(v) => update('appLaunchAnimation', v)}
+                />
+              }
+              showChevron={false}
+            />
+            {settings.appLaunchAnimation && (
+              <View style={styles.sliderRow}>
+                <Text style={[typography.footnote, { color: colors.secondaryLabel, width: 40 }]}>
+                  Fast
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <CupertinoSlider
+                    value={settings.appLaunchDurationMs}
+                    onValueChange={(v) => update('appLaunchDurationMs', Math.round(v))}
+                    minimumValue={150}
+                    maximumValue={450}
+                  />
+                </View>
+                <Text style={[typography.footnote, { color: colors.secondaryLabel, width: 40, textAlign: 'right' }]}>
+                  Slow
+                </Text>
+              </View>
+            )}
+          </CupertinoListSection>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
+const PREVIEW_SIZE = 60;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  segmentedRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  rebuildProgressBar: {
+    width: 80,
+  },
+  shapeRow: { paddingHorizontal: 16, paddingVertical: 12 },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
   gridContainer: {
     marginBottom: 8,
   },

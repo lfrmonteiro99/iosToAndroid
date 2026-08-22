@@ -46,6 +46,11 @@ function webviewUri(utils: ReturnType<typeof render>): string {
   return (webview.props.source as { uri: string }).uri;
 }
 
+function flatStyle(element: { props: { style: unknown } }): Record<string, unknown> {
+  const styles = Array.isArray(element.props.style) ? element.props.style : [element.props.style];
+  return Object.assign({}, ...styles.filter(Boolean));
+}
+
 describe('BrowserScreen — address bar + WebView', () => {
   it('renders an address bar and a WebView pointing at the home URL', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
@@ -174,6 +179,55 @@ describe('BrowserScreen — Share', () => {
   });
 });
 
+describe('BrowserScreen — private browsing toggle', () => {
+  it('mounts the WebView with incognito=false by default', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const webview = utils.getByTestId('browser-webview');
+    expect(webview.props.incognito).toBe(false);
+  });
+
+  it('toggling the private-browsing button flips incognito to true, and back to false', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const toggle = utils.getByLabelText('Toggle private browsing');
+    fireEvent.press(toggle);
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
+    fireEvent.press(toggle);
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
+  });
+
+  it('darkens topBar and addressBar to #1C1C1E while private, and restores the default theme colors when turned off', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const topBar = utils.getByTestId('browser-topbar');
+    const addressBar = utils.getByPlaceholderText('Search or enter website name');
+
+    const defaultTopBarBg = flatStyle(topBar).backgroundColor;
+    const defaultAddressBarBg = flatStyle(addressBar).backgroundColor;
+    expect(defaultTopBarBg).not.toBe('#1C1C1E');
+    expect(defaultAddressBarBg).not.toBe('#1C1C1E');
+
+    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
+    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe('#1C1C1E');
+    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe('#1C1C1E');
+
+    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
+    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe(defaultTopBarBg);
+    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
+      defaultAddressBarBg
+    );
+  });
+
+  it('toggling private browsing repeatedly without navigating keeps the current URL and typed address bar text', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const bar = utils.getByPlaceholderText('Search or enter website name');
+    fireEvent.changeText(bar, 'example.com');
+
+    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
+    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
+    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
+
+    expect(utils.getByPlaceholderText('Search or enter website name').props.value).toBe('example.com');
+});
+});
 describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
   it('opens the tab grid when the Tabs button is pressed', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
@@ -225,14 +279,44 @@ describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
     expect(webviewUri(utils)).toBe('https://example.com');
   });
 
-  it('closing the only tab leaves activeTabId pointing at no tab (grid shown, no WebView, no crash)', () => {
+  it('the Tabs button shows a badge with the current tab count', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('2');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('3');
+  });
+
+  it('closing the only (active) tab never leaves zero tabs: a fresh home tab takes over', () => {
+    const utils = submitAddress('example.com');
+    expect(webviewUri(utils)).toBe('https://example.com');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('Close tab: https://example.com'));
+
+    // Never zero tabs: exactly one remains, at the home URL.
+    expect(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`)).toBeTruthy();
+    expect(utils.queryByLabelText('Tab: https://example.com')).toBeNull();
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+
+  it('closing tabs repeatedly (double-tap on the last close affordance) still leaves exactly one tab', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
     fireEvent.press(utils.getByLabelText('Tabs'));
-    fireEvent.press(utils.getByLabelText(`Close tab: ${BROWSER_HOME_URL}`));
+    const label = `Close tab: ${BROWSER_HOME_URL}`;
+    fireEvent.press(utils.getByLabelText(label));
+    fireEvent.press(utils.getByLabelText(label));
 
-    expect(utils.queryByTestId('browser-webview')).toBeNull();
-    expect(utils.getByLabelText('New Tab')).toBeTruthy();
-    expect(utils.queryByLabelText(/^Tab: /)).toBeNull();
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+    expect(utils.getByTestId('browser-webview')).toBeTruthy();
   });
 
   it('closing the active tab (when others remain) activates another existing tab', () => {
@@ -255,8 +339,7 @@ describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
     fireEvent.press(utils.getByLabelText('Tabs'));
     // Close the background tab (example.com), not the active one.
     fireEvent.press(utils.getByLabelText('Close tab: https://example.com'));
-    fireEvent.press(utils.getByLabelText('Done'));
-    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+    fireEvent.press(utils.getByLabelText('Done'));    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
   });
 });
 

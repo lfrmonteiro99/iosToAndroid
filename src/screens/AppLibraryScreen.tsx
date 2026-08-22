@@ -17,7 +17,14 @@ import * as Haptics from 'expo-haptics';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { useSettings } from '../store/SettingsStore';
+import {
+  buildCategorySections,
+  recategorizeApp,
+  STABLE_KEY_TO_NAME,
+} from '../utils/categoryOverrides';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
@@ -102,7 +109,9 @@ export function categorizeApp(app: InstalledApp): string {
     return NATIVE_CATEGORY_MAP[native];
   }
   const nameLower = app.name.toLowerCase();
-  const pkgLower = app.packageName.toLowerCase();
+  // packageName pode ser undefined (apps virtuais sem packageName real) — não
+  // deixar que isso rebente a cascata; trata-se como string vazia.
+  const pkgLower = (app.packageName ?? '').toLowerCase();
   for (const cat of CATEGORY_KEYWORDS) {
     for (const kw of cat.keywords) {
       if (nameLower.includes(kw) || pkgLower.includes(kw)) {
@@ -192,6 +201,13 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
   const largeApps = hasQuadrant ? apps.slice(0, 3) : apps.slice(0, 4);
   const miniApps = hasQuadrant ? apps.slice(3, 3 + MAX_QUADRANT_MINIS) : [];
 
+  // DEVIATION from the scale+dim primitive: the category card keeps the
+  // pressed-background convention (§3.2 convention 4), now using the shared
+  // token. Two reasons — a large tile that shrinks reads wrong next to the
+  // launcher grid, and the App Library is mounted inside the launcher pager,
+  // where an animated style per card would make a page transition's
+  // useAnimatedStyle cost grow with the number of categories (the exact
+  // invariant #518 protects). The ad hoc 0.8 opacity is gone either way.
   return (
     <Pressable
       onPress={onPress}
@@ -199,8 +215,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
         styles.categoryCard,
         {
           width: cardWidth,
-          backgroundColor: colors.secondarySystemGroupedBackground,
-          opacity: pressed ? 0.8 : 1,
+          backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground,
         },
       ]}
       accessibilityLabel={`${title} category, ${apps.length} app${apps.length !== 1 ? 's' : ''}`}
@@ -257,12 +272,15 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
 interface CategoryDetailProps {
   visible: boolean;
   title: string;
+  /** Chave estável da categoria atual (para recategorizar com base nela). */
+  categoryKey: string;
   apps: InstalledApp[];
   onClose: () => void;
   onLaunch: (pkg: string) => void;
+  onRequestRecategorize: (packageName: string, currentKey: string) => void;
 }
 
-function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: CategoryDetailProps) {
+function CategoryDetailModal({ visible, title, categoryKey, apps, onClose, onLaunch, onRequestRecategorize }: CategoryDetailProps) {
   const { theme, isDark, typography, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -296,6 +314,8 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
           renderItem={({ item }) => (
             <Pressable
               onPress={() => { onLaunch(item.packageName); onClose(); }}
+              onLongPress={() => onRequestRecategorize(item.packageName, categoryKey)}
+              delayLongPress={350}
               style={[styles.modalAppCell, { width: cellW }]}
               accessibilityLabel={`Open ${item.name}, App Library`}
               accessibilityRole="button"
@@ -313,8 +333,65 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
 }
 
 // ---------------------------------------------------------------------------
-// Horizontal app strip (Recently Added / Suggestions)
+// Recategorize sheet (long-press num ícone dentro do modal de categoria)
 // ---------------------------------------------------------------------------
+// Onde se recategoriza uma app (#516): um long-press no ícone dentro do modal
+// de detalhe da categoria abre este sheet. Decisão justificada no PR — não é um
+// ecrã de definições com 200 apps; é contextual, no sítio onde o utilizador já
+// vê a app, e reaproveita o modal que já lista as apps da categoria.
+
+interface RecategorizeSheetProps {
+  visible: boolean;
+  currentKey: string;
+  onCancel: () => void;
+  onSelect: (targetKey: string) => void;
+}
+
+function RecategorizeSheet({ visible, currentKey, onCancel, onSelect }: RecategorizeSheetProps) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+  const insets = useSafeAreaInsets();
+  // Todas as categorias conhecidas, pela ordem canónica do mapa.
+  const allKeys = Object.keys(STABLE_KEY_TO_NAME);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <Pressable style={styles.sheetBackdrop} onPress={onCancel}>
+        <View style={[styles.sheetRoot, { backgroundColor: colors.secondarySystemGroupedBackground, paddingBottom: insets.bottom + 16 }]}>
+          <Text style={[typography.title3, styles.sheetTitle, { color: colors.label }]}>
+            Mover para a categoria
+          </Text>
+          <FlatList
+            data={allKeys}
+            keyExtractor={(k) => k}
+            renderItem={({ item: key }) => (
+              <Pressable
+                onPress={() => onSelect(key)}
+                style={[styles.sheetRow, { borderBottomColor: colors.separator }]}
+                accessibilityLabel={`Mover para ${STABLE_KEY_TO_NAME[key]}`}
+                accessibilityRole="button"
+              >
+                <Text style={[typography.body, { color: colors.label }]}>{STABLE_KEY_TO_NAME[key]}</Text>
+                {key === currentKey && (
+                  <Ionicons name="checkmark" size={20} color={colors.systemBlue} />
+                )}
+              </Pressable>
+            )}
+          />
+          <Pressable
+            onPress={onCancel}
+            style={[styles.sheetCancel, { borderTopColor: colors.separator }]}
+            accessibilityLabel="Cancelar"
+            accessibilityRole="button"
+          >
+            <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}>Cancelar</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 
 const AppStrip = React.memo(function AppStrip({
   apps,
@@ -378,15 +455,15 @@ const SearchResults = React.memo(function SearchResults({
         />
       }
       renderItem={({ item }) => (
-        <Pressable
+        <CupertinoPressable
           onPress={() => onLaunch(item.packageName)}
-          style={({ pressed }) => [styles.searchRow, { opacity: pressed ? 0.7 : 1 }]}
+          style={styles.searchRow}
           accessibilityLabel={`Open ${item.name}, App Library`}
           accessibilityRole="button"
         >
           <AppIcon app={item} size={46} />
           <Text style={[typography.callout, styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
-        </Pressable>
+        </CupertinoPressable>
       )}
     />
   );
@@ -421,29 +498,28 @@ export function AppLibraryContent() {
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState('');
-  const [categoryModal, setCategoryModal] = useState<{ title: string; apps: InstalledApp[] } | null>(null);
-
+  const [categoryModal, setCategoryModal] = useState<{ title: string; key: string; apps: InstalledApp[] } | null>(null);
+  // Estado do long-press "recategorizar app": qual app e se o sheet está visível.
+  const [recatSheet, setRecatSheet] = useState<{ packageName: string; currentKey: string } | null>(null);
   // Card layout — 2 columns with gap
   const CARD_GAP = 12;
   const SIDE_PAD = 16;
   const cardWidth = (width - SIDE_PAD * 2 - CARD_GAP) / 2;
 
-  // Categorise all apps
+  // Categorias da grelha, com overrides do utilizador aplicados
+  // (ocultar / renomear / reordenar / appOverrides). Usa chaves estáveis, por
+  // isso renomear não parte a atribuição.
+  const { settings, update } = useSettings();
   const categories = useMemo(() => {
-    const map: Record<string, InstalledApp[]> = {};
-    for (const app of apps) {
-      const cat = categorizeApp(app);
-      if (!map[cat]) map[cat] = [];
-      map[cat].push(app);
-    }
-    // Sort categories — Other last
-    const keys = Object.keys(map).sort((a, b) => {
-      if (a === 'Other') return 1;
-      if (b === 'Other') return -1;
-      return a.localeCompare(b);
-    });
-    return keys.map((name) => ({ name, apps: map[name] }));
-  }, [apps]);
+    return buildCategorySections(apps, settings.categoryOverrides, categorizeApp);
+  }, [apps, settings.categoryOverrides]);
+
+  // Grava um appOverrides (recategorização via long-press).
+  const handleRecategorize = useCallback((packageName: string, targetKey: string) => {
+    const next = recategorizeApp(settings.categoryOverrides, packageName, targetKey);
+    update('categoryOverrides', next);
+    setRecatSheet(null);
+  }, [settings.categoryOverrides, update]);
 
   // Recently Added — most recently launched apps (by launchedAt timestamp)
   const recentlyAddedApps = useMemo(() => {
@@ -529,11 +605,11 @@ export function AppLibraryContent() {
           <View style={styles.categoryGrid}>
             {categories.map((cat) => (
               <CategoryCard
-                key={cat.name}
-                title={cat.name}
+                key={cat.key}
+                title={cat.displayName}
                 apps={cat.apps}
                 cardWidth={cardWidth}
-                onPress={() => setCategoryModal({ title: cat.name, apps: cat.apps })}
+                onPress={() => setCategoryModal({ title: cat.displayName, key: cat.key, apps: cat.apps })}
                 onLaunchApp={handleLaunch}
               />
             ))}
@@ -546,11 +622,23 @@ export function AppLibraryContent() {
         <CategoryDetailModal
           visible
           title={categoryModal.title}
+          categoryKey={categoryModal.key}
           apps={categoryModal.apps}
           onClose={() => setCategoryModal(null)}
           onLaunch={handleLaunch}
+          onRequestRecategorize={(pkg, currentKey) => setRecatSheet({ packageName: pkg, currentKey })}
         />
       )}
+
+      {/* Recategorize sheet (long-press dentro do modal de categoria) */}
+      <RecategorizeSheet
+        visible={recatSheet !== null}
+        currentKey={recatSheet?.currentKey ?? ''}
+        onCancel={() => setRecatSheet(null)}
+        onSelect={(targetKey) => {
+          if (recatSheet) handleRecategorize(recatSheet.packageName, targetKey);
+        }}
+      />
     </View>
   );
 }
@@ -735,5 +823,37 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'center',
     marginTop: 5,
+  },
+
+  // Recategorize sheet
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheetRoot: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 16,
+    maxHeight: '70%',
+  },
+  sheetTitle: {
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sheetCancel: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 8,
   },
 });
