@@ -182,7 +182,7 @@ describe('WallpaperScreen', () => {
 describe('WallpaperScreen icon treatment (#486)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSettings = { wallpaperIndex: 0, iconTreatment: 'mask-adaptive-only' };
+    mockSettings = { wallpaperIndex: 0, iconTreatment: 'mask-adaptive-only', appLaunchAnimation: true, appLaunchDurationMs: 280 };
     (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([]);
     (LauncherModule.isDefaultLauncher as jest.Mock).mockResolvedValue(false);
     (LauncherModule.getIconCacheSizeBytes as jest.Mock).mockResolvedValue(0);
