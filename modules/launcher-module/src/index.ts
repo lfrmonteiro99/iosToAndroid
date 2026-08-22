@@ -164,18 +164,31 @@ export interface InstalledKeyboard {
   enabled: boolean;
 }
 
+/**
+ * Máscara a aplicar aos ícones, decidida em JS (src/utils/iconShape.ts) e
+ * aplicada nativamente. `exponent: null` significa "sem máscara" — o drawable
+ * do sistema tal como ele vem. `cacheKey` entra no nome do PNG em disco, o que
+ * é o que faz uma mudança de forma invalidar a cache em vez de devolver o
+ * ficheiro com a forma antiga.
+ */
+export interface IconMask {
+  shape: string;
+  exponent: number | null;
+  cacheKey: string;
+}
+
 interface LauncherModuleType {
   // Apps
-  getInstalledApps(): Promise<InstalledApp[]>;
+  getInstalledApps(mask?: IconMask): Promise<InstalledApp[]>;
   launchApp(packageName: string): Promise<boolean>;
-  getAppIcon(packageName: string): Promise<string>;
+  getAppIcon(packageName: string, mask?: IconMask): Promise<string>;
   /**
    * Single-package variant of getInstalledApps: resolves the launcher entry for
    * one package, or null when the package is not installed or has no launcher
    * activity. Used to refresh only the package a PACKAGE_* broadcast named,
    * instead of rescanning every installed app.
    */
-  getAppInfo(packageName: string): Promise<InstalledApp | null>;
+  getAppInfo(packageName: string, mask?: IconMask): Promise<InstalledApp | null>;
   isDefaultLauncher(): Promise<boolean>;
   openLauncherSettings(): Promise<boolean>;
   goHome(): Promise<boolean>;
@@ -384,8 +397,8 @@ function createBridgedModule(): LauncherModuleType {
   if (!nativeModule) return stub;
 
   return {
-    getInstalledApps: async () => {
-      try { return dedupeByPackageName<InstalledApp>(withCategory(await nativeModule.getInstalledApps())); }
+    getInstalledApps: async (mask?: IconMask) => {
+      try { return dedupeByPackageName<InstalledApp>(withCategory(await nativeModule.getInstalledApps(mask ?? null))); }
       catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {
@@ -399,12 +412,12 @@ function createBridgedModule(): LauncherModuleType {
         return ok;
       } catch (e) { console.error('LauncherModule.launchApp failed:', e); reportBridgeError('launchApp', e); return false; }
     },
-    getAppIcon: async (packageName: string) => {
-      try { return await nativeModule.getAppIcon(packageName); }
+    getAppIcon: async (packageName: string, mask?: IconMask) => {
+      try { return await nativeModule.getAppIcon(packageName, mask ?? null); }
       catch (e) { console.error('LauncherModule.getAppIcon failed:', e); reportBridgeError('getAppIcon', e); return ''; }
     },
-    getAppInfo: async (packageName: string) => {
-      try { return await nativeModule.getAppInfo(packageName); }
+    getAppInfo: async (packageName: string, mask?: IconMask) => {
+      try { return await nativeModule.getAppInfo(packageName, mask ?? null); }
       catch (e) { console.error('LauncherModule.getAppInfo failed:', e); reportBridgeError('getAppInfo', e); return null; }
     },
     isDefaultLauncher: async () => {
@@ -723,6 +736,21 @@ export function addSpeechResultListener(
   listener: (text: string) => void,
 ): () => void {
   const sub = addModuleListener('onSpeechResult', (n: { text: string }) => {
+    listener(n.text);
+  });
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to partial (in-flight) speech-to-text results.
+ * Fires repeatedly while the user is still speaking so callers can render a
+ * live transcript before the recognizer commits with onSpeechResult.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechPartialResultListener(
+  listener: (text: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechPartialResult', (n: { text: string }) => {
     listener(n.text);
   });
   return () => sub.remove();

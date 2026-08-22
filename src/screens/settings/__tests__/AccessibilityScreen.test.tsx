@@ -149,3 +149,58 @@ describe('AccessibilityScreen font choice (#477: Inter or system typeface)', () 
     expect(getByTestId('font-choice-value').props.children).toBe('inter');
   });
 });
+
+// Reads pressFeedback directly from SettingsStore — proves the control reaches
+// the global store, not just local screen state.
+function PressFeedbackReader() {
+  const { settings } = useSettings();
+  return <Text testID="press-feedback-value">{settings.pressFeedback}</Text>;
+}
+
+describe('AccessibilityScreen touch feedback (#497: scale+opacity / opacity / none)', () => {
+  it('renders the Touch Feedback section with all 3 options', () => {
+    const { getByText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
+    expect(getByText('Scale & Opacity')).toBeTruthy();
+    expect(getByText('Opacity Only')).toBeTruthy();
+    expect(getByText('None')).toBeTruthy();
+  });
+
+  it('defaults to Scale & Opacity selected', () => {
+    const { getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <PressFeedbackReader />
+      </>,
+    );
+
+    expect(getByTestId('press-feedback-value').props.children).toBe('scale-opacity');
+  });
+
+  it('selecting None updates the global SettingsStore pressFeedback', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <PressFeedbackReader />
+      </>,
+    );
+
+    fireEvent.press(getByText('None'));
+
+    expect(getByTestId('press-feedback-value').props.children).toBe('none');
+  });
+
+  it('selecting Opacity Only then Scale & Opacity again returns to scale-opacity (no stuck state)', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <PressFeedbackReader />
+      </>,
+    );
+
+    fireEvent.press(getByText('Opacity Only'));
+    expect(getByTestId('press-feedback-value').props.children).toBe('opacity');
+
+    fireEvent.press(getByText('Scale & Opacity'));
+    expect(getByTestId('press-feedback-value').props.children).toBe('scale-opacity');
+  });
+});

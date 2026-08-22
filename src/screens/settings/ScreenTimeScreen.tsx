@@ -10,6 +10,7 @@ import {
   CupertinoSwitch,
   useAlert,
 } from '../../components';
+import { CupertinoPressable } from '../../components/CupertinoPressable';
 import { logger } from '../../utils/logger';
 import type { AppNavigationProp } from '../../navigation/types';
 
@@ -151,11 +152,11 @@ export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp
                     <Text style={[typography.body, { color: colors.label, textAlign: 'center', marginBottom: 8 }]}>
                       Screen Time needs usage access permission to show your app usage data.
                     </Text>
-                    <Pressable
+                    <CupertinoPressable
                       onPress={handleOpenUsageAccess}
-                      style={({ pressed }) => [
+                      style={[
                         styles.permissionButton,
-                        { backgroundColor: colors.systemBlue, opacity: pressed ? 0.7 : 1 },
+                        { backgroundColor: colors.systemBlue },
                       ]}
                       accessibilityLabel="Open Usage Access Settings"
                       accessibilityRole="button"
@@ -163,7 +164,7 @@ export function ScreenTimeScreen({ navigation }: { navigation: AppNavigationProp
                       <Text style={[typography.body, { color: '#FFFFFF', fontWeight: '600' }]}>
                         Open Usage Access Settings
                       </Text>
-                    </Pressable>
+                    </CupertinoPressable>
                     <Text style={[typography.caption1, { color: colors.secondaryLabel, textAlign: 'center', marginTop: 8 }]}>
                       Find this app in the list and enable access, then return here.
                     </Text>

@@ -18,6 +18,14 @@ export type AssistiveAction =
   | 'screenshot'
   | 'lock'
   | 'siri'
+  | 'camera'
+  | 'flashlight'
+  | 'volumeUp'
+  | 'volumeDown'
+  | 'mute'
+  | 'accessibility'
+  | 'device'
+  | 'custom'
   | 'none';
 
 export type MenuItemId =
@@ -31,7 +39,12 @@ export type MenuItemId =
   | 'screenshot'
   | 'lock'
   | 'reachability'
-  | 'hideTemporarily';
+  | 'hideTemporarily'
+  | 'camera'
+  | 'flashlight'
+  | 'accessibility'
+  | 'device'
+  | 'custom';
 
 export interface AssistiveTouchState {
   /** Master on/off switch */

@@ -128,7 +128,7 @@ const ConversationRow = React.memo(function ConversationRow({
     <Pressable
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: pressed ? colors.systemGray5 : colors.systemBackground },
+        { backgroundColor: pressed ? colors.pressedRowBackground : colors.systemBackground },
       ]}
       onPress={editMode ? onSelect : onPress}
       accessibilityRole="button"

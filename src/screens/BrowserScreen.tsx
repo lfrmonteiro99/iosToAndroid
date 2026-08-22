@@ -66,7 +66,6 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createTab(BROWSER_HOME_URL)]);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -75,9 +74,11 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
+  const styles = React.useMemo(() => createStyles(colors, isPrivate), [colors, isPrivate]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const currentUrl = activeTab?.url ?? BROWSER_HOME_URL;
@@ -101,6 +102,11 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const handleShare = useCallback(() => {
     hapticImpact();
     setShowShareSheet(true);
+  }, []);
+
+  const handleTogglePrivate = useCallback(() => {
+    hapticImpact();
+    setIsPrivate((prev) => !prev);
   }, []);
 
   const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
@@ -150,11 +156,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const handleCloseTab = useCallback(
     (id: string) => {
       setTabs((prev) => {
-        const next = prev.filter((t) => t.id !== id);
-        if (id === activeTabId) {
+        const remaining = prev.filter((t) => t.id !== id);
+        // Invariant: the browser never has zero tabs open. Closing the last one
+        // replaces it with a fresh home tab rather than leaving an empty state.
+        const next = remaining.length > 0 ? remaining : [createTab(BROWSER_HOME_URL)];
+        if (id === activeTabId || remaining.length === 0) {
           const fallback = next[0];
-          setActiveTabId(fallback?.id ?? '');
-          setInputUrl(fallback?.url ?? BROWSER_HOME_URL);
+          setActiveTabId(fallback.id);
+          setInputUrl(fallback.url);
         }
         return next;
       });
@@ -191,7 +200,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
+      <View testID="browser-topbar" style={styles.topBar}>
         <Pressable
           onPress={handleBack}
           hitSlop={8}
@@ -235,8 +244,14 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           hitSlop={8}
           accessibilityLabel="Tabs"
           accessibilityRole="button"
+          style={styles.tabsButton}
         >
           <Ionicons name="albums-outline" size={22} color={BROWSER_ACCENT} />
+          <View style={styles.tabsBadge}>
+            <Text testID="browser-tabs-badge" style={styles.tabsBadgeText}>
+              {String(tabs.length)}
+            </Text>
+          </View>
         </Pressable>
         <Pressable
           onPress={handleShare}
@@ -245,6 +260,19 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           accessibilityRole="button"
         >
           <Ionicons name="share-outline" size={22} color={BROWSER_ACCENT} />
+        </Pressable>
+        <Pressable
+          onPress={handleTogglePrivate}
+          hitSlop={8}
+          accessibilityLabel="Toggle private browsing"
+          accessibilityRole="button"
+          accessibilityState={{ selected: isPrivate }}
+        >
+          <Ionicons
+            name={isPrivate ? 'eye-off' : 'eye'}
+            size={22}
+            color={isPrivate ? colors.label : BROWSER_ACCENT}
+          />
         </Pressable>
       </View>
 
@@ -263,6 +291,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         testID="browser-webview"
         source={{ uri: currentUrl }}
         style={styles.webview}
+        incognito={isPrivate}
         onLoadStart={() => {
           setLoading(true);
           setProgress(0);
@@ -327,7 +356,9 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-function createStyles(colors: CupertinoColors) {
+const PRIVATE_BACKGROUND = '#1C1C1E';
+
+function createStyles(colors: CupertinoColors, isPrivate: boolean) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.systemBackground },
     topBar: {
@@ -336,14 +367,14 @@ function createStyles(colors: CupertinoColors) {
       gap: 8,
       paddingHorizontal: 12,
       paddingVertical: 8,
-      backgroundColor: colors.secondarySystemBackground,
+      backgroundColor: isPrivate ? PRIVATE_BACKGROUND : colors.secondarySystemBackground,
     },
     addressBar: {
       flex: 1,
       height: 36,
       borderRadius: 10,
       paddingHorizontal: 12,
-      backgroundColor: colors.tertiarySystemBackground,
+      backgroundColor: isPrivate ? PRIVATE_BACKGROUND : colors.tertiarySystemBackground,
       color: colors.label,
       ...Typography.body,
     },
@@ -351,6 +382,22 @@ function createStyles(colors: CupertinoColors) {
     progressTrack: { height: 2, backgroundColor: 'transparent' },
     progressBar: { height: 2, backgroundColor: BROWSER_ACCENT },
     webview: { flex: 1 },
+    tabsButton: { justifyContent: 'center', alignItems: 'center' },
+    tabsBadge: {
+      minWidth: 16,
+      paddingHorizontal: 3,
+      borderRadius: 8,
+      backgroundColor: BROWSER_ACCENT,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 1,
+    },
+    tabsBadgeText: {
+      ...Typography.caption2,
+      color: '#FFFFFF',
+      fontWeight: '700',
+      textAlign: 'center',
+    },
     tabGridHeader: {
       flexDirection: 'row',
       alignItems: 'center',

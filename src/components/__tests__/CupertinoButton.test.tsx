@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import * as Haptics from 'expo-haptics';
 import { render, fireEvent } from '../../test-utils';
 import { CupertinoButton } from '../CupertinoButton';
+import { useSettings } from '../../store/SettingsStore';
+
+// Sets a global press-feedback preference before the button under test mounts
+// its press listeners. Mirrors the pattern used elsewhere in this suite for
+// asserting against SettingsStore-driven behaviour (see AccessibilityScreen
+// tests' Reader components).
+function SetPressFeedback({ value }: { value: 'scale-opacity' | 'opacity' | 'none' }) {
+  const { update } = useSettings();
+  useEffect(() => { update('pressFeedback', value); }, [value, update]);
+  return null;
+}
 
 describe('CupertinoButton', () => {
   it('renders button with title', () => {
@@ -85,5 +97,24 @@ describe('CupertinoButton', () => {
     expect(onPress).toHaveBeenCalledTimes(2);
 
     jest.useRealTimers();
+  });
+
+  // #497: pressFeedback: 'none' removes the visual scale/opacity effect but
+  // must never silence the haptic (§3.2.4 — cutting animation ≠ cutting
+  // haptics). hapticImpact fires from this component's onPress handler, a
+  // call site untouched by useCupertinoPress's visual-only logic — this test
+  // guards against a future regression that wires it through pressFeedback.
+  it("still fires haptic feedback on press when pressFeedback is 'none'", () => {
+    (Haptics.impactAsync as jest.Mock).mockClear();
+    const { getByText } = render(
+      <>
+        <SetPressFeedback value="none" />
+        <CupertinoButton title="Tap" onPress={() => {}} />
+      </>,
+    );
+
+    fireEvent.press(getByText('Tap'));
+
+    expect(Haptics.impactAsync).toHaveBeenCalledTimes(1);
   });
 });

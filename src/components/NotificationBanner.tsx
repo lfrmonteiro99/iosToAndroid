@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticNotification } from '../utils/haptics';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { notificationBannerEnter, notificationBannerScale, feedbackSettle } from '../theme/springPresets';
 
 export interface BannerNotification {
   id: string;
@@ -66,8 +67,8 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         translateY.value = withTiming(0, { duration: 150 });
         scale.value = withTiming(1, { duration: 150 });
       } else {
-        translateY.value = withSpring(0, { damping: 22, stiffness: 350, mass: 0.8 });
-        scale.value = withSpring(1, { damping: 22, stiffness: 350 });
+        translateY.value = withSpring(0, notificationBannerEnter);
+        scale.value = withSpring(1, notificationBannerScale);
       }
 
       // Auto-dismiss after 5s (iOS style)
@@ -97,7 +98,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
       } else {
         // Snap back — translateY is a literal dp offset, e.velocityY is
         // already dp/sec, no conversion needed.
-        translateY.value = withSpring(0, { damping: 20, stiffness: 300, velocity: e.velocityY });
+        translateY.value = withSpring(0, { ...feedbackSettle, velocity: e.velocityY });
       }
     });
 

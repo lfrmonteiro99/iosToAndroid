@@ -17,6 +17,7 @@ import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
 
 // ---------------------------------------------------------------------------
@@ -398,9 +399,9 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
     switch (item.type) {
       case 'webSearch':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={`Search Web for "${item.query}"`}
             accessibilityRole="button"
           >
@@ -412,13 +413,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
                 Search Web for &ldquo;{item.query}&rdquo;
               </Text>
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       case 'app':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={item.app.name}
             accessibilityRole="button"
           >
@@ -426,13 +427,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             <View style={styles.resultTextWrap}>
               <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>{item.app.name}</Text>
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       case 'contact':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={item.name}
             accessibilityRole="button"
           >
@@ -445,13 +446,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
                 <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>{item.phone}</Text>
               ) : null}
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       case 'note':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={`Note: ${item.title}`}
             accessibilityRole="button"
           >
@@ -462,13 +463,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]}>{item.title}</Text>
               <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>Notes</Text>
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       case 'mail':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={`Mail: ${item.subject} from ${item.sender}`}
             accessibilityRole="button"
           >
@@ -479,13 +480,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.subject}</Text>
               <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>Mail · {item.sender}</Text>
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       case 'reminder':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={`Reminder: ${item.title}`}
             accessibilityRole="button"
           >
@@ -496,13 +497,13 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
               <Text style={[typography.callout, styles.resultTitle, { color: colors.label }]} numberOfLines={1}>{item.title}</Text>
               <Text style={[typography.footnote, styles.resultSubtitle, { color: colors.secondaryLabel }]}>Reminders</Text>
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       case 'setting':
         return (
-          <Pressable
+          <CupertinoPressable
             onPress={() => handleResultPress(item)}
-            style={({ pressed }) => [styles.resultRow, { opacity: pressed ? 0.7 : 1 }]}
+            style={styles.resultRow}
             accessibilityLabel={`Setting: ${item.name}`}
             accessibilityRole="button"
           >
@@ -515,7 +516,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
                 Settings &gt; {item.name}
               </Text>
             </View>
-          </Pressable>
+          </CupertinoPressable>
         );
       default:
         return null;
@@ -569,13 +570,12 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             </Pressable>
           </View>
           {history.map((item, index) => (
-            <Pressable
+            <CupertinoPressable
               key={`${item}-${index}`}
               onPress={() => handleHistoryPress(item)}
-              style={({ pressed }) => [
+              style={[
                 styles.historyRow,
                 {
-                  opacity: pressed ? 0.7 : 1,
                   borderBottomColor: colors.separator,
                   borderBottomWidth: index < history.length - 1 ? StyleSheet.hairlineWidth : 0,
                 },
@@ -585,7 +585,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
             >
               <Ionicons name="time-outline" size={18} color={colors.secondaryLabel} />
               <Text style={[typography.callout, styles.historyText, { color: colors.label }]}>{item}</Text>
-            </Pressable>
+            </CupertinoPressable>
           ))}
         </View>
       ) : isSearching ? (

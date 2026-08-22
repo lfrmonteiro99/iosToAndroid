@@ -2,23 +2,40 @@ import React from 'react';
 import { waitFor, fireEvent, within } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { render } from '../../test-utils';
+import type { RenderAPI } from '@testing-library/react-native';
 import { FindMyScreen } from '../FindMyScreen';
+import * as ContactsStore from '../../store/ContactsStore';
 
 // AllProviders (in test-utils) already wraps with ThemeProvider,
-// DeviceProvider and LocationProvider, so we render FindMyScreen directly.
-// The permission state defaults to 'granted' in jest.setup.js (mocked
-// getForegroundPermissionsAsync returns status 'granted'); the denied /
-// undetermined paths are exercised by overriding the mock per-test.
+// DeviceProvider, LocationProvider and ContactsProvider, so we render
+// FindMyScreen directly. The permission state defaults to 'granted' in
+// jest.setup.js (mocked getForegroundPermissionsAsync returns status
+// 'granted'); the denied / undetermined paths are exercised by overriding
+// the mock per-test. ContactsStore is seeded with 7 favorites (ids
+// 1,3,7,10,13,20,26) unless a test mocks useContacts().
 
 const ITEMS_KEY = '@iostoandroid/findmy_items';
+const LOST_MODE_KEY = '@iostoandroid/findmy_lost_mode';
 
-function renderFindMy() {
+function renderFindMy(): RenderAPI {
   return render(<FindMyScreen />);
+}
+
+// Returns the shared AsyncStorage mock so individual tests can seed storage.
+function getAsyncStorage() {
+  return jest.requireMock('@react-native-async-storage/async-storage').default;
 }
 
 describe('FindMyScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default: no persisted lost-mode state. Intercept only our key so other
+    // providers (DeviceStore's timezone sync, etc.) keep their default
+    // read behaviour.
+    const asyncStorage = getAsyncStorage();
+    asyncStorage.getItem.mockImplementation((key: string) =>
+      key === LOST_MODE_KEY ? Promise.resolve(null) : Promise.resolve(null),
+    );
   });
 
   it('renders the "Find My" title', async () => {
@@ -37,7 +54,7 @@ describe('FindMyScreen', () => {
 
   it('renders the "Grant Location Permission" button when permission is undetermined', async () => {
     const loc = jest.requireMock('expo-location');
-    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValue({ status: 'undetermined' });
+    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValueOnce({ status: 'undetermined' });
 
     const { getByText } = renderFindMy();
     const button = await waitFor(() => getByText('Grant Location Permission'));
@@ -48,13 +65,230 @@ describe('FindMyScreen', () => {
 
   it('pressing the grant button calls requestPermission', async () => {
     const loc = jest.requireMock('expo-location');
-    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValue({ status: 'denied' });
+    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValueOnce({ status: 'denied' });
     const requestSpy = jest.spyOn(loc, 'requestForegroundPermissionsAsync');
 
     const { getByText } = renderFindMy();
     const button = await waitFor(() => getByText('Grant Location Permission'));
     fireEvent.press(button);
     await waitFor(() => expect(requestSpy).toHaveBeenCalled());
+  });
+
+  // ─── Lost mode (issue #267) ─────────────────────────────────────────────
+
+  it('does not show the lost-mode overlay when lost mode is inactive', async () => {
+    const asyncStorage = getAsyncStorage();
+    asyncStorage.getItem.mockImplementation((key: string) =>
+      key === LOST_MODE_KEY
+        ? Promise.resolve(JSON.stringify({ active: false, message: '' }))
+        : Promise.resolve(null),
+    );
+
+    const { queryByText } = renderFindMy();
+    await waitFor(() => expect(queryByText('This Device')).toBeTruthy());
+    // Overlay copy must be absent while inactive.
+    expect(queryByText('This Device Is Marked as Lost')).toBeNull();
+  });
+
+  it('toggling "Mark as Lost" on opens the message prompt', async () => {
+    const { getByText, getByRole, getByPlaceholderText } = renderFindMy();
+    await waitFor(() => expect(getByText('Mark as Lost')).toBeTruthy());
+
+    fireEvent.press(getByRole('switch'));
+
+    // The prompt captures an optional contact message.
+    const field = await waitFor(() => getByPlaceholderText('Contact message (optional)'));
+    expect(field).toBeTruthy();
+    // Note: this is a prompt, not the overlay yet.
+    expect(getByText('Lost Mode')).toBeTruthy();
+  });
+
+  it('toggling "Mark as Lost" on persists { active: true, message } and shows the overlay', async () => {
+    const asyncStorage = getAsyncStorage();
+
+    const { getByText, getByPlaceholderText, getByRole } = renderFindMy();
+    await waitFor(() => expect(getByText('Mark as Lost')).toBeTruthy());
+
+    // Open the prompt and type a contact note.
+    fireEvent.press(getByRole('switch'));
+    const field = await waitFor(() => getByPlaceholderText('Contact message (optional)'));
+    fireEvent.changeText(field, 'Call 555-0199');
+
+    fireEvent.press(getByText('Save'));
+
+    // The overlay must appear.
+    await waitFor(() => expect(getByText('This Device Is Marked as Lost')).toBeTruthy());
+    // The stored message must be surfaced (overlay copy is uniquely labelled).
+    expect(getByText('Reach me: Call 555-0199')).toBeTruthy();
+    // The in-app-only limitation must be visible to the user.
+    expect(getByText('This does not lock your device')).toBeTruthy();
+
+    // Persisted flag must be active:true with the message.
+    await waitFor(() =>
+      expect(asyncStorage.setItem).toHaveBeenCalledWith(
+        LOST_MODE_KEY,
+        expect.stringContaining('"active":true'),
+      ),
+    );
+    expect(asyncStorage.setItem).toHaveBeenCalledWith(
+      LOST_MODE_KEY,
+      expect.stringContaining('Call 555-0199'),
+    );
+  });
+
+  it('the overlay "Turn Off Lost Mode" button hides the overlay and persists active:false', async () => {
+    const asyncStorage = getAsyncStorage();
+    asyncStorage.getItem.mockImplementation((key: string) =>
+      key === LOST_MODE_KEY
+        ? Promise.resolve(JSON.stringify({ active: true, message: 'Call 555-0199' }))
+        : Promise.resolve(null),
+    );
+
+    const { getByText, queryByText } = renderFindMy();
+    // Overlay is shown immediately on mount because the flag is active.
+    await waitFor(() => expect(getByText('This Device Is Marked as Lost')).toBeTruthy());
+
+    fireEvent.press(getByText('Turn Off Lost Mode'));
+
+    await waitFor(() =>
+      expect(queryByText('This Device Is Marked as Lost')).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(asyncStorage.setItem).toHaveBeenCalledWith(
+        LOST_MODE_KEY,
+        expect.stringContaining('"active":false'),
+      ),
+    );
+  });
+
+  it('reappears on remount when the flag was left active', async () => {
+    const asyncStorage = getAsyncStorage();
+    asyncStorage.getItem.mockImplementation((key: string) =>
+      key === LOST_MODE_KEY
+        ? Promise.resolve(JSON.stringify({ active: true, message: 'Call 555-0199' }))
+        : Promise.resolve(null),
+    );
+
+    const first = renderFindMy();
+    await waitFor(() => expect(first.getByText('This Device Is Marked as Lost')).toBeTruthy());
+    first.unmount();
+
+    // Remount (simulating navigating away and back to Find My).
+    const second = renderFindMy();
+    await waitFor(() => expect(second.getByText('This Device Is Marked as Lost')).toBeTruthy());
+    expect(second.getByText('Reach me: Call 555-0199')).toBeTruthy();
+  });
+});
+
+describe('FindMyScreen tabs (issue #264)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // The tests in the first describe block override expo-location's
+    // getForegroundPermissionsAsync with mockResolvedValue (undetermined /
+    // denied). clearAllMocks resets the call log but NOT the implementation,
+    // so that leak would make the Devices tab here read "denied" and never
+    // show the device row. Re-establish a granted default on every tab test
+    // so each starts from the real default state.
+    const loc = jest.requireMock('expo-location');
+    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValue({ status: 'granted' });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('renders a segmented control with Devices, People, Items and defaults to Devices', async () => {
+    const { getByText } = renderFindMy();
+    await waitFor(() => expect(getByText('Devices')).toBeTruthy());
+    expect(getByText('People')).toBeTruthy();
+    expect(getByText('Items')).toBeTruthy();
+
+    // Default tab is Devices: device row is visible, People content is not.
+    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+    expect(() => getByText('Location Sharing Unavailable')).toThrow();
+  });
+
+  it('People tab shows one row per ContactsStore favorite with "Location Sharing Unavailable"', async () => {
+    const { getByText, getAllByText } = renderFindMy();
+
+    fireEvent.press(await waitFor(() => getByText('People')));
+    await waitFor(() => expect(getByText('Alice Anderson')).toBeTruthy());
+
+    // Every seeded favorite appears as a row.
+    expect(getByText('Alice Anderson')).toBeTruthy();
+    expect(getByText('Charlie Chen')).toBeTruthy();
+    expect(getByText('George Garcia')).toBeTruthy();
+    expect(getByText('Julia James')).toBeTruthy();
+    expect(getByText('Michael Moore')).toBeTruthy();
+    expect(getByText('Teresa Taylor')).toBeTruthy();
+    expect(getByText('Zachary Zhang')).toBeTruthy();
+
+    // One honest "unavailable" subtitle per favorite (7 seeded favorites).
+    await waitFor(() =>
+      expect(getAllByText('Location Sharing Unavailable').length).toBe(7),
+    );
+  });
+
+  it('People tab never renders a coordinate, distance, or "last seen" value for a contact', async () => {
+    const { getByText, queryByText, getAllByText } = renderFindMy();
+
+    fireEvent.press(await waitFor(() => getByText('People')));
+    await waitFor(() => expect(getByText('Alice Anderson')).toBeTruthy());
+
+    // The device's live coordinate must NOT leak into the People tab.
+    expect(queryByText(/37\.7749, -122\.4194/)).toBeNull();
+    // No fake "last seen" / "updated" label for a contact.
+    expect(queryByText(/Updated .* ago/)).toBeNull();
+    // Every favorite subtitle is exactly the honest unavailable string — no
+    // silent fabrication of coordinates or distance.
+    expect(getAllByText('Location Sharing Unavailable').length).toBe(7);
+  });
+
+  it('People tab shows the empty state when ContactsStore has no favorites', async () => {
+    jest.spyOn(ContactsStore, 'useContacts').mockReturnValue({
+      contacts: [],
+      favorites: [],
+      deviceFavoriteIds: [],
+      addContact: jest.fn(),
+      updateContact: jest.fn(),
+      deleteContact: jest.fn(),
+      toggleFavorite: jest.fn(),
+      getContact: jest.fn(),
+      reset: jest.fn(),
+      isReady: true,
+    });
+
+    const { getByText, queryByText } = renderFindMy();
+
+    fireEvent.press(await waitFor(() => getByText('People')));
+    await waitFor(() => expect(getByText('No One Is Sharing Their Location')).toBeTruthy());
+    // No fake favorite rows when there are none.
+    expect(queryByText('Location Sharing Unavailable')).toBeNull();
+  });
+
+  it('Items tab shows the empty placeholder', async () => {
+    const { getByText } = renderFindMy();
+
+    fireEvent.press(await waitFor(() => getByText('Items')));
+    await waitFor(() => expect(getByText('No Items')).toBeTruthy());
+    expect(
+      getByText("Item tracking requires hardware like AirTags, which this app can't detect."),
+    ).toBeTruthy();
+  });
+
+  it('switching away from and back to Devices preserves the Devices content', async () => {
+    const { getByText, getAllByText } = renderFindMy();
+
+    // Go to People, confirm device row is gone.
+    fireEvent.press(await waitFor(() => getByText('People')));
+    await waitFor(() => expect(getByText('Alice Anderson')).toBeTruthy());
+    expect(() => getByText('This Device')).toThrow();
+
+    // Back to Devices: device row + coordinates return, People content gone.
+    fireEvent.press(getByText('Devices'));
+    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+    await waitFor(() => expect(getAllByText(/37\.7749, -122\.4194/).length).toBeGreaterThan(0));
+    expect(() => getByText('Location Sharing Unavailable')).toThrow();
   });
 });
 
@@ -87,9 +321,12 @@ describe('FindMyScreen — Items tab (tracked inventory)', () => {
     return screen;
   }
 
-  it('renders the inventory empty state when there are no items', async () => {
+  it('renders the Add Item button and the #264 empty state when there are no items', async () => {
     const screen = await openItemsTab();
-    await waitFor(() => expect(screen.getByText('No Tracked Items')).toBeTruthy());
+    // The zero-items case keeps the honest placeholder from #264 — no fake
+    // tracking claims — and the CRUD entry point sits above it.
+    await waitFor(() => expect(screen.getByText('No Items')).toBeTruthy());
+    expect(screen.getByText('Add Item')).toBeTruthy();
   });
 
   it('adds an item via the sheet, appends it to the list, and persists it', async () => {

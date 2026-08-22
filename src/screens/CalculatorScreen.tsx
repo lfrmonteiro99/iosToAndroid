@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import Decimal from 'decimal.js';
 import { hapticImpact } from '../utils/haptics';
 
@@ -234,33 +235,30 @@ function CalcButton({
 
   if (def.type === 'memory') {
     return (
-      <Pressable
+      <CupertinoPressable
         onPress={onPress}
         accessibilityLabel={getAccessibilityLabel(def)}
         accessibilityRole="button"
-        style={({ pressed }) => [
-          {
-            flex: 1,
-            height: isLandscape ? 32 : 40,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: pressed ? 0.5 : 1,
-          },
-        ]}
+        style={{
+          flex: 1,
+          height: isLandscape ? 32 : 40,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       >
         <Text style={{ color: textColor, fontSize, fontWeight: '500' }}>
           {def.label}
         </Text>
-      </Pressable>
+      </CupertinoPressable>
     );
   }
 
   return (
-    <Pressable
+    <CupertinoPressable
       onPress={onPress}
       accessibilityLabel={getAccessibilityLabel(def)}
       accessibilityRole="button"
-      style={({ pressed }) => [
+      style={[
         {
           width: def.wide ? btnSize * 2 + gap : btnSize,
           height: btnSize,
@@ -269,7 +267,6 @@ function CalcButton({
           paddingLeft: def.wide ? btnSize / 2 - 10 : 0,
           justifyContent: 'center' as const,
           backgroundColor: bgColor,
-          opacity: pressed ? 0.75 : 1,
           elevation: 2,
         },
         !def.wide && { alignItems: 'center' as const },
@@ -278,7 +275,7 @@ function CalcButton({
       <Text style={{ color: textColor, fontSize, fontWeight: '400' }}>
         {def.label}
       </Text>
-    </Pressable>
+    </CupertinoPressable>
   );
 }
 
