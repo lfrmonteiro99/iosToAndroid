@@ -34,6 +34,14 @@ describe('BatteryScreen', () => {
     expect(toJSON()).toBeTruthy();
   });
 
+  // Real interaction: the header back button ("Settings") calls
+  // navigation.goBack(). This is the unique occurrence of that text in the tree.
+  it('navigates back when the Settings back button is pressed', () => {
+    const { getByText } = render(<BatteryScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Settings'));
+    expect(mockNavigation.goBack).toHaveBeenCalled();
+  });
+
   it('renders the battery percentage read from device state', () => {
     const { getByText } = render(<BatteryScreen navigation={mockNavigation as never} />);
     // level 0.72 -> Math.round(0.72 * 100) = 72
