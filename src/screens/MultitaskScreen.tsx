@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  withSpring,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
@@ -25,6 +26,8 @@ import { useApps, InstalledApp, RecentApp } from '../store/AppsStore';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { settle, useGestureReduceMotion, resolveSpringConfig } from '../utils/useGestureReduceMotion';
+import { Easing } from 'react-native-reanimated';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -81,6 +84,7 @@ interface RecentAppCardProps {
 
 function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps) {
   const { typography } = useTheme();
+  const reduceMotion = useGestureReduceMotion();
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
 
@@ -102,13 +106,23 @@ function RecentAppCard({ app, launchedAt, onSwipeUp, onTap }: RecentAppCardProps
     })
     .onEnd((e) => {
       if (e.translationY < -80 || e.velocityY < -500) {
-        translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 300 });
-        opacity.value = withTiming(0, { duration: 300 }, () => {
-          runOnJS(dismiss)();
-        });
+        // Dismiss card with velocity-aware spring animation
+        translateY.value = settle(-SCREEN_HEIGHT, 'mediumSettle', reduceMotion, e.velocityY);
+        // Use explicit withSpring/withTiming for opacity to preserve the dismiss callback
+        if (reduceMotion) {
+          opacity.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) }, () => {
+            runOnJS(dismiss)();
+          });
+        } else {
+          const springCfg = resolveSpringConfig('mediumSettle', e.velocityY);
+          opacity.value = withSpring(0, springCfg, () => {
+            runOnJS(dismiss)();
+          });
+        }
       } else {
-        translateY.value = withTiming(0, { duration: 250 });
-        opacity.value = withTiming(1, { duration: 250 });
+        // Return card to origin
+        translateY.value = settle(0, 'mediumSettle', reduceMotion, 0);
+        opacity.value = settle(1, 'mediumSettle', reduceMotion, 0);
       }
     });
 

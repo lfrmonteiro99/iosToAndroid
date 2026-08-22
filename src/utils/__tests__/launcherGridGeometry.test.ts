@@ -174,3 +174,51 @@ describe('LauncherHomeScreen consome a geometria derivada', () => {
     expect(mod.ICON_RADIUS).not.toBeCloseTo(13.5, 1);
   });
 });
+
+// #501: a cápsula do dock reutilizava a altura fixa 88 do AppIcon COM label
+// (src/screens/LauncherHomeScreen.tsx `appIconWrapper.height`), mesmo o dock
+// não tendo labels — dava ~108pt em vez dos ~96 da §2. A altura tem de vir de
+// ICON_SIZE + padding vertical, não de um número escolhido à parte, ou volta a
+// divergir do ícone assim que a largura do ecrã (e por isso ICON_SIZE) mudar.
+describe('LauncherHomeScreen: altura do dock deriva do ícone (#501)', () => {
+  const loadScreenAtWidth = (width: number) => {
+    jest.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Dimensions } = require('react-native') as typeof import('react-native');
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width, height: 800, scale: 2, fontScale: 1 });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('../../screens/LauncherHomeScreen') as {
+      ICON_SIZE: number;
+      DOCK_VERTICAL_PADDING: number;
+      DOCK_HORIZONTAL_INSET: number;
+    };
+  };
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.resetModules();
+  });
+
+  it('a 393dp, ICON_SIZE + paddingVertical*2 cai em 96 (§2 "Dock: altura ≈96")', () => {
+    const mod = loadScreenAtWidth(393);
+    const capsuleHeight = mod.ICON_SIZE + mod.DOCK_VERTICAL_PADDING * 2;
+    expect(capsuleHeight).toBe(96);
+  });
+
+  it('a altura da cápsula acompanha o ícone noutras larguras, não fica presa a 393dp', () => {
+    const mod360 = loadScreenAtWidth(360);
+    const expectedIconSize360 = computeLauncherGridGeometry(360).iconSize;
+    expect(mod360.ICON_SIZE).toBe(expectedIconSize360);
+    const capsuleHeight360 = mod360.ICON_SIZE + mod360.DOCK_VERTICAL_PADDING * 2;
+    // A 360dp o ícone já não é 60 (é 55, ver tabela acima) — se a altura da
+    // cápsula ainda fosse fixa em 96, isto provaria que não deriva de nada.
+    expect(capsuleHeight360).not.toBe(96);
+  });
+
+  it('usa 10 de inset lateral (§2 "Dock: inset lateral"), não os 12 antigos', () => {
+    const mod = loadScreenAtWidth(393);
+    expect(mod.DOCK_HORIZONTAL_INSET).toBe(10);
+  });
+});

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { BorderRadius } from '../theme/CupertinoTheme';
+import { BorderRadius, Shape } from '../theme/CupertinoTheme';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -114,7 +114,7 @@ export function CupertinoShareSheet({ visible, onClose, title, url, text, onAddT
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
+        <View testID="share-sheet" style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
           <GlassSurface
             intensity={85}
             tint={dark ? 'dark' : 'light'}
@@ -204,8 +204,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: Shape.sheet.radius,
+    borderTopRightRadius: Shape.sheet.radius,
     overflow: 'hidden',
     paddingTop: 8,
   },
