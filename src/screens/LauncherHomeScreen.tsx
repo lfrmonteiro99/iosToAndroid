@@ -61,6 +61,7 @@ import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig'
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { launcherIconPress } from '../theme/springPresets';
 import { markGridVisible, markWarmStartBegin } from '../utils/perfMetrics';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
@@ -335,13 +336,13 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
   const handlePressIn = useCallback(() => {
     if (isJiggling) return;
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
+    pressScale.value = withSpring(0.85, launcherIconPress);
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [isJiggling, pressScale]);
 
   const handlePressOut = useCallback(() => {
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(1.0, { damping: 12, stiffness: 200 });
+    pressScale.value = withSpring(1.0, launcherIconPress);
   }, [pressScale]);
 
   return (
@@ -1360,6 +1361,7 @@ export function LauncherHomeScreen() {
         ref={scrollViewRef}
         horizontal
         pagingEnabled
+        decelerationRate={0.998}
         showsHorizontalScrollIndicator={false}
         onScroll={handlePageScroll}
         scrollEventThrottle={16}
@@ -1367,6 +1369,7 @@ export function LauncherHomeScreen() {
         style={styles.pagerContainer}
         contentContainerStyle={styles.pagerContent}
         scrollEnabled={!isJiggling}
+        testID="launcher-pagination-scroll"
       >
         {pages.map((pageItems, pageIndex) => (
           <View key={pageIndex} style={styles.page}>

@@ -376,7 +376,21 @@ export const Shadows = StyleSheet.create({
   },
 });
 
-// Animation constants matching iOS spring dynamics
+/**
+ * @deprecated Legacy spring vocabulary (issue #492) — do not add new consumers.
+ * New code should import a named preset from `src/theme/springPresets.ts` instead.
+ * Kept as-is, values unchanged, until existing consumers migrate: aligning these to
+ * the new vocabulary's numbers would change on-screen behaviour, and #492's ressalva
+ * forbids that without a before/after capture.
+ *
+ * Nearest-by-usage mapping to the new vocabulary (name only — NOT equal in value,
+ * see springPresets.ts for the actual numbers):
+ *   springBouncy  (d10/s150) → wobble      (playful overshoot)
+ *   springSnappy  (d20/s400) → snap        (fast, decisive settle)
+ *   springGentle  (d25/s200) → sheet       (soft modal presentation)
+ *   defaultSpring (d20/s300) → interactive (control feedback: switch, segmented control)
+ *   gentleSpring  (d15/s150) → navigation  (screen-level transition)
+ */
 export const AnimationConfig = {
   springBouncy: { damping: 10, stiffness: 150, mass: 1 },
   springSnappy: { damping: 20, stiffness: 400, mass: 1 },

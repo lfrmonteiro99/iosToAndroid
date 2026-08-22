@@ -66,7 +66,15 @@ export const gestureConfig = {
   cardDismissDp: 84,
   cardDismissVelocity: -0.9,
 
-  // Springs — per §13.3 of spec
+  // Springs — tuned empirically against real on-device gesture feel, NOT from
+  // ESPECIFICACAO.md §3.1's estimated presets (see src/theme/springPresets.ts).
+  // Stiffness here runs 3-4x higher than the theme's springs because these settle
+  // a gesture that's already moving — `resolveSpringConfig` (useGestureReduceMotion.ts)
+  // merges in the real release velocity, so a spring tuned for a standstill UI
+  // transition reads as sluggish/laggy mid-drag. Do not "align" these to
+  // springPresets.ts without a before/after capture (issue #492).
+  // (The previous "§13.3" reference was dead: the current spec's §13 is "Aferição"
+  // and has no subsections — issue #492.)
   spring: {
     fastSettle: { stiffness: 760, damping: 58, mass: 1 },
     mediumSettle: { stiffness: 680, damping: 52, mass: 1 },
