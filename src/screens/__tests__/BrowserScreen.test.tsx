@@ -278,14 +278,44 @@ describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
     expect(webviewUri(utils)).toBe('https://example.com');
   });
 
-  it('closing the only tab leaves activeTabId pointing at no tab (grid shown, no WebView, no crash)', () => {
+  it('the Tabs button shows a badge with the current tab count', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('2');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('3');
+  });
+
+  it('closing the only (active) tab never leaves zero tabs: a fresh home tab takes over', () => {
+    const utils = submitAddress('example.com');
+    expect(webviewUri(utils)).toBe('https://example.com');
+
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText('Close tab: https://example.com'));
+
+    // Never zero tabs: exactly one remains, at the home URL.
+    expect(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`)).toBeTruthy();
+    expect(utils.queryByLabelText('Tab: https://example.com')).toBeNull();
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+
+  it('closing tabs repeatedly (double-tap on the last close affordance) still leaves exactly one tab', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
     fireEvent.press(utils.getByLabelText('Tabs'));
-    fireEvent.press(utils.getByLabelText(`Close tab: ${BROWSER_HOME_URL}`));
+    const label = `Close tab: ${BROWSER_HOME_URL}`;
+    fireEvent.press(utils.getByLabelText(label));
+    fireEvent.press(utils.getByLabelText(label));
 
-    expect(utils.queryByTestId('browser-webview')).toBeNull();
-    expect(utils.getByLabelText('New Tab')).toBeTruthy();
-    expect(utils.queryByLabelText(/^Tab: /)).toBeNull();
+    fireEvent.press(utils.getByLabelText('Done'));
+    expect(utils.getByTestId('browser-tabs-badge').props.children).toBe('1');
+    expect(utils.getByTestId('browser-webview')).toBeTruthy();
   });
 
   it('closing the active tab (when others remain) activates another existing tab', () => {
