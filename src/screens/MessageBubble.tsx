@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { DeviceSms } from '../store/DeviceStore';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import type { ResolvedTypography } from '../theme/ThemeContext';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 
 export interface LocalImageMessage {
   id: string;
@@ -92,9 +93,9 @@ export const MessageBubble = React.memo(function MessageBubble({
             ))}
           </View>
           <View style={[styles.reactionActionDivider, { backgroundColor: isDark ? '#48484A' : '#E5E5EA' }]} />
-          <Pressable
+          <CupertinoPressable
             onPress={onCopy}
-            style={({ pressed }) => [styles.reactionActionBtn, { opacity: pressed ? 0.6 : 1 }]}
+            style={styles.reactionActionBtn}
             accessibilityLabel="Copy message"
             accessibilityRole="button"
           >
@@ -102,7 +103,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             <Text style={[typography.subhead, { color: isDark ? '#EBEBF5' : '#3C3C43', marginLeft: 6 }]}>
               Copy
             </Text>
-          </Pressable>
+          </CupertinoPressable>
         </Animated.View>
       )}
       <Pressable onLongPress={onLongPress} delayLongPress={400} accessibilityLabel="Message" accessibilityHint="Long press for options" accessibilityRole="button">

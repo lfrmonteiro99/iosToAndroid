@@ -10,6 +10,10 @@ import {
   clampIconShapeExponent,
   setIconMask,
 } from '../utils/iconShape';
+import {
+  type CategoryOverrideSettings,
+  DEFAULT_CATEGORY_OVERRIDES,
+} from '../utils/categoryOverrides';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -70,6 +74,14 @@ export interface SettingsState {
   scheduledSummaryIdx: number;
   fontChoice: 'inter' | 'system';
   pressFeedback: 'scale-opacity' | 'opacity' | 'none';
+  /** Home-screen grid columns (§2 derivation, issue #503). */
+  gridColumns: 3 | 4 | 5 | 6;
+  /** Home-screen grid rows per page (issue #503). */
+  gridRows: 4 | 5 | 6 | 7;
+  /** Multiplier over the spec's 0.153 x screen-width icon size (issue #503). */
+  iconSizeScale: number;
+  /** Whether app names render under grid icons (issue #503). */
+  showIconLabels: boolean;
   /**
    * Whether the icon-expand animation plays when opening an app (§6.3).
    * Independent of `reduceMotion`: turning this off skips only the
@@ -91,6 +103,13 @@ export interface SettingsState {
    * Só afecta a forma 'squircle' (ver effectiveIconExponent).
    */
   iconShapeExponent: number;
+  /**
+   * Overrides de categorias da App Library (#516): ocultar, renomear, reordenar
+   * categorias e recategorizar apps individualmente. Toda a lógica opera sobre
+   * chaves estáveis (ex.: 'social'), nunca sobre o nome exibido, para que
+   * renomear não parta a atribuição.
+   */
+  categoryOverrides: CategoryOverrideSettings;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -150,10 +169,15 @@ export const DEFAULT_SETTINGS: SettingsState = {
   scheduledSummaryIdx: 0,
   fontChoice: 'inter',
   pressFeedback: 'scale-opacity',
+  gridColumns: 4,
+  gridRows: 6,
+  iconSizeScale: 1.0,
+  showIconLabels: true,
   appLaunchAnimation: true,
   appLaunchDurationMs: 280,
   iconShape: 'squircle',
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
+  categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
 };
 
 interface SettingsContextValue {

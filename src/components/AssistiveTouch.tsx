@@ -22,6 +22,7 @@ import {
   MenuItemId,
 } from '../store/AssistiveTouchStore';
 import { useTheme } from '../theme/ThemeContext';
+import { CupertinoPressable } from './CupertinoPressable';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 import { IDLE_DIM_MS } from '../utils/gestureConfig';
@@ -528,13 +529,12 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
             const x = centre + MENU_GEOMETRY.radius * Math.cos(angle) - MENU_GEOMETRY.cellSize / 2;
             const y = centre + MENU_GEOMETRY.radius * Math.sin(angle) - MENU_GEOMETRY.cellSize / 2;
             return (
-              <Pressable
+              <CupertinoPressable
                 key={item.id}
-                style={({ pressed }) => [
+                style={[
                   styles.menuCell,
                   {
                     backgroundColor: cellBg,
-                    opacity: pressed ? 0.65 : 1,
                     left: x,
                     top: y,
                   },
@@ -547,7 +547,7 @@ function RadialMenu({ items, onPick, buttonSize, anchorX, anchorY, isDark }: Rad
                 <Text style={[styles.menuLabel, { color: iconColor }]} numberOfLines={1}>
                   {item.label}
                 </Text>
-              </Pressable>
+              </CupertinoPressable>
             );
           })}
         </View>

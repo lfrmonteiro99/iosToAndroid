@@ -131,7 +131,7 @@ export function CupertinoAlertDialog({
                 style={({ pressed }) => [
                   styles.actionButton,
                   {
-                    backgroundColor: pressed ? colors.systemGray5 : 'transparent',
+                    backgroundColor: pressed ? colors.pressedRowBackground : 'transparent',
                     borderLeftWidth:
                       isHorizontal && index > 0 ? StyleSheet.hairlineWidth : 0,
                     borderTopWidth:
