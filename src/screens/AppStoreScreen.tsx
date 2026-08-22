@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CupertinoNavigationBar, CupertinoSegmentedControl, CupertinoSearchBar } from '../components';
 import { useTheme } from '../theme/ThemeContext';
-import { useApps } from '../store/AppsStore';
+import { useApps, VIRTUAL_APP_PACKAGE_NAMES } from '../store/AppsStore';
 import { CURATED_APPS, type CuratedApp } from '../data/curatedApps';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
@@ -20,7 +20,7 @@ import type { InstalledApp } from '../store/AppsStore';
 
 // Segment labels live in one place — inserting/reordering a tab means
 // changing this array only, not the render branches below.
-const APP_STORE_SEGMENTS = ['Today', 'Search', 'Categories'] as const;
+const APP_STORE_SEGMENTS = ['Today', 'Search', 'Categories', 'Updates'] as const;
 
 // ---------------------------------------------------------------------------
 // Categories tab — keyword-based grouping, scoped to this file
@@ -159,6 +159,67 @@ function AppRow({
 }
 
 // ---------------------------------------------------------------------------
+// Updates tab — honest manual-update check (no fabrication of update state)
+// ---------------------------------------------------------------------------
+
+// Android offers no public, key-free way for a third-party app to know whether
+// an installed app has an update pending — that needs the Play Developer API,
+// which this app neither has nor can obtain. So the Updates tab does NOT claim
+// to detect updates. It lists every real, user-installed app (system apps and
+// this app's own virtual built-ins excluded) and offers a deep link to that
+// app's Play Store page so the user can check/update manually. No fabricated
+// "N updates available" badge, no fake version comparison, ever.
+function UpdatesTab({ apps, onCheck }: { apps: InstalledApp[]; onCheck: (packageName: string) => void }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+
+  return (
+    <>
+      <Text
+        testID="updates-notice"
+        style={[typography.footnote, styles.updatesNotice, { color: colors.secondaryLabel }]}
+      >
+        Android cannot check for app updates automatically. Tap an app to open its Play Store page.
+      </Text>
+
+      {apps.length === 0 ? (
+        <Text style={[typography.footnote, styles.updatesEmpty, { color: colors.tertiaryLabel }]}>
+          No installed apps to check.
+        </Text>
+      ) : (
+        apps.map((app) => (
+          <Pressable
+            key={app.packageName}
+            onPress={() => onCheck(app.packageName)}
+            accessibilityRole="button"
+            accessibilityLabel={`Check ${app.name} on Play Store`}
+            style={[
+              styles.updateRow,
+              { backgroundColor: colors.secondarySystemGroupedBackground },
+            ]}
+          >
+            <View style={[styles.iconPlaceholder, { backgroundColor: colors.systemGray5 }]}>
+              <Ionicons name="cube-outline" size={26} color={colors.secondaryLabel} />
+            </View>
+            <View style={styles.cardText}>
+              <Text style={[typography.headline, { color: colors.label }]} numberOfLines={1}>
+                {app.name}
+              </Text>
+              <Text style={[typography.caption1, { color: colors.tertiaryLabel }]} numberOfLines={1}>
+                {app.packageName}
+              </Text>
+            </View>
+            <Text style={[typography.footnote, styles.updateActionLabel, { color: colors.systemBlue }]}>
+              Check
+            </Text>
+          </Pressable>
+        ))
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
@@ -182,6 +243,18 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
   // display name, so a user-renamed app still resolves as installed.
   const installedPackages = useMemo(
     () => new Set(apps.map((a) => a.packageName)),
+    [apps],
+  );
+
+  // Updates tab candidates: real, user-installed apps only. System apps are
+  // excluded via isSystem; this app's own virtual built-ins (Phone, Messages,
+  // Settings, …) are excluded by package name because every entry in
+  // VIRTUAL_APPS_MAP has isSystem:false and would otherwise slip through.
+  const updatableCandidates = useMemo(
+    () =>
+      apps.filter(
+        (a) => !a.isSystem && !VIRTUAL_APP_PACKAGE_NAMES.has(a.packageName),
+      ),
     [apps],
   );
 
@@ -224,6 +297,26 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
       }
     } catch (err) {
       logger.warn('AppStoreScreen', 'could not open Play Store search', err);
+    }
+  }, []);
+
+  // Manual update check: Android can't tell us whether an installed app has a
+  // pending update, so we deep-link to its Play Store listing and let the user
+  // check there. Same canOpenURL→openURL→https-fallback guard as the Today
+  // "Get" action — honest about the limitation, not faking detection.
+  const handleCheckUpdate = useCallback(async (packageName: string) => {
+    const marketUrl = playStoreUrl(packageName);
+    try {
+      if (await Linking.canOpenURL(marketUrl)) {
+        await Linking.openURL(marketUrl);
+        return;
+      }
+      const webUrl = playStoreWebUrl(packageName);
+      if (await Linking.canOpenURL(webUrl)) {
+        await Linking.openURL(webUrl);
+      }
+    } catch (err) {
+      logger.warn('AppStoreScreen', 'could not open store listing', err);
     }
   }, []);
 
@@ -385,7 +478,7 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
               </Text>
             </Pressable>
           </>
-        ) : (
+        ) : tabIndex === 2 ? (
           <>
             {categorySections.map((section) => (
               <View key={section.name} style={styles.categorySection}>
@@ -405,6 +498,8 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
               </View>
             ))}
           </>
+        ) : (
+          <UpdatesTab apps={updatableCandidates} onCheck={handleCheckUpdate} />
         )}
       </ScrollView>
     </View>
@@ -483,5 +578,23 @@ const styles = StyleSheet.create({
   },
   backLabel: {
     fontWeight: '400',
+  },
+  updatesNotice: {
+    marginTop: 2,
+    marginBottom: 12,
+    lineHeight: 19,
+  },
+  updatesEmpty: {
+    marginTop: 4,
+  },
+  updateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 12,
+  },
+  updateActionLabel: {
+    fontWeight: '700',
   },
 });

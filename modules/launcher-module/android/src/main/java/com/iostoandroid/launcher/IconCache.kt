@@ -4,15 +4,37 @@ package com.iostoandroid.launcher
  * Pure-JVM logic for LauncherModule's on-disk icon cache. Kept free of
  * android.* imports so it can be unit-tested without a device.
  *
- * Icons are cached as `<packageName>_<versionCode>.png` under
+ * Icons are cached as `<packageName>_<versionCode>_<shapeKey>.png` under
  * `context.filesDir/icons/`. Folding versionCode into the key means an app
  * update invalidates its icon for free — the old file simply stops matching
  * any currently-installed package and [orphanedFiles] flags it for deletion.
+ * Folding the shape key in does the same for the icon-shape setting (#482):
+ * change the shape or the squircle exponent and the previously masked PNGs stop
+ * matching, so the grid re-renders instead of serving the old shape.
  */
 object IconCache {
 
-    /** The cache filename for [packageName] at [versionCode]. */
-    fun fileName(packageName: String, versionCode: Long): String = "${packageName}_$versionCode.png"
+    /** Shape key used when the caller did not specify one (default squircle, n=4.7). */
+    const val DEFAULT_SHAPE_KEY = "squircle4.7"
+
+    /**
+     * The cache filename for [packageName] at [versionCode], masked with
+     * [shapeKey]. Characters that are not filename-safe are stripped from the
+     * shape key so a malformed value from JS cannot escape the icons directory.
+     */
+    fun fileName(
+        packageName: String,
+        versionCode: Long,
+        shapeKey: String = DEFAULT_SHAPE_KEY
+    ): String = "${packageName}_${versionCode}_${sanitizeShapeKey(shapeKey)}.png"
+
+    /** Keeps letters, digits, dots and dashes; everything else becomes '-'. */
+    fun sanitizeShapeKey(shapeKey: String): String {
+        val cleaned = shapeKey.map { c ->
+            if (c.isLetterOrDigit() || c == '.' || c == '-') c else '-'
+        }.joinToString("")
+        return if (cleaned.isEmpty()) DEFAULT_SHAPE_KEY else cleaned
+    }
 
     /**
      * Names, from [existingFileNames], that no longer correspond to any name in

@@ -62,7 +62,13 @@ describe('AppsStore — reacts to package install/uninstall broadcasts', () => {
       'com.example.banana',
       'com.example.cherry',
     ]);
-    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.banana');
+    // O segundo argumento é a máscara de forma dos ícones (#482): o refresh
+    // incremental tem de usar a MESMA forma que a grelha, senão a app recém
+    // instalada aparecia com a silhueta antiga.
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
+      'com.example.banana',
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+    );
     expect(LauncherModule.getInstalledApps).not.toHaveBeenCalled();
   });
 
