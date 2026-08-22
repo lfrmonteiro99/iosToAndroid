@@ -5,6 +5,7 @@ import { useAlert } from '../components';
 import { logger } from '../utils/logger';
 import { migrateAsyncStorageKey } from './storage';
 import { upsertApp, removeApp } from './appsIndexReducer';
+import { getIconMask, subscribeIconMask, type IconMaskOptions } from '../utils/iconShape';
 import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
@@ -118,6 +119,14 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
 };
 
+// Single source of truth for this app's own virtual built-ins. Every entry in
+// VIRTUAL_APPS_MAP has isSystem:false, so screens must exclude them by package
+// name, never by isSystem — otherwise the App Store's Updates list (and any
+// other "real installed apps" view) would surface our own fake packages.
+export const VIRTUAL_APP_PACKAGE_NAMES: ReadonlySet<string> = new Set(
+  Object.keys(VIRTUAL_APPS_MAP),
+);
+
 // Default dock apps — our built-in screens
 const DEFAULT_DOCK = [
   'com.iostoandroid.phone',
@@ -201,6 +210,14 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
     ).slice(0, 4); // max 4 in dock
   }, []);
 
+  // Forma da máscara dos ícones (#482). Lida do módulo utils/iconShape (mesmo
+  // padrão de utils/haptics): o SettingsStore publica-a lá, e este store
+  // subscreve — sem acoplar o AppsProvider ao SettingsProvider.
+  const [iconMask, setIconMask] = useState<IconMaskOptions>(() => getIconMask());
+  useEffect(() => subscribeIconMask(setIconMask), []);
+  const iconMaskRef = React.useRef(iconMask);
+  iconMaskRef.current = iconMask;
+
   const loadApps = useCallback(async () => {
     if (Platform.OS !== 'android') {
       setState(prev => ({ ...prev, isLoading: false }));
@@ -249,7 +266,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
       if (!LauncherModule) throw new Error('LauncherModule unavailable');
 
       const [apps, defaultStatus] = await Promise.all([
-        LauncherModule.getInstalledApps(),
+        LauncherModule.getInstalledApps(iconMask),
         LauncherModule.isDefaultLauncher(),
       ]);
 
@@ -271,8 +288,11 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [resolveDock]);
+  }, [resolveDock, iconMask]);
 
+  // loadApps depende de iconMask, por isso mudar a forma ou o expoente volta a
+  // pedir os ícones ao nativo com a chave de cache nova — a grelha actualiza sem
+  // reinstalar nem reiniciar.
   useEffect(() => {
     loadApps();
   }, [loadApps]);
@@ -315,7 +335,7 @@ export function AppsProvider({ children }: { children: React.ReactNode }) {
         // to be re-read rather than left as-is.
         try {
           const LauncherModule = await getLauncherModule();
-          const app = await LauncherModule?.getAppInfo(packageName);
+          const app = await LauncherModule?.getAppInfo(packageName, iconMaskRef.current);
           if (!mounted || !app) return; // not launchable, or unmounted meanwhile
           applyIndex(prev => upsertApp(prev, app));
         } catch (e) {
