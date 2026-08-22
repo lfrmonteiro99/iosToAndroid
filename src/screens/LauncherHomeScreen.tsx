@@ -58,7 +58,7 @@ import { NotificationCenterOverlay } from '../components/NotificationCenterOverl
 import { SpotlightReveal } from '../components/SpotlightReveal';
 import { AppLaunchOverlay } from '../components/AppLaunchOverlay';
 import type { LaunchBounds } from '../components/AppLaunchOverlay';
-import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
+import { zones, gestureConfig, dpPerMsToPtPerSec, springForAppLaunchDuration } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
@@ -86,6 +86,13 @@ export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
 export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
 const CELL_WIDTH = GRID_GEOMETRY.cellWidth;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
+// #501: o dock não tem label por baixo do ícone (ao contrário da grelha), por
+// isso a sua altura visual é ICON_SIZE + este padding * 2, nunca um número
+// escolhido à parte — a 393dp dá 60 + 18*2 = 96, batendo com a §2 ("Dock:
+// altura ≈96") e escalando com o ícone em qualquer outra largura.
+export const DOCK_VERTICAL_PADDING = 18;
+// §2: "Dock: inset lateral" = 10.
+export const DOCK_HORIZONTAL_INSET = 10;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -301,6 +308,8 @@ interface AppIconProps {
   onDelete?: (app: InstalledApp) => void;
   badge?: number;
   textScale?: number;
+  /** #501: the dock reuses AppIcon but has no name label under the icon. */
+  showLabel?: boolean;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -312,7 +321,7 @@ interface AppIconProps {
 // as instâncias em vez de criar uma arrow function nova por ícone a cada render
 // — sem isso o memo não teria qualquer efeito, porque a prop `onPress` nunca
 // seria igual à do render anterior.
-const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
+const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1, showLabel = true }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
@@ -383,7 +392,7 @@ const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPre
   return (
     <Pressable
       ref={iconRef}
-      style={[styles.appIconWrapper, { width: cellWidth }]}
+      style={[styles.appIconWrapper, { width: cellWidth }, !showLabel && styles.appIconWrapperCompact]}
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -453,9 +462,11 @@ const AppIcon = React.memo(function AppIcon({ app, cellWidth, onPress, onLongPre
           </Pressable>
         )}
       </Animated.View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
-        {app.name}
-      </Text>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
+          {app.name}
+        </Text>
+      )}
     </Pressable>
   );
 });
@@ -747,6 +758,13 @@ export function LauncherHomeScreen() {
     phase: 'expand' | 'collapse';
   } | null>(null);
 
+  // Spring physics for the icon-expand overlay, derived from the user's
+  // chosen appLaunchDurationMs (#512 §6.3) — still a spring at any duration.
+  const appLaunchSpringConfig = useMemo(
+    () => springForAppLaunchDuration(settings.appLaunchDurationMs),
+    [settings.appLaunchDurationMs],
+  );
+
   // Fires exactly when the expand spring settles — this is the intent trigger
   // point, not a setTimeout guess (§6.3). A failed launch collapses the
   // overlay back to the icon instead of leaving it stuck full-screen.
@@ -779,9 +797,19 @@ export function LauncherHomeScreen() {
       return;
     }
     // No measure fn (folder icons open inside a Modal — a separate native
-    // window that can't host a screen-spanning overlay) or reduceMotion:
-    // launch immediately, no expand, no measurement round-trip at all.
-    if (!measure || reduceMotion) {
+    // window that can't host a screen-spanning overlay), reduceMotion, or
+    // appLaunchAnimation off: launch immediately, no expand, no measurement
+    // round-trip at all.
+    //
+    // Precedence (#512 §6.3): reduceMotion — the stand-in for the future
+    // `motionIntensity: 'off'` (epic #467, not yet in SettingsStore) — always
+    // wins and disables the expand regardless of appLaunchAnimation.
+    // appLaunchAnimation: false only disables this one animation and leaves
+    // everything else reduceMotion also gates untouched. Either condition
+    // alone is enough to skip the overlay; both route through launchApp,
+    // which is where LauncherModule.kt's Android transition suppression
+    // lives (unconditional there), so it is never affected by this choice.
+    if (!measure || reduceMotion || !settings.appLaunchAnimation) {
       launchApp(app.packageName);
       return;
     }
@@ -792,7 +820,7 @@ export function LauncherHomeScreen() {
         launchApp(app.packageName);
       }
     });
-  }, [navigation, launchApp, reduceMotion]);
+  }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -1570,6 +1598,7 @@ export function LauncherHomeScreen() {
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
+                showLabel={false}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
@@ -1657,6 +1686,7 @@ export function LauncherHomeScreen() {
           phase={launchTransition.phase}
           onExpandComplete={handleExpandComplete}
           onCollapseComplete={handleCollapseComplete}
+          springConfig={appLaunchSpringConfig}
         />
       )}
       </Animated.View>
@@ -1767,6 +1797,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 5,
   },
+  // #501: dock variant (showLabel=false) — no label below the icon, so the
+  // wrapper is exactly the icon's own height instead of the grid's 88.
+  appIconWrapperCompact: {
+    height: ICON_SIZE,
+    paddingTop: 0,
+  },
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
@@ -1816,12 +1852,12 @@ const styles = StyleSheet.create({
 
   // Dock
   dockOuter: {
-    paddingHorizontal: 12,
+    paddingHorizontal: DOCK_HORIZONTAL_INSET,
   },
   dockBlur: {
     overflow: 'hidden',
     borderRadius: Shape.dock.radius,
-    paddingVertical: 10,
+    paddingVertical: DOCK_VERTICAL_PADDING,
     paddingHorizontal: 16,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },

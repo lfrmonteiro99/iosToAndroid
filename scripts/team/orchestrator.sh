@@ -629,6 +629,126 @@ corrida de review. Fechado. O branch fica no remoto se alguém quiser o diff." >
 #
 # A pergunta certa é sobre AQUELE issue, e a resposta está no registo de agentes
 # vivos.
+
+# ── Resolver trivial de conflitos de version-bump ───────────────────────────
+#
+# O auto-release bumpa o `package.json`/`app.json`/`package-lock.json` a cada
+# merge, e branches que ficam para trás na fila apanham conflitos nesses três
+# ficheiros — três ficheiros a que a implementação do branch quase nunca tocou.
+# Sem isto, cada bump em conflito custa um ciclo completo de agent (worktree,
+# npm install, resolver por intenção, push): 30-60s de quota só para escrever
+# `git checkout --theirs package.json`.
+#
+# Só resolve o caso trivial: TODOS os ficheiros em conflito estão na allowlist
+# ABAIXO **e** o branch, medido contra o merge-base, não tocou em nenhum deles.
+# A segunda parte é o que evita perder trabalho legítimo — um branch que
+# adicionou uma dependência tocou `package.json`, o guard falha, e o pipeline
+# normal trata o conflito como sempre.
+#
+# Um sucesso salta directamente para qa:review, poupando o implementador todo.
+BUMP_ALLOWLIST=(package.json app.json package-lock.json)
+
+resolve_trivial_bump_conflicts() {
+  local issue pr branch wt merge_base conflicted only_allowed real_touch
+  for issue in $(issues_with "$L_BLOCKED_IMPL"); do
+    branch="qa/issue-$issue"
+    pr=$(gh pr list --repo "$REPO" --head "$branch" --base "$BASE_BRANCH" \
+      --state open --json number,mergeable \
+      --jq '.[0] | select(.mergeable == "CONFLICTING") | .number' \
+      2>/dev/null || echo "")
+    [ -n "$pr" ] || continue
+
+    wt=$(wt_checkout "$branch" "resolve-$issue" 2>/dev/null) || continue
+    git -C "$wt" fetch origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+
+    # Try the merge. A clean merge here means the CONFLICTING state was already
+    # stale; still worth pushing so the pipeline advances.
+    if git -C "$wt" merge --no-edit --no-ff "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+      git -C "$wt" push -u origin "$branch" --force-with-lease >/dev/null 2>&1 && {
+        log "resolver: #$issue já mergável — só faltava sincronizar branch"
+        set_state "$issue" "$L_REVIEW"
+      }
+      wt_remove "$wt"
+      continue
+    fi
+
+    conflicted=$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null || true)
+    [ -n "$conflicted" ] || { git -C "$wt" merge --abort >/dev/null 2>&1 || true; wt_remove "$wt"; continue; }
+
+    only_allowed=1
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      case " ${BUMP_ALLOWLIST[*]} " in
+        *" $f "*) ;;
+        *) only_allowed=0; break ;;
+      esac
+    done <<< "$conflicted"
+
+    if [ "$only_allowed" = 0 ]; then
+      log "resolver: #$issue conflita fora da allowlist — passa ao implementador"
+      git -C "$wt" merge --abort >/dev/null 2>&1 || true
+      wt_remove "$wt"
+      continue
+    fi
+
+    # Second guard: the branch's own changes to each bump file must be limited
+    # to the `.version` (or `.expo.version` for app.json) JSON field. A branch
+    # that added a real dependency has other fields differing from the base;
+    # taking theirs would silently discard it. Compared semantically with jq
+    # instead of by line, so pretty-print vs single-line JSON does not fool it.
+    merge_base=$(git -C "$wt" merge-base HEAD "origin/$BASE_BRANCH" 2>/dev/null || echo "")
+    real_touch=0
+    for f in $conflicted; do
+      local jq_filter
+      case "$f" in
+        app.json)          jq_filter='.expo.version = ""' ;;
+        package.json|package-lock.json) jq_filter='(.. | objects | .version?) |= ""' ;;
+        *)                 jq_filter='.' ;;
+      esac
+      local base_norm branch_norm
+      base_norm=$(git -C "$wt" show "$merge_base:$f" 2>/dev/null | jq -S "$jq_filter" 2>/dev/null || true)
+      branch_norm=$(git -C "$wt" show "HEAD:$f" 2>/dev/null | jq -S "$jq_filter" 2>/dev/null || true)
+      if [ -z "$base_norm" ] || [ -z "$branch_norm" ] || [ "$base_norm" != "$branch_norm" ]; then
+        real_touch=1
+        log "resolver: #$issue tocou $f fora do campo version — não é trivial, passa ao implementador"
+        break
+      fi
+    done
+    if [ "$real_touch" = 1 ]; then
+      git -C "$wt" merge --abort >/dev/null 2>&1 || true
+      wt_remove "$wt"
+      continue
+    fi
+
+    # Trivial case: take main's version of each bump file, commit, push.
+    for f in $conflicted; do
+      git -C "$wt" checkout --theirs -- "$f" >/dev/null 2>&1
+      git -C "$wt" add -- "$f" >/dev/null 2>&1
+    done
+    if ! git -C "$wt" -c user.name="qa-resolver" -c user.email="qa@local" \
+         commit --no-edit >/dev/null 2>&1; then
+      warn "resolver: #$issue commit falhou — passa ao implementador"
+      git -C "$wt" merge --abort >/dev/null 2>&1 || true
+      wt_remove "$wt"
+      continue
+    fi
+
+    if git -C "$wt" push -u origin "$branch" --force-with-lease >/dev/null 2>&1; then
+      log "resolver: #$issue conflito trivial resolvido ($(echo "$conflicted" | tr '\n' ' '))"
+      comment_issue "$issue" "## Orquestrador: conflito trivial de version-bump resolvido
+
+Os únicos ficheiros em conflito eram do allowlist do auto-release
+(\`${BUMP_ALLOWLIST[*]}\`) e este branch não os modificou. Foi feito
+\`git checkout --theirs\` a cada, commit do merge e push — a rever, sem gastar
+um implementador."
+      set_state "$issue" "$L_REVIEW"
+    else
+      warn "resolver: #$issue push falhou — o pipeline normal trata"
+    fi
+    wt_remove "$wt"
+  done
+}
+
 rescue_stuck_wip() {
   local issue pr
   for issue in $(issues_with "$L_WIP"); do
@@ -941,6 +1061,9 @@ while true; do
     log "subscrição Claude esgotada (volta às $(date -d "@$(( $(date +%s) + $(cooldown_remaining) ))" +%H:%M)) — implementadores em HERMES até lá"
   fi
 
+  # Bump conflitos triviais: uma passagem antes do resgate e do despacho para
+  # não gastar um implementador só por causa de package.json/app.json.
+  resolve_trivial_bump_conflicts
   rescue_stuck_wip
   close_orphan_prs
 
