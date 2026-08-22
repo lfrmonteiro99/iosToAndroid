@@ -11,6 +11,7 @@ import {
 } from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
+import { Shape } from '../../theme/CupertinoTheme';
 
 function flattenStyle(style: unknown): Record<string, unknown>[] {
   if (Array.isArray(style)) return style.flat(Infinity).filter(Boolean) as Record<string, unknown>[];
@@ -21,6 +22,41 @@ describe('LauncherHomeScreen', () => {
   it('renders without crashing', () => {
     const { toJSON } = render(<LauncherHomeScreen />);
     expect(toJSON()).toBeTruthy();
+  });
+
+  // #481: dock corner radius must consume Shape.dock (34), not the old
+  // hand-picked literal (22) — 35% below spec §1.6.
+  it('renders the dock at the Shape.dock radius (34)', () => {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+
+    const { UNSAFE_getByType } = render(<LauncherHomeScreen />);
+    const dockBlur = UNSAFE_getByType('BlurView' as never);
+    const flat = flattenStyle(dockBlur.props.style);
+    const radiusStyle = flat.find((s) => 'borderRadius' in s) as { borderRadius: number } | undefined;
+
+    expect(radiusStyle).toBeDefined();
+    expect(radiusStyle?.borderRadius).toBe(Shape.dock.radius);
+    expect(radiusStyle?.borderRadius).toBe(34);
+
+    jest.restoreAllMocks();
   });
 
   it('renders the home screen container', () => {
@@ -512,7 +548,7 @@ describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
     mockLoadedApps();
     const { getByTestId } = render(<LauncherHomeScreen />);
 
-    const paginationScrollView = getByTestId('launcher-pagination-scroll');
+    const paginationScrollView = getByTestId('launcher-pager');
     expect(paginationScrollView.props.decelerationRate).toBe(0.998);
   });
 });

@@ -11,8 +11,21 @@ import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
+  CupertinoSegmentedControl,
+  CupertinoSlider,
   useAlert,
 } from '../../components';
+import { useApps } from '../../store/AppsStore';
+import {
+  ICON_SHAPES,
+  ICON_SHAPE_LABELS,
+  ICON_SHAPE_EXPONENT_MIN,
+  ICON_SHAPE_EXPONENT_MAX,
+  DEFAULT_ICON_SHAPE_EXPONENT,
+  normalizeIconShape,
+  clampIconShapeExponent,
+  previewCornerRatio,
+} from '../../utils/iconShape';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const CUSTOM_WALLPAPER_KEY = '@iostoandroid/custom_wallpaper';
@@ -24,6 +37,17 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
   const { settings, update } = useSettings();
   const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
   const alert = useAlert();
+  const { apps } = useApps();
+
+  // Forma dos ícones (#482). Vive neste ecrã porque é aqui que a aparência do
+  // ecrã inicial já se configura — ver o PR para a justificação.
+  const iconShape = normalizeIconShape(settings.iconShape);
+  const iconShapeExponent = clampIconShapeExponent(settings.iconShapeExponent);
+  const shapeIndex = Math.max(0, ICON_SHAPES.indexOf(iconShape));
+  // Pré-visualização com um ícone REAL: a primeira app instalada com ícone.
+  const previewIcon = apps.find((a) => !!a.icon)?.icon ?? null;
+  const previewRadius = PREVIEW_SIZE * previewCornerRatio(iconShape, iconShapeExponent);
+  const exponentDisabled = iconShape !== 'squircle';
 
   useEffect(() => {
     AsyncStorage.getItem(CUSTOM_WALLPAPER_KEY).then((uri) => {
@@ -151,6 +175,58 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
           Selected: {selectedWallpaper.name}
         </Text>
 
+        {/* Forma dos ícones (#482) */}
+        <View style={{ paddingHorizontal: spacing.md, marginTop: spacing.md }}>
+          <CupertinoListSection header="Icon Shape">
+            <View style={styles.shapeRow}>
+              <CupertinoSegmentedControl
+                values={ICON_SHAPE_LABELS as string[]}
+                selectedIndex={shapeIndex}
+                onChange={(index) => update('iconShape', ICON_SHAPES[index])}
+              />
+            </View>
+            <View style={styles.previewRow}>
+              {previewIcon ? (
+                <Image
+                  source={{ uri: previewIcon }}
+                  style={{ width: PREVIEW_SIZE, height: PREVIEW_SIZE, borderRadius: previewRadius }}
+                  accessibilityLabel={`Icon shape preview, ${ICON_SHAPE_LABELS[shapeIndex]}`}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: PREVIEW_SIZE,
+                    height: PREVIEW_SIZE,
+                    borderRadius: previewRadius,
+                    backgroundColor: colors.systemBlue,
+                  }}
+                  accessibilityLabel={`Icon shape preview, ${ICON_SHAPE_LABELS[shapeIndex]}`}
+                />
+              )}
+              <Text style={[typography.footnote, { color: colors.secondaryLabel }]}>
+                {iconShape === 'original'
+                  ? 'Original: system drawable, no mask'
+                  : `Exponent: ${iconShapeExponent.toFixed(1)}`}
+              </Text>
+            </View>
+            <View style={styles.sliderRow}>
+              <CupertinoSlider
+                value={iconShapeExponent}
+                minimumValue={ICON_SHAPE_EXPONENT_MIN}
+                maximumValue={ICON_SHAPE_EXPONENT_MAX}
+                disabled={exponentDisabled}
+                onValueChange={(value) =>
+                  update('iconShapeExponent', clampIconShapeExponent(value))
+                }
+              />
+            </View>
+            <CupertinoListTile
+              title="Reset Shape Exponent"
+              onPress={() => update('iconShapeExponent', DEFAULT_ICON_SHAPE_EXPONENT)}
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Set section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Set Wallpaper">
@@ -181,8 +257,19 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
   );
 }
 
+const PREVIEW_SIZE = 60;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  shapeRow: { paddingHorizontal: 16, paddingVertical: 12 },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  sliderRow: { paddingHorizontal: 16, paddingBottom: 16 },
   gridContainer: {
     marginBottom: 8,
   },
