@@ -210,7 +210,7 @@ describe('AssistiveTouch menu backdrop', () => {
     // Sem backdrop montado, o toque no item não pode ser consumido por ele.
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
 
-    fireEvent.press(getByLabelText('Notifications'));
+    fireEvent.press(getByLabelText('Notification Centre'));
     expect(navigationRef.navigate).toHaveBeenCalledWith('NotificationCenter');
   });
 
@@ -232,7 +232,7 @@ describe('AssistiveTouch menu backdrop', () => {
     expect(getByLabelText(BACKDROP_LABEL)).toBeTruthy();
 
     // Tocar num item fecha; `menuOpen` continua true durante a animação de saída.
-    fireEvent.press(getByLabelText('Notifications'));
+    fireEvent.press(getByLabelText('Notification Centre'));
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
 
     // Reabrir antes de o fecho terminar — o `menuOpen` nunca transiciona, por
@@ -249,7 +249,7 @@ describe('AssistiveTouch menu backdrop', () => {
     openMenu();
     advance(50); // antes de o guard da abertura disparar
 
-    fireEvent.press(getByLabelText('Notifications')); // fecha o menu
+    fireEvent.press(getByLabelText('Notification Centre')); // fecha o menu
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
 
     advance(150); // o timer da abertura original dispararia nesta janela
@@ -301,17 +301,26 @@ describe('AssistiveTouch acção siri', () => {
 });
 
 describe('AssistiveTouch menu geometry', () => {
-  // The popover clips its overflow, so cells that do not fit the content box
-  // drop menu items out of view instead of wrapping them onto a visible row.
-  const { width, height, padding, gap, columns, cellHeight, maxItems } = MENU_GEOMETRY;
-  const contentW = width - padding * 2;
-  const contentH = height - padding * 2;
+  // The popover clips its overflow, so cells positioned partly outside the
+  // square would be cut off instead of wrapping into view.
+  const { size, cellSize, radius, maxItems } = MENU_GEOMETRY;
+  const centre = size / 2;
 
-  it('fits a full menu inside the popover', () => {
-    const cellW = (contentW - gap * (columns - 1)) / columns;
-    expect(cellW * columns + gap * (columns - 1)).toBeLessThanOrEqual(contentW);
+  it('every ring position keeps a full cell inside the popover square', () => {
+    for (let i = 0; i < maxItems; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / maxItems;
+      const x = centre + radius * Math.cos(angle);
+      const y = centre + radius * Math.sin(angle);
+      expect(x - cellSize / 2).toBeGreaterThanOrEqual(0);
+      expect(y - cellSize / 2).toBeGreaterThanOrEqual(0);
+      expect(x + cellSize / 2).toBeLessThanOrEqual(size);
+      expect(y + cellSize / 2).toBeLessThanOrEqual(size);
+    }
+  });
 
-    const rows = Math.ceil(maxItems / columns);
-    expect(rows * cellHeight + gap * (rows - 1)).toBeLessThanOrEqual(contentH);
+  it('adjacent cells on the ring do not overlap', () => {
+    // Chord length between two neighbouring centres must exceed the cell side.
+    const chord = 2 * radius * Math.sin(Math.PI / maxItems);
+    expect(chord).toBeGreaterThanOrEqual(cellSize);
   });
 });
