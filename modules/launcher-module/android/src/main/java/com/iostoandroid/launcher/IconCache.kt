@@ -24,15 +24,15 @@ object IconCache {
      * into the key: changing the shape, the exponent or the treatment in
      * Settings orphans the existing PNGs for free, the same way an app update
      * already does via versionCode — no separate "invalidate" step needed.
-     * Characters that are not filename-safe are stripped from the shape key so
-     * a malformed value from JS cannot escape the icons directory.
+     * Characters that are not filename-safe are stripped from BOTH keys so a
+     * malformed value from JS cannot escape the icons directory.
      */
     fun fileName(
         packageName: String,
         versionCode: Long,
         shapeKey: String = DEFAULT_SHAPE_KEY,
         treatment: String = IconTreatment.DEFAULT
-    ): String = "${packageName}_${versionCode}_${sanitizeShapeKey(shapeKey)}_$treatment.png"
+    ): String = "${packageName}_${versionCode}_${sanitizeShapeKey(shapeKey)}_${sanitizeShapeKey(treatment)}.png"
 
     /** Keeps letters, digits, dots and dashes; everything else becomes '-'. */
     fun sanitizeShapeKey(shapeKey: String): String {

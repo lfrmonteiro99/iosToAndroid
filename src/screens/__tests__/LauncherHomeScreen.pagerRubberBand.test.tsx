@@ -134,7 +134,7 @@ function mockLoadedApps() {
     isRebuildingIconCache: false,
     iconCacheRebuildProgress: null,
     rebuildIconCache: jest.fn(() => Promise.resolve()),
-    } as ReturnType<typeof AppsStore.useApps>);
+  } as ReturnType<typeof AppsStore.useApps>);
 }
 
 beforeEach(() => {

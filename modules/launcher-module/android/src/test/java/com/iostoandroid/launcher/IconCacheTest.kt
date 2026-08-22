@@ -1,6 +1,7 @@
 package com.iostoandroid.launcher
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,6 +50,15 @@ class IconCacheTest {
         val existing = listOf(maskAll)
         val validUnderNewTreatment = setOf(none)
         assertEquals(listOf(maskAll), IconCache.orphanedFiles(existing, validUnderNewTreatment))
+    }
+
+    @Test
+    fun `fileName sanitizes a malformed treatment so JS cannot escape the icons directory`() {
+        // Mesmo guard do shapeKey: um tratamento que não seja um dos três válidos
+        // não pode introduzir separadores de caminho no nome do ficheiro.
+        val escaped = IconCache.fileName("com.example.app", 1L, treatment = "../../evil")
+        assertFalse(escaped.contains('/'))
+        assertFalse(escaped.contains(".."))
     }
 
     @Test

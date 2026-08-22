@@ -494,7 +494,10 @@ export function AppsProvider({
       setIconCacheRebuildProgress({ done: 0, total: packageNames.length });
       for (let i = 0; i < packageNames.length; i++) {
         try {
-          await LauncherModule.getAppInfo(packageNames[i], iconTreatment);
+          // O 2º argumento é a MÁSCARA (forma/expoente da #482), não o
+          // tratamento: passar o tratamento nesse slot faria o redraw usar a
+          // forma DEFAULT e ignorar a forma escolhida pelo utilizador.
+          await LauncherModule.getAppInfo(packageNames[i], iconMaskRef.current, iconTreatment);
         } catch (e) {
           logger.warn('AppsStore', `rebuildIconCache: redraw failed for ${packageNames[i]}`, e);
         }

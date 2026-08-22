@@ -142,7 +142,11 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
     await act(async () => {});
 
-    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith('mask-all');
+    // #486/#482: a máscara (forma/expoente) viaja no 1º argumento, o tratamento no 2º.
+    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-all',
+    );
   });
 
   it('defaults to mask-adaptive-only when no iconTreatment prop is passed (every pre-#486 test wraps AppsProvider this way)', async () => {
@@ -150,7 +154,41 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
     await act(async () => {});
 
-    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith('mask-adaptive-only');
+    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-adaptive-only',
+    );
+  });
+
+  it('reloads the apps when the iconTreatment prop changes — the cache key invalidates and the icons are re-fetched (#486 acceptance)', async () => {
+    // O tratamento entra na chave nativa da cache (IconCache.fileName): mudá-lo
+    // tem de forçar um novo getInstalledApps com o valor novo, senão a grelha
+    // continuava a mostrar os PNGs antigos até ao próximo arranque.
+    let currentTreatment = 'mask-all';
+    const treatedWrapper = ({ children }: { children: React.ReactNode }) => (
+      <AppsProvider iconTreatment={currentTreatment}>{children}</AppsProvider>
+    );
+
+    const { rerender } = renderHook(() => useApps(), { wrapper: treatedWrapper });
+    await act(async () => {});
+    await act(async () => {});
+    expect(LauncherModule.getInstalledApps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-all',
+    );
+
+    (LauncherModule.getInstalledApps as jest.Mock).mockClear();
+    currentTreatment = 'none';
+    await act(async () => {
+      rerender({});
+    });
+    await act(async () => {});
+
+    expect(LauncherModule.getInstalledApps).toHaveBeenCalledTimes(1);
+    expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'none',
+    );
   });
 
   it('rebuildIconCache clears the cache, redraws every installed app one at a time, then refreshes the size', async () => {
@@ -173,9 +211,19 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     });
 
     expect(LauncherModule.clearIconCache).toHaveBeenCalledTimes(1);
-    // One getAppInfo call per installed app, redrawing after the clear.
-    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.a', 'mask-adaptive-only');
-    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.b', 'mask-adaptive-only');
+    // One getAppInfo call per installed app, redrawing after the clear — com a
+    // MESMA máscara (forma/expoente) e o tratamento actuais, para o rebuild não
+    // devolver ícones com outra silhueta (#486 + #482).
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
+      'com.example.a',
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-adaptive-only',
+    );
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
+      'com.example.b',
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-adaptive-only',
+    );
     expect(result.current.isRebuildingIconCache).toBe(false);
     expect(result.current.iconCacheRebuildProgress).toBeNull();
     expect(result.current.iconCacheSizeBytes).toBe(4096);

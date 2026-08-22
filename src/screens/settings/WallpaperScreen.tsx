@@ -59,6 +59,7 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const {
+    apps,
     iconCacheSizeBytes,
     isRebuildingIconCache,
     iconCacheRebuildProgress,
@@ -66,7 +67,6 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
   } = useApps();
   const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
   const alert = useAlert();
-  const { apps } = useApps();
 
   // Forma dos ícones (#482). Vive neste ecrã porque é aqui que a aparência do
   // ecrã inicial já se configura — ver o PR para a justificação.

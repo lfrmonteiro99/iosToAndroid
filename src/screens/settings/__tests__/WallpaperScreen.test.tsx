@@ -8,7 +8,7 @@ import { CupertinoSwitch, CupertinoSlider } from '../../../components';
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn() } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const mockUpdate = jest.fn();
-let mockSettings: {
+const mockSettings: {
   wallpaperIndex: number;
   iconTreatment: string;
   appLaunchAnimation: boolean;
@@ -182,7 +182,12 @@ describe('WallpaperScreen', () => {
 describe('WallpaperScreen icon treatment (#486)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSettings = { wallpaperIndex: 0, iconTreatment: 'mask-adaptive-only', appLaunchAnimation: true, appLaunchDurationMs: 280 };
+    // Mutar o objecto partilhado (não reatribuir): a factory do jest.mock lê a
+    // variável `mockSettings`, e o alias mockSettingsState tem de continuar a
+    // apontar para o MESMO objecto, senão o describe anterior mexia num objeto
+    // órfão e este noutro.
+    mockSettingsState.wallpaperIndex = 0;
+    mockSettingsState.iconTreatment = 'mask-adaptive-only';
     (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([]);
     (LauncherModule.isDefaultLauncher as jest.Mock).mockResolvedValue(false);
     (LauncherModule.getIconCacheSizeBytes as jest.Mock).mockResolvedValue(0);
@@ -237,7 +242,13 @@ describe('WallpaperScreen icon treatment (#486)', () => {
     });
 
     expect(LauncherModule.clearIconCache).toHaveBeenCalledTimes(1);
-    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith('com.example.a', 'mask-adaptive-only');
+    // #486/#482: o redraw passa a MESMA máscara (forma/expoente) que a grelha e
+    // o tratamento actual — o rebuild não pode devolver ícones com outra silhueta.
+    expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
+      'com.example.a',
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-adaptive-only',
+    );
   });
 
   it('shows rebuild progress while a rebuild is in flight', async () => {
