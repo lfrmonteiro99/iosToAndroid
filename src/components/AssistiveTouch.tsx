@@ -24,9 +24,10 @@ import { useTheme } from '../theme/ThemeContext';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
 import { IDLE_DIM_MS } from '../utils/gestureConfig';
+import { assistiveTouchSnap, assistiveTouchMenuReveal } from '../theme/springPresets';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const SNAP_SPRING = { damping: 18, stiffness: 220 } as const;
+const SNAP_SPRING = assistiveTouchSnap;
 
 /**
  * Radial-menu popover geometry. Shared by the anchor maths and the grid styles
@@ -194,7 +195,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     fullyOpenTimer.current = setTimeout(() => setFullyOpen(true), 150);
     menuScale.value = reduceMotion
       ? withTiming(1, { duration: 150 })
-      : withSpring(1, { damping: 14, stiffness: 220 });
+      : withSpring(1, assistiveTouchMenuReveal);
     menuOpacity.value = withTiming(1, { duration: 160 });
     wake();
   }, [menuScale, menuOpacity, wake, hapticFeedback, reduceMotion]);

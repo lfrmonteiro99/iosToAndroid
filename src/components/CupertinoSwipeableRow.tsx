@@ -11,6 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
+import { feedbackSettle } from '../theme/springPresets';
 
 export interface SwipeAction {
   label: string;
@@ -28,7 +29,7 @@ interface CupertinoSwipeableRowProps {
 }
 
 const ACTION_WIDTH = 74;
-const SPRING_CONFIG = { damping: 20, stiffness: 300 };
+const SPRING_CONFIG = feedbackSettle;
 
 export function CupertinoSwipeableRow({
   children,

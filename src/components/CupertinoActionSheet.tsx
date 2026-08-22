@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticImpact } from '../utils/haptics';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { actionSheetPresent } from '../theme/springPresets';
 
 interface ActionSheetOption {
   label: string;
@@ -48,12 +49,12 @@ export function CupertinoActionSheet({
     if (visible) {
       translateY.value = reduceMotion
         ? withTiming(0, { duration: 180 })
-        : withSpring(0, { damping: 25, stiffness: 300 });
+        : withSpring(0, actionSheetPresent);
       backdropOpacity.value = withTiming(1, { duration: 250 });
     } else {
       translateY.value = reduceMotion
         ? withTiming(400, { duration: 150 })
-        : withSpring(400, { damping: 25, stiffness: 300 });
+        : withSpring(400, actionSheetPresent);
       backdropOpacity.value = withTiming(0, { duration: 200 });
     }
     // Shared values are stable refs; reduceMotion is a reactive dep
