@@ -1784,14 +1784,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   appIconLabel: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 11,
     fontWeight: '500',
     color: '#ffffff',
     textAlign: 'center',
     width: '90%',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 3,
   },
 
@@ -1801,18 +1801,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
-    gap: 4,
+    gap: 9,
   },
   pageDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   pageDotFilled: {
     backgroundColor: '#ffffff',
   },
   pageDotEmpty: {
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
   // Dock
