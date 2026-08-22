@@ -60,8 +60,8 @@ function generateTabId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
-function createTab(url: string): BrowserTab {
-  return { id: generateTabId(), url, title: '' };
+function createTab(url: string, isPrivate = false): BrowserTab {
+  return { id: generateTabId(), url, title: '', isPrivate };
 }
 
 export function BrowserScreen({ navigation }: { navigation: AppNavigationProp }) {
@@ -78,15 +78,17 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showBookmarksList, setShowBookmarksList] = useState(false);
-  const [isPrivate, setIsPrivate] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
-  const styles = React.useMemo(() => createStyles(colors, isPrivate), [colors, isPrivate]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const currentUrl = activeTab?.url ?? BROWSER_HOME_URL;
   const pageTitle = activeTab?.title ?? '';
+  const styles = React.useMemo(
+    () => createStyles(colors, !!activeTab?.isPrivate),
+    [colors, activeTab?.isPrivate]
+  );
 
   const handleSubmit = useCallback(() => {
     const next = resolveUrl(inputUrl);
@@ -129,17 +131,15 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     setInputUrl(url);
   }, [activeTabId]);
 
-  const handleTogglePrivate = useCallback(() => {
-    hapticImpact();
-    setIsPrivate((prev) => !prev);
-  }, []);
-
-  const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, title: navState.title } : t)));
-    setCanGoBack(navState.canGoBack);
-    setCanGoForward(navState.canGoForward);
-    setInputUrl(navState.url);
-  }, [activeTabId]);
+  const handleNavigationStateChange = useCallback(
+    (navState: WebViewNavigation) => {
+      setCanGoBack(navState.canGoBack);
+      setCanGoForward(navState.canGoForward);
+      setInputUrl(navState.url);
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, title: navState.title } : t)));
+    },
+    [activeTabId],
+  );
 
   const handleGoBackInHistory = useCallback(() => {
     if (!canGoBack) return;
@@ -170,8 +170,8 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     [tabs],
   );
 
-  const handleNewTab = useCallback(() => {
-    const tab = createTab(BROWSER_HOME_URL);
+  const handleNewTab = useCallback((isPrivate: boolean) => {
+    const tab = createTab(BROWSER_HOME_URL, isPrivate);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
     setInputUrl(BROWSER_HOME_URL);
@@ -298,19 +298,6 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         >
           <Ionicons name="share-outline" size={22} color={BROWSER_ACCENT} />
         </Pressable>
-        <Pressable
-          onPress={handleTogglePrivate}
-          hitSlop={8}
-          accessibilityLabel="Toggle private browsing"
-          accessibilityRole="button"
-          accessibilityState={{ selected: isPrivate }}
-        >
-          <Ionicons
-            name={isPrivate ? 'eye-off' : 'eye'}
-            size={22}
-            color={isPrivate ? colors.label : BROWSER_ACCENT}
-          />
-        </Pressable>
       </View>
 
       {loading ? (
@@ -328,7 +315,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         testID="browser-webview"
         source={{ uri: currentUrl }}
         style={styles.webview}
-        incognito={isPrivate}
+        incognito={!!activeTab?.isPrivate}
         onLoadStart={() => {
           setLoading(true);
           setProgress(0);
@@ -450,14 +437,6 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
       fontWeight: '700',
       textAlign: 'center',
     },
-    tabGridHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-    },
-    tabGridTitle: { ...Typography.headline, color: colors.label },
     bottomToolbar: {
       position: 'absolute',
       left: 0,
@@ -470,5 +449,13 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
       borderTopWidth: StyleSheet.hairlineWidth,
       backgroundColor: colors.secondarySystemBackground,
     },
+    tabGridHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    tabGridTitle: { ...Typography.headline, color: colors.label },
   });
 }

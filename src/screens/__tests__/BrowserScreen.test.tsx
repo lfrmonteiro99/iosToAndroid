@@ -179,55 +179,6 @@ describe('BrowserScreen — Share', () => {
   });
 });
 
-describe('BrowserScreen — private browsing toggle', () => {
-  it('mounts the WebView with incognito=false by default', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const webview = utils.getByTestId('browser-webview');
-    expect(webview.props.incognito).toBe(false);
-  });
-
-  it('toggling the private-browsing button flips incognito to true, and back to false', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const toggle = utils.getByLabelText('Toggle private browsing');
-    fireEvent.press(toggle);
-    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
-    fireEvent.press(toggle);
-    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
-  });
-
-  it('darkens topBar and addressBar to #1C1C1E while private, and restores the default theme colors when turned off', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const topBar = utils.getByTestId('browser-topbar');
-    const addressBar = utils.getByPlaceholderText('Search or enter website name');
-
-    const defaultTopBarBg = flatStyle(topBar).backgroundColor;
-    const defaultAddressBarBg = flatStyle(addressBar).backgroundColor;
-    expect(defaultTopBarBg).not.toBe('#1C1C1E');
-    expect(defaultAddressBarBg).not.toBe('#1C1C1E');
-
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe('#1C1C1E');
-    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe('#1C1C1E');
-
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe(defaultTopBarBg);
-    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
-      defaultAddressBarBg
-    );
-  });
-
-  it('toggling private browsing repeatedly without navigating keeps the current URL and typed address bar text', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const bar = utils.getByPlaceholderText('Search or enter website name');
-    fireEvent.changeText(bar, 'example.com');
-
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-
-    expect(utils.getByPlaceholderText('Search or enter website name').props.value).toBe('example.com');
-});
-});
 describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
   it('opens the tab grid when the Tabs button is pressed', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
@@ -427,6 +378,97 @@ describe('BrowserScreen — Back/Forward toolbar', () => {
     fireEvent.press(utils.getByLabelText('Go back'));
     expect((nav as unknown as { goBack: jest.Mock }).goBack).toHaveBeenCalledTimes(1);
     expect(mockGoBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('BrowserScreen — private browsing is per-tab (grid segmented control)', () => {
+  // The standalone "Toggle private browsing" Pressable from the single-tab
+  // sub-issue no longer exists. Privacy is now driven by the active tab's
+  // isPrivate flag, switched via the "Tabs"/"Private" segmented control in
+  // BrowserTabGrid.
+
+  it('mounts the WebView with incognito=false for a normal default tab', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const webview = utils.getByTestId('browser-webview');
+    expect(webview.props.incognito).toBe(false);
+  });
+
+  it('creating a private tab via the "Private" segment mounts its WebView with incognito=true', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    // Switch the grid to the "Private" segment, then add a tab.
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
+  });
+
+  it('switching back to a normal tab flips incognito back to false (per-tab, not global)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
+
+    // Go back to the grid and select the original normal tab.
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`));
+
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
+  });
+
+  it('darkens topBar and addressBar to #1C1C1E for a private active tab, restores for a normal tab', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const topBar = utils.getByTestId('browser-topbar');
+    const addressBar = utils.getByPlaceholderText('Search or enter website name');
+
+    const defaultTopBarBg = flatStyle(topBar).backgroundColor;
+    const defaultAddressBarBg = flatStyle(addressBar).backgroundColor;
+    expect(defaultTopBarBg).not.toBe('#1C1C1E');
+    expect(defaultAddressBarBg).not.toBe('#1C1C1E');
+
+    // Make the active tab private.
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+
+    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe('#1C1C1E');
+    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
+      '#1C1C1E'
+    );
+
+    // Switch back to the normal tab → default chrome restored.
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`));
+
+    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe(defaultTopBarBg);
+    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
+      defaultAddressBarBg
+    );
+  });
+
+  it('repeatedly toggling the grid segment without creating tabs does not crash and keeps a normal tab active', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByText('Tabs'));
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByText('Tabs'));
+
+    // Leave the grid; the active tab is still the original normal one.
+    fireEvent.press(utils.getByLabelText('Done'));
+
+    // Still on the original normal tab, WebView intact, not private.
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+
+  it('the standalone private-browsing toggle no longer exists in the top bar', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.queryByLabelText('Toggle private browsing')).toBeNull();
   });
 });
 
