@@ -17,6 +17,8 @@ import type { AppNavigationProp } from '../../navigation/types';
 
 const TEXT_SIZE_LABELS = ['Small', 'Default', 'Large', 'XL'];
 const FONT_CHOICE_LABELS = ['Inter', 'System'];
+const PRESS_FEEDBACK_LABELS = ['Scale & Opacity', 'Opacity Only', 'None'];
+const PRESS_FEEDBACK_VALUES = ['scale-opacity', 'opacity', 'none'] as const;
 
 const A11Y_KEYS = {
   textscale: '@iostoandroid/a11y_textscale',
@@ -151,6 +153,22 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               }
               showChevron={false}
             />
+          </CupertinoListSection>
+        </View>
+
+        {/* Touch Feedback */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Touch Feedback"
+            footer="Controls the visual response when pressing buttons and controls. 'None' turns off the visual effect only — haptic feedback (from Sounds & Haptics) is unaffected."
+          >
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={PRESS_FEEDBACK_LABELS}
+                selectedIndex={PRESS_FEEDBACK_VALUES.indexOf(settings.pressFeedback)}
+                onChange={(i) => update('pressFeedback', PRESS_FEEDBACK_VALUES[i])}
+              />
+            </View>
           </CupertinoListSection>
         </View>
 

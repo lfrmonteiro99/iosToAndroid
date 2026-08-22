@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '../../../test-utils';
 import { AboutScreen } from '../AboutScreen';
+import { AlertProvider } from '../../../components/AlertProvider';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
 
@@ -27,5 +28,20 @@ describe('AboutScreen', () => {
     const { getByText } = render(<AboutScreen navigation={mockNavigation as never} />);
     fireEvent.press(getByText('General'));
     expect(mockNavigation.goBack).toHaveBeenCalled();
+  });
+
+  // Real interaction: tapping the "Legal & Regulatory" action row fires the
+  // alert. The row renders inside a real AlertProvider so the dialog actually
+  // mounts; the default no-op context would otherwise swallow the call.
+  it('opens the Legal & Regulatory alert when the row is tapped', () => {
+    const { getByText } = render(
+      <AlertProvider>
+        <AboutScreen navigation={mockNavigation as never} />
+      </AlertProvider>,
+    );
+    const legalRow = getByText('Legal & Regulatory');
+    fireEvent.press(legalRow);
+    expect(getByText('Legal')).toBeTruthy();
+    expect(getByText(/not affiliated with Apple/i)).toBeTruthy();
   });
 });

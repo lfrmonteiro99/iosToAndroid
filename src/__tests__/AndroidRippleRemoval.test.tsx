@@ -92,7 +92,10 @@ describe('Issue #494: Android Ripple Removal', () => {
       );
 
       expect(appIconSection).toContain('pressScale');
-      expect(appIconSection).toContain('withSpring(0.85');
+      // #496 replaced the ad hoc 0.85 with the shared §3.2 press scale constant.
+      // The assertion is still "the icon springs its press scale on press-in";
+      // only the magnitude moved into src/hooks/useCupertinoPress.ts.
+      expect(appIconSection).toContain('withSpring(CUPERTINO_PRESS_SCALE');
       expect(appIconSection).toContain('handlePressIn');
       expect(appIconSection).toContain('handlePressOut');
     });
@@ -107,8 +110,10 @@ describe('Issue #494: Android Ripple Removal', () => {
         content.indexOf('function FolderIcon') + 1500
       );
 
-      // Should have a style prop with pressed state handling
-      expect(folderSection).toMatch(/style.*pressed/);
+      // #496: the folder icon now gets its press feedback from the shared
+      // primitive via CupertinoPressable instead of an inline
+      // `opacity: pressed ? 0.6 : 1`.
+      expect(folderSection).toMatch(/<CupertinoPressable/);
     });
 
     it('LauncherHomeScreen default launcher button should have opacity feedback', () => {
@@ -121,8 +126,8 @@ describe('Issue #494: Android Ripple Removal', () => {
         content.indexOf('Set as default launcher') + 500
       );
 
-      // Should have a style prop with pressed state handling
-      expect(defaultBannerSection).toMatch(/style.*pressed/);
+      // #496: migrated to the shared primitive (was `opacity: pressed ? 0.7 : 1`).
+      expect(defaultBannerSection).toMatch(/<CupertinoPressable/);
     });
 
     it('CallScreen control button should have opacity feedback', () => {
@@ -158,11 +163,11 @@ describe('Issue #494: Android Ripple Removal', () => {
       const content = fs.readFileSync(filePath, 'utf8');
 
       // Menu cell should have style feedback
-      const pressableStart = content.indexOf('<Pressable', content.indexOf('items.map'));
+      const pressableStart = content.indexOf('<CupertinoPressable', content.indexOf('items.map'));
       const menuCellSection = content.substring(pressableStart, pressableStart + 500);
 
-      // Should have a style prop with pressed state handling
-      expect(menuCellSection).toMatch(/style.*pressed/);
+      // #496: migrated to the shared primitive (was `opacity: pressed ? 0.65 : 1`).
+      expect(menuCellSection).toMatch(/<CupertinoPressable/);
     });
 
     it('TodayViewScreen widget card should have opacity feedback', () => {

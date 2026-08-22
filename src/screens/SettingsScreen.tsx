@@ -130,7 +130,7 @@ export function SettingsScreen() {
           onPress={() => item.route && (navigation as AppNavigationProp).navigate(item.route as any)} // eslint-disable-line @typescript-eslint/no-explicit-any -- route is a dynamic key from config
           style={({ pressed }) => [
             styles.profileCard,
-            { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },
+            { backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground },
           ]}
           accessibilityRole="button"
           accessibilityLabel={item.title}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '../../../test-utils';
 import { AssistiveTouchSettingsScreen } from '../AssistiveTouchSettingsScreen';
+import { AlertProvider } from '../../../components/AlertProvider';
 import type { MenuItemId } from '../../../store/AssistiveTouchStore';
 
 const mockUpdate = jest.fn();
@@ -42,6 +43,14 @@ describe('AssistiveTouchSettingsScreen', () => {
     expect(toJSON()).toBeTruthy();
   });
 
+  // Real interaction: the header back button ("Accessibility") calls
+  // navigation.goBack(). This is the unique occurrence of that text in the tree.
+  it('navigates back when the Accessibility back button is pressed', () => {
+    const { getByText } = render(<AssistiveTouchSettingsScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Accessibility'));
+    expect(mockNavigation.goBack).toHaveBeenCalled();
+  });
+
   it('renders the master switch and customization section when enabled', () => {
     const { getByText, getAllByRole } = render(
       <AssistiveTouchSettingsScreen navigation={mockNavigation as never} />,
@@ -79,5 +88,103 @@ describe('AssistiveTouchSettingsScreen', () => {
     );
     expect(queryByText('Customise Top Level Menu')).toBeNull();
     expect(queryByText('Reset to Defaults')).toBeNull();
+  });
+});
+
+// ── Top-level menu editing ──────────────────────────────────────────────────
+// These render inside a real AlertProvider: the picker and the cap warning are
+// alerts, so a stubbed no-op alert would hide the very behaviour under test.
+describe('AssistiveTouchSettingsScreen top-level menu', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseAssistive.mockReturnValue(assistive());
+  });
+
+  function renderScreen() {
+    return render(
+      <AlertProvider>
+        <AssistiveTouchSettingsScreen navigation={mockNavigation as never} />
+      </AlertProvider>,
+    );
+  }
+
+  it('the minus removes the item from the menu', () => {
+    const { getByLabelText } = renderScreen();
+    fireEvent.press(getByLabelText('Remove Spotlight'));
+    expect(mockUpdate).toHaveBeenCalledWith({
+      menuItems: ['home', 'multitask', 'notifications', 'controlCenter', 'settings'],
+    });
+  });
+
+  it('Add Item warns instead of opening an unusable picker when the menu is full', () => {
+    const { getByText, queryByText } = renderScreen();
+    fireEvent.press(getByText('Add Item'));
+    expect(getByText('Limit Reached')).toBeTruthy();
+    expect(queryByText('Add to Menu')).toBeNull();
+  });
+
+  it('Add Item offers Siri and appends it once there is a free slot', () => {
+    mockUseAssistive.mockReturnValue(
+      assistive({ menuItems: ['home', 'multitask', 'notifications', 'controlCenter', 'spotlight'] }),
+    );
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Add Item'));
+    expect(getByText('Add to Menu')).toBeTruthy();
+    fireEvent.press(getByText('Siri'));
+    expect(mockUpdate).toHaveBeenCalledWith({
+      menuItems: ['home', 'multitask', 'notifications', 'controlCenter', 'spotlight', 'siri'],
+    });
+  });
+
+  it('the action picker offers Siri for a single tap', () => {
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Single-Tap'));
+    fireEvent.press(getByText('Siri'));
+    expect(mockUpdate).toHaveBeenCalledWith({ singleTapAction: 'siri' });
+  });
+});
+
+// ── Expanded catalog ────────────────────────────────────────────────────────
+describe('AssistiveTouchSettingsScreen expanded action catalog', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseAssistive.mockReturnValue(assistive());
+  });
+
+  function renderScreen() {
+    return render(
+      <AlertProvider>
+        <AssistiveTouchSettingsScreen navigation={mockNavigation as never} />
+      </AlertProvider>,
+    );
+  }
+
+  it.each([
+    ['Camera',      'camera'],
+    ['Torch',       'flashlight'],
+    ['Volume Up',   'volumeUp'],
+    ['Volume Down', 'volumeDown'],
+    ['Mute',        'mute'],
+    ['Accessibility', 'accessibility'],
+    ['Device',      'device'],
+    ['Custom',      'custom'],
+  ])('the action picker offers %s and maps it to Single-Tap', (label, id) => {
+    const { getByText, getAllByText } = renderScreen();
+    fireEvent.press(getByText('Single-Tap'));
+    // The label may also appear elsewhere (nav back button, list header): the
+    // picker option is the LAST match, added when the alert modal renders.
+    const matches = getAllByText(label);
+    fireEvent.press(matches[matches.length - 1]);
+    expect(mockUpdate).toHaveBeenCalledWith({ singleTapAction: id });
+  });
+
+  it('Add Item offers the new menu categories once slots open up', () => {
+    mockUseAssistive.mockReturnValue(assistive({ menuItems: ['home'] }));
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Add Item'));
+    // Any of the new categories must be reachable from the picker.
+    expect(getByText('Camera')).toBeTruthy();
+    expect(getByText('Device')).toBeTruthy();
+    expect(getByText('Custom')).toBeTruthy();
   });
 });
