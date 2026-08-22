@@ -58,6 +58,11 @@ export const SystemColors = {
     // Separator
     separator: 'rgba(60, 60, 67, 0.29)',
     opaqueSeparator: '#C6C6C8',
+
+    // Pressed list row background (convention 4 of §3.2 — a pressed full-width
+    // list row darkens its background instead of scaling/dimming). Single token
+    // so every list row uses the same pressed colour.
+    pressedRowBackground: '#E5E5EA',
   },
   dark: {
     systemBlue: '#0A84FF',
@@ -115,6 +120,9 @@ export const SystemColors = {
     // Separator
     separator: 'rgba(84, 84, 88, 0.6)',
     opaqueSeparator: '#38383A',
+
+    // Pressed list row background — see the light counterpart above.
+    pressedRowBackground: '#2C2C2E',
   },
 };
 

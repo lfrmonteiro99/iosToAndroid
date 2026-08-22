@@ -380,7 +380,7 @@ function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[
           onPress={() => handleCall(item.phone, getFullName(item))}
           style={({ pressed }) => [
             styles.contactRow,
-            { backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground },
+            { backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground },
           ]}
           accessibilityRole="button"
           accessibilityLabel={`Call ${getFullName(item)}`}

@@ -10,6 +10,10 @@ import {
   clampIconShapeExponent,
   setIconMask,
 } from '../utils/iconShape';
+import {
+  type CategoryOverrideSettings,
+  DEFAULT_CATEGORY_OVERRIDES,
+} from '../utils/categoryOverrides';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -98,6 +102,13 @@ export interface SettingsState {
    * Só afecta a forma 'squircle' (ver effectiveIconExponent).
    */
   iconShapeExponent: number;
+  /**
+   * Overrides de categorias da App Library (#516): ocultar, renomear, reordenar
+   * categorias e recategorizar apps individualmente. Toda a lógica opera sobre
+   * chaves estáveis (ex.: 'social'), nunca sobre o nome exibido, para que
+   * renomear não parta a atribuição.
+   */
+  categoryOverrides: CategoryOverrideSettings;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -164,6 +175,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   appLaunchDurationMs: 280,
   iconShape: 'squircle',
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
+  categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
 };
 
 interface SettingsContextValue {
