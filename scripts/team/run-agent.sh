@@ -210,6 +210,11 @@ run_harness() {
   # tee may still be flushing after the agent exits.
   sleep 1
   AGENT_OUTPUT=$(cat "$out_file" 2>/dev/null || echo "")
+  # Persistir o output para diagnóstico quando não há veredicto: o ficheiro
+  # temporário ia abaixo com o rm seguinte e o log do caller só mostra o tee.
+  if [ -s "$out_file" ]; then
+    cp "$out_file" "$LOCK_PREFIX.$AGENT_SLOT.lastout" 2>/dev/null || true
+  fi
   rm -f "$out_file"
   return $rc
 }
@@ -371,5 +376,20 @@ echo "[run-agent] fim: motor=${USED:-nenhum} rc=$RC" >&2
 # genuine failure. Without this marker "no verdict" reads as "this issue defeated
 # the pipeline" and a temporary quota outage permanently consumes real work items.
 echo "$USED" > "$LOCK_PREFIX.$AGENT_SLOT.engine" 2>/dev/null || true
+
+# ── Salvaguarda de veredicto no stdout ──────────────────────────────────────
+# O hermes/deepseek termina a conversa sem executar a última acção (Write do
+# ficheiro em __VERDICT_PATH__) e imprime o JSON no stdout; o claude/ollama
+# escrevem o ficheiro. Se o caller indicou AGENT_VERDICT_FILE e o ficheiro não
+# existe/não parseia, recupera o JSON do output gravado e escreve-o. Medido no
+# #486: 8 corridas "SEM VEREDICTO" com o JSON completo perdido no log.
+if [ -n "${AGENT_VERDICT_FILE:-}" ] && [ -n "${AGENT_OUTPUT:-}" ]; then
+  if [ ! -s "$AGENT_VERDICT_FILE" ] \
+     || ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$AGENT_VERDICT_FILE" 2>/dev/null; then
+    if python3 "$SCRIPT_DIR/extract-verdict.py" "$AGENT_VERDICT_FILE" "$LOCK_PREFIX.$AGENT_SLOT.lastout" 2>/dev/null; then
+      echo "[run-agent] veredicto recuperado do stdout do agente -> $AGENT_VERDICT_FILE" >&2
+    fi
+  fi
+fi
 
 exit "$RC"

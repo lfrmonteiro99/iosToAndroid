@@ -137,7 +137,16 @@ ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" \
   "## Labels\n\n" + ([.labels[].name] | join(", ")) + "\n\n" +
   "## Comentários\n\n" +
   (if (.comments | length) > 0 then
-     ([.comments[] | "- **@" + (.author.login // "anon") + "**: " + (.body // "")] | join("\n\n"))
+     # Dedupe de repetidos consecutivos + cauda de 30. O reviewer comenta "em
+     # conflito" em cada ciclo enquanto o PR estiver conflituoso, e o prompt
+     # (que inclui TODOS os comentários) crescia até rebentar o limite de argv
+     # do kernel — E2BIG em run-agent.sh, #486 chegou a 118KB só de repetições.
+     ([.comments[]
+        | {a: (.author.login // "anon"), b: (.body // "")}]
+      | reduce .[] as $c ([]; if length > 0 and .[-1].a == $c.a and .[-1].b == $c.b then . else . + [$c] end)
+      | .[-30:]
+      | map("- **@" + .a + "**: " + .b)
+      | join("\n\n"))
    else "(sem comentários)" end)
 ' 2>/dev/null) || { log "ERRO: não consegui ler o issue"; exit 1; }
 
@@ -148,7 +157,12 @@ EXISTING_PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
 if [ -n "$EXISTING_PR" ]; then
   PR_FEEDBACK=$(gh pr view "$EXISTING_PR" --repo "$REPO" --json comments --jq '
     (if (.comments | length) > 0 then
-       ([.comments[] | "- **@" + (.author.login // "anon") + "**: " + (.body // "")] | join("\n\n"))
+       ([.comments[]
+          | {a: (.author.login // "anon"), b: (.body // "")}]
+        | reduce .[] as $c ([]; if length > 0 and .[-1].a == $c.a and .[-1].b == $c.b then . else . + [$c] end)
+        | .[-20:]
+        | map("- **@" + .a + "**: " + .b)
+        | join("\n\n"))
      else "(sem comentários)" end)' 2>/dev/null || echo "")
 fi
 
@@ -208,6 +222,7 @@ agent_log_header "$LOG_DIR/implement-$ISSUE.log" "implement #$ISSUE modelo=$MODE
 # TEAM_SLOT=implN e AGENT_ENGINE=claude|hermes; sem override fica em 'main', que
 # é o caminho do despacho explícito (`--issue N`).
 AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="${AGENT_ENGINE:-}" \
+  AGENT_VERDICT_FILE="$VERDICT_FILE" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${IMPLEMENT_TIMEOUT:-2700}" \
   >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
 

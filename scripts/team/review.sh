@@ -127,10 +127,19 @@ diz numa chamada.
 neste branch antes de arrancar e resolve os marcadores por intencao — percebendo o
 que cada lado queria e preservando as duas intencoes. Depois disso volto a olhar." >/dev/null 2>&1 || true
   if [ -n "$ISSUE" ]; then
-    comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
+    # NÃO repetir o comentário em cada ciclo: o reviewer volta aqui a cada ~45s
+    # enquanto o PR estiver em conflito, e cada repetição engorda o prompt do
+    # implementador (que inclui os comentários do issue) — #486 chegou a 118KB
+    # só de "PR #587 em conflito" repetidos e rebentou o argv (E2BIG).
+    if ! gh issue view "$ISSUE" --repo "$REPO" --json comments \
+      --jq "[.comments[].body // \"\"] | any(test(\"PR #$PR em conflito\"))" 2>/dev/null | grep -q true; then
+      comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
 
 Devolvido ao implementador para resolver os conflitos. O trabalho no branch
 mantem-se — nao e para refazer."
+    else
+      log "conflito do PR #$PR já comunicado no issue #$ISSUE — sem repetir"
+    fi
     set_state "$ISSUE" "$L_BLOCKED_IMPL"
   fi
   exit 0
@@ -241,6 +250,7 @@ if [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
 fi
 
 AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="$REVIEW_ENGINE" \
+  AGENT_VERDICT_FILE="$VERDICT_FILE" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
