@@ -336,6 +336,8 @@ jest.mock('./modules/launcher-module/src', () => ({
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #608 Tap to Wake
+    wakeScreen: jest.fn(() => Promise.resolve()),
   },
 }));
 

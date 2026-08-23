@@ -48,6 +48,8 @@ export interface SettingsState {
   trueTone: boolean;
   autoLock: string;
   raiseToWake: boolean;
+  /** When true, tapping the (app-dimmed) screen wakes it — Tap to Wake (#608). */
+  tapToWake: boolean;
   airdrop: 'off' | 'contactsOnly' | 'everyone';
   backgroundAppRefresh: 'off' | 'wifi' | 'wifiAndCellular';
   dateTimeAutomatic: boolean;
@@ -165,6 +167,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   trueTone: true,
   autoLock: '5 Minutes',
   raiseToWake: true,
+  tapToWake: false,
   airdrop: 'contactsOnly',
   backgroundAppRefresh: 'wifi',
   dateTimeAutomatic: true,
