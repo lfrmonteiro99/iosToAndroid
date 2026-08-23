@@ -360,7 +360,11 @@ function ReachabilityShifter({ children }: { children: React.ReactNode }) {
  */
 function AppsProviderWithIconTreatment({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
-  return <AppsProvider iconTreatment={settings.iconTreatment}>{children}</AppsProvider>;
+  return (
+    <AppsProvider iconTreatment={settings.iconTreatment} newAppsToHome={settings.newAppsToHome}>
+      {children}
+    </AppsProvider>
+  );
 }
 
 export default function App() {

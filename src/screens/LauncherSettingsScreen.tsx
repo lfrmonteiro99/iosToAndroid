@@ -19,6 +19,7 @@ import {
   CupertinoButton,
   CupertinoSegmentedControl,
   CupertinoSlider,
+  CupertinoActionSheet,
   useAlert,
 } from '../components';
 import { logger } from '../utils/logger';
@@ -87,6 +88,7 @@ export function LauncherSettingsScreen() {
 
   const alert = useAlert();
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -306,6 +308,17 @@ export function LauncherSettingsScreen() {
       {/* ── Home Screen ────────────────────────────────────────── */}
       <CupertinoListSection header="Home Screen">
         <CupertinoListTile
+          title="New Apps Go To"
+          leading={{ name: 'apps', color: '#fff', backgroundColor: '#5856D6' }}
+          showChevron
+          trailing={
+            <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+              {settings.newAppsToHome ? 'Home Screen' : 'App Library Only'}
+            </Text>
+          }
+          onPress={() => setShowNewAppsPicker(true)}
+        />
+        <CupertinoListTile
           title="Show Badge Counts"
           leading={{ name: 'notifications', color: '#fff', backgroundColor: '#FF3B30' }}
           showChevron={false}
@@ -474,6 +487,24 @@ export function LauncherSettingsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── New Apps destination (#601) ────────────────────────── */}
+      <CupertinoActionSheet
+        visible={showNewAppsPicker}
+        onClose={() => setShowNewAppsPicker(false)}
+        title="New Apps Go To"
+        options={[
+          {
+            label: 'App Library Only',
+            onPress: () => { update('newAppsToHome', false); setShowNewAppsPicker(false); },
+          },
+          {
+            label: 'Home Screen',
+            onPress: () => { update('newAppsToHome', true); setShowNewAppsPicker(false); },
+          },
+        ]}
+        cancelLabel="Cancel"
+      />
 
       {/* ── Diagnostics (#517) ─────────────────────────────────── */}
       <CupertinoListSection header="Diagnostics">
