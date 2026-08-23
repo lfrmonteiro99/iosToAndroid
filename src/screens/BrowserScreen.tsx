@@ -17,6 +17,8 @@ import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 import { CupertinoShareSheet } from '../components/CupertinoShareSheet';
 import { BrowserTabGrid, BrowserTab } from '../components/BrowserTabGrid';
+import { BrowserBookmarksList } from '../components/BrowserBookmarksList';
+import { useBookmarks } from '../store/BookmarksStore';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -58,14 +60,15 @@ function generateTabId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
-function createTab(url: string): BrowserTab {
-  return { id: generateTabId(), url, title: '' };
+function createTab(url: string, isPrivate = false): BrowserTab {
+  return { id: generateTabId(), url, title: '', isPrivate };
 }
 
 export function BrowserScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
 
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createTab(BROWSER_HOME_URL)]);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -74,15 +77,18 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showShareSheet, setShowShareSheet] = useState(false);
-  const [isPrivate, setIsPrivate] = useState(false);
+  const [showBookmarksList, setShowBookmarksList] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const webviewRef = useRef<WebView>(null);
-  const styles = React.useMemo(() => createStyles(colors, isPrivate), [colors, isPrivate]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const currentUrl = activeTab?.url ?? BROWSER_HOME_URL;
   const pageTitle = activeTab?.title ?? '';
+  const styles = React.useMemo(
+    () => createStyles(colors, !!activeTab?.isPrivate),
+    [colors, activeTab?.isPrivate]
+  );
 
   const handleSubmit = useCallback(() => {
     const next = resolveUrl(inputUrl);
@@ -104,17 +110,36 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     setShowShareSheet(true);
   }, []);
 
-  const handleTogglePrivate = useCallback(() => {
+  const handleToggleBookmark = useCallback(() => {
+    if (!currentUrl) return;
     hapticImpact();
-    setIsPrivate((prev) => !prev);
+    if (isBookmarked(currentUrl)) {
+      const existing = bookmarks.find((bm) => bm.url === currentUrl);
+      if (existing) removeBookmark(existing.id);
+    } else {
+      addBookmark(currentUrl, pageTitle);
+    }
+  }, [currentUrl, pageTitle, isBookmarked, bookmarks, addBookmark, removeBookmark]);
+
+  const handleOpenBookmarks = useCallback(() => {
+    hapticImpact();
+    setShowBookmarksList(true);
   }, []);
 
-  const handleNavigationStateChange = useCallback((navState: WebViewNavigation) => {
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, title: navState.title } : t)));
-    setCanGoBack(navState.canGoBack);
-    setCanGoForward(navState.canGoForward);
-    setInputUrl(navState.url);
+  const handleNavigateToBookmark = useCallback((url: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, url } : t)));
+    setInputUrl(url);
   }, [activeTabId]);
+
+  const handleNavigationStateChange = useCallback(
+    (navState: WebViewNavigation) => {
+      setCanGoBack(navState.canGoBack);
+      setCanGoForward(navState.canGoForward);
+      setInputUrl(navState.url);
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, title: navState.title } : t)));
+    },
+    [activeTabId],
+  );
 
   const handleGoBackInHistory = useCallback(() => {
     if (!canGoBack) return;
@@ -145,8 +170,8 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
     [tabs],
   );
 
-  const handleNewTab = useCallback(() => {
-    const tab = createTab(BROWSER_HOME_URL);
+  const handleNewTab = useCallback((isPrivate: boolean) => {
+    const tab = createTab(BROWSER_HOME_URL, isPrivate);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
     setInputUrl(BROWSER_HOME_URL);
@@ -240,6 +265,18 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
           <Ionicons name="refresh" size={22} color={BROWSER_ACCENT} />
         </Pressable>
         <Pressable
+          onPress={handleToggleBookmark}
+          hitSlop={8}
+          accessibilityLabel={isBookmarked(currentUrl) ? 'Remove bookmark' : 'Add bookmark'}
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isBookmarked(currentUrl) ? 'star' : 'star-outline'}
+            size={22}
+            color={BROWSER_ACCENT}
+          />
+        </Pressable>
+        <Pressable
           onPress={handleShowTabGrid}
           hitSlop={8}
           accessibilityLabel="Tabs"
@@ -261,19 +298,6 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         >
           <Ionicons name="share-outline" size={22} color={BROWSER_ACCENT} />
         </Pressable>
-        <Pressable
-          onPress={handleTogglePrivate}
-          hitSlop={8}
-          accessibilityLabel="Toggle private browsing"
-          accessibilityRole="button"
-          accessibilityState={{ selected: isPrivate }}
-        >
-          <Ionicons
-            name={isPrivate ? 'eye-off' : 'eye'}
-            size={22}
-            color={isPrivate ? colors.label : BROWSER_ACCENT}
-          />
-        </Pressable>
       </View>
 
       {loading ? (
@@ -291,7 +315,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         testID="browser-webview"
         source={{ uri: currentUrl }}
         style={styles.webview}
-        incognito={isPrivate}
+        incognito={!!activeTab?.isPrivate}
         onLoadStart={() => {
           setLoading(true);
           setProgress(0);
@@ -349,7 +373,22 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
             style={{ opacity: canGoForward ? 1 : 0.3 }}
           />
         </Pressable>
+        <Pressable
+          onPress={handleOpenBookmarks}
+          hitSlop={8}
+          accessibilityLabel="Bookmarks"
+          accessibilityRole="button"
+        >
+          <Ionicons name="bookmark-outline" size={24} color={BROWSER_ACCENT} />
+        </Pressable>
       </View>
+
+      <BrowserBookmarksList
+        visible={showBookmarksList}
+        bookmarks={bookmarks}
+        onClose={() => setShowBookmarksList(false)}
+        onNavigate={handleNavigateToBookmark}
+      />
     </View>
   );
 }
@@ -398,14 +437,6 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
       fontWeight: '700',
       textAlign: 'center',
     },
-    tabGridHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-    },
-    tabGridTitle: { ...Typography.headline, color: colors.label },
     bottomToolbar: {
       position: 'absolute',
       left: 0,
@@ -418,5 +449,13 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
       borderTopWidth: StyleSheet.hairlineWidth,
       backgroundColor: colors.secondarySystemBackground,
     },
+    tabGridHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    tabGridTitle: { ...Typography.headline, color: colors.label },
   });
 }

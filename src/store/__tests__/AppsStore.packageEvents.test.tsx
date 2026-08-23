@@ -62,12 +62,13 @@ describe('AppsStore — reacts to package install/uninstall broadcasts', () => {
       'com.example.banana',
       'com.example.cherry',
     ]);
-    // O segundo argumento é a máscara de forma dos ícones (#482): o refresh
-    // incremental tem de usar a MESMA forma que a grelha, senão a app recém
-    // instalada aparecia com a silhueta antiga.
+    // #486/#482: getAppInfo now receives the icon mask (same shape as the
+    // grid) and the current icon treatment (default when no iconTreatment prop
+    // is passed, as in this wrapper).
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.banana',
       expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      'mask-adaptive-only',
     );
     expect(LauncherModule.getInstalledApps).not.toHaveBeenCalled();
   });

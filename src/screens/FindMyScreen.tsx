@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -18,6 +19,7 @@ import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedContr
 import { CupertinoEmptyState } from '../components/CupertinoEmptyState';
 import { CupertinoSwitch } from '../components/CupertinoSwitch';
 import { CupertinoTextField } from '../components/CupertinoTextField';
+import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
 import { hapticSelection } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
@@ -32,6 +34,31 @@ interface LostModeState {
 }
 
 const DEFAULT_LOST_MODE: LostModeState = { active: false, message: '' };
+
+// ─── Storage / helpers ───────────────────────────────────────────────────────
+
+const ITEMS_KEY = '@iostoandroid/findmy_items';
+
+interface TrackedItem {
+  id: string;
+  name: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  addedAt: number;
+}
+
+// Fixed, hand-picked set of icons the user can assign to an item. This is an
+// inventory list only — there is no AirTag-equivalent hardware this app can
+// range or locate, so icons are purely cosmetic labels, never live trackers.
+const ICON_CHOICES: (keyof typeof Ionicons.glyphMap)[] = [
+  'key',
+  'bag-handle',
+  'briefcase',
+  'bicycle',
+];
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
 
 function formatRelative(timestamp: number): string {
   const diffSec = Math.floor((Date.now() - timestamp) / 1000);
@@ -75,6 +102,69 @@ export function FindMyScreen() {
     ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}`
     : null;
   const updatedLabel = currentLocation ? `Updated ${formatRelative(currentLocation.timestamp)}` : null;
+
+  // ── Items tab (tracked inventory) ──────────────────────────────────────────
+  const [items, setItems] = useState<TrackedItem[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newIcon, setNewIcon] = useState<keyof typeof Ionicons.glyphMap>(ICON_CHOICES[0]);
+
+  // Hydrate from AsyncStorage on mount (mirrors MapsScreen's recents hydration:
+  // a `cancelled` guard so an in-flight read after unmount is ignored).
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(ITEMS_KEY)
+      .then((raw) => {
+        if (cancelled) return;
+        if (raw) {
+          try {
+            const parsed: TrackedItem[] = JSON.parse(raw);
+            if (Array.isArray(parsed)) setItems(parsed);
+          } catch {
+            // ignore corrupt payloads
+          }
+        }
+      })
+      .catch(() => {
+        // storage read failed — start empty
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistItems = useCallback(async (updated: TrackedItem[]) => {
+    try {
+      await AsyncStorage.setItem(ITEMS_KEY, JSON.stringify(updated));
+    } catch {
+      // silently fail — same posture as MapsScreen.persistRecents
+    }
+  }, []);
+
+  const addItem = useCallback(() => {
+    const name = newName.trim();
+    if (!name) return;
+    const item: TrackedItem = {
+      id: generateId(),
+      name,
+      icon: newIcon,
+      addedAt: Date.now(),
+    };
+    const updated = [...items, item];
+    setItems(updated);
+    setNewName('');
+    setSheetOpen(false);
+    void persistItems(updated);
+  }, [newName, newIcon, items, persistItems]);
+
+  const deleteItem = useCallback(
+    (id: string) => {
+      const updated = items.filter((i) => i.id !== id);
+      setItems(updated);
+      void persistItems(updated);
+    },
+    [items, persistItems]
+  );
 
   // ── Lost mode (issue #267) ──────────────────────────────────────────────
   // In-app-only simulation: an unprivileged launcher cannot lock the device,
@@ -263,15 +353,129 @@ export function FindMyScreen() {
           )}
 
           {selectedTab === 'items' && (
-            <CupertinoEmptyState
-              icon="cube-outline"
-              iconColor={colors.systemGray}
-              title="No Items"
-              message="Item tracking requires hardware like AirTags, which this app can't detect."
-            />
+            <View testID="items-tab" style={styles.itemsTab}>
+              <View style={styles.itemsHeader}>
+                <CupertinoButton
+                  title="Add Item"
+                  variant="plain"
+                  onPress={() => {
+                    setNewName('');
+                    setSheetOpen(true);
+                  }}
+                />
+              </View>
+
+              {items.length === 0 ? (
+                // Zero-items case: the placeholder from #264 stays — it makes
+                // clear this app cannot detect tracking hardware.
+                <CupertinoEmptyState
+                  icon="cube-outline"
+                  iconColor={colors.systemGray}
+                  title="No Items"
+                  message="Item tracking requires hardware like AirTags, which this app can't detect."
+                />
+              ) : (
+                <CupertinoListSection header="Tracked Items">
+                  {items.map((item) => (
+                    <CupertinoSwipeableRow
+                      key={item.id}
+                      trailingActions={[
+                        {
+                          label: 'Delete',
+                          color: colors.systemRed,
+                          onPress: () => deleteItem(item.id),
+                        },
+                      ]}
+                    >
+                      <CupertinoListTile
+                        title={item.name}
+                        subtitle={`Added ${formatRelative(item.addedAt)}`}
+                        leading={{
+                          name: item.icon,
+                          color: '#FFFFFF',
+                          backgroundColor: colors.systemBlue,
+                        }}
+                      />
+                    </CupertinoSwipeableRow>
+                  ))}
+                </CupertinoListSection>
+              )}
+            </View>
           )}
         </ScrollView>
       </CupertinoNavigationBar>
+
+      {/* Add-item sheet — slide-up modal, same family as MapsScreen's detail sheet. */}
+      <Modal
+        visible={sheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSheetOpen(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            onPress={() => setSheetOpen(false)}
+          />
+          <View
+            style={[
+              styles.sheetContent,
+              { backgroundColor: colors.secondarySystemGroupedBackground, paddingBottom: 16 },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={[typography.title3, { color: colors.label, fontWeight: '700', alignSelf: 'center' }]}>
+              New Tracked Item
+            </Text>
+            <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+              <CupertinoTextField
+                placeholder="Item name"
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+              />
+              <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: 16, marginBottom: 8 }]}>
+                ICON
+              </Text>
+              <View style={styles.iconRow}>
+                {ICON_CHOICES.map((ic) => (
+                  <Pressable
+                    key={ic}
+                    accessibilityLabel={`Select ${ic} icon`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: newIcon === ic }}
+                    onPress={() => setNewIcon(ic)}
+                    style={[
+                      styles.iconChoice,
+                      {
+                        backgroundColor: colors.systemGray6,
+                        borderColor: newIcon === ic ? colors.systemBlue : 'transparent',
+                      },
+                    ]}
+                  >
+                    <Ionicons name={ic} size={26} color={colors.label} />
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.sheetActions}>
+                <CupertinoButton
+                  title="Cancel"
+                  variant="plain"
+                  onPress={() => setSheetOpen(false)}
+                />
+                <CupertinoButton
+                  title="Add"
+                  variant="filled"
+                  disabled={!newName.trim()}
+                  onPress={addItem}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Message prompt — inline Modal capturing the optional contact note. */}
       <Modal
@@ -367,6 +571,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 8,
   },
+  itemsTab: {
+    marginTop: 8,
+  },
+  itemsHeader: {
+    paddingHorizontal: 16,
+    alignItems: 'flex-end',
+  },
   mapContainer: {
     margin: 16,
     height: 260,
@@ -394,6 +605,42 @@ const styles = StyleSheet.create({
   sectionContainer: {
     paddingHorizontal: 16,
     marginTop: 8,
+  },
+  // Add-item sheet
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheetContent: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 8,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#C7C7CC',
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  iconRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  iconChoice: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
   },
   // Message prompt sheet
   promptBackdrop: {

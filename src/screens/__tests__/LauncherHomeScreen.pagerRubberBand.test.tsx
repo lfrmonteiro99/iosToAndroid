@@ -130,6 +130,10 @@ function mockLoadedApps() {
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    iconCacheSizeBytes: 0,
+    isRebuildingIconCache: false,
+    iconCacheRebuildProgress: null,
+    rebuildIconCache: jest.fn(() => Promise.resolve()),
   } as ReturnType<typeof AppsStore.useApps>);
 }
 

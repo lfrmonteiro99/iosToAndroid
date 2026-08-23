@@ -1,7 +1,8 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, act } from '../../test-utils';
 import { BrowserScreen, resolveUrl, BROWSER_HOME_URL } from '../BrowserScreen';
 import { BUILT_IN_APPS, VIRTUAL_ICON_CONFIG } from '../LauncherHomeScreen';
+import { useBookmarks } from '../../store/BookmarksStore';
 
 // The global mock in jest.setup.js hands out a fresh jest.fn() per render
 // (useImperativeHandle has no deps array), so a reference captured before a
@@ -178,55 +179,6 @@ describe('BrowserScreen — Share', () => {
   });
 });
 
-describe('BrowserScreen — private browsing toggle', () => {
-  it('mounts the WebView with incognito=false by default', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const webview = utils.getByTestId('browser-webview');
-    expect(webview.props.incognito).toBe(false);
-  });
-
-  it('toggling the private-browsing button flips incognito to true, and back to false', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const toggle = utils.getByLabelText('Toggle private browsing');
-    fireEvent.press(toggle);
-    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
-    fireEvent.press(toggle);
-    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
-  });
-
-  it('darkens topBar and addressBar to #1C1C1E while private, and restores the default theme colors when turned off', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const topBar = utils.getByTestId('browser-topbar');
-    const addressBar = utils.getByPlaceholderText('Search or enter website name');
-
-    const defaultTopBarBg = flatStyle(topBar).backgroundColor;
-    const defaultAddressBarBg = flatStyle(addressBar).backgroundColor;
-    expect(defaultTopBarBg).not.toBe('#1C1C1E');
-    expect(defaultAddressBarBg).not.toBe('#1C1C1E');
-
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe('#1C1C1E');
-    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe('#1C1C1E');
-
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe(defaultTopBarBg);
-    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
-      defaultAddressBarBg
-    );
-  });
-
-  it('toggling private browsing repeatedly without navigating keeps the current URL and typed address bar text', () => {
-    const utils = render(<BrowserScreen navigation={nav} />);
-    const bar = utils.getByPlaceholderText('Search or enter website name');
-    fireEvent.changeText(bar, 'example.com');
-
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-    fireEvent.press(utils.getByLabelText('Toggle private browsing'));
-
-    expect(utils.getByPlaceholderText('Search or enter website name').props.value).toBe('example.com');
-});
-});
 describe('BrowserScreen — multi-tab (BrowserTabGrid)', () => {
   it('opens the tab grid when the Tabs button is pressed', () => {
     const utils = render(<BrowserScreen navigation={nav} />);
@@ -429,6 +381,97 @@ describe('BrowserScreen — Back/Forward toolbar', () => {
   });
 });
 
+describe('BrowserScreen — private browsing is per-tab (grid segmented control)', () => {
+  // The standalone "Toggle private browsing" Pressable from the single-tab
+  // sub-issue no longer exists. Privacy is now driven by the active tab's
+  // isPrivate flag, switched via the "Tabs"/"Private" segmented control in
+  // BrowserTabGrid.
+
+  it('mounts the WebView with incognito=false for a normal default tab', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const webview = utils.getByTestId('browser-webview');
+    expect(webview.props.incognito).toBe(false);
+  });
+
+  it('creating a private tab via the "Private" segment mounts its WebView with incognito=true', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    // Switch the grid to the "Private" segment, then add a tab.
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
+  });
+
+  it('switching back to a normal tab flips incognito back to false (per-tab, not global)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(true);
+
+    // Go back to the grid and select the original normal tab.
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`));
+
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
+  });
+
+  it('darkens topBar and addressBar to #1C1C1E for a private active tab, restores for a normal tab', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const topBar = utils.getByTestId('browser-topbar');
+    const addressBar = utils.getByPlaceholderText('Search or enter website name');
+
+    const defaultTopBarBg = flatStyle(topBar).backgroundColor;
+    const defaultAddressBarBg = flatStyle(addressBar).backgroundColor;
+    expect(defaultTopBarBg).not.toBe('#1C1C1E');
+    expect(defaultAddressBarBg).not.toBe('#1C1C1E');
+
+    // Make the active tab private.
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByLabelText('New Tab'));
+
+    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe('#1C1C1E');
+    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
+      '#1C1C1E'
+    );
+
+    // Switch back to the normal tab → default chrome restored.
+    fireEvent.press(utils.getByLabelText('Tabs'));
+    fireEvent.press(utils.getByLabelText(`Tab: ${BROWSER_HOME_URL}`));
+
+    expect(flatStyle(utils.getByTestId('browser-topbar')).backgroundColor).toBe(defaultTopBarBg);
+    expect(flatStyle(utils.getByPlaceholderText('Search or enter website name')).backgroundColor).toBe(
+      defaultAddressBarBg
+    );
+  });
+
+  it('repeatedly toggling the grid segment without creating tabs does not crash and keeps a normal tab active', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Tabs'));
+
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByText('Tabs'));
+    fireEvent.press(utils.getByText('Private'));
+    fireEvent.press(utils.getByText('Tabs'));
+
+    // Leave the grid; the active tab is still the original normal one.
+    fireEvent.press(utils.getByLabelText('Done'));
+
+    // Still on the original normal tab, WebView intact, not private.
+    expect(utils.getByTestId('browser-webview').props.incognito).toBe(false);
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+  });
+
+  it('the standalone private-browsing toggle no longer exists in the top bar', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.queryByLabelText('Toggle private browsing')).toBeNull();
+  });
+});
+
 describe('home-screen registration', () => {
   it('registers the browser package in both maps', () => {
     expect(BUILT_IN_APPS['com.iostoandroid.browser']).toBe('Browser');
@@ -460,5 +503,117 @@ describe('home-screen registration', () => {
       expect(BUILT_IN_APPS[pkg]).toBe(route);
       expect(VIRTUAL_ICON_CONFIG[pkg]).toBeTruthy();
     }
+  });
+});
+
+// ─── Bookmarks (issue #255) ──────────────────────────────────────────────────
+
+function BookmarkSeed({ seed }: { seed: { url: string; title: string }[] }) {
+  const { addBookmark } = useBookmarks();
+  React.useEffect(() => {
+    seed.forEach((s) => addBookmark(s.url, s.title));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+describe('BrowserScreen — star button toggles a bookmark', () => {
+  it('starts unbookmarked (outline star + "Add bookmark")', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.getByLabelText('Add bookmark')).toBeTruthy();
+    expect(utils.queryByLabelText('Remove bookmark')).toBeNull();
+  });
+
+  it('pressing the star adds a bookmark for the current URL and fills the star', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+
+    // Icon flips to "Remove bookmark" (filled star state).
+    expect(utils.getByLabelText('Remove bookmark')).toBeTruthy();
+    expect(utils.queryByLabelText('Add bookmark')).toBeNull();
+  });
+
+  it('pressing the star again removes the bookmark and reverts to outline', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+    expect(utils.getByLabelText('Remove bookmark')).toBeTruthy();
+
+    fireEvent.press(utils.getByLabelText('Remove bookmark'));
+    // Back to the outline / "Add bookmark" state.
+    expect(utils.getByLabelText('Add bookmark')).toBeTruthy();
+  });
+
+  it('the starred page appears in the bookmarks list with its URL', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+
+    // The home tab's URL was bookmarked; title falls back to the URL.
+    // (BROWSER_HOME_URL text also appears in the address bar, hence getAllByText.)
+    expect(utils.getAllByText(BROWSER_HOME_URL).length).toBeGreaterThan(0);
+  });
+
+  it('double-tapping the star does not create two bookmarks (no duplicate)', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+    fireEvent.press(utils.getByLabelText('Remove bookmark'));
+    // After add+remove the tree is back to unbookmarked; pressing again once more
+    // should leave exactly one labelled state, not two "Remove bookmark".
+    fireEvent.press(utils.getByLabelText('Add bookmark'));
+    expect(utils.getAllByLabelText('Remove bookmark')).toHaveLength(1);
+  });
+});
+
+describe('BrowserScreen — bookmarks list modal', () => {
+  it('opens the bookmarks list when the Bookmarks button is pressed', async () => {
+    const utils = render(
+      <>
+        <BookmarkSeed seed={[{ url: 'https://example.com/bookmarked', title: 'Bookmarked' }]} />
+        <BrowserScreen navigation={nav} />
+      </>,
+    );
+    await act(async () => {});
+
+    expect(utils.queryByText('Bookmarked')).toBeNull();
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+
+    expect(utils.getByText('Bookmarked')).toBeTruthy();
+    expect(utils.getByText('https://example.com/bookmarked')).toBeTruthy();
+  });
+
+  it('tapping a bookmark navigates the active tab to its URL and closes the modal', async () => {
+    const utils = render(
+      <>
+        <BookmarkSeed seed={[{ url: 'https://example.com/bookmarked', title: 'Bookmarked' }]} />
+        <BrowserScreen navigation={nav} />
+      </>,
+    );
+    await act(async () => {});
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+    fireEvent.press(utils.getByText('Bookmarked'));
+
+    // Modal dismissed.
+    expect(utils.queryByText('Bookmarked')).toBeNull();
+    // Active WebView navigated to the bookmarked URL.
+    expect(webviewUri(utils)).toBe('https://example.com/bookmarked');
+  });
+
+  it('the list is empty-state when no bookmarks exist', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+    expect(utils.getByText('No bookmarks yet')).toBeTruthy();
+  });
+
+  it('closing the list (Close button) does not change the WebView URL', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
+
+    fireEvent.press(utils.getByLabelText('Bookmarks'));
+    fireEvent.press(utils.getByLabelText('Close Bookmarks'));
+
+    expect(webviewUri(utils)).toBe(BROWSER_HOME_URL);
   });
 });

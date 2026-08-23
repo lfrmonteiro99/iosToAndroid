@@ -421,7 +421,13 @@ const AppIcon = React.memo(function AppIcon({
   return (
     <Pressable
       ref={iconRef}
-      style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }, !showLabel && styles.appIconWrapperCompact]}
+      // O `appIconWrapperCompact` (height: ICON_SIZE estático, paddingTop 0)
+      // tem de vir ANTES do { height: wrapperHeight } dinâmico: se vier
+      // depois, sobrepõe a altura da célula e, com showIconLabels=false +
+      // iconSizeScale=1.2, o ícone (maior que ICON_SIZE) transborda para a
+      // linha seguinte da grelha. Com a ordem certa, o compact só contribui
+      // com o paddingTop 0 e a célula é sempre 5 + iconSize sem label.
+      style={[styles.appIconWrapper, !showLabel && styles.appIconWrapperCompact, { width: cellWidth, height: wrapperHeight }]}
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -1248,6 +1254,21 @@ export function LauncherHomeScreen() {
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
+
+  // Reviewer follow-up (#503): mudar a densidade (colunas/linhas) encolhe o
+  // número de páginas, e `currentPage` só mudava em handleScroll — ficava
+  // para além de totalPages, os dots perdiam a página activa e o offset do
+  // pager ficava além do conteúdo até ao próximo scroll. Clampar página e
+  // offset juntos. Sem apps suficientes para encolher, currentPage (0) <
+  // totalPages e o efeito é no-op.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (currentPage >= totalPages) {
+      const lastPage = Math.max(0, totalPages - 1);
+      setCurrentPage(lastPage);
+      scrollViewRef.current?.scrollTo({ x: lastPage * SCREEN_WIDTH, animated: false });
+    }
+  }, [currentPage, totalPages]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;

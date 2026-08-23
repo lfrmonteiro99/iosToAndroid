@@ -17,8 +17,10 @@ import { useApps } from '../store/AppsStore';
 import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { parseCommand } from '../assistant/commandParser';
+import { speak, stopSpeaking } from '../assistant/speech';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+import { createQuickAlarm } from '../utils/alarmScheduling';
 import { useAlert, SiriWaveform } from '../components';
 import { withAutoLockSuppressed } from '../utils/permissions';
 
@@ -142,9 +144,21 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
       case 'WHAT_TIME':
         setResponse(`It's ${formatAssistantTime(new Date())}`);
         return;
-      case 'SET_ALARM':
-        setResponse(`Setting alarms ${NOT_SUPPORTED.replace("That's ", '')}`);
+      case 'SET_ALARM': {
+        const when = new Date();
+        when.setHours(command.hour, command.minute, 0, 0);
+        // Fire-and-catch like launchApp: persistence must not block the handler,
+        // and the confirmation only claims success once the alarm is stored.
+        createQuickAlarm(command.hour, command.minute)
+          .then(() => {
+            setResponse(`Alarm set for ${formatAssistantTime(when)}`);
+          })
+          .catch((e) => {
+            logger.warn('SiriScreen', 'createQuickAlarm failed', e);
+            setResponse("Couldn't set that alarm.");
+          });
         return;
+      }
       case 'UNRECOGNIZED':
       default:
         setResponse(NOT_SUPPORTED);
@@ -286,6 +300,17 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
       mod?.default?.stopSpeechRecognition().catch(() => {});
     });
   }, []);
+
+  // Speak every response once it is set. Bound to `[response]` rather than
+  // calling the speech inline in the switch so the async `launchApp` failure
+  // path (which sets a second response inside `.catch`) is also covered, and
+  // so the same text submitted twice doesn't double-speak. The `response`
+  // guard skips the initial `null` (the greeting shows via `GREETING`).
+  useEffect(() => {
+    if (response) speak(response);
+  }, [response]);
+
+  useEffect(() => () => stopSpeaking(), []);
 
   const styles = useMemo(() => createStyles(), []);
   const micDisabled = voiceAvailable === false;

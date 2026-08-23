@@ -102,12 +102,16 @@ class IconMaskSpecTest {
     fun `a shape key with path separators cannot escape the icons directory`() {
         val name = IconCache.fileName("com.a", 1L, "../../etc/passwd")
         assertFalse(name.contains("/"))
-        assertEquals("com.a_1_..-..-etc-passwd.png", name)
+        // O treatment default entra na chave desde o #486, tal como a shape.
+        assertEquals("com.a_1_..-..-etc-passwd_${IconTreatment.DEFAULT}.png", name)
     }
 
     @Test
     fun `an empty shape key falls back to the default key`() {
-        assertEquals("com.a_1_${IconCache.DEFAULT_SHAPE_KEY}.png", IconCache.fileName("com.a", 1L, ""))
+        assertEquals(
+            "com.a_1_${IconCache.DEFAULT_SHAPE_KEY}_${IconTreatment.DEFAULT}.png",
+            IconCache.fileName("com.a", 1L, "")
+        )
     }
 
     @Test
