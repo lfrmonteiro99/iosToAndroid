@@ -153,6 +153,34 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               }
               showChevron={false}
             />
+            <CupertinoListTile
+              title="Reduce White Point"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.reduceWhitePoint}
+                  onValueChange={(v) => update('reduceWhitePoint', v)}
+                />
+              }
+              showChevron={false}
+            />
+            {settings.reduceWhitePoint && (
+              <View style={styles.sliderRow}>
+                <Text style={[typography.caption1, { color: colors.secondaryLabel, width: 32 }]}>
+                  A
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <CupertinoSlider
+                    value={settings.whitePointLevel}
+                    onValueChange={(v) => update('whitePointLevel', v)}
+                    minimumValue={0.25}
+                    maximumValue={1.0}
+                  />
+                </View>
+                <Text style={[typography.body, { color: colors.secondaryLabel, width: 32, textAlign: 'right' }]}>
+                  A
+                </Text>
+              </View>
+            )}
           </CupertinoListSection>
         </View>
 
