@@ -34,6 +34,7 @@ import { HotspotScreen } from '../screens/settings/HotspotScreen';
 import { NotificationsScreen } from '../screens/settings/NotificationsScreen';
 import { SoundsHapticsScreen } from '../screens/settings/SoundsHapticsScreen';
 import { FocusScreen } from '../screens/settings/FocusScreen';
+import { SiriSearchScreen } from '../screens/settings/SiriSearchScreen';
 import { ScreenTimeScreen } from '../screens/settings/ScreenTimeScreen';
 import { StorageScreen } from '../screens/settings/StorageScreen';
 import { SoftwareUpdateScreen } from '../screens/settings/SoftwareUpdateScreen';
@@ -124,6 +125,7 @@ export function TabNavigator() {
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SoundsHaptics" component={SoundsHapticsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Focus" component={FocusScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="SiriSearch" component={SiriSearchScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="ScreenTime" component={ScreenTimeScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="General" component={GeneralScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="About" component={AboutScreen} options={{ animation: slideAnimation }} />
