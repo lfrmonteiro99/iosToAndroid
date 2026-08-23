@@ -120,6 +120,14 @@ export interface SettingsState {
    */
   categoryOverrides: CategoryOverrideSettings;
   /**
+   * App Library — «Home Screen & Dock → App Library» no iOS. `showSuggestions`
+   * controla a faixa Recently Added + Suggestions (a "sugestões" do iOS);
+   * `showNotifications` controla se as apps dentro da App Library exibem o
+   * badge/dot de notificações não lidas. Ambos default true (#602).
+   */
+  appLibraryShowNotifications: boolean;
+  appLibraryShowSuggestions: boolean;
+  /**
    * Newly Downloaded Apps destination (iOS «Home Screen & Dock → Newly
    * Downloaded Apps»). When true (default) a freshly installed app is shown on
    * the home screen; when false it appears only in the App Library. Already-
@@ -198,6 +206,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
   newAppsToHome: true,
+  appLibraryShowNotifications: true,
+  appLibraryShowSuggestions: true,
 };
 
 interface SettingsContextValue {
