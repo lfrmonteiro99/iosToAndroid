@@ -36,6 +36,9 @@ jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 jest.mock('expo-brightness', () => ({
   getBrightnessAsync: jest.fn(() => Promise.resolve(0.5)),
   setBrightnessAsync: jest.fn(() => Promise.resolve()),
+  // #612 Auto-Brightness: drives the OS brightness mode (AUTOMATIC vs MANUAL).
+  setSystemBrightnessModeAsync: jest.fn(() => Promise.resolve()),
+  BrightnessMode: { UNKNOWN: 0, AUTOMATIC: 1, MANUAL: 2 },
 }));
 
 jest.mock('expo-battery', () => ({

@@ -74,6 +74,8 @@ function deviceCtxWith(overrides: Partial<DeviceContextValue>): DeviceContextVal
     openSystemPanel: jest.fn(() => Promise.resolve()),
     requestContactsPermission: jest.fn(() => Promise.resolve(false)),
     requestSmsPermission: jest.fn(() => Promise.resolve(false)),
+    autoBrightness: true,
+    setAutoBrightness: jest.fn(() => Promise.resolve()),
     ...overrides,
   };
 }
@@ -230,7 +232,9 @@ describe('ConversationScreen', () => {
       openSystemPanel: jest.fn(() => Promise.resolve()),
       requestContactsPermission: jest.fn(() => Promise.resolve(false)),
       requestSmsPermission: jest.fn(() => Promise.resolve(false)),
-    };
+      autoBrightness: true,
+      setAutoBrightness: jest.fn(() => Promise.resolve()),
+      };
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const bubbleMock = require('../MessageBubble') as { __getRenderCount: () => number; __resetRenderCount: () => void };

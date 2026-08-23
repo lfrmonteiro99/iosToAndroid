@@ -185,6 +185,8 @@ function MockDeviceProvider({
     openSystemPanel: async () => {},
     requestContactsPermission: async () => false,
     requestSmsPermission: async () => false,
+    autoBrightness: true,
+    setAutoBrightness: async () => {},
   };
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;
 }

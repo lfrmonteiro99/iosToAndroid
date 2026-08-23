@@ -18,6 +18,7 @@ interface CupertinoSliderProps {
   minimumTrackColor?: string;
   maximumTrackColor?: string;
   disabled?: boolean;
+  testID?: string;
 }
 
 const THUMB_SIZE = 28;
@@ -31,6 +32,7 @@ export function CupertinoSlider({
   minimumTrackColor,
   maximumTrackColor,
   disabled = false,
+  testID,
 }: CupertinoSliderProps) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -83,6 +85,8 @@ export function CupertinoSlider({
       <View
         style={[styles.container, disabled && { opacity: 0.5 }]}
         onLayout={handleLayout}
+        testID={testID}
+        accessibilityState={{ disabled }}
       >
         {/* Background track */}
         <View style={[styles.track, { backgroundColor: maxColor }]} />
