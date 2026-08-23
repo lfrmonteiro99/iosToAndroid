@@ -18,6 +18,7 @@ import {
   type RequirePasscodeAfter,
   DEFAULT_REQUIRE_PASSCODE_AFTER,
 } from '../utils/passcodePolicy';
+import { clampWhitePointLevel } from '../utils/whitePoint';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -71,6 +72,10 @@ export interface SettingsState {
   wallpaperIndex: number;
   reduceMotion: boolean;
   reduceTransparency: boolean;
+  /** iOS «Reduce White Point»: dims the brightest colours via a dark overlay over the root container. */
+  reduceWhitePoint: boolean;
+  /** Overlay opacity (1 - whitePointLevel). Gama 0.25–1.0; 1.0 = sem redução. Default 1.0. */
+  whitePointLevel: number;
   boldText: boolean;
   showLockScreen: boolean;
   biometricUnlock: boolean;
@@ -240,6 +245,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   wallpaperIndex: 0,
   reduceMotion: false,
   reduceTransparency: false,
+  reduceWhitePoint: false,
+  whitePointLevel: 1.0,
   boldText: false,
   showLockScreen: true,
   biometricUnlock: true,
@@ -325,6 +332,10 @@ export function SettingsProvider({
             // uma máscara indefinida, por isso normaliza-se na leitura.
             iconShape: normalizeIconShape(parsed?.iconShape),
             iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
+            // whitePointLevel tem de ficar na gama 0.25–1.0; um valor
+            // corrompido (NaN, fora da gama) faria um overlay com opacidade
+            // inválida, por isso normaliza-se na leitura.
+            whitePointLevel: clampWhitePointLevel(parsed?.whitePointLevel),
           }));
         } catch { /* ignore */ }
       }

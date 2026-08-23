@@ -1,9 +1,10 @@
 import React from 'react';
 import { Text } from 'react-native';
-import { render, fireEvent } from '../../../test-utils';
+import { render, fireEvent, act } from '../../../test-utils';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useSettings } from '../../../store/SettingsStore';
 import { AccessibilityScreen } from '../AccessibilityScreen';
+import { CupertinoSlider } from '../../../components/CupertinoSlider';
 
 // AccessibilityScreen uses useAssistiveTouch which requires AssistiveTouchProvider.
 // Provide a minimal stub so the screen renders without the full provider tree.
@@ -202,5 +203,94 @@ describe('AccessibilityScreen touch feedback (#497: scale+opacity / opacity / no
 
     fireEvent.press(getByText('Scale & Opacity'));
     expect(getByTestId('press-feedback-value').props.children).toBe('scale-opacity');
+  });
+});
+
+// Reads reduceWhitePoint + whitePointLevel directly from SettingsStore — proves
+// the control reaches the global store, not just local screen state.
+function WhitePointReader() {
+  const { settings } = useSettings();
+  return (
+    <Text testID="wp-value">
+      {`${String(settings.reduceWhitePoint)}|${String(settings.whitePointLevel)}`}
+    </Text>
+  );
+}
+
+describe('AccessibilityScreen — Reduce White Point (#614)', () => {
+  it('renders the Reduce White Point toggle, default off', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <WhitePointReader />
+      </>,
+    );
+    expect(getByText('Reduce White Point')).toBeTruthy();
+    expect(getByTestId('wp-value').props.children).toBe('false|1');
+  });
+
+  it('toggling Reduce White Point updates the global SettingsStore', () => {
+    const { getAllByRole, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <WhitePointReader />
+      </>,
+    );
+
+    expect(getByTestId('wp-value').props.children).toBe('false|1');
+
+    // Vision section order: Bold Text, Reduce Motion, High Contrast,
+    // Reduce Transparency, Smart Invert, Color Filters, Reduce White Point
+    const switches = getAllByRole('switch');
+    fireEvent.press(switches[6]);
+
+    expect(getByTestId('wp-value').props.children).toBe('true|1');
+  });
+
+  it('slider is hidden while Reduce White Point is off', () => {
+    const { UNSAFE_queryAllByType } = render(
+      <AccessibilityScreen navigation={mockNavigation as never} />,
+    );
+    const sliders = UNSAFE_queryAllByType(CupertinoSlider);
+    expect(sliders.find((s) => s.props.minimumValue === 0.25)).toBeUndefined();
+  });
+
+  it('slider appears when enabled and its change updates whitePointLevel', () => {
+    const { getAllByRole, getByTestId, UNSAFE_queryAllByType } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <WhitePointReader />
+      </>,
+    );
+
+    // turn on
+    const switches = getAllByRole('switch');
+    fireEvent.press(switches[6]);
+    expect(getByTestId('wp-value').props.children).toBe('true|1');
+
+    const sliders = UNSAFE_queryAllByType(CupertinoSlider);
+    const wpSlider = sliders.find((s) => s.props.minimumValue === 0.25);
+    expect(wpSlider).toBeTruthy();
+    expect(wpSlider!.props.maximumValue).toBe(1.0);
+
+    act(() => {
+      wpSlider!.props.onValueChange(0.5);
+    });
+    expect(getByTestId('wp-value').props.children).toBe('true|0.5');
+  });
+
+  it('toggling twice (double-tap) returns to off without stuck state', () => {
+    const { getAllByRole, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <WhitePointReader />
+      </>,
+    );
+
+    const switches = getAllByRole('switch');
+    fireEvent.press(switches[6]);
+    expect(getByTestId('wp-value').props.children).toBe('true|1');
+    fireEvent.press(switches[6]);
+    expect(getByTestId('wp-value').props.children).toBe('false|1');
   });
 });
