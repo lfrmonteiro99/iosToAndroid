@@ -380,16 +380,19 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBrightnessValue = useCallback(async (value: number) => {
-    // #612: when OS auto-brightness owns the screen, the manual slider is a
-    // no-op. We do not call setBrightnessAsync (which would momentarily
-    // override the system value and flicker) and we do not write `brightness`
-    // into state — the displayed value is irrelevant while auto is on.
-    if (autoBrightness) return;
+    // #612: this is the SHARED brightness setter, also used by the Control
+    // Center (ControlCenterScreen.applyBrightness → device.setBrightness). It
+    // must always write the value — OS auto-brightness does NOT make it a
+    // no-op. The Display & Brightness manual slider disables itself locally
+    // (DisplayBrightnessScreen: slider disabled + guarded onValueChange), and
+    // the OS mode is switched via setSystemBrightnessModeAsync in the effect
+    // below. Guarding this setter would silently break the Control Center
+    // brightness slider whenever autoBrightness is true (its default).
     try {
       await Brightness.setBrightnessAsync(value);
       setState(prev => ({ ...prev, brightness: value }));
     } catch { /* needs permission */ }
-  }, [autoBrightness]);
+  }, []);
 
   const setAutoBrightnessValue = useCallback(async (enabled: boolean) => {
     // The OS brightness-mode sync lives in the device effect below, which

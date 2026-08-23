@@ -101,7 +101,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
               <View style={styles.sliderTrack}>
                 <CupertinoSlider
                   value={brightness}
-                  onValueChange={(v) => setBrightness(v)}
+                  onValueChange={(v) => { if (!autoBrightness) setBrightness(v); }}
                   minimumValue={0}
                   maximumValue={1}
                   disabled={autoBrightness}

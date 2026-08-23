@@ -40,16 +40,19 @@ describe('DeviceStore autoBrightness (#612)', () => {
     expect(setSystemBrightnessModeAsync).toHaveBeenCalledWith(Brightness.BrightnessMode.AUTOMATIC);
   });
 
-  it('does NOT call setBrightnessAsync from the manual slider while auto is on', async () => {
+  it('ALWAYS drives setBrightnessAsync from the manual slider even while auto is on (Control Center stays functional, #612)', async () => {
     const setBrightnessAsync = Brightness.setBrightnessAsync as jest.Mock;
     setBrightnessAsync.mockClear();
 
     const { result } = renderHook(() => useDevice(), { wrapper });
     await act(async () => {});
 
-    // autoBrightness is true by default → setBrightness must be a no-op.
+    // autoBrightness is true by default, yet the SHARED store must NOT be a
+    // no-op: the Control Center brightness slider calls setBrightness directly
+    // and must keep working even with OS auto-brightness engaged. Only
+    // DisplayBrightnessScreen disables its own slider locally.
     await act(async () => { await result.current.setBrightness(0.2); });
-    expect(setBrightnessAsync).not.toHaveBeenCalled();
+    expect(setBrightnessAsync).toHaveBeenCalledWith(0.2);
   });
 
   it('calls setBrightnessAsync from the manual slider once auto is disabled', async () => {

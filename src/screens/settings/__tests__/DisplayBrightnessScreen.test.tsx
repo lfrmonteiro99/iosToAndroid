@@ -1,6 +1,7 @@
 import React from 'react';
-import { render, fireEvent } from '../../../test-utils';
+import { render, fireEvent, act } from '../../../test-utils';
 import { DisplayBrightnessScreen } from '../DisplayBrightnessScreen';
+import Brightness from 'expo-brightness';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
 
@@ -52,5 +53,30 @@ describe('DisplayBrightnessScreen', () => {
     fireEvent(slider, 'onValueChange', 0.4);
     expect(getByTestId('auto-brightness-switch').props.accessibilityState.checked).toBe(false);
     expect(getByTestId('brightness-slider').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('does NOT call setBrightnessAsync when the manual slider is moved while auto is on (local no-op, #612)', () => {
+    const setBrightnessAsync = Brightness.setBrightnessAsync as jest.Mock;
+    setBrightnessAsync.mockClear();
+
+    const { getByTestId } = render(<DisplayBrightnessScreen navigation={mockNavigation as never} />);
+
+    // Auto-Brightness is on by default → slider is disabled and its
+    // onValueChange is guarded. A (programmatic) onValueChange must be ignored.
+    const slider = getByTestId('brightness-slider');
+    fireEvent(slider, 'onValueChange', 0.8);
+    expect(setBrightnessAsync).not.toHaveBeenCalled();
+  });
+
+  it('calls setBrightnessAsync when the manual slider is moved after auto is turned off (local no-op released, #612)', async () => {
+    const setBrightnessAsync = Brightness.setBrightnessAsync as jest.Mock;
+    setBrightnessAsync.mockClear();
+
+    const { getByTestId } = render(<DisplayBrightnessScreen navigation={mockNavigation as never} />);
+    await act(async () => { fireEvent.press(getByTestId('auto-brightness-switch')); });
+
+    const slider = getByTestId('brightness-slider');
+    fireEvent(slider, 'onValueChange', 0.3);
+    expect(setBrightnessAsync).toHaveBeenCalledWith(0.3);
   });
 });
