@@ -17,7 +17,6 @@ import {
 import {
   type RequirePasscodeAfter,
   DEFAULT_REQUIRE_PASSCODE_AFTER,
-  normalizeRequirePasscodeAfter,
 } from '../utils/passcodePolicy';
 
 const STORAGE_KEY = '@iostoandroid/settings';
@@ -144,6 +143,14 @@ export interface SettingsState {
    */
   categoryOverrides: CategoryOverrideSettings;
   /**
+   * App Library — «Home Screen & Dock → App Library» no iOS. `showSuggestions`
+   * controla a faixa Recently Added + Suggestions (a "sugestões" do iOS);
+   * `showNotifications` controla se as apps dentro da App Library exibem o
+   * badge/dot de notificações não lidas. Ambos default true (#602).
+   */
+  appLibraryShowNotifications: boolean;
+  appLibraryShowSuggestions: boolean;
+  /**
    * Newly Downloaded Apps destination (iOS «Home Screen & Dock → Newly
    * Downloaded Apps»). When true (default) a freshly installed app is shown on
    * the home screen; when false it appears only in the App Library. Already-
@@ -151,7 +158,6 @@ export interface SettingsState {
    * after it was turned off (#601).
    */
   newAppsToHome: boolean;
-  /**
   /**
    * Status bar appearance (iOS «Display & Brightness → Appearance → Style» /
    * «Home Screen & Dock → Status Bar»). 'light' forces light-content, 'dark'
@@ -265,6 +271,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
   newAppsToHome: true,
+  appLibraryShowNotifications: true,
+  appLibraryShowSuggestions: true,
   statusBarStyle: 'auto',
   statusBarVisible: true,
   autoBrightness: true,
@@ -326,9 +334,6 @@ export function SettingsProvider({
             // uma máscara indefinida, por isso normaliza-se na leitura.
             iconShape: normalizeIconShape(parsed?.iconShape),
             iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
-            // Um valor corrompido aqui decidiria se a passcode é exigida ou
-            // não, por isso normaliza-se na leitura para o mais restritivo.
-            requirePasscodeAfter: normalizeRequirePasscodeAfter(parsed?.requirePasscodeAfter),
           }));
         } catch { /* ignore */ }
       }

@@ -17,6 +17,7 @@ interface CupertinoSwitchProps {
   onValueChange?: (value: boolean) => void;
   trackColor?: { true?: string; false?: string };
   disabled?: boolean;
+  /** Identificador de teste opcional (passado ao Pressable raiz). */
   testID?: string;
 }
 

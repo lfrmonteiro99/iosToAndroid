@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
+import { useDevice } from '../store/DeviceStore';
 import {
   buildCategorySections,
   recategorizeApp,
@@ -129,34 +130,54 @@ export function categorizeApp(app: InstalledApp): string {
 const ICON_SIZE = 50;
 const ICON_RADIUS = 12;
 
-const AppIcon = React.memo(function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }) {
+const AppIcon = React.memo(function AppIcon({
+  app,
+  size = ICON_SIZE,
+  badge,
+}: {
+  app: InstalledApp;
+  size?: number;
+  /** Contagem de notificações não lidas a mostrar como dot vermelho (gateado por settings). */
+  badge?: number;
+}) {
   const radius = (size / ICON_SIZE) * ICON_RADIUS;
-  if (app.icon) {
-    return (
-      <Image
-        source={{ uri: app.icon }}
-        style={{ width: size, height: size, borderRadius: radius }}
-        resizeMode="cover"
-      />
-    );
-  }
-  // Fallback letter icon
-  const letter = app.name.charAt(0).toUpperCase();
-  const hue = app.name.charCodeAt(0) % 360;
+  const icon = app.icon ? (
+    <Image
+      source={{ uri: app.icon }}
+      style={{ width: size, height: size, borderRadius: radius }}
+      resizeMode="cover"
+    />
+  ) : (
+    (() => {
+      // Fallback letter icon
+      const letter = app.name.charAt(0).toUpperCase();
+      const hue = app.name.charCodeAt(0) % 360;
+      return (
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: radius,
+            backgroundColor: `hsl(${hue}, 55%, 55%)`,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: size * 0.4, fontWeight: '600' }}>
+            {letter}
+          </Text>
+        </View>
+      );
+    })()
+  );
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius,
-        backgroundColor: `hsl(${hue}, 55%, 55%)`,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: size * 0.4, fontWeight: '600' }}>
-        {letter}
-      </Text>
+    <View style={{ width: size, height: size, position: 'relative' }}>
+      {icon}
+      {badge != null && badge > 0 && (
+        <View testID={`app-badge-${app.packageName}`} style={styles.appIconBadge}>
+          <Text style={styles.appIconBadgeText}>{badge > 99 ? '99+' : String(badge)}</Text>
+        </View>
+      )}
     </View>
   );
 });
@@ -171,6 +192,10 @@ interface CategoryCardProps {
   onPress: () => void;
   onLaunchApp: (packageName: string) => void;
   cardWidth: number;
+  /** Contagem de notificações não lidas por packageName (passada ao AppIcon). */
+  badgeCounts: Record<string, number>;
+  /** Se os badges devem ser exibidos (gateado por settings). */
+  showNotifications: boolean;
 }
 
 // From this many apps onward, the 4th grid cell becomes a 2x2 "more apps"
@@ -190,7 +215,7 @@ function touchHitSlop(size: number) {
   return { top: pad, bottom: pad, left: pad, right: pad };
 }
 
-export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, onLaunchApp, cardWidth }: CategoryCardProps) {
+export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, onLaunchApp, cardWidth, badgeCounts, showNotifications }: CategoryCardProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const iconSize = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
@@ -233,7 +258,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
             accessibilityLabel={`Open ${a.name}, App Library`}
             accessibilityRole="button"
           >
-            <AppIcon app={a} size={iconSize} />
+            <AppIcon app={a} size={iconSize} badge={showNotifications ? badgeCounts[a.packageName] : undefined} />
           </Pressable>
         ))}
         {hasQuadrant && (
@@ -246,7 +271,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
           >
             {miniApps.map((a) => (
               <View key={a.packageName} style={{ width: miniSize, height: miniSize }}>
-                <AppIcon app={a} size={miniSize} />
+                <AppIcon app={a} size={miniSize} badge={showNotifications ? badgeCounts[a.packageName] : undefined} />
               </View>
             ))}
           </Pressable>
@@ -278,9 +303,13 @@ interface CategoryDetailProps {
   onClose: () => void;
   onLaunch: (pkg: string) => void;
   onRequestRecategorize: (packageName: string, currentKey: string) => void;
+  /** Contagem de notificações não lidas por packageName (passada ao AppIcon). */
+  badgeCounts: Record<string, number>;
+  /** Se os badges devem ser exibidos (gateado por settings). */
+  showNotifications: boolean;
 }
 
-function CategoryDetailModal({ visible, title, categoryKey, apps, onClose, onLaunch, onRequestRecategorize }: CategoryDetailProps) {
+function CategoryDetailModal({ visible, title, categoryKey, apps, onClose, onLaunch, onRequestRecategorize, badgeCounts, showNotifications }: CategoryDetailProps) {
   const { theme, isDark, typography, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -320,7 +349,7 @@ function CategoryDetailModal({ visible, title, categoryKey, apps, onClose, onLau
               accessibilityLabel={`Open ${item.name}, App Library`}
               accessibilityRole="button"
             >
-              <AppIcon app={item} size={iconSize} />
+              <AppIcon app={item} size={iconSize} badge={showNotifications ? badgeCounts[item.packageName] : undefined} />
               <Text style={[typography.caption2, styles.modalAppLabel, { color: colors.label }]} numberOfLines={2}>
                 {item.name}
               </Text>
@@ -408,9 +437,13 @@ function RecategorizeSheet({ visible, currentKey, onCancel, onSelect, onHide }: 
 const AppStrip = React.memo(function AppStrip({
   apps,
   onLaunch,
+  badgeCounts,
+  showNotifications,
 }: {
   apps: InstalledApp[];
   onLaunch: (pkg: string) => void;
+  badgeCounts: Record<string, number>;
+  showNotifications: boolean;
 }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
@@ -426,7 +459,11 @@ const AppStrip = React.memo(function AppStrip({
           accessibilityLabel={`Open ${app.name}, App Library`}
           accessibilityRole="button"
         >
-          <AppIcon app={app} size={stripIconSize} />
+          <AppIcon
+            app={app}
+            size={stripIconSize}
+            badge={showNotifications ? badgeCounts[app.packageName] : undefined}
+          />
           <Text style={[typography.caption2, styles.stripLabel, { color: colors.label }]} numberOfLines={2}>
             {app.name}
           </Text>
@@ -443,9 +480,13 @@ const AppStrip = React.memo(function AppStrip({
 const SearchResults = React.memo(function SearchResults({
   apps,
   onLaunch,
+  badgeCounts,
+  showNotifications,
 }: {
   apps: InstalledApp[];
   onLaunch: (pkg: string) => void;
+  badgeCounts: Record<string, number>;
+  showNotifications: boolean;
 }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
@@ -473,7 +514,7 @@ const SearchResults = React.memo(function SearchResults({
           accessibilityLabel={`Open ${item.name}, App Library`}
           accessibilityRole="button"
         >
-          <AppIcon app={item} size={46} />
+          <AppIcon app={item} size={46} badge={showNotifications ? badgeCounts[item.packageName] : undefined} />
           <Text style={[typography.callout, styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
         </CupertinoPressable>
       )}
@@ -525,6 +566,7 @@ export function AppLibraryContent() {
   // (ocultar / renomear / reordenar / appOverrides). Usa chaves estáveis, por
   // isso renomear não parte a atribuição.
   const { settings, update } = useSettings();
+  const device = useDevice();
   // Siri & Search → «Show Apps in App Library» (#610). Quando desligado a App
   // Library não mostra nenhuma app: nem strips, nem categorias, nem resultados
   // da sua própria procura. As apps continuam instaladas e lançáveis a partir
@@ -542,6 +584,20 @@ export function AppLibraryContent() {
     return buildCategorySections(visibleApps, settings.categoryOverrides, categorizeApp);
   }, [visibleApps, settings.categoryOverrides]);
 
+  // Badge counts — mesma fonte da home (LauncherHomeScreen.tsx:1113): SMS não
+  // lidas do device mapeiam para a app Messages. Gateado por
+  // appLibraryShowNotifications: só contam quando o toggle está ligado.
+  const badgeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const unread = device.messages.filter((m) => !m.isRead).length;
+    if (unread > 0) counts['com.iostoandroid.messages'] = unread;
+    return counts;
+  }, [device.messages]);
+
+  // Toggles da App Library (#602).
+  const showSuggestions = settings.appLibraryShowSuggestions;
+  const showNotifications = settings.appLibraryShowNotifications;
+
   // Grava um appOverrides (recategorização via long-press).
   const handleRecategorize = useCallback((packageName: string, targetKey: string) => {
     const next = recategorizeApp(settings.categoryOverrides, packageName, targetKey);
@@ -558,7 +614,7 @@ export function AppLibraryContent() {
       .filter((a): a is InstalledApp => !!a);
     if (recentPkgs.length > 0) return recentPkgs;
     // Fallback: newest-named apps when no launch history exists
-    return [...visibleApps].sort((a, b) => b.name.localeCompare(a.name)).slice(0, 4);
+    return [...visibleApps].sort((a, b) => b.name.localeCompare(b.name)).slice(0, 4);
   }, [visibleApps, recentApps]);
 
   // Suggestions — next 4 most-recently-launched apps after Recently Added
@@ -604,28 +660,44 @@ export function AppLibraryContent() {
 
       {isSearching ? (
         /* Search results */
-        <SearchResults apps={filteredApps} onLaunch={handleLaunch} />
+        <SearchResults
+          apps={filteredApps}
+          onLaunch={handleLaunch}
+          badgeCounts={badgeCounts}
+          showNotifications={showNotifications}
+        />
       ) : (
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Recently Added */}
-          {recentlyAddedApps.length > 0 && (
+          {/* Recently Added — faixa de sugestões do iOS, oculta quando
+              appLibraryShowSuggestions está desligado. */}
+          {showSuggestions && recentlyAddedApps.length > 0 && (
             <View style={styles.stripSection}>
               <SectionHeader title="Recently Added" colors={colors} />
               <View style={[styles.stripCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-                <AppStrip apps={recentlyAddedApps} onLaunch={handleLaunch} />
+                <AppStrip
+                  apps={recentlyAddedApps}
+                  onLaunch={handleLaunch}
+                  badgeCounts={badgeCounts}
+                  showNotifications={showNotifications}
+                />
               </View>
             </View>
           )}
 
-          {/* Suggestions */}
-          {suggestedApps.length > 0 && (
+          {/* Suggestions — mesma faixa de sugestões do iOS. */}
+          {showSuggestions && suggestedApps.length > 0 && (
             <View style={styles.stripSection}>
               <SectionHeader title="Suggestions" colors={colors} />
               <View style={[styles.stripCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-                <AppStrip apps={suggestedApps} onLaunch={handleLaunch} />
+                <AppStrip
+                  apps={suggestedApps}
+                  onLaunch={handleLaunch}
+                  badgeCounts={badgeCounts}
+                  showNotifications={showNotifications}
+                />
               </View>
             </View>
           )}
@@ -641,6 +713,8 @@ export function AppLibraryContent() {
                 cardWidth={cardWidth}
                 onPress={() => setCategoryModal({ title: cat.displayName, key: cat.key, apps: cat.apps })}
                 onLaunchApp={handleLaunch}
+                badgeCounts={badgeCounts}
+                showNotifications={showNotifications}
               />
             ))}
           </View>
@@ -657,6 +731,8 @@ export function AppLibraryContent() {
           onClose={() => setCategoryModal(null)}
           onLaunch={handleLaunch}
           onRequestRecategorize={(pkg, currentKey) => setRecatSheet({ packageName: pkg, currentKey })}
+          badgeCounts={badgeCounts}
+          showNotifications={showNotifications}
         />
       )}
 
@@ -858,6 +934,27 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'center',
     marginTop: 5,
+  },
+
+  // App Icon badge (dot de notificações não lidas) — #602
+  appIconBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.3)',
+  },
+  appIconBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   // Recategorize sheet
