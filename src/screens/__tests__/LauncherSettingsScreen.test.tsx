@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '../../test-utils';
+import { within } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { LauncherSettingsScreen } from '../LauncherSettingsScreen';
@@ -109,5 +110,51 @@ describe('LauncherSettingsScreen', () => {
       expect(getByText('Enter New Passcode')).toBeTruthy();
     });
     expect(store.has('@iostoandroid/lock_pin')).toBe(true);
+  });
+});
+
+describe('LauncherSettingsScreen Show Page Dots toggle (#603)', () => {
+  it('renders a "Show Page Dots" switch in the Home Screen section, default ON', () => {
+    const { getByLabelText } = render(<LauncherSettingsScreen />);
+    const tile = getByLabelText('Show Page Dots');
+    const sw = within(tile).getByRole('switch');
+    expect(sw.props.accessibilityState.checked).toBe(true);
+  });
+
+  it('toggles showPageDots off and persists it to AsyncStorage', async () => {
+    const store = setupMemoryAsyncStorage();
+
+    const { getByLabelText } = render(<LauncherSettingsScreen />);
+    const tile = getByLabelText('Show Page Dots');
+    const sw = within(tile).getByRole('switch');
+
+    fireEvent.press(sw);
+
+    await waitFor(() => {
+      expect(
+        within(getByLabelText('Show Page Dots')).getByRole('switch').props.accessibilityState.checked,
+      ).toBe(false);
+    });
+
+    // Persiste entre arranques: o SettingsStore escreve o JSON completo.
+    await waitFor(() => {
+      const raw = store.get('@iostoandroid/settings');
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw as string);
+      expect(parsed.showPageDots).toBe(false);
+    });
+  });
+
+  it('leaves showPageDots unset (true by default) when nothing is toggled', async () => {
+    const store = setupMemoryAsyncStorage();
+
+    render(<LauncherSettingsScreen />);
+
+    // O default true não precisa de ser escrito explicitamente para persistir
+    // o comportamento; mas se o store gravar, deve refletir true.
+    await waitFor(() => {
+      const raw = store.get('@iostoandroid/settings');
+      if (raw) expect(JSON.parse(raw).showPageDots ?? true).toBe(true);
+    });
   });
 });
