@@ -33,7 +33,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { brightness, setBrightness } = useDevice();
+  const { brightness, setBrightness, autoBrightness, setAutoBrightness } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
   const [showTintPicker, setShowTintPicker] = useState(false);
   const [showStatusBarStylePicker, setShowStatusBarStylePicker] = useState(false);
@@ -85,6 +85,17 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
         {/* Brightness slider */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Brightness">
+            <CupertinoListTile
+              title="Auto-Brightness"
+              trailing={
+                <CupertinoSwitch
+                  value={autoBrightness}
+                  onValueChange={(v) => setAutoBrightness(v)}
+                  testID="auto-brightness-switch"
+                />
+              }
+              showChevron={false}
+            />
             <View style={styles.sliderRow}>
               <Ionicons name="sunny-outline" size={20} color={colors.secondaryLabel} />
               <View style={styles.sliderTrack}>
@@ -93,6 +104,8 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
                   onValueChange={(v) => setBrightness(v)}
                   minimumValue={0}
                   maximumValue={1}
+                  disabled={autoBrightness}
+                  testID="brightness-slider"
                 />
               </View>
               <Ionicons name="sunny" size={20} color={colors.secondaryLabel} />

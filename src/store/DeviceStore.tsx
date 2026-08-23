@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, AppState, PermissionsAndroid } from 'react-native';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import * as Battery from 'expo-battery';
@@ -7,6 +7,7 @@ import * as Network from 'expo-network';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import { syncAlarmsWithDeviceTimezone } from '../utils/alarmTimezone';
+import { useSettings } from './SettingsStore';
 
 export interface DeviceWifi {
   enabled: boolean;
@@ -95,6 +96,15 @@ interface DeviceContextValue extends DeviceState {
   openSystemPanel: (panel: string) => Promise<void>;
   requestContactsPermission: () => Promise<boolean>;
   requestSmsPermission: () => Promise<boolean>;
+  /** Whether OS ambient-light auto-brightness is engaged (#612). Mirrors SettingsStore.autoBrightness. */
+  autoBrightness: boolean;
+  /**
+   * Enable/disable OS auto-brightness. When enabled the device is put in
+   * AUTOMATIC brightness mode and the manual slider becomes a no-op; when
+   * disabled the device is switched to MANUAL mode so `setBrightness` controls
+   * it directly. Updates the `autoBrightness` setting so it persists.
+   */
+  setAutoBrightness: (enabled: boolean) => Promise<void>;
 }
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -121,7 +131,22 @@ const DEFAULT_STATE: DeviceState = {
 
 export function DeviceProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<DeviceState>(DEFAULT_STATE);
+  const { settings, update } = useSettings();
+  const autoBrightness = settings.autoBrightness;
 
+  // Keep the device's OS brightness mode in lock-step with the autoBrightness
+  // setting. `autoBrightnessModeRef` guards against re-issuing the same
+  // setSystemBrightnessModeAsync on every render (iOS does not expose a real
+  // mode setter in this mock, and calling it repeatedly would cause flicker on
+  // device) — see #612 "Sem flicker ao alternar".
+  const autoBrightnessModeRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (autoBrightnessModeRef.current === autoBrightness) return;
+    autoBrightnessModeRef.current = autoBrightness;
+    Brightness.setSystemBrightnessModeAsync(
+      autoBrightness ? Brightness.BrightnessMode.AUTOMATIC : Brightness.BrightnessMode.MANUAL,
+    ).catch(() => { /* needs SYSTEM_BRIGHTNESS permission on Android */ });
+  }, [autoBrightness]);
   const getLauncherModule = useCallback(async () => {
     if (Platform.OS !== 'android') return null;
     try {
@@ -355,11 +380,24 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBrightnessValue = useCallback(async (value: number) => {
+    // #612: when OS auto-brightness owns the screen, the manual slider is a
+    // no-op. We do not call setBrightnessAsync (which would momentarily
+    // override the system value and flicker) and we do not write `brightness`
+    // into state — the displayed value is irrelevant while auto is on.
+    if (autoBrightness) return;
     try {
       await Brightness.setBrightnessAsync(value);
       setState(prev => ({ ...prev, brightness: value }));
     } catch { /* needs permission */ }
-  }, []);
+  }, [autoBrightness]);
+
+  const setAutoBrightnessValue = useCallback(async (enabled: boolean) => {
+    // The OS brightness-mode sync lives in the device effect below, which
+    // reacts to the `autoBrightness` setting change exactly once (guarded by
+    // autoBrightnessModeRef). Calling setSystemBrightnessModeAsync here too
+    // would double-issue and is exactly the flicker we must avoid (#612).
+    update('autoBrightness', enabled);
+  }, [update]);
 
   const setVolumeValue = useCallback(async (value: number) => {
     const mod = await getLauncherModule();
@@ -445,7 +483,9 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     openSystemPanel,
     requestContactsPermission,
     requestSmsPermission,
-  }), [state, refresh, setBrightnessValue, setVolumeValue, toggleWifi, toggleBluetooth, openSystemPanel, requestContactsPermission, requestSmsPermission]);
+    autoBrightness,
+    setAutoBrightness: setAutoBrightnessValue,
+  }), [state, refresh, setBrightnessValue, setVolumeValue, toggleWifi, toggleBluetooth, openSystemPanel, requestContactsPermission, requestSmsPermission, autoBrightness, setAutoBrightnessValue]);
 
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;
 }

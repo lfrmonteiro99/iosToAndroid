@@ -164,6 +164,14 @@ export interface SettingsState {
    * StatusBar is hidden (the launcher chrome moves up to fill the gap).
    */
   statusBarVisible: boolean;
+  /**
+   * iOS «Display & Brightness → Auto-Brightness»: when true (default) the OS
+   * ambient-light sensor drives the screen brightness; the manual brightness
+   * slider is disabled and the device stays in AUTOMATIC brightness mode. When
+   * false, the slider takes over with `Brightness.setBrightnessAsync` and the
+   * device is switched to MANUAL brightness mode (#612).
+   */
+  autoBrightness: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -240,6 +248,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   newAppsToHome: true,
   statusBarStyle: 'auto',
   statusBarVisible: true,
+  autoBrightness: true,
 };
 
 interface SettingsContextValue {
