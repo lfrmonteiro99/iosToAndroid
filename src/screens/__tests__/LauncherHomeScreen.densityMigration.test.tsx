@@ -1,8 +1,10 @@
 import React from 'react';
+import { View, ScrollView, Pressable, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { render, waitFor, within } from '../../test-utils';
+import { render, waitFor, within, fireEvent } from '../../test-utils';
 import * as AppsStore from '../../store/AppsStore';
 import * as FoldersStore from '../../store/FoldersStore';
+import { useSettings } from '../../store/SettingsStore';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
 
 // issue #503 — Ponto 2: mudar a densidade da grelha (colunas/linhas) re-pagina
@@ -108,6 +110,53 @@ function countOnPage(root: ReturnType<typeof render>, pageIndex: number): number
   return within(grid).getAllByRole('button').length;
 }
 
+/** Muda a densidade ao vivo via SettingsStore (o mecanismo real do ecrã). */
+function DensityProbe({ cols, rows }: { cols: 3 | 4 | 5 | 6; rows: 4 | 5 | 6 | 7 }) {
+  const { update } = useSettings();
+  return (
+    <Pressable
+      testID="density-probe"
+      onPress={() => {
+        update('gridColumns', cols);
+        update('gridRows', rows);
+      }}
+    >
+      <Text>probe</Text>
+    </Pressable>
+  );
+}
+
+/** O ScrollView horizontal do pager (o único com pagingEnabled). */
+function getPager(root: ReturnType<typeof render>) {
+  return root.UNSAFE_getAllByType(ScrollView).find(
+    (n: { props: { pagingEnabled?: boolean } }) => n.props.pagingEnabled,
+  );
+}
+
+/** Simula o fim do momentum scroll do pager numa página (handleScroll real). */
+function scrollPagerTo(root: ReturnType<typeof render>, page: number, width: number) {
+  fireEvent(getPager(root)!, 'momentumScrollEnd', {
+    nativeEvent: {
+      contentOffset: { x: page * width },
+      contentSize: { width: (page + 1) * width },
+      layoutMeasurement: { width },
+    },
+  });
+}
+
+/** Lê os dots do PageDots: { total, active } (active = -1 se nenhuma página activa). */
+function readDots(root: ReturnType<typeof render>): { total: number; active: number } {
+  const dots = root.UNSAFE_getAllByType(View).filter((n: { props: { style?: unknown } }) => {
+    const s = StyleSheet.flatten(n.props.style) as Record<string, unknown> | undefined;
+    return !!s && s.width === 7 && s.height === 7 && s.borderRadius === 3.5;
+  });
+  const active = dots.findIndex((n: { props: { style?: unknown } }) => {
+    const s = StyleSheet.flatten(n.props.style) as Record<string, unknown> | undefined;
+    return !!s && s.backgroundColor === '#ffffff';
+  });
+  return { total: dots.length, active };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -198,5 +247,50 @@ describe('LauncherHomeScreen density migration (#503, ponto 2)', () => {
     expect(densePage0Count).toBe(24);
     expect(sparsePage0Count).toBe(25);
     expect(sparsePage0Count).toBeGreaterThan(densePage0Count);
+  });
+
+  it('clamps currentPage and the dots when a density change shrinks the page count', async () => {
+    // Review follow-up: mudar a densidade encolhe o número de páginas e o
+    // currentPage (que só muda em handleScroll) ficava para além de
+    // totalPages — os dots perdiam a página activa e o offset ficava além do
+    // conteúdo até ao próximo scroll. Tem de haver um reset: clampar a página
+    // e o offset do pager juntos.
+    const apps = APP_NAMES.map(makeApp); // 26 apps + 14 virtuais = 40 itens
+    mockApps(apps);
+    mockFolders([]);
+    // 4x6 = 24/page -> 2 páginas de grelha + App Library = 3 páginas.
+    seedSettings({ gridColumns: 4, gridRows: 6 });
+    const root = render(
+      <>
+        <LauncherHomeScreen />
+        <DensityProbe cols={6} rows={7} />
+      </>,
+    );
+
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), { timeout: 3000 });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Dimensions } = require('react-native');
+    const width = Dimensions.get('window').width;
+
+    // Navega até à última página de grelha (page 2 de 3).
+    scrollPagerTo(root, 2, width);
+    await waitFor(() => {
+      expect(readDots(root)).toEqual({ total: 3, active: 2 });
+    });
+
+    // 6x7 = 42/page -> 40 itens cabem numa página de grelha: 3 -> 2 páginas.
+    fireEvent.press(root.getByTestId('density-probe'));
+
+    // O pager tem de estabilizar: 2 dots e a página activa na última (1), não
+    // em 2 (que já não existe). Antes do fix, active ficava em -1.
+    await waitFor(() => {
+      expect(readDots(root)).toEqual({ total: 2, active: 1 });
+    });
+
+    // Estável também depois de um scroll para a posição clampada.
+    scrollPagerTo(root, 1, width);
+    await waitFor(() => {
+      expect(readDots(root)).toEqual({ total: 2, active: 1 });
+    });
   });
 });

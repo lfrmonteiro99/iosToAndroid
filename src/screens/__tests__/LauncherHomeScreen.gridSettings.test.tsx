@@ -56,6 +56,13 @@ function seedSettings(partial: Record<string, unknown>) {
 
 const BUILT_IN_COUNT = Object.keys(BUILT_IN_APPS).length; // 14 virtual apps, no real device apps mocked
 
+/** Achata um style (array de objectos) com precedência da última entrada. */
+function flattenStyle(element: { props: { style: unknown } }): Record<string, number> {
+  const style = element.props.style;
+  const flat = (Array.isArray(style) ? style.flat(Infinity) : [style]).filter(Boolean) as Record<string, number>[];
+  return flat.reduce((acc, s) => ({ ...acc, ...s }), {});
+}
+
 beforeEach(() => {
   mockApps();
 });
@@ -142,5 +149,68 @@ describe('LauncherHomeScreen grid density settings (#503)', () => {
     );
     expect(width).toBe(expected.iconSize);
     expect(width).toBeLessThanOrEqual(expected.cellWidth);
+  });
+
+  it('showIconLabels: false + iconSizeScale 1.2 keeps the cell taller than the icon (no vertical overlap)', async () => {
+    // Review follow-up: a combinação labels-off × escala 1.2 não estava
+    // coberta — o teste de labels-off corria só a escala 1.0, onde o defeito
+    // não aparece. Antes do fix, `appIconWrapperCompact` (height: ICON_SIZE
+    // estático) vinha depois do wrapperHeight dinâmico no array de estilos e
+    // sobrepunha-o: com o ícone escalado a 1.2 a célula ficava mais baixa que
+    // o ícone e este sobrepunha a linha seguinte da grelha.
+    seedSettings({ showIconLabels: false, iconSizeScale: 1.2 });
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+
+    await waitFor(() => expect(getByLabelText('Open Phone')).toBeTruthy(), { timeout: 3000 });
+    const height = flattenStyle(getByLabelText('Open Phone')).height as number;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const width = require('react-native').Dimensions.get('window').width;
+    const expected = computeLauncherGridGeometry(width, 4, 1.2);
+
+    // Invariante vertical: a célula tem de ter altura >= ícone, senão o ícone
+    // transborda para a linha seguinte.
+    expect(height).toBeGreaterThanOrEqual(expected.iconSize);
+    // E a célula é exactamente o paddingTop (5) + o ícone, sem label.
+    expect(height).toBe(5 + expected.iconSize);
+  });
+
+  it('showIconLabels: false + iconSizeScale 0.8 shrinks the cell with the icon', async () => {
+    // O inverso do fix: quando o ícone encolhe, a célula tem de encolher com
+    // ele (5 + iconSize), não ficar presa no ICON_SIZE de escala 1.0.
+    seedSettings({ showIconLabels: false, iconSizeScale: 0.8 });
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+
+    await waitFor(() => expect(getByLabelText('Open Phone')).toBeTruthy(), { timeout: 3000 });
+    const height = flattenStyle(getByLabelText('Open Phone')).height as number;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const width = require('react-native').Dimensions.get('window').width;
+    const expected = computeLauncherGridGeometry(width, 4, 0.8);
+
+    expect(height).toBe(5 + expected.iconSize);
+    expect(height).toBeLessThan(computeLauncherGridGeometry(width, 4, 1).iconSize);
+  });
+
+  it('does not throw "Rendered more hooks" when isLoading flips true→false (reviewer regression)', async () => {
+    // Reviewer follow-up (#599 / #503): gridItems / pages / clamp useEffect
+    // used to sit BELOW the isLoading early return, gated by
+    // `eslint-disable-next-line react-hooks/rules-of-hooks`. On any render that
+    // took the loading path those hooks were skipped, so the isLoading:true →
+    // false transition called a different number of hooks than the previous
+    // render and React threw "Rendered more hooks than during the previous
+    // render". Hoisting those three hooks above the early returns must keep the
+    // hook count identical across the transition.
+    mockApps({ isLoading: true });
+    const { rerender, getByLabelText } = render(<LauncherHomeScreen />);
+
+    // Flip the mock to the loaded state with at least one real app present.
+    mockApps({
+      isLoading: false,
+      nonDockApps: [{ name: 'SomeApp', packageName: 'com.example.someapp', icon: '', isSystem: false }],
+    });
+    // Must NOT throw the rules-of-hooks crash on re-render after the flip.
+    expect(() => rerender(<LauncherHomeScreen />)).not.toThrow();
+
+    // And the loaded grid must now be present (built-in Phone app always shows).
+    await waitFor(() => expect(getByLabelText('Open Phone')).toBeTruthy(), { timeout: 3000 });
   });
 });

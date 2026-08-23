@@ -159,3 +159,100 @@ describe('LocationStore', () => {
     expect(getByTestId('current').props.children).toBe('none');
   });
 });
+
+// ─── clearHistory (issue #268) ──────────────────────────────────────────────
+// Stateful in-memory AsyncStorage so a clearHistory() removal is observable:
+// after clear, getItem(HISTORY_KEY) must return null, not a `[]` placeholder.
+const SEED = [
+  { latitude: 37.7749, longitude: -122.4194, accuracy: 10, timestamp: 1_700_000_001_000 },
+  { latitude: 37.33, longitude: -122.0, accuracy: 12, timestamp: 1_700_000_002_000 },
+  { latitude: 38.0, longitude: -121.0, accuracy: 8, timestamp: 1_700_000_003_000 },
+];
+
+function setupMemoryAsyncStorage(initial: Record<string, string> = {}) {
+  const store = new Map<string, string>(Object.entries(initial));
+  (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) =>
+    store.has(key) ? store.get(key) : null,
+  );
+  (AsyncStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => {
+    store.set(key, value);
+  });
+  (AsyncStorage.removeItem as jest.Mock).mockImplementation(async (key: string) => {
+    store.delete(key);
+  });
+  return store;
+}
+
+function ClearProbe() {
+  const { history, clearHistory } = useLocation();
+  return (
+    <React.Fragment>
+      <Text testID="historyLen">{String(history.length)}</Text>
+      <Text testID="clear" onPress={() => clearHistory()}>clear</Text>
+    </React.Fragment>
+  );
+}
+
+describe('LocationStore — clearHistory', () => {
+  beforeEach(() => {
+    setupMemoryAsyncStorage({ [HISTORY_KEY]: JSON.stringify(SEED) });
+    jest.clearAllMocks();
+  });
+
+  it('empties history state and removes the persisted entry on clear', async () => {
+    const { getByTestId } = render(
+      <Harness>
+        <ClearProbe />
+      </Harness>,
+    );
+    await waitFor(() => expect(getByTestId('historyLen').props.children).toBe('3'));
+
+    await act(async () => {
+      getByTestId('clear').props.onPress();
+    });
+
+    await waitFor(() => expect(getByTestId('historyLen').props.children).toBe('0'));
+    // The persisted key is gone, not left as a `[]` placeholder.
+    expect(await AsyncStorage.getItem(HISTORY_KEY)).toBeNull();
+    const removeItem = AsyncStorage.removeItem as jest.Mock;
+    expect(removeItem.mock.calls.some((c) => c[0] === HISTORY_KEY)).toBe(true);
+  });
+
+  it('a remount after clear does not repopulate history (entry truly removed)', async () => {
+    const { getByTestId, unmount } = render(
+      <Harness>
+        <ClearProbe />
+      </Harness>,
+    );
+    await waitFor(() => expect(getByTestId('historyLen').props.children).toBe('3'));
+    await act(async () => {
+      getByTestId('clear').props.onPress();
+    });
+    await waitFor(() => expect(getByTestId('historyLen').props.children).toBe('0'));
+    unmount();
+
+    // Fresh provider must hydrate from the (now absent) key → empty history.
+    const { getByTestId: after } = render(
+      <Harness>
+        <ClearProbe />
+      </Harness>,
+    );
+    await waitFor(() => expect(after('historyLen').props.children).toBeDefined());
+    expect(after('historyLen').props.children).toBe('0');
+  });
+
+  it('is idempotent: clearing an already-empty history still removes the key', async () => {
+    const store = setupMemoryAsyncStorage({ [HISTORY_KEY]: JSON.stringify([]) });
+    const { getByTestId } = render(
+      <Harness>
+        <ClearProbe />
+      </Harness>,
+    );
+    await waitFor(() => expect(getByTestId('historyLen').props.children).toBe('0'));
+    await act(async () => {
+      getByTestId('clear').props.onPress();
+    });
+    await waitFor(() => expect(getByTestId('historyLen').props.children).toBe('0'));
+    expect(store.has(HISTORY_KEY)).toBe(false);
+  });
+});
