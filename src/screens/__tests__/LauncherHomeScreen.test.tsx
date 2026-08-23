@@ -45,6 +45,10 @@ describe('LauncherHomeScreen', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
       iconCacheSizeBytes: 0,
       isRebuildingIconCache: false,
       iconCacheRebuildProgress: null,
@@ -225,6 +229,10 @@ describe('LauncherHomeScreen wallpaper parallax (#433)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
       iconCacheSizeBytes: 0,
       isRebuildingIconCache: false,
       iconCacheRebuildProgress: null,
@@ -295,6 +303,10 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
       iconCacheSizeBytes: 0,
       isRebuildingIconCache: false,
       iconCacheRebuildProgress: null,
@@ -414,6 +426,10 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
       iconCacheSizeBytes: 0,
       isRebuildingIconCache: false,
       iconCacheRebuildProgress: null,
@@ -436,6 +452,9 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
     const app = { name: 'Chrome', packageName: 'com.android.chrome', icon: '', isSystem: false };
     mockLoadedApps({
       apps: [app],
+      // #606: a App Library lista `visibleApps` (apps menos as escondidas); só
+      // a procura lê `apps`. Sem isto a biblioteca vinha vazia neste mock.
+      visibleApps: [app],
       nonDockApps: [app],   // grelha do home
       // `recentApps` e ordenado por `launchedAt` e cruzado contra `apps` pelo
       // packageName (AppLibraryScreen.tsx:355-364) — sem o timestamp a app nao
@@ -556,6 +575,10 @@ describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
       ...over,
     } as ReturnType<typeof AppsStore.useApps>);
   }
@@ -612,6 +635,10 @@ describe('LauncherHomeScreen dock has no app-name labels (#501)', () => {
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
       iconCacheSizeBytes: 0,
       isRebuildingIconCache: false,
       iconCacheRebuildProgress: null,
