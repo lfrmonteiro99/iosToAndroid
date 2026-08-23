@@ -138,6 +138,55 @@ The lock screen is shown on cold start and whenever the app goes to the backgrou
 
 ---
 
+## Team orchestrator (`scripts/team/`)
+
+Long-running pipeline that works GitHub issues labelled `qa:*` into PRs, driven by `orchestrator.sh` inside tmux (`start.sh`). Roles: PLAN/DESIGN and final review on Anthropic, implementation and overflow on whichever pool has quota.
+
+### Provider pools
+
+| Pool | Auth | Role in the ladder | Notes |
+|------|------|--------------------|-------|
+| **Claude** (Anthropic subscription) | OAuth login (`claude /login`) | primary rung | nothing to configure |
+| **Alibaba** (Bailian Token Plan) | `ALIBABA_API_KEY` (`sk-sp-…` prefix) | overflow rung + dedicated slots | Anthropic-compatible endpoint |
+| **Ollama Cloud** | its own config | last-resort fallback | unchanged |
+| **hermes** | own binary | peer engine (opt-in) | unchanged |
+
+The dispatch ladder in `run-agent.sh`, top to bottom:
+
+```
+hermes   (AGENT_ENGINE=hermes → runs alone, exits inline — a peer, not a rung)
+claude   (subscription OAuth — no env overrides)
+alibaba  (RUNG: only reached when the claude rung was skipped or came up empty)
+guards   (exit 77: nothing configured/available that could run)
+ollama   (fallback of last resort)
+```
+
+Requirement the ladder is built around: **the pipeline keeps working when any single provider is out of quota.** Each rung that exhausts writes a cooldown file and falls through; a run that exhausts on every rung exits 77 (deliberately-did-not-run) instead of consuming the issue's attempt budget.
+
+### Alibaba pool setup
+
+1. Put the key in `~/.config/ios2android-team/env`:
+   ```bash
+   ALIBABA_API_KEY=sk-sp-…
+   ```
+   Only keys with the `sk-sp-` prefix are accepted — a normal pay-as-you-go `sk-` key hits a different endpoint shape and its 401s would not match the exhaustion detector, escaping as task failures instead of cooldowns.
+2. Optional overrides (env, via `start.sh`, or in the same credentials file — the file is read at source time, so a key change needs no restart of anything but the orchestrator): `TEAM_ALIBABA_BASE_URL` (default: the Beijing Anthropic-compatible Token Plan endpoint; this machine's key is proven against `ap-southeast-1`, and that override lives next to the key), `TEAM_ALIBABA_MODEL_LOW/MED/STRONG` (default tiers `qwen3.6-flash` / `qwen3.7-plus` / `qwen3.8-max`), `TEAM_ALIBABA_COOLDOWN_H` (quota-window cooldown, default 6h), `TEAM_ALIBABA_RATE_COOLDOWN_M` (rate-limit cooldown, default 2min), `TEAM_USE_ALIBABA=0` to switch the pool off.
+3. Dedicated implementation slots: include `alibaba` in `TEAM_IMPL_ENGINES` (e.g. `claude,claude,alibaba`). A peer alibaba slot does **not** fall through to claude — pool exhausted → exit 77, so quota separation holds.
+
+> **⚠ Terms-of-service warning.** The personal Token Plan prohibits automated/batch/background calling; a non-stop orchestrator qualifies, and the penalty is suspension or ban of the key. The risk exists whenever this pipeline runs against a personal Token Plan key. Compliant alternatives: a pay-as-you-go `sk-` key (different base URL, outside this pool's prefix check) or an org/Team plan. Decide with eyes open.
+
+> **⚠ Same-key warning.** If the `sk-sp-` key in `~/.config/ios2android-team/env` is the same key already used elsewhere on the machine, the claude rung and the alibaba rung draw on the same quota pool — you get explicit routing and dedicated cooldowns, but no real quota separation. Real separation requires a distinct key.
+
+Other facts worth knowing:
+
+- **Concurrency cap**: Standard Token Plan ≈ 3–4 concurrent agents. Count alibaba implementation slots + reviewers (`TEAM_REVIEW_ALIBABA=1`) + the curator (it dispatches without `AGENT_ENGINE`, so it walks the whole ladder). Keep alibaba entries in the roster at ~3 max.
+- **`AGENT_FORCE_ALIBABA=1`**: mirrors `AGENT_FORCE_FALLBACK` — skips the claude rung and forces the alibaba rung. The only way to A/B the pool without removing the claude login.
+- **Env-precedence gotcha (P0, verified 2026-08-23)**: a `settings.json` `env` block beats per-process env. Any `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` left in `~/.claude/settings.json` silently routes *every* claude process — including the subscription rung — to that endpoint. Keep the block absent (or PATH-only); the alibaba rung injects its env per invocation via `env VAR=… claude`, never `export`.
+- **Client retry behaviour**: the Claude CLI retries aggressively (~7 attempts in ~20s) and hangs silently against a dead endpoint until its timeout. Exhaustion surfaces as the documented `429 Allocated quota exceeded` / `429 Requests rate limit exceeded`, both already matched by the detector.
+- **Nocturnal discount** (22:00–08:00, `qwen3.8-max`): time-limited vendor pricing. Not encoded in the pipeline by design — do not build scheduling logic around it.
+
+---
+
 ## Contributing
 
 1. Branch from `main`.

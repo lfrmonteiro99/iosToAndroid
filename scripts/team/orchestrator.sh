@@ -102,7 +102,7 @@ build_impl_roster() {
   fi
   IFS=',' read -r -a raw <<< "$spec"
   [ "${#raw[@]}" -gt 0 ] || raw=(claude)
-  local warned_hermes=0
+  local warned_hermes=0 warned_alibaba=0
   for (( i=0; i<TEAM_IMPLEMENTERS; i++ )); do
     e="${raw[$(( i % ${#raw[@]} ))]}"
     e="${e// /}"
@@ -110,11 +110,23 @@ build_impl_roster() {
       [ "$warned_hermes" = "0" ] && { log "hermes pedido mas não encontrei o binário — esses slots vão de claude"; warned_hermes=1; }
       e="claude"
     fi
+    # Valida CONFIGURAÇÃO, não estado: um pool com chave mas em cooldown mantém
+    # o slot (o impl_engine_now decide à hora, e o slot é saltado em cooldown).
+    # Sem chave é que o slot degrada — ruidoso, nunca 77 silencioso (padrão hermes).
+    if [ "$e" = "alibaba" ] && ! alibaba_configured; then
+      [ "$warned_alibaba" = "0" ] && { log "alibaba pedido mas o pool não está configurado (ALIBABA_API_KEY sk-sp- em falta ou TEAM_USE_ALIBABA=0) — esses slots vão de claude"; warned_alibaba=1; }
+      e="claude"
+    fi
     [ -n "$e" ] || e="claude"
     IMPL_ENGINES+=("$e")
   done
   log "slots de implementação: $TEAM_IMPLEMENTERS (${IMPL_ENGINES[*]}), tecto real = memória"
   hermes_available && log "hermes disponível ($(hermes_bin)) — assume os slots enquanto a subscrição Claude estiver esgotada"
+  if alibaba_configured; then
+    local extra=""
+    alibaba_exhausted && extra=" — EM COOLDOWN (~$(( $(alibaba_cooldown_remaining) / 60 ))min)"
+    log "pool alibaba configurado (base=$TEAM_ALIBABA_BASE_URL) — rung de overflow + slots próprios$extra"
+  fi
 }
 
 # ── Motor de AGORA, não motor de arranque ──────────────────────────────────
@@ -142,14 +154,24 @@ impl_engine_now() {
     hermes_available && echo hermes || echo claude
     return 0
   fi
-  if ! claude_available && hermes_available; then
-    echo hermes; return 0
+  # Slot dedicado ao pool alibaba: corre quando o pool está disponível; em
+  # cooldown/esgotado degrada para a lógica claude (nunca decide sozinho que
+  # "queima claude é igual" — a preferência alibaba→hermes→claude abaixo é só
+  # para slots que QUEREM claude).
+  if [ "$want" = "alibaba" ]; then
+    if alibaba_available; then echo alibaba; return 0; fi
+    # pool seco/indisponível: cai para a decisão normal de claude/hermes
   fi
-  if [ "$(cooldown_remaining)" -gt 0 ] && hermes_available; then
-    echo hermes
-  else
-    echo claude
+  if ! claude_available; then
+    if alibaba_available; then echo alibaba; return 0; fi
+    if hermes_available; then echo hermes; return 0; fi
+    echo claude; return 0
   fi
+  if [ "$(cooldown_remaining)" -gt 0 ]; then
+    if alibaba_available; then echo alibaba; return 0; fi
+    if hermes_available; then echo hermes; return 0; fi
+  fi
+  echo claude
 }
 
 # ── Issue queries ──────────────────────────────────────────────────────────
@@ -200,7 +222,17 @@ refresh_issue_cache() {
     [ -z "$raw" ] && { echo "$row"; continue; }
     [ "$raw" -ge "$cutoff" ] && echo "$row"
   done | jq -s '.' 2>/dev/null)
-  [ -n "$filtered" ] && ISSUE_CACHE="$filtered" || ISSUE_CACHE="$json"
+  # Fallback quando a janela de prioridade está VAZIA: o jq -s devolve "[]" (string
+  # não-vazia!), pelo que `[ -n "$filtered" ]` nunca via o vazio e o cache ficava
+  # literalmente `[]` — o orquestrador declarava "BACKLOG VAZIO" com issues antigos
+  # qa:ready por apanhar. A janela de 36h é PRIORIDADE, não exclusão: esgotada,
+  # segue para os restantes abertos (issues parqueados sem label qa:* continuam
+  # invisíveis — o issues_with filtra por label).
+  if [ -n "$filtered" ] && [ "$filtered" != "[]" ]; then
+    ISSUE_CACHE="$filtered"
+  else
+    ISSUE_CACHE="$json"
+  fi
   return 0
 }
 
@@ -341,9 +373,15 @@ next_free_with() {
 }
 
 # O selector certo para o motor do slot.
+# claude e alibaba correm pela escada completa (rung claude → rung alibaba →
+# guards → ollama), por isso ambos usam first_with. Nota de semântica: os
+# filtros de degradação (next_free_with) só activam via on_fallback(), que
+# também exige ollama não-esgotado — com ollama em cooldown de 6h e claude
+# seco, slots alibaba correm sem filtro e podem apanhar issues "envenenados";
+# o circuit breaker de defer absorve isso.
 next_issue_for() {
   local label="$1" engine="$2"
-  if [ "$engine" = "claude" ]; then first_with "$label"; else next_free_with "$label"; fi
+  if [ "$engine" = "claude" ] || [ "$engine" = "alibaba" ]; then first_with "$label"; else next_free_with "$label"; fi
 }
 
 # Labels on one issue, straight from the cache.
@@ -785,12 +823,22 @@ launch_implementers_if_needed() {
 
   for (( n=1; n<=TEAM_IMPLEMENTERS; n++ )); do
     slot="impl$n"
-    engine=$(impl_engine_now "${IMPL_ENGINES[$((n-1))]:-claude}")
+    want="${IMPL_ENGINES[$((n-1))]:-claude}"
 
     # Ocupado: ou tem um role vivo registado, ou o lock do run-agent está tomado.
     # As duas guardas, pela mesma razão que o inflight existe.
     inflight_slot_active "$slot" && continue
     flock -w 0 -n "$LOCK_PREFIX.$slot.lock" true 2>/dev/null || continue
+
+    # Separação de quota: slot cujo engine configurado está em cooldown é
+    # saltado — não o re-despachamos como claude todos os ciclos (queimava o
+    # pool que se está a poupar) nem o despachamos para sair 77 de imediato.
+    # O ciclo seguinte volta a avaliar; o pool retoma quando o cooldown expira.
+    if [ "$want" = "alibaba" ] && ! alibaba_available; then
+      continue
+    fi
+
+    engine=$(impl_engine_now "$want")
 
     if ! mem_room_for_agent; then
       log "sem memória para mais um implementador — $(mem_status); $((TEAM_IMPLEMENTERS - n + 1)) slot(s) por encher"
@@ -910,11 +958,11 @@ while true; do
   # COM HERMES, NÃO SE DORME.
   #
   # Este bloco existe para não gastar um ciclo a redescobrir que a quota acabou.
-  # Mas dormir também desliga o hermes, que tem quota PRÓPRIA e é exactamente o
-  # motor que devia assumir aqui — a pipeline parava horas com um motor livre
-  # ao lado. Com hermes disponível o ciclo segue: o impl_engine_now põe todos os
-  # slots em hermes até a subscrição voltar.
-  if { [ "${TEAM_USE_FALLBACK:-1}" != "1" ] || fallback_exhausted; } && ! hermes_available; then
+  # Mas dormir também desliga o hermes e o pool alibaba, que têm quota PRÓPRIA e
+  # são exactamente os motores que deviam assumir aqui — a pipeline parava horas
+  # com um motor livre ao lado. Com hermes OU alibaba disponível o ciclo segue:
+  # o impl_engine_now encaminha os slots elegíveis até a subscrição voltar.
+  if { [ "${TEAM_USE_FALLBACK:-1}" != "1" ] || fallback_exhausted; } && ! hermes_available && ! alibaba_available; then
     REMAIN=$(cooldown_remaining)
     if [ "$REMAIN" -gt 0 ]; then
       fallback_exhausted && log "o fallback tambem esta sem quota (Ollama Cloud, ~$(( $(fallback_cooldown_remaining) / 60 ))min)"
@@ -937,8 +985,13 @@ while true; do
     continue
   fi
 
-  if [ "$(cooldown_remaining)" -gt 0 ] && hermes_available; then
-    log "subscrição Claude esgotada (volta às $(date -d "@$(( $(date +%s) + $(cooldown_remaining) ))" +%H:%M)) — implementadores em HERMES até lá"
+  if [ "$(cooldown_remaining)" -gt 0 ]; then
+    ALT=""
+    alibaba_available && ALT="ALIBABA"
+    hermes_available && ALT="${ALT:+$ALT + }HERMES"
+    if [ -n "$ALT" ]; then
+      log "subscrição Claude esgotada (volta às $(date -d "@$(( $(date +%s) + $(cooldown_remaining) ))" +%H:%M)) — slots elegíveis em $ALT até lá"
+    fi
   fi
 
   rescue_stuck_wip

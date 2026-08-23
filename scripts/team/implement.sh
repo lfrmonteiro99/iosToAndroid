@@ -227,7 +227,9 @@ AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="${AGENT_ENGI
   >> "$LOG_DIR/implement-$ISSUE.log" 2>&1; AGENT_RC=$?
 
 if ! verdict_readable "$VERDICT_FILE"; then
-  if ! no_verdict_is_real_failure main "$AGENT_RC"; then
+  # F6: o marker é escrito em ${TEAM_SLOT:-main} (impl1..N) — ler "main" aqui era
+  # ler o ficheiro do slot errado e escalar corridas degradadas indevidamente.
+  if ! no_verdict_is_real_failure "${TEAM_SLOT:-main}" "$AGENT_RC"; then
     NV=$(bump_noverdict "$ISSUE")
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — $NV seguidas — issue volta a $PREV_STATE"
     if [ "$NV" -ge "$TEAM_DEFER_AFTER" ]; then

@@ -256,8 +256,17 @@ agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 # Um PR que espera pela quota e recuperavel; um merge errado nao.
 #
 # Com TEAM_REVIEW_HERMES=1 assume mesmo assim, para quem preferir escoar a fila.
+#
+# ALIBABA NO REVIEWER: tambem OPT-IN (TEAM_REVIEW_ALIBABA, omissao 0), pela mesma
+# razao — o pool nao esta medido neste papel e o reviewer e o unico portao antes
+# do main. Verificado ANTES do bloco hermes e sem fall-through: com ambos a 1 e o
+# pool alibaba disponivel, a review vai em alibaba (decisao explicita, nao cascata).
 REVIEW_ENGINE="claude"
-if [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
+if [ "${TEAM_REVIEW_ALIBABA:-0}" = "1" ] \
+   && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && alibaba_available; then
+  REVIEW_ENGINE="alibaba"
+  log "subscricao indisponivel e TEAM_REVIEW_ALIBABA=1 — a julgar no pool alibaba"
+elif [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
    && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && hermes_available; then
   REVIEW_ENGINE="hermes"
   log "subscricao indisponivel e TEAM_REVIEW_HERMES=1 — a julgar em hermes"
@@ -298,7 +307,9 @@ de um motor que consiga julgá-lo." >/dev/null 2>&1 || true
 }
 
 if ! verdict_readable "$VERDICT_FILE"; then
-  if ! no_verdict_is_real_failure main "$AGENT_RC"; then
+  # F6: o marker é escrito em ${TEAM_SLOT:-main} (rev1..N) — ler "main" aqui era
+  # ler o ficheiro do slot errado e escalar corridas degradadas indevidamente.
+  if ! no_verdict_is_real_failure "${TEAM_SLOT:-main}" "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — PR fica para nova review"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: corrida degradada, sem veredicto
 
