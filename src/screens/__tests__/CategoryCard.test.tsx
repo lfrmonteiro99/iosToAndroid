@@ -25,6 +25,8 @@ function renderCard(count: number, overrides?: Partial<React.ComponentProps<type
       cardWidth={CARD_WIDTH}
       onPress={onPress}
       onLaunchApp={onLaunchApp}
+      badgeCounts={{}}
+      showNotifications
       {...overrides}
     />
   );

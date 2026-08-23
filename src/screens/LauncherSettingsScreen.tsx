@@ -393,6 +393,35 @@ export function LauncherSettingsScreen() {
         />
       </CupertinoListSection>
 
+      {/* ── App Library (#602) ─────────────────────────────────── */}
+      <CupertinoListSection header="App Library">
+        <CupertinoListTile
+          title="Show Notifications"
+          leading={{ name: 'notifications', color: '#fff', backgroundColor: '#FF3B30' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.appLibraryShowNotifications}
+              onValueChange={(v) => update('appLibraryShowNotifications', v)}
+              testID="toggle-appLibraryShowNotifications"
+            />
+          }
+        />
+        <CupertinoListTile
+          title="Show Suggestions"
+          leading={{ name: 'apps', color: '#fff', backgroundColor: '#5856D6' }}
+          showChevron={false}
+          isLast
+          trailing={
+            <CupertinoSwitch
+              value={settings.appLibraryShowSuggestions}
+              onValueChange={(v) => update('appLibraryShowSuggestions', v)}
+              testID="toggle-appLibraryShowSuggestions"
+            />
+          }
+        />
+      </CupertinoListSection>
+
       {/* ── Hidden Apps (#606) ─────────────────────────────────── */}
       {/* Só existe quando há algo escondido: uma secção permanentemente vazia
           seria ruído no ecrã, e o utilizador só chega aqui depois de esconder. */}
