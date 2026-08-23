@@ -7,6 +7,27 @@ import { FindMyScreen } from '../FindMyScreen';
 import type { AppNavigationProp } from '../../navigation/types';
 import * as ContactsStore from '../../store/ContactsStore';
 
+// expo-notifications is mocked locally (same shape as RemindersScreen.test.tsx)
+// so no shared jest.setup mock changes — ClockScreen's alarm tests keep their
+// own mock untouched.
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', canAskAgain: true })),
+  scheduleNotificationAsync: jest.fn(() => Promise.resolve('notification-id')),
+  cancelScheduledNotificationAsync: jest.fn(() => Promise.resolve()),
+  SchedulableTriggerInputTypes: { TIME_INTERVAL: 'timeInterval', DATE: 'date', CALENDAR: 'calendar' },
+}));
+
+// useAlert() resolves to a no-op in AllProviders (test-utils does not mount
+// AlertProvider), so capture it here to assert what the user is told.
+const mockAlert = jest.fn();
+jest.mock('../../components', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const actual = jest.requireActual('../../components');
+  return { ...actual, useAlert: () => mockAlert };
+});
+
 // AllProviders (in test-utils) already wraps with ThemeProvider,
 // DeviceProvider, LocationProvider and ContactsProvider, so we render
 // FindMyScreen directly. The permission state defaults to 'granted' in
@@ -422,5 +443,119 @@ describe('FindMyScreen — Items tab (tracked inventory)', () => {
     const itemsTabView = screen.getByTestId('items-tab');
     expect(within(itemsTabView).queryByText(/Find|Locate|distance/i)).toBeNull();
     expect(within(itemsTabView).queryByLabelText(/locate|find/i)).toBeNull();
+  });
+});
+
+// ─── Play Sound on this device (issue #266) ──────────────────────────────────
+// The feature is honestly scoped to the CURRENT device: without a backend and a
+// companion device there is nothing else to reach. These tests pin the
+// permission-granted path, the permission-denied path (which must not schedule
+// anything, and must not fail silently), and the scoping guard.
+describe('FindMyScreen — Play Sound (issue #266)', () => {
+  const notif = jest.requireMock('expo-notifications');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    notif.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    notif.requestPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    notif.scheduleNotificationAsync.mockResolvedValue('notif-id');
+    mockAlert.mockClear();
+  });
+
+  it('shows a "Play Sound" row on the Devices tab', async () => {
+    const { getByText } = renderFindMy();
+    await waitFor(() => expect(getByText('Play Sound')).toBeTruthy());
+  });
+
+  it('pressing it with permission granted schedules a notification with sound and confirms', async () => {
+    const { getByText } = renderFindMy();
+    fireEvent.press(await waitFor(() => getByText('Play Sound')));
+
+    await waitFor(() => expect(notif.scheduleNotificationAsync).toHaveBeenCalledTimes(1));
+    const arg = notif.scheduleNotificationAsync.mock.calls[0][0];
+    expect(arg.content.sound).toBe(true);
+    expect(arg.trigger.type).toBe('timeInterval');
+    expect(arg.trigger.seconds).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(mockAlert.mock.calls.some(([title]) => title === 'Playing Sound')).toBe(true),
+    );
+  });
+
+  it('does not re-prompt when permission is already granted', async () => {
+    const { getByText } = renderFindMy();
+    fireEvent.press(await waitFor(() => getByText('Play Sound')));
+    await waitFor(() => expect(notif.scheduleNotificationAsync).toHaveBeenCalled());
+    expect(notif.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it('requests permission when undetermined and schedules once granted', async () => {
+    notif.getPermissionsAsync.mockResolvedValue({ status: 'undetermined', canAskAgain: true });
+    const { getByText } = renderFindMy();
+    fireEvent.press(await waitFor(() => getByText('Play Sound')));
+
+    await waitFor(() => expect(notif.requestPermissionsAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(notif.scheduleNotificationAsync).toHaveBeenCalledTimes(1));
+  });
+
+  it('with permission denied it schedules nothing and explains why (no silent no-op)', async () => {
+    notif.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    notif.requestPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+
+    const { getByText } = renderFindMy();
+    fireEvent.press(await waitFor(() => getByText('Play Sound')));
+
+    await waitFor(() =>
+      expect(mockAlert.mock.calls.some(([, message]) => /notification/i.test(String(message)))).toBe(
+        true,
+      ),
+    );
+    expect(notif.scheduleNotificationAsync).not.toHaveBeenCalled();
+    // Inverse of the fix: the success confirmation must stay hidden.
+    expect(mockAlert.mock.calls.some(([title]) => title === 'Playing Sound')).toBe(false);
+  });
+
+  it('a scheduling failure surfaces an alert instead of being swallowed', async () => {
+    notif.scheduleNotificationAsync.mockRejectedValue(new Error('boom'));
+    const { getByText } = renderFindMy();
+    fireEvent.press(await waitFor(() => getByText('Play Sound')));
+
+    await waitFor(() =>
+      expect(mockAlert.mock.calls.some(([title]) => /Could Not Play Sound/i.test(String(title)))).toBe(
+        true,
+      ),
+    );
+    expect(mockAlert.mock.calls.some(([title]) => title === 'Playing Sound')).toBe(false);
+  });
+
+  it('a double press schedules exactly one notification (no duplicate alert)', async () => {
+    const { getByText } = renderFindMy();
+    const row = await waitFor(() => getByText('Play Sound'));
+    fireEvent.press(row);
+    fireEvent.press(row);
+
+    await waitFor(() => expect(notif.scheduleNotificationAsync).toHaveBeenCalled());
+    expect(notif.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('the row is hidden while location permission is not granted', async () => {
+    const loc = jest.requireMock('expo-location');
+    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValueOnce({ status: 'denied' });
+    const { getByText, queryByText } = renderFindMy();
+    await waitFor(() => expect(getByText('Grant Location Permission')).toBeTruthy());
+    expect(queryByText('Play Sound')).toBeNull();
+  });
+
+  it('no tab offers to play a sound on another person\u2019s or another device (regression guard)', async () => {
+    const { getByText, queryByText } = renderFindMy();
+    await waitFor(() => expect(getByText('Play Sound')).toBeTruthy());
+    // The only sound affordance is scoped to this device.
+    expect(queryByText(/Play Sound on/i)).toBeNull();
+
+    fireEvent.press(getByText('People'));
+    await waitFor(() => expect(queryByText('Play Sound')).toBeNull());
+
+    fireEvent.press(getByText('Items'));
+    await waitFor(() => expect(queryByText('Play Sound')).toBeNull());
   });
 });
