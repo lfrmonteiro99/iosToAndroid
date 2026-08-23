@@ -194,6 +194,28 @@ export interface SettingsState {
    * and remain launchable from the home screen.
    */
   searchShowInLibrary: boolean;
+  /**
+   * Dark Mode «Automatic» with a custom schedule (iOS «Display & Brightness →
+   * Appearance → Automatic → Custom Schedule»). When true, the launcher follows
+   * its own Light Until / Dark Until hours instead of the system color scheme.
+   * Only meaningful while `mode` is 'system' (see ThemeContext.resolveIsDark).
+   * Default false — the pre-existing behaviour (follow the OS) is preserved.
+   */
+  darkModeAutomatic: boolean;
+  /**
+   * "Light Until" hour for the custom Dark Mode schedule, 'HH:MM' 24h. The
+   * launcher renders light from midnight up to (and excluding) this instant,
+   * then dark until `darkModeDarkUntil` the next morning. Default '07:00'
+   * matches the iOS custom-schedule default of "Light until 7:00 AM".
+   */
+  darkModeLightUntil: string;
+  /**
+   * "Dark Until" hour for the custom Dark Mode schedule, 'HH:MM' 24h. The
+   * launcher renders dark from `darkModeLightUntil` up to (and excluding) this
+   * instant, then light again. Default '19:00' matches the iOS default of
+   * "Dark until 7:00 PM".
+   */
+  darkModeDarkUntil: string;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -277,6 +299,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   searchShowSuggestions: true,
   searchShowInSearch: true,
   searchShowInLibrary: true,
+  darkModeAutomatic: false,
+  darkModeLightUntil: '07:00',
+  darkModeDarkUntil: '19:00',
 };
 
 interface SettingsContextValue {
