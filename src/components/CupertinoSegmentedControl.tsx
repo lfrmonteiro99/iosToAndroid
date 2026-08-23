@@ -14,12 +14,14 @@ interface CupertinoSegmentedControlProps {
   values: string[];
   selectedIndex: number;
   onChange?: (index: number) => void;
+  testID?: string;
 }
 
 export function CupertinoSegmentedControl({
   values,
   selectedIndex,
   onChange,
+  testID,
 }: CupertinoSegmentedControlProps) {
   const { theme, typography, shadows } = useTheme();
   const { colors } = theme;
@@ -57,6 +59,7 @@ export function CupertinoSegmentedControl({
 
   return (
     <View
+      testID={testID}
       style={[
         styles.container,
         { backgroundColor: colors.systemGray5 },
