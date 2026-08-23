@@ -363,6 +363,17 @@ export function LauncherSettingsScreen() {
           }
         />
         <CupertinoListTile
+          title="Show Status Bar"
+          leading={{ name: 'cellular', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.statusBarVisible}
+              onValueChange={(v) => update('statusBarVisible', v)}
+            />
+          }
+        />
+        <CupertinoListTile
           title="Show App Names"
           leading={{ name: 'text-outline', color: '#fff', backgroundColor: '#8E8E93' }}
           showChevron={false}
