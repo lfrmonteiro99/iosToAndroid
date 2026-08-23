@@ -10,6 +10,7 @@ import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
 const LIBRARY_ONLY_KEY = '@iostoandroid/library_only';
+const HIDDEN_APPS_KEY = '@iostoandroid/hidden_apps';
 const APPS_INDEX_KEY = '@iostoandroid/apps_index';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
 const RECENTS_LEGACY_KEY = '@recent_apps';
@@ -84,6 +85,14 @@ interface AppsState {
    * the user-facing equivalent so behaviour is unified.
    */
   libraryOnlyApps: string[];
+  /**
+   * Packages hidden from the home screen AND from every browsable list in the
+   * App Library (#606 — the iOS "hide app" behaviour). The app stays installed
+   * and launchable through search, unlike libraryOnlyApps which only keeps it
+   * off the home grid. The two sets are independent on purpose: unhiding must
+   * not silently undo a "Remove from Home".
+   */
+  hiddenApps: string[];
 }
 
 export interface IconCacheRebuildProgress {
@@ -103,6 +112,17 @@ interface AppsContextValue {
    * always populates it.
    */
   libraryOnlyApps?: string[];
+  /**
+   * Packages hidden via hideApp() (#606). Excluded from nonDockApps and from
+   * visibleApps, but still present in `apps` so search can launch them.
+   */
+  hiddenApps: string[];
+  /**
+   * `apps` minus the hidden packages — what the App Library shows in its
+   * categories and Recently Added / Suggestions strips. Search deliberately
+   * keeps reading `apps` so a hidden app remains launchable.
+   */
+  visibleApps: InstalledApp[];
   recentPackages: string[];
   recentApps: RecentApp[];
   isLoading: boolean;
@@ -113,6 +133,10 @@ interface AppsContextValue {
   launchApp: (packageName: string) => Promise<boolean>;
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
+  /** Hide the package from the home screen and the App Library's browsable lists (#606). */
+  hideApp: (packageName: string) => void;
+  /** Undo hideApp() for the package (#606). */
+  unhideApp: (packageName: string) => void;
   addToDock: (packageName: string) => void;
   removeFromDock: (packageName: string) => void;
   removeFromRecents: (packageName: string) => void;
@@ -202,6 +226,7 @@ export function AppsProvider({
     dockApps: DEFAULT_DOCK,
     isLoading: true,
     libraryOnlyApps: [],
+    hiddenApps: [],
   });
   const [isDefault, setIsDefault] = useState(false);
   const [recentApps, setRecentApps] = useState<RecentApp[]>([]);
@@ -259,6 +284,26 @@ export function AppsProvider({
 
   const persistLibraryOnly = useCallback((pkgs: string[]) => {
     AsyncStorage.setItem(LIBRARY_ONLY_KEY, JSON.stringify(pkgs));
+  }, []);
+
+  // Load the hidden-apps set (#606). Persisted under its own key, separate from
+  // both the layout and the library-only set, so resetting either one does not
+  // silently reveal apps the user chose to hide.
+  useEffect(() => {
+    (async () => {
+      const raw = await AsyncStorage.getItem(HIDDEN_APPS_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setState(prev => ({ ...prev, hiddenApps: parsed.filter((p): p is string => typeof p === 'string') }));
+        }
+      } catch (e) { logger.warn('AppsStore', 'failed to parse hidden apps set', e); }
+    })();
+  }, []);
+
+  const persistHidden = useCallback((pkgs: string[]) => {
+    AsyncStorage.setItem(HIDDEN_APPS_KEY, JSON.stringify(pkgs));
   }, []);
 
   const addToRecents = useCallback(async (packageName: string) => {
@@ -504,6 +549,26 @@ export function AppsProvider({
     });
   }, [persist, persistLibraryOnly]);
 
+  const hideApp = useCallback((packageName: string) => {
+    setState(prev => {
+      // Idempotent: a double long-press must not push the package twice, and
+      // must not rewrite storage for a no-op.
+      if (prev.hiddenApps.includes(packageName)) return prev;
+      const hiddenApps = [...prev.hiddenApps, packageName];
+      persistHidden(hiddenApps);
+      return { ...prev, hiddenApps };
+    });
+  }, [persistHidden]);
+
+  const unhideApp = useCallback((packageName: string) => {
+    setState(prev => {
+      if (!prev.hiddenApps.includes(packageName)) return prev;
+      const hiddenApps = prev.hiddenApps.filter(p => p !== packageName);
+      persistHidden(hiddenApps);
+      return { ...prev, hiddenApps };
+    });
+  }, [persistHidden]);
+
   const addToDock = useCallback((packageName: string) => {
     setState(prev => {
       if (prev.dockApps.length >= 4 || prev.dockApps.includes(packageName)) return prev;
@@ -588,8 +653,16 @@ export function AppsProvider({
   );
 
   const nonDockApps = useMemo(() =>
-    state.allApps.filter(a => !state.dockApps.includes(a.packageName) && !state.libraryOnlyApps.includes(a.packageName)),
-    [state.allApps, state.dockApps, state.libraryOnlyApps],
+    state.allApps.filter(a =>
+      !state.dockApps.includes(a.packageName)
+      && !state.libraryOnlyApps.includes(a.packageName)
+      && !state.hiddenApps.includes(a.packageName)),
+    [state.allApps, state.dockApps, state.libraryOnlyApps, state.hiddenApps],
+  );
+
+  const visibleApps = useMemo(() =>
+    state.allApps.filter(a => !state.hiddenApps.includes(a.packageName)),
+    [state.allApps, state.hiddenApps],
   );
 
   // Derive recentPackages (string[]) for backward compatibility
@@ -601,12 +674,16 @@ export function AppsProvider({
     dockApps,
     nonDockApps,
     libraryOnlyApps: state.libraryOnlyApps,
+    hiddenApps: state.hiddenApps,
+    visibleApps,
     recentPackages,
     recentApps,
     isLoading: state.isLoading,
     launchApp,
     addToHome,
     removeFromHome,
+    hideApp,
+    unhideApp,
     addToDock,
     removeFromDock,
     removeFromRecents,
@@ -621,7 +698,7 @@ export function AppsProvider({
     isRebuildingIconCache,
     iconCacheRebuildProgress,
     rebuildIconCache,
-  }), [state, dockApps, nonDockApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
+  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, hideApp, unhideApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }

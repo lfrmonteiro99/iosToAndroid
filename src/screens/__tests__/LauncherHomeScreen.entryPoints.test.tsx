@@ -51,6 +51,10 @@ function mockLoadedApps(overrides: Partial<ReturnType<typeof AppsStore.useApps>>
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    hiddenApps: [],
+    visibleApps: [],
+    hideApp: jest.fn(),
+    unhideApp: jest.fn(),
     ...overrides,
   } as ReturnType<typeof AppsStore.useApps>);
 }
