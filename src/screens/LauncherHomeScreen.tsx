@@ -511,10 +511,13 @@ const AppIcon = React.memo(function AppIcon({
 interface PageDotsProps {
   total: number;
   current: number;
+  show: boolean;
 }
 
-function PageDots({ total, current }: PageDotsProps) {
-  if (total <= 1) return null;
+function PageDots({ total, current, show }: PageDotsProps) {
+  // iOS «Home Screen & Dock → Show Page Dots»: escondido por setting mesmo
+  // quando há paginação, ou quando há só uma página.
+  if (total <= 1 || !show) return null;
   return (
     <View style={styles.pageDotsRow}>
       {Array.from({ length: total }).map((_, i) => (
@@ -1677,7 +1680,7 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Page dots + Search label (iOS 16/17 style)                         */}
       {/* ---------------------------------------------------------------- */}
-      <PageDots total={totalPages} current={currentPage} />
+      <PageDots total={totalPages} current={currentPage} show={settings.showPageDots} />
       <Pressable
         style={styles.searchLabel}
         onPress={isJiggling ? exitJiggle : () => navigation.navigate('SpotlightSearch')}

@@ -90,6 +90,13 @@ export interface SettingsState {
   /** Whether app names render under grid icons (issue #503). */
   showIconLabels: boolean;
   /**
+   * Whether the home-screen page dots (iOS «Home Screen & Dock → Show Page
+   * Dots») render when there is more than one page. Independent of
+   * `showIconLabels` — one hides the app-name text, the other hides the
+   * pagination indicator. Default true (iOS shows dots unless toggled off).
+   */
+  showPageDots: boolean;
+  /**
    * Whether the icon-expand animation plays when opening an app (§6.3).
    * Independent of `reduceMotion`: turning this off skips only the
    * icon-expand overlay, not other motion in the app. `reduceMotion` (or,
@@ -189,6 +196,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   gridRows: 6,
   iconSizeScale: 1.0,
   showIconLabels: true,
+  showPageDots: true,
   appLaunchAnimation: true,
   appLaunchDurationMs: 280,
   iconShape: 'squircle',
