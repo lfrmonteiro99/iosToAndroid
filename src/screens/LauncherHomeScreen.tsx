@@ -1159,43 +1159,13 @@ export function LauncherHomeScreen() {
     });
   }, [openFolder, currentPage]);
 
-  // Non-Android fallback
-  if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
-    return <NonAndroidFallback />;
-  }
-
-  // Loading
-  if (isLoading) {
-    return (
-      <View style={[styles.root, styles.centered, { backgroundColor: '#1C1C1E' }]}>
-        <CupertinoActivityIndicator />
-      </View>
-    );
-  }
-
-  // Wallpaper gradient
-  const wallpaperColor =
-    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
-  const wallpaperDark = darkenHex(wallpaperColor, 0.28);
-
-  const WallpaperContent =
-    settings.wallpaperIndex === 6 && customWallpaperUri ? (
-      <ImageBackground
-        source={{ uri: customWallpaperUri }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-      </ImageBackground>
-    ) : (
-      <LinearGradient
-        colors={[wallpaperColor, wallpaperDark]}
-        style={StyleSheet.absoluteFillObject}
-      />
-    );
-
-  // Build display items: virtual built-in apps + real apps + folders
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Build display items: virtual built-in apps + real apps + folders.
+  // Moved ABOVE the early returns deliberately (#503 reviewer follow-up):
+  // this useMemo — together with `pages` and the clamp effect below — used to
+  // sit after the isLoading return, so on a render that took the loading path
+  // the hooks were skipped while on the loaded path they ran. That's a
+  // different hook count between renders → "Rendered more hooks than during
+  // the previous render". Same house rule as canSpotlight above.
   const gridItems = useMemo((): GridItem[] => {
     const items: GridItem[] = [];
     const appsInFolders = new Set(folders.flatMap(f => f.apps));
@@ -1239,7 +1209,6 @@ export function LauncherHomeScreen() {
   // size (appsPerPage derives from settings, issue #503) re-packs pages
   // without ever reordering an app — there is no per-page stored position to
   // migrate (issue #503).
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const pages: GridItem[][] = useMemo(() => {
     const out: GridItem[][] = [];
     for (let i = 0; i < gridItems.length; i += appsPerPage) {
@@ -1261,7 +1230,6 @@ export function LauncherHomeScreen() {
   // pager ficava além do conteúdo até ao próximo scroll. Clampar página e
   // offset juntos. Sem apps suficientes para encolher, currentPage (0) <
   // totalPages e o efeito é no-op.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (currentPage >= totalPages) {
       const lastPage = Math.max(0, totalPages - 1);
@@ -1269,6 +1237,41 @@ export function LauncherHomeScreen() {
       scrollViewRef.current?.scrollTo({ x: lastPage * SCREEN_WIDTH, animated: false });
     }
   }, [currentPage, totalPages]);
+
+  // Non-Android fallback
+  if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
+    return <NonAndroidFallback />;
+  }
+
+  // Loading
+  if (isLoading) {
+    return (
+      <View style={[styles.root, styles.centered, { backgroundColor: '#1C1C1E' }]}>
+        <CupertinoActivityIndicator />
+      </View>
+    );
+  }
+
+  // Wallpaper gradient
+  const wallpaperColor =
+    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
+  const wallpaperDark = darkenHex(wallpaperColor, 0.28);
+
+  const WallpaperContent =
+    settings.wallpaperIndex === 6 && customWallpaperUri ? (
+      <ImageBackground
+        source={{ uri: customWallpaperUri }}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode="cover"
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
+      </ImageBackground>
+    ) : (
+      <LinearGradient
+        colors={[wallpaperColor, wallpaperDark]}
+        style={StyleSheet.absoluteFillObject}
+      />
+    );
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;

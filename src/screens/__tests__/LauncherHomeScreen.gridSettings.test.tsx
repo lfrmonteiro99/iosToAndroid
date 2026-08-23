@@ -189,4 +189,28 @@ describe('LauncherHomeScreen grid density settings (#503)', () => {
     expect(height).toBe(5 + expected.iconSize);
     expect(height).toBeLessThan(computeLauncherGridGeometry(width, 4, 1).iconSize);
   });
+
+  it('does not throw "Rendered more hooks" when isLoading flips true→false (reviewer regression)', async () => {
+    // Reviewer follow-up (#599 / #503): gridItems / pages / clamp useEffect
+    // used to sit BELOW the isLoading early return, gated by
+    // `eslint-disable-next-line react-hooks/rules-of-hooks`. On any render that
+    // took the loading path those hooks were skipped, so the isLoading:true →
+    // false transition called a different number of hooks than the previous
+    // render and React threw "Rendered more hooks than during the previous
+    // render". Hoisting those three hooks above the early returns must keep the
+    // hook count identical across the transition.
+    mockApps({ isLoading: true });
+    const { rerender, getByLabelText } = render(<LauncherHomeScreen />);
+
+    // Flip the mock to the loaded state with at least one real app present.
+    mockApps({
+      isLoading: false,
+      nonDockApps: [{ name: 'SomeApp', packageName: 'com.example.someapp', icon: '', isSystem: false }],
+    });
+    // Must NOT throw the rules-of-hooks crash on re-render after the flip.
+    expect(() => rerender(<LauncherHomeScreen />)).not.toThrow();
+
+    // And the loaded grid must now be present (built-in Phone app always shows).
+    await waitFor(() => expect(getByLabelText('Open Phone')).toBeTruthy(), { timeout: 3000 });
+  });
 });
