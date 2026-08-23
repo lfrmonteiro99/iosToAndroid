@@ -35,6 +35,7 @@ import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
 import { markProcessStartFromAge } from './src/utils/perfMetrics';
+import { useFocusSchedule } from './src/hooks/useFocusSchedule';
 
 // Cold start (#517): a marca de origem é a idade do processo lida do lado
 // nativo, não o instante em que este módulo é avaliado — assim o número inclui
@@ -53,6 +54,11 @@ function AppContent() {
   const { settings } = useSettings();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [isLocked, setIsLocked] = useState(true);
+
+  // Agendamento de Focus por horário (#616): ativa/desativa o Work nos limites
+  // do intervalo definido em Settings. Montado aqui — um único ponto de verdade
+  // para toda a app, independente de qual ecrã está montado.
+  useFocusSchedule();
 
   // Inter / Inter Display (#474, sub-issue de #464 — substituto sancionado da
   // SF Pro, cuja licença restringe o uso a mocks para SO Apple). Uma falha no
