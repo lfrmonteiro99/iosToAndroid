@@ -22,6 +22,11 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -60,6 +65,20 @@ class LauncherModule : Module() {
 @Volatile private var instance: LauncherModule? = null
 @Volatile var activeRecognizer: SpeechRecognizer? = null
 
+        /** Forward speech recognition events to JavaScript (see Events below). */
+        fun emitSpeech(name: String, text: String) {
+            try {
+                val bundle = Bundle().apply { putString("text", text) }
+                instance?.sendEvent(name, bundle)
+            } catch (_: Throwable) { /* AppContext may not be ready */ }
+        }
+    }
+
+    // Speech recognition state. SpeechRecognizer must be created on the main
+    // looper; we post start/stop onto a main-looper Handler to honour that.
+    private var speechRecognizer: SpeechRecognizer? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
         /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
          * by plugins/withLauncherIntent.js) to forward events to JavaScript.
@@ -80,7 +99,12 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
+<<<<<<< Updated upstream
         Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
+=======
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed",
+            "onSpeechResult", "onSpeechPartial", "onSpeechError")
+>>>>>>> Stashed changes
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -290,6 +314,7 @@ class LauncherModule : Module() {
             true
         }
 
+<<<<<<< Updated upstream
         // ── Performance (§7, #517) ───────────────────────────────────────
 
         /**
@@ -310,6 +335,63 @@ class LauncherModule : Module() {
             }
         }
 
+=======
+        // ── Speech recognition (mic → text), native Android SpeechRecognizer ──
+        // The Siri screen uses this as the voice-input half of its assistant;
+        // the text-to-speech (voice output) half is handled in JS via expo-speech.
+        // Both keep the iOS-style UI as a mask — the system voice engines run
+        // underneath but never take over the screen.
+
+        AsyncFunction("startSpeechRecognition") {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                LauncherModule.emitSpeech("onSpeechError", "Speech recognition not available on this device")
+                return@AsyncFunction false
+            }
+            mainHandler.post {
+                if (speechRecognizer == null) {
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                }
+                val listener = object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onError(error: Int) {
+                        LauncherModule.emitSpeech("onSpeechError", "error_$error")
+                    }
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val text = matches?.firstOrNull() ?: ""
+                        LauncherModule.emitSpeech("onSpeechResult", text)
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val text = matches?.firstOrNull() ?: ""
+                        if (text.isNotEmpty()) LauncherModule.emitSpeech("onSpeechPartial", text)
+                    }
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                }
+                speechRecognizer?.setRecognitionListener(listener)
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                }
+                speechRecognizer?.startListening(intent)
+            }
+            true
+        }
+
+        AsyncFunction("stopSpeechRecognition") {
+            mainHandler.post {
+                speechRecognizer?.stopListening()
+            }
+            true
+        }
+
+
+>>>>>>> Stashed changes
         // ── Wi-Fi ────────────────────────────────────────────────────────
 
         AsyncFunction("getWifiInfo") {

@@ -6,12 +6,17 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+<<<<<<< Updated upstream
   Platform,
   PermissionsAndroid,
   Linking,
+=======
+  ActivityIndicator,
+>>>>>>> Stashed changes
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Speech from 'expo-speech';
 
 import { useApps } from '../store/AppsStore';
 import { useContacts, Contact } from '../store/ContactsStore';
@@ -20,9 +25,17 @@ import { parseCommand } from '../assistant/commandParser';
 import { speak, stopSpeaking } from '../assistant/speech';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+<<<<<<< Updated upstream
 import { createQuickAlarm } from '../utils/alarmScheduling';
 import { useAlert, SiriWaveform } from '../components';
 import { withAutoLockSuppressed } from '../utils/permissions';
+=======
+import LauncherModule, {
+  addSpeechResultListener,
+  addSpeechPartialListener,
+  addSpeechErrorListener,
+} from '../../modules/launcher-module/src';
+>>>>>>> Stashed changes
 
 const GREETING = 'What can I help you with?';
 const LISTENING = 'Listening…';
@@ -85,9 +98,13 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
   const [text, setText] = useState('');
   const [response, setResponse] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
+<<<<<<< Updated upstream
   // Availability is per-device — cached once, then used to disable the mic if
   // the platform has no on-device recognizer (e.g. non-Android emulators).
   const [voiceAvailable, setVoiceAvailable] = useState<boolean | null>(null);
+=======
+  const [partial, setPartial] = useState('');
+>>>>>>> Stashed changes
   const inputRef = useRef<TextInput>(null);
 
   const findApp = useCallback(
@@ -100,48 +117,66 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
     [apps],
   );
 
+<<<<<<< Updated upstream
   const runCommand = useCallback((input: string) => {
     if (input.trim().length === 0) return;
     const command = parseCommand(input);
+=======
+  // Speak a response aloud using the device's native TTS engine (expo-speech
+  // → Android TextToSpeech / iOS AVSpeechSynthesis). Keeps the iOS-style UI as
+  // the mask; the system voice runs underneath and never takes over the screen.
+  const speak = useCallback((message: string) => {
+    Speech.stop();
+    Speech.speak(message, { language: 'en-US', pitch: 1.0, rate: 1.0 });
+  }, []);
+
+  // Route a recognized command string through the same parser the text input
+  // uses, then speak + show the response. The single source of truth for what
+  // the assistant can do lives in parseCommand.
+  const handleCommand = useCallback((input: string) => {
+    const trimmed = input.trim();
+    if (trimmed.length === 0) return;
+
+    const command = parseCommand(trimmed);
+    let reply: string;
+>>>>>>> Stashed changes
 
     switch (command.type) {
       case 'OPEN_APP': {
         const app = findApp(command.appName);
         if (!app) {
-          setResponse(`Couldn't find an app called "${command.appName}".`);
-          return;
+          reply = `Couldn't find an app called "${command.appName}".`;
+          break;
         }
-        setResponse(`Opening ${app.name}.`);
-        // launchApp is a no-op off Android and can reject if the package
-        // vanished between the scan and the tap; surface it instead of
-        // letting an unhandled rejection escape the handler.
+        reply = `Opening ${app.name}.`;
         launchApp(app.packageName).catch((e) => {
           logger.warn('SiriScreen', 'launchApp failed', e);
-          setResponse(`Couldn't open ${app.name}.`);
+          reply = `Couldn't open ${app.name}.`;
         });
-        return;
+        break;
       }
       case 'CALL_CONTACT': {
         const contact = findContact(contacts, command.contactName);
         if (!contact) {
-          setResponse(`Couldn't find a contact called "${command.contactName}".`);
-          return;
+          reply = `Couldn't find a contact called "${command.contactName}".`;
+          break;
         }
-        setResponse(`Calling ${fullName(contact) || contact.phone}.`);
+        reply = `Calling ${fullName(contact) || contact.phone}.`;
         navigation.navigate('CallScreen', { name: fullName(contact), number: contact.phone });
-        return;
+        break;
       }
       case 'SEND_MESSAGE': {
         const contact = findContact(contacts, command.contactName);
         if (!contact) {
-          setResponse(`Couldn't find a contact called "${command.contactName}".`);
-          return;
+          reply = `Couldn't find a contact called "${command.contactName}".`;
+          break;
         }
-        setResponse(`Messaging ${fullName(contact) || contact.phone}.`);
+        reply = `Messaging ${fullName(contact) || contact.phone}.`;
         navigation.navigate('Conversation', { address: contact.phone });
-        return;
+        break;
       }
       case 'WHAT_TIME':
+<<<<<<< Updated upstream
         setResponse(`It's ${formatAssistantTime(new Date())}`);
         return;
       case 'SET_ALARM': {
@@ -159,11 +194,19 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           });
         return;
       }
+=======
+        reply = `It's ${formatAssistantTime(new Date())}`;
+        break;
+      case 'SET_ALARM':
+        reply = `Setting alarms ${NOT_SUPPORTED.replace("That's ", '')}`;
+        break;
+>>>>>>> Stashed changes
       case 'UNRECOGNIZED':
       default:
-        setResponse(NOT_SUPPORTED);
-        return;
+        reply = NOT_SUPPORTED;
+        break;
     }
+<<<<<<< Updated upstream
   }, [findApp, contacts, launchApp, navigation]);
 
   const handleSubmit = useCallback(() => {
@@ -311,6 +354,74 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
   }, [response]);
 
   useEffect(() => () => stopSpeaking(), []);
+=======
+
+    setResponse(reply);
+    speak(reply);
+  }, [findApp, contacts, launchApp, navigation, speak]);
+
+  // Native speech-recognition events → drive the iOS-style assistant.
+  useEffect(() => {
+    const offResult = addSpeechResultListener((recognized: string) => {
+      setListening(false);
+      setPartial('');
+      handleCommand(recognized);
+    });
+    const offPartial = addSpeechPartialListener((p: string) => {
+      setPartial(p);
+    });
+    const offError = addSpeechErrorListener((code: string) => {
+      setListening(false);
+      setPartial('');
+      logger.warn('SiriScreen', 'speech error', code);
+      if (code === 'error_7') {
+        // ERROR_NO_MATCH / recognition stopped — stay silent, let the user retry.
+        return;
+      }
+      const msg = "I didn't catch that.";
+      setResponse(msg);
+      speak(msg);
+    });
+    return () => {
+      offResult();
+      offPartial();
+      offError();
+      LauncherModule.stopSpeechRecognition();
+    };
+  }, [handleCommand, speak]);
+
+  const startListening = useCallback(async () => {
+    // Microphone permission is part of requestAllPermissions(); if not yet
+    // granted, the native recognizer will error and we fall back to text.
+    setResponse(null);
+    setPartial('');
+    setListening(true);
+    const ok = await LauncherModule.startSpeechRecognition();
+    if (!ok) {
+      setListening(false);
+      const msg = "Microphone isn't available. Type your request below.";
+      setResponse(msg);
+      speak(msg);
+      inputRef.current?.focus();
+    }
+  }, [speak]);
+
+  const stopListening = useCallback(() => {
+    setListening(false);
+    LauncherModule.stopSpeechRecognition();
+  }, []);
+
+  // Press-and-hold the mic: talk while held, release to stop.
+  const handleMicPressIn = useCallback(() => { startListening(); }, [startListening]);
+  const handleMicPressOut = useCallback(() => { stopListening(); }, [stopListening]);
+
+  const handleSubmit = useCallback(() => {
+    const input = text;
+    if (input.trim().length === 0) return;
+    setText('');
+    handleCommand(input);
+  }, [text, handleCommand]);
+>>>>>>> Stashed changes
 
   const styles = useMemo(() => createStyles(), []);
   const micDisabled = voiceAvailable === false;
@@ -319,6 +430,8 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
     : micDisabled
       ? colors.tertiaryLabel
       : colors.systemBlue;
+
+  const displayText = listening ? (partial || 'Listening…') : (response ?? GREETING);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
@@ -340,11 +453,19 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         contentContainerStyle={styles.responseContent}
         keyboardShouldPersistTaps="handled"
       >
+        {listening ? (
+          <ActivityIndicator
+            size="large"
+            color={colors.systemBlue}
+            style={styles.listeningIndicator}
+            accessibilityLabel="Listening"
+          />
+        ) : null}
         <Text
           style={[typography.title3, styles.responseText, { color: colors.label }]}
           accessibilityLabel="Siri response"
         >
-          {response ?? GREETING}
+          {displayText}
         </Text>
       </ScrollView>
 
@@ -379,6 +500,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           editable={!listening}
         />
         <Pressable
+<<<<<<< Updated upstream
           onPress={toggleListening}
           disabled={micDisabled}
           hitSlop={10}
@@ -391,6 +513,23 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           ]}
         >
           <Ionicons name={listening ? 'stop-circle' : 'mic'} size={28} color={micColor} />
+=======
+          onPressIn={handleMicPressIn}
+          onPressOut={handleMicPressOut}
+          accessibilityRole="button"
+          accessibilityLabel={listening ? 'Stop listening' : 'Hold to talk'}
+          hitSlop={12}
+          style={({ pressed }) => [
+            styles.micButton,
+            { backgroundColor: listening || pressed ? colors.systemBlue : colors.secondaryLabel },
+          ]}
+        >
+          <Ionicons
+            name={listening ? 'stop' : 'mic'}
+            size={22}
+            color={colors.systemBackground}
+          />
+>>>>>>> Stashed changes
         </Pressable>
       </View>
     </View>
@@ -405,17 +544,26 @@ function createStyles() {
     responseArea: { flex: 1 },
     responseContent: { padding: 24, flexGrow: 1, justifyContent: 'center' },
     responseText: { textAlign: 'center' },
+<<<<<<< Updated upstream
     waveformRow: {
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 6,
     },
+=======
+    listeningIndicator: { marginBottom: 16 },
+>>>>>>> Stashed changes
     inputRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 12,
       paddingTop: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
+<<<<<<< Updated upstream
+=======
+      flexDirection: 'row',
+      alignItems: 'center',
+>>>>>>> Stashed changes
       gap: 8,
     },
     input: {
@@ -428,6 +576,10 @@ function createStyles() {
     micButton: {
       width: 40,
       height: 40,
+<<<<<<< Updated upstream
+=======
+      borderRadius: 20,
+>>>>>>> Stashed changes
       alignItems: 'center',
       justifyContent: 'center',
     },
