@@ -402,3 +402,123 @@ describe('AppsStore — new apps destination (#601: newAppsToHome)', () => {
     expect(result.current.libraryOnlyApps).not.toContain('com.example.banana');
   });
 });
+
+describe('AppsStore — hide app (#606: App Library only, sem desinstalar)', () => {
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: 'file:///icons/b_1.png', isSystem: false };
+  const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: 'file:///icons/c_1.png', isSystem: false };
+  const HIDDEN_KEY = '@iostoandroid/hidden_apps';
+
+  beforeEach(() => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([banana, cherry]);
+  });
+
+  async function mount() {
+    const utils = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    return utils;
+  }
+
+  it('hideApp remove a app da home e das listas visíveis, mas mantém-na instalada', async () => {
+    const { result } = await mount();
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+
+    await act(async () => { result.current.hideApp('com.example.banana'); });
+
+    expect(result.current.hiddenApps).toContain('com.example.banana');
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+    expect(result.current.visibleApps.map(a => a.packageName)).not.toContain('com.example.banana');
+    // Continua instalada (e por isso alcançável pela procura, que lê `apps`).
+    expect(result.current.apps.map(a => a.packageName)).toContain('com.example.banana');
+    // Não afecta as outras apps.
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.cherry');
+  });
+
+  it('hideApp persiste o conjunto para sobreviver a reinícios', async () => {
+    const { result } = await mount();
+    await act(async () => { result.current.hideApp('com.example.banana'); });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      HIDDEN_KEY,
+      JSON.stringify(['com.example.banana']),
+    );
+  });
+
+  it('hidrata hiddenApps do AsyncStorage no arranque', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === HIDDEN_KEY ? JSON.stringify(['com.example.cherry']) : null),
+    );
+
+    const { result } = await mount();
+
+    expect(result.current.hiddenApps).toEqual(['com.example.cherry']);
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.cherry');
+  });
+
+  it('unhideApp restaura a app às listas visíveis', async () => {
+    const { result } = await mount();
+    await act(async () => { result.current.hideApp('com.example.banana'); });
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+
+    await act(async () => { result.current.unhideApp('com.example.banana'); });
+
+    expect(result.current.hiddenApps).not.toContain('com.example.banana');
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+    expect(result.current.visibleApps.map(a => a.packageName)).toContain('com.example.banana');
+  });
+
+  it('hideApp duas vezes seguidas (duplo toque) não duplica a entrada', async () => {
+    const { result } = await mount();
+    await act(async () => {
+      result.current.hideApp('com.example.banana');
+      result.current.hideApp('com.example.banana');
+    });
+
+    expect(result.current.hiddenApps.filter(p => p === 'com.example.banana')).toHaveLength(1);
+  });
+
+  it('unhideApp de um pacote que não está escondido é um no-op sem escrita', async () => {
+    const { result } = await mount();
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => { result.current.unhideApp('com.example.cherry'); });
+
+    expect(result.current.hiddenApps).toEqual([]);
+    expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(HIDDEN_KEY, expect.anything());
+  });
+
+  it('ignora conteúdo corrompido no AsyncStorage em vez de rebentar', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === HIDDEN_KEY ? '{not json' : null),
+    );
+
+    const { result } = await mount();
+
+    expect(result.current.hiddenApps).toEqual([]);
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+  });
+
+  it('descarta entradas não-string de um conjunto persistido inválido', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === HIDDEN_KEY ? JSON.stringify(['com.example.banana', 42, null]) : null),
+    );
+
+    const { result } = await mount();
+
+    expect(result.current.hiddenApps).toEqual(['com.example.banana']);
+  });
+
+  it('esconder é independente de libraryOnlyApps: unhide não põe a app de volta na home se ela era library-only', async () => {
+    const { result } = await mount();
+    await act(async () => { result.current.removeFromHome('com.example.banana'); });
+    await act(async () => { result.current.hideApp('com.example.banana'); });
+    await act(async () => { result.current.unhideApp('com.example.banana'); });
+
+    // Continua library-only (removeFromHome não é desfeito pelo unhide)…
+    expect(result.current.libraryOnlyApps).toContain('com.example.banana');
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+    // …mas volta a ser visível na App Library.
+    expect(result.current.visibleApps.map(a => a.packageName)).toContain('com.example.banana');
+  });
+});
