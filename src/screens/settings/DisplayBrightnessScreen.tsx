@@ -15,17 +15,27 @@ import {
   CupertinoActionSheet,
   CupertinoSlider,
 } from '../../components';
+import { AccentColors, type AccentColorKey } from '../../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const NIGHT_SHIFT_KEY = '@iostoandroid/night_shift';
 
+const ACCENT_KEYS = Object.keys(AccentColors) as AccentColorKey[];
+
+/** 'blue' → 'Blue'. iOS lists the tint options with a capitalised label. */
+function accentLabel(key: AccentColorKey) {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
 export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigationProp }) {
-  const { theme, typography, spacing, isDark, mode, setThemeMode } = useTheme();
+  const { theme, typography, spacing, isDark, mode, setThemeMode, accentColor, setAccentColor } =
+    useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
   const { brightness, setBrightness } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
+  const [showTintPicker, setShowTintPicker] = useState(false);
   const [nightShiftEnabled, setNightShiftEnabled] = useState(false);
   const [nightShiftIntensity, setNightShiftIntensity] = useState(0.5);
 
@@ -122,6 +132,27 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
                 onChange={(i) => setThemeMode(i === 0 ? 'light' : i === 1 ? 'dark' : 'system')}
               />
             </View>
+          </CupertinoListSection>
+        </View>
+
+        {/* Tint (accent colour) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection header="Tint">
+            <CupertinoListTile
+              title="Tint"
+              trailing={
+                <View style={styles.tintTrailing}>
+                  <View
+                    testID="tint-swatch"
+                    style={[styles.tintSwatch, { backgroundColor: colors.accent }]}
+                  />
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                    {accentLabel(accentColor)}
+                  </Text>
+                </View>
+              }
+              onPress={() => setShowTintPicker(true)}
+            />
           </CupertinoListSection>
         </View>
 
@@ -234,6 +265,20 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
         ]}
         cancelLabel="Cancel"
       />
+
+      <CupertinoActionSheet
+        visible={showTintPicker}
+        onClose={() => setShowTintPicker(false)}
+        title="Tint"
+        options={ACCENT_KEYS.map((key) => ({
+          label: accentLabel(key),
+          onPress: () => {
+            setAccentColor(key);
+            setShowTintPicker(false);
+          },
+        }))}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }
@@ -271,5 +316,15 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     width: '100%',
+  },
+  tintTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tintSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
 });
