@@ -45,5 +45,7 @@ module.exports = {
     uninstallApp: jest.fn(() => Promise.resolve(true)),
     clearIconCache: jest.fn(() => Promise.resolve(0)),
     getIconCacheSizeBytes: jest.fn(() => Promise.resolve(0)),
+    // #608 Tap to Wake
+    wakeScreen: jest.fn(() => Promise.resolve()),
   },
 };

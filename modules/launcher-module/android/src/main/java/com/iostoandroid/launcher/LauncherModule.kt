@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
@@ -748,6 +749,29 @@ class LauncherModule : Module() {
         AsyncFunction("isFlashlightOn") {
             // No direct API to check; track state in companion object
             flashlightState
+        }
+
+        // ── Wake Screen (Tap to Wake, #608) ──────────────────────────────
+        // Acorda o ecrã quando está apenas "dimmed" pela app (não apagado do
+        // SO). Expo RN não tem API para isto; precisa de native module.
+        //
+        // Limitação documentada: capturar um toque com o ecrã APAGADO do
+        // sistema exigiria um receiver de toque a nível de framework
+        // (fora do âmbito de um Expo module simples). Este método só é
+        // chamado quando a app já recebe o toque (ecrã dimmed/locked pela
+        // app), portanto acorda nesse caso — não o SO.
+        AsyncFunction("wakeScreen") {
+            try {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                @Suppress("DEPRECATION")
+                val wakeLock = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "iostoandroid:tapToWake"
+                )
+                wakeLock.setReferenceCounted(false)
+                wakeLock.acquire(500L)
+                wakeLock.release()
+            } catch (e: Exception) { /* falha silenciosa: o wake é best-effort */ }
         }
 
         // ── Call Log ─────────────────────────────────────────────────────
