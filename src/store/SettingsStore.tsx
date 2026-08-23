@@ -177,6 +177,14 @@ export interface SettingsState {
    */
   statusBarVisible: boolean;
   /**
+   * iOS «Display & Brightness → Auto-Brightness»: when true (default) the OS
+   * ambient-light sensor drives the screen brightness; the manual brightness
+   * slider is disabled and the device stays in AUTOMATIC brightness mode. When
+   * false, the slider takes over with `Brightness.setBrightnessAsync` and the
+   * device is switched to MANUAL brightness mode (#612).
+   */
+  autoBrightness: boolean;
+  /**
    * Siri & Search → Suggestions (#610). When false the App Library's
    * «Suggestions» strip is not rendered. Independent of the two visibility
    * toggles below: this only removes the suggestion strip, not the apps.
@@ -305,6 +313,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   appLibraryShowSuggestions: true,
   statusBarStyle: 'auto',
   statusBarVisible: true,
+  autoBrightness: true,
   searchShowSuggestions: true,
   searchShowInSearch: true,
   searchShowInLibrary: true,

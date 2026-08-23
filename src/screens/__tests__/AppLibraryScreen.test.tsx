@@ -71,6 +71,8 @@ function makeDevice(messages: DeviceSms[]): DeviceContextValue {
     openSystemPanel: async () => {},
     requestContactsPermission: async () => false,
     requestSmsPermission: async () => false,
+    autoBrightness: true,
+    setAutoBrightness: async () => {},
   };
 }
 
