@@ -83,7 +83,7 @@ export function LauncherSettingsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update, reset: resetSettings } = useSettings();
-  const { dockApps } = useApps();
+  const { dockApps, apps, hiddenApps, unhideApp } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
@@ -375,6 +375,34 @@ export function LauncherSettingsScreen() {
           }
         />
       </CupertinoListSection>
+
+      {/* ── Hidden Apps (#606) ─────────────────────────────────── */}
+      {/* Só existe quando há algo escondido: uma secção permanentemente vazia
+          seria ruído no ecrã, e o utilizador só chega aqui depois de esconder. */}
+      {hiddenApps.length > 0 && (
+        <CupertinoListSection header="Hidden Apps">
+          {hiddenApps.map((pkg, i) => (
+            <CupertinoListTile
+              key={pkg}
+              // Um pacote desinstalado entretanto já não está em `apps`; mostra-se
+              // o packageName para continuar a ser possível revelá-lo.
+              title={apps.find(a => a.packageName === pkg)?.name ?? pkg}
+              subtitle="Tap to unhide"
+              leading={{ name: 'eye-off', color: '#fff', backgroundColor: '#8E8E93' }}
+              showChevron={false}
+              isLast={i === hiddenApps.length - 1}
+              onPress={() => unhideApp(pkg)}
+            />
+          ))}
+          <View style={styles.buttonRow}>
+            <CupertinoButton
+              title="Unhide All Apps"
+              variant="tinted"
+              onPress={() => hiddenApps.forEach(unhideApp)}
+            />
+          </View>
+        </CupertinoListSection>
+      )}
 
       {/* ── Dock ───────────────────────────────────────────────── */}
       <CupertinoListSection header="Dock">
