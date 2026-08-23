@@ -20,6 +20,7 @@ interface LocationContextValue {
   isReady: boolean;
   requestPermission: () => Promise<boolean>;
   refreshLocation: () => Promise<void>;
+  clearHistory: () => void;
 }
 
 const LOCATION_KEY = '@iostoandroid/findmy_location';
@@ -79,7 +80,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   }, [currentLocation, isReady]);
 
   useEffect(() => {
-    if (isReady) AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    // Persist the history, but only when it actually holds data. An empty
+    // array is the store's default state and needs no backing entry — writing
+    // `[]` would only recreate the key clearHistory just removed, defeating
+    // the "remove the persisted entry" requirement on remount.
+    if (isReady && history.length > 0) {
+      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    }
   }, [history, isReady]);
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
@@ -123,6 +130,15 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const clearHistory = useCallback((): void => {
+    setHistory([]);
+    // Remove the persisted entry rather than leaving a `[]` placeholder, so a
+    // remount does not find a now-stale key and rehydrate an empty-but-present
+    // history. The persist effect above only writes when history is non-empty,
+    // so this removal sticks.
+    void AsyncStorage.removeItem(HISTORY_KEY);
+  }, []);
+
   const value = useMemo<LocationContextValue>(
     () => ({
       currentLocation,
@@ -131,8 +147,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       isReady,
       requestPermission,
       refreshLocation,
+      clearHistory,
     }),
-    [currentLocation, history, permissionStatus, isReady, requestPermission, refreshLocation],
+    [currentLocation, history, permissionStatus, isReady, requestPermission, refreshLocation, clearHistory],
   );
 
   return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;

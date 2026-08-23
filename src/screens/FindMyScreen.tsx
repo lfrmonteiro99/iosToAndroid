@@ -25,6 +25,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
 import { useLocation } from '../store/LocationStore';
 import { useContacts } from '../store/ContactsStore';
+import type { AppNavigationProp } from '../navigation/types';
 
 const LOST_MODE_KEY = '@iostoandroid/findmy_lost_mode';
 
@@ -74,7 +75,7 @@ function formatRelative(timestamp: number): string {
 type FindMyTab = 'devices' | 'people' | 'items';
 const TAB_VALUES: FindMyTab[] = ['devices', 'people', 'items'];
 
-export function FindMyScreen() {
+export function FindMyScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
   const { bluetooth } = useDevice();
@@ -317,6 +318,17 @@ export function FindMyScreen() {
                         />
                       }
                       showChevron={false}
+                    />
+                    <CupertinoListTile
+                      title="Location History"
+                      subtitle="View and clear recorded locations"
+                      leading={{
+                        name: 'time-outline',
+                        color: '#FFFFFF',
+                        backgroundColor: colors.systemBlue,
+                      }}
+                      onPress={() => navigation.navigate('FindMyLocationHistory')}
+                      showChevron
                     />
                   </CupertinoListSection>
                 </View>
