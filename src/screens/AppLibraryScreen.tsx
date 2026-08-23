@@ -508,7 +508,7 @@ export function AppLibraryContent() {
   // `apps` é a lista completa (usada só pela procura, para que uma app
   // escondida continue lançável) e `visibleApps` é a lista sem as escondidas
   // (#606), usada nas categorias e nos strips.
-  const { apps, visibleApps, launchApp, recentApps, hideApp } = useApps();
+  const { apps: allInstalledApps, visibleApps: nonHiddenApps, launchApp, recentApps, hideApp } = useApps();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -525,6 +525,19 @@ export function AppLibraryContent() {
   // (ocultar / renomear / reordenar / appOverrides). Usa chaves estáveis, por
   // isso renomear não parte a atribuição.
   const { settings, update } = useSettings();
+  // Siri & Search → «Show Apps in App Library» (#610). Quando desligado a App
+  // Library não mostra nenhuma app: nem strips, nem categorias, nem resultados
+  // da sua própria procura. As apps continuam instaladas e lançáveis a partir
+  // da home. Filtra-se aqui, à entrada, para que os dois consumidores da lista
+  // (browse e procura) não possam divergir.
+  const visibleApps = useMemo(
+    () => (settings.searchShowInLibrary ? nonHiddenApps : []),
+    [nonHiddenApps, settings.searchShowInLibrary],
+  );
+  const apps = useMemo(
+    () => (settings.searchShowInLibrary ? allInstalledApps : []),
+    [allInstalledApps, settings.searchShowInLibrary],
+  );
   const categories = useMemo(() => {
     return buildCategorySections(visibleApps, settings.categoryOverrides, categorizeApp);
   }, [visibleApps, settings.categoryOverrides]);
@@ -550,6 +563,8 @@ export function AppLibraryContent() {
 
   // Suggestions — next 4 most-recently-launched apps after Recently Added
   const suggestedApps = useMemo(() => {
+    // Siri & Search → «Show Suggestions» (#610): sem sugestões, sem strip.
+    if (!settings.searchShowSuggestions) return [];
     const recentSorted = [...recentApps]
       .sort((a, b) => b.launchedAt - a.launchedAt)
       .slice(4, 8)
@@ -557,7 +572,7 @@ export function AppLibraryContent() {
       .filter((a): a is InstalledApp => !!a);
     if (recentSorted.length > 0) return recentSorted;
     return [...visibleApps].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 4);
-  }, [visibleApps, recentApps]);
+  }, [visibleApps, recentApps, settings.searchShowSuggestions]);
 
   // Filtered apps for search
   const filteredApps = useMemo(() => {

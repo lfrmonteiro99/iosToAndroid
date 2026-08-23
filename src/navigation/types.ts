@@ -40,6 +40,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   SoundsHaptics: undefined;
   Focus: undefined;
+  SiriSearch: undefined;
   ScreenTime: undefined;
   General: undefined;
   About: undefined;

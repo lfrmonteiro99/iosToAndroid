@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
+import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
@@ -202,6 +203,10 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
   const { apps, launchApp } = useApps();
   const { contacts: deviceContacts } = useDevice();
   const { contacts: storeContacts } = useContacts();
+  // Siri & Search → «Show Apps in Search» (#610). Quando desligado, nenhuma app
+  // entra nos resultados; as restantes secções não são afectadas.
+  const { settings } = useSettings();
+  const showAppsInSearch = settings.searchShowInSearch;
 
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -281,7 +286,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
 
     // Apps
     const appResults: AppResult[] = [];
-    for (const app of apps) {
+    for (const app of showAppsInSearch ? apps : []) {
       const nameMatch = fuzzyMatch(app.name, q);
       const pkgMatch = fuzzyMatch(app.packageName, q);
       const bestScore = Math.max(nameMatch.score, pkgMatch.score);
@@ -352,7 +357,7 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
     if (reminderResults.length > 0) result.push({ title: 'Reminders', data: reminderResults });
     if (settingResults.length > 0) result.push({ title: 'Settings', data: settingResults });
     return result;
-  }, [query, apps, allContacts, notes, mails, reminders]);
+  }, [query, apps, showAppsInSearch, allContacts, notes, mails, reminders]);
 
   const handleResultPress = useCallback(async (item: SearchResult) => {
     const updatedHistory = await addToHistory(query, history);

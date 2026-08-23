@@ -134,6 +134,24 @@ export interface SettingsState {
    * after it was turned off (#601).
    */
   newAppsToHome: boolean;
+  /**
+   * Siri & Search → Suggestions (#610). When false the App Library's
+   * «Suggestions» strip is not rendered. Independent of the two visibility
+   * toggles below: this only removes the suggestion strip, not the apps.
+   */
+  searchShowSuggestions: boolean;
+  /**
+   * Siri & Search → Show App in Search (#610). When false apps are excluded
+   * from Spotlight's «Apps» section (and from the App Library's own search
+   * field); other Spotlight sections are untouched.
+   */
+  searchShowInSearch: boolean;
+  /**
+   * Siri & Search → Show in App Library (#610). When false the App Library
+   * shows no apps at all: no strips, no category cards. Apps stay installed
+   * and remain launchable from the home screen.
+   */
+  searchShowInLibrary: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -206,6 +224,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
   newAppsToHome: true,
+  searchShowSuggestions: true,
+  searchShowInSearch: true,
+  searchShowInLibrary: true,
 };
 
 interface SettingsContextValue {
