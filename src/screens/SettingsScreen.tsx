@@ -64,6 +64,7 @@ export function SettingsScreen() {
         { key: 'notifications', title: 'Notifications', icon: 'notifications', iconBg: '#FF3B30', type: 'navigate', route: 'Notifications' },
         { key: 'sounds', title: 'Sounds & Haptics', icon: 'volume-high', iconBg: '#FF2D55', type: 'navigate', route: 'SoundsHaptics' },
         { key: 'focus', title: 'Focus', icon: 'moon', iconBg: '#5856D6', type: 'navigate', route: 'Focus' },
+        { key: 'siriSearch', title: 'Siri & Search', icon: 'search', iconBg: '#000000', type: 'navigate', route: 'SiriSearch' },
         { key: 'screentime', title: 'Screen Time', icon: 'hourglass', iconBg: '#5856D6', type: 'navigate', route: 'ScreenTime' },
       ],
     },

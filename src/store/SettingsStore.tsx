@@ -14,6 +14,10 @@ import {
   type CategoryOverrideSettings,
   DEFAULT_CATEGORY_OVERRIDES,
 } from '../utils/categoryOverrides';
+import {
+  type RequirePasscodeAfter,
+  DEFAULT_REQUIRE_PASSCODE_AFTER,
+} from '../utils/passcodePolicy';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -70,6 +74,18 @@ export interface SettingsState {
   boldText: boolean;
   showLockScreen: boolean;
   biometricUnlock: boolean;
+  /**
+   * iOS «Face ID & Passcode → iPhone Unlock»: usar biometria para desbloquear o
+   * launcher. Sub-opção de `biometricUnlock`, que continua a ser o master
+   * on/off — com o master desligado esta não tem efeito nenhum.
+   */
+  faceIdForUnlock: boolean;
+  /**
+   * iOS «Face ID & Passcode → Require Passcode»: quanto tempo depois do último
+   * desbloqueio é que voltar ao ecrã de bloqueio exige autenticação. O default
+   * 'immediately' reproduz o comportamento anterior a #611.
+   */
+  requirePasscodeAfter: RequirePasscodeAfter;
   showSearchLabel: boolean;
   automaticUpdates: boolean;
   updateAvailable: boolean;
@@ -142,6 +158,37 @@ export interface SettingsState {
    * after it was turned off (#601).
    */
   newAppsToHome: boolean;
+  /**
+   * Status bar appearance (iOS «Display & Brightness → Appearance → Style» /
+   * «Home Screen & Dock → Status Bar»). 'light' forces light-content, 'dark'
+   * forces dark-content, 'auto' (default) follows the active theme. Independent
+   * of `showPageDots`/theme switches — this is the user's explicit override.
+   */
+  statusBarStyle: 'light' | 'dark' | 'auto';
+  /**
+   * Whether the status bar is shown on the home screen (iOS «Home Screen &
+   * Dock → Show Status Bar»). Default true. When false, the home-screen
+   * StatusBar is hidden (the launcher chrome moves up to fill the gap).
+   */
+  statusBarVisible: boolean;
+  /**
+   * Siri & Search → Suggestions (#610). When false the App Library's
+   * «Suggestions» strip is not rendered. Independent of the two visibility
+   * toggles below: this only removes the suggestion strip, not the apps.
+   */
+  searchShowSuggestions: boolean;
+  /**
+   * Siri & Search → Show App in Search (#610). When false apps are excluded
+   * from Spotlight's «Apps» section (and from the App Library's own search
+   * field); other Spotlight sections are untouched.
+   */
+  searchShowInSearch: boolean;
+  /**
+   * Siri & Search → Show in App Library (#610). When false the App Library
+   * shows no apps at all: no strips, no category cards. Apps stay installed
+   * and remain launchable from the home screen.
+   */
+  searchShowInLibrary: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -196,6 +243,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   boldText: false,
   showLockScreen: true,
   biometricUnlock: true,
+  faceIdForUnlock: true,
+  requirePasscodeAfter: DEFAULT_REQUIRE_PASSCODE_AFTER,
   showSearchLabel: true,
   automaticUpdates: true,
   updateAvailable: false,
@@ -216,6 +265,11 @@ export const DEFAULT_SETTINGS: SettingsState = {
   newAppsToHome: true,
   appLibraryShowNotifications: true,
   appLibraryShowSuggestions: true,
+  statusBarStyle: 'auto',
+  statusBarVisible: true,
+  searchShowSuggestions: true,
+  searchShowInSearch: true,
+  searchShowInLibrary: true,
 };
 
 interface SettingsContextValue {

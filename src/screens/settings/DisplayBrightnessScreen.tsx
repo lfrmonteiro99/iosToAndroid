@@ -36,6 +36,7 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
   const { brightness, setBrightness } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
   const [showTintPicker, setShowTintPicker] = useState(false);
+  const [showStatusBarStylePicker, setShowStatusBarStylePicker] = useState(false);
   const [nightShiftEnabled, setNightShiftEnabled] = useState(false);
   const [nightShiftIntensity, setNightShiftIntensity] = useState(0.5);
 
@@ -152,6 +153,28 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
                 </View>
               }
               onPress={() => setShowTintPicker(true)}
+            />
+          </CupertinoListSection>
+        </View>
+
+        {/* Status Bar Style (iOS «Display & Brightness → Appearance → Style») */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection header="Status Bar">
+            <CupertinoListTile
+              title="Status Bar Style"
+              trailing={
+                <Text
+                  testID="status-bar-style-value"
+                  style={[typography.body, { color: colors.secondaryLabel }]}
+                >
+                  {settings.statusBarStyle === 'light'
+                    ? 'Light'
+                    : settings.statusBarStyle === 'dark'
+                    ? 'Dark'
+                    : 'Automatic'}
+                </Text>
+              }
+              onPress={() => setShowStatusBarStylePicker(true)}
             />
           </CupertinoListSection>
         </View>
@@ -277,6 +300,18 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
             setShowTintPicker(false);
           },
         }))}
+        cancelLabel="Cancel"
+      />
+
+      <CupertinoActionSheet
+        visible={showStatusBarStylePicker}
+        onClose={() => setShowStatusBarStylePicker(false)}
+        title="Status Bar Style"
+        options={[
+          { label: 'Light', onPress: () => { update('statusBarStyle', 'light'); setShowStatusBarStylePicker(false); } },
+          { label: 'Dark', onPress: () => { update('statusBarStyle', 'dark'); setShowStatusBarStylePicker(false); } },
+          { label: 'Automatic', onPress: () => { update('statusBarStyle', 'auto'); setShowStatusBarStylePicker(false); } },
+        ]}
         cancelLabel="Cancel"
       />
     </View>
