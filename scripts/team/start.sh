@@ -192,13 +192,27 @@ for b in claude hermes; do
 done
 export PATH="$TEAM_PATH"
 
+# DEEPSEEK_API_KEY: o auth.json do perfil hermes aponta para `env:DEEPSEEK_API_KEY`,
+# e a chave vive no .env do Jarvis (single source of truth — ver ~/.bashrc). O tmux
+# não passa por shells de login: sem esta injeção os agentes hermes morrem com
+# "No usable credentials found for provider 'deepseek'".
+if [ -z "${DEEPSEEK_API_KEY:-}" ] && [ -f "$HOME/Documentos/jarvis/.env" ]; then
+  _ds_key=$(grep -E '^deepseek_api_key=' "$HOME/Documentos/jarvis/.env" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d "\"'")
+  [ -n "$_ds_key" ] && export DEEPSEEK_API_KEY="$_ds_key"
+  unset _ds_key
+fi
+
 TEAM_ENV=" PATH='$TEAM_PATH'"
-for v in TEAM_HERMES TEAM_HERMES_BIN TEAM_CLAUDE_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
+for v in DEEPSEEK_API_KEY TEAM_HERMES TEAM_HERMES_BIN TEAM_CLAUDE_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
          TEAM_IMPLEMENTERS TEAM_IMPL_ENGINES TEAM_REVIEWERS \
          TEAM_AGENT_MEM_MB TEAM_MEM_FLOOR_MB TEAM_AGENT_WARMUP_S TEAM_JEST_WORKERS \
          TEAM_CYCLE_SLEEP TEAM_HEALTH_DELIVERY_S TEAM_HEALTH_AGENT_S \
          TEAM_HEALTH_STRANDED_S TEAM_HEALTH_DEFER_MANY TEAM_HEALTH_BASELINE_AHEAD \
-         TEAM_REVIEW_HERMES; do
+         TEAM_REVIEW_HERMES \
+         TEAM_USE_ALIBABA ALIBABA_API_KEY TEAM_ALIBABA_BASE_URL \
+         TEAM_ALIBABA_MODEL_LOW TEAM_ALIBABA_MODEL_MED TEAM_ALIBABA_MODEL_STRONG \
+         TEAM_ALIBABA_COOLDOWN_H TEAM_ALIBABA_RATE_COOLDOWN_M \
+         TEAM_REVIEW_ALIBABA AGENT_FORCE_ALIBABA; do
   [ -n "${!v:-}" ] && TEAM_ENV="$TEAM_ENV $v='${!v}'"
 done
 

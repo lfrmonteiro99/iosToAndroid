@@ -249,6 +249,111 @@ on_fallback() {
   [ "$(cooldown_remaining)" -gt 0 ]
 }
 
+# ── Terceiro pool: Alibaba Cloud (Bailian Token Plan) ─────────────────────
+#
+# Pool independente através do MESMO binário claude, com override de ambiente
+# por invocação (ANTHROPIC_BASE_URL + chave sk-sp-). Não partilha quota com a
+# subscrição: Team subscription = facturação Anthropic; Token Plan = créditos
+# Alibaba. Qualquer um dos três pode secar sem parar o pipeline.
+#
+# Achado 2026-08-23 (sonda P0): o bloco `env` de ~/.claude/settings.json GANHA
+# ao env de processo — enquanto esse bloco definiu ANTHROPIC_BASE_URL, todos os
+# overrides por invocação foram ignorados em silêncio. O bloco foi removido
+# (backup: settings.json.bak-2026-08-23-token-plan) e a partir daí o env por
+# invocação ganha (provado com um servidor HTTP local a receber os POSTs).
+# NUNCA reintroduzir ANTHROPIC_* nesse bloco — matava este pool em silêncio.
+#
+# COOLDOWN DE DOIS NÍVEIS. Os erros documentados do Token Plan são dois:
+#   * "429 Allocated quota exceeded"  — janela esgotada (o plano pessoal tem
+#     janela de 7 dias; não volta em minutos) → cooldown longo;
+#   * "429 Requests rate limit exceeded" — limite de concorrência, passa
+#     depressa → cooldown curto.
+# Tratar os dois por igual ou martela um pool seco durante uma semana a cada
+# ciclo, ou espera 6h por um soluço de 2 minutos. A lição do fallback Ollama
+# (TEAM_FALLBACK_COOLDOWN_H=6, "limite semanal não limpa em minutos") aplica-se
+# ao caso longo.
+TEAM_USE_ALIBABA="${TEAM_USE_ALIBABA:-1}"
+# Base URL: env ganha; senão o ficheiro de credenciais da pipeline (mesma fonte
+# da chave — quem reutiliza a chave desta máquina precisa do endpoint
+# ap-southeast-1, e o override vive ao lado da chave, não no ps do processo);
+# senão o default da documentação (cn-beijing).
+TEAM_ALIBABA_BASE_URL="${TEAM_ALIBABA_BASE_URL:-}"
+if [ -z "$TEAM_ALIBABA_BASE_URL" ] && [ -f "$HOME/.config/ios2android-team/env" ]; then
+  TEAM_ALIBABA_BASE_URL=$(grep -E '^TEAM_ALIBABA_BASE_URL=' "$HOME/.config/ios2android-team/env" 2>/dev/null | head -1 | cut -d= -f2-)
+fi
+TEAM_ALIBABA_BASE_URL="${TEAM_ALIBABA_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic}"
+
+# qwen3.8-max e qwen3.7-plus têm raciocínio+visão; qwen3.6-flash também.
+# qwen3.7-max é SÓ TEXTO — de fora dos defaults (subagentes lêem screenshots).
+TEAM_ALIBABA_MODEL_LOW="${TEAM_ALIBABA_MODEL_LOW:-qwen3.6-flash}"
+TEAM_ALIBABA_MODEL_MED="${TEAM_ALIBABA_MODEL_MED:-qwen3.7-plus}"
+TEAM_ALIBABA_MODEL_STRONG="${TEAM_ALIBABA_MODEL_STRONG:-qwen3.8-max}"
+
+ALIBABA_COOLDOWN_FILE="$STATE_DIR/alibaba-usage-cooldown"
+TEAM_ALIBABA_COOLDOWN_H="${TEAM_ALIBABA_COOLDOWN_H:-6}"
+TEAM_ALIBABA_RATE_COOLDOWN_M="${TEAM_ALIBABA_RATE_COOLDOWN_M:-2}"
+
+# Chave do pool: env ALIBABA_API_KEY, senão o ficheiro de credenciais da
+# pipeline. SÓ aceita prefixo sk-sp- (chave Token Plan): outro prefixo
+# (sk- pay-as-you-go) daria 401, que não casa com is_usage_exhausted e
+# escaparia como falha de tarefa — trata-se como pool ausente. O aviso alto
+# vive nos callers de arranque (roster do orchestrator, PEER no run-agent),
+# não aqui, porque isto corre dentro de $( ) a cada ciclo e um aviso aqui
+# seria spam a cada 45s.
+alibaba_api_key() {
+  local key="" src
+  if [ -n "${ALIBABA_API_KEY:-}" ]; then
+    key="$ALIBABA_API_KEY"
+  else
+    for src in "$HOME/.config/ios2android-team/env"; do
+      [ -f "$src" ] || continue
+      key=$(grep -E '^ALIBABA_API_KEY=' "$src" 2>/dev/null | head -1 | cut -d= -f2-)
+      [ -n "$key" ] && break
+    done
+  fi
+  [ -n "$key" ] || return 1
+  case "$key" in
+    sk-sp-*) printf '%s' "$key"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+alibaba_configured() {
+  [ "${TEAM_USE_ALIBABA:-1}" = "1" ] || return 1
+  alibaba_api_key >/dev/null 2>&1
+}
+
+alibaba_cooldown_remaining() {
+  [ -f "$ALIBABA_COOLDOWN_FILE" ] || { echo 0; return; }
+  local until_ts now
+  until_ts=$(cat "$ALIBABA_COOLDOWN_FILE" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  if [ "$now" -lt "$until_ts" ]; then echo $(( until_ts - now )); else echo 0; fi
+}
+
+alibaba_exhausted() { [ "$(alibaba_cooldown_remaining)" -gt 0 ]; }
+
+# Disponível = configurado + sem cooldown + binário claude resolúvel (o pool
+# corre no mesmo harness que a subscrição).
+alibaba_available() {
+  alibaba_configured || return 1
+  alibaba_exhausted && return 1
+  claude_available
+}
+
+# Tier do agente que vai correr: os callers recebem CLAUDE_MODEL
+# (haiku/sonnet/opus) e o pool responde com o qwen correspondente, para a
+# classe de dificuldade não mudar só porque o motor mudou (mesma regra dos
+# tiers claude/ollama acima).
+alibaba_model_for() {
+  local m="$1"
+  case "$m" in
+    *haiku*) echo "$TEAM_ALIBABA_MODEL_LOW" ;;
+    *opus*)  echo "$TEAM_ALIBABA_MODEL_STRONG" ;;
+    *)       echo "$TEAM_ALIBABA_MODEL_MED" ;;
+  esac
+}
+
 is_deferred() {
   local issue="$1" until_ts now
   [ -f "$DEFER_DIR/$issue" ] || return 1
@@ -782,13 +887,14 @@ comment_issue() {
 # `VERDICT=$(jq ... "$VERDICT")` overwrites the path with the value, and the next
 # jq call then tries to open a file named "blocked".
 
-# True when the last agent on this slot ran on the FALLBACK engine rather than the
-# subscription. A role that produced no verdict on the fallback must not be treated
-# as "this issue defeated the pipeline": the fallback model is materially weaker, so
-# a temporary quota outage would otherwise park real work permanently.
+# True when the last agent on this slot ran on a NON-SUBSCRIPTION engine (the
+# ollama fallback or the alibaba pool) rather than the subscription. A role that
+# produced no verdict there must not be treated as "this issue defeated the
+# pipeline": those engines are not measured on this repo's work in the same way,
+# so a temporary quota outage would otherwise park real work permanently.
 agent_used_fallback() {
   local slot="${1:-main}"
-  grep -q '^ollama/' "$LOCK_PREFIX.$slot.engine" 2>/dev/null
+  grep -qE '^(ollama|alibaba)/' "$LOCK_PREFIX.$slot.engine" 2>/dev/null
 }
 
 # Standard handling for "the agent produced no verdict". Returns 0 when the caller

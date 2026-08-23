@@ -127,10 +127,19 @@ diz numa chamada.
 neste branch antes de arrancar e resolve os marcadores por intencao — percebendo o
 que cada lado queria e preservando as duas intencoes. Depois disso volto a olhar." >/dev/null 2>&1 || true
   if [ -n "$ISSUE" ]; then
-    comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
+    # NÃO repetir o comentário em cada ciclo: o reviewer volta aqui a cada ~45s
+    # enquanto o PR estiver em conflito, e cada repetição engorda o prompt do
+    # implementador (que inclui os comentários do issue) — #486 chegou a 118KB
+    # só de "PR #587 em conflito" repetidos e rebentou o argv (E2BIG).
+    if ! gh issue view "$ISSUE" --repo "$REPO" --json comments \
+      --jq "[.comments[].body // \"\"] | any(test(\"PR #$PR em conflito\"))" 2>/dev/null | grep -q true; then
+      comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
 
 Devolvido ao implementador para resolver os conflitos. O trabalho no branch
 mantem-se — nao e para refazer."
+    else
+      log "conflito do PR #$PR já comunicado no issue #$ISSUE — sem repetir"
+    fi
     set_state "$ISSUE" "$L_BLOCKED_IMPL"
   fi
   exit 0
@@ -151,7 +160,11 @@ git -C "$TEAM_ROOT" fetch origin "$BASE" >/dev/null 2>&1 || true
 DIFF=$(git -C "$WT" --no-pager diff "origin/$BASE...HEAD" 2>/dev/null || true)
 FILES=$(git -C "$WT" --no-pager diff "origin/$BASE...HEAD" --name-only 2>/dev/null || true)
 DIFF_BYTES=${#DIFF}
-DIFF="${DIFF:0:60000}"
+# O prompt vai em argv do hermes (MAX_ARG_STRLEN ~128KB): 60KB de diff + template
+# + issue com comentários rebentava o setsid com E2BIG (medido no #587: 68KB de
+# diff, "Lista de argumentos muito longa", agente nunca arrancava). O agente tem
+# o worktree e git: o diff completo está a um comando, por isso trunca-se aqui.
+DIFF="${DIFF:0:30000}"
 
 if [ -z "${DIFF//[[:space:]]/}" ]; then
   log "DIFF VAZIO — não se revê um PR pelo título"
@@ -173,7 +186,14 @@ if [ -n "$ISSUE" ]; then
   ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" --json title,body,comments --jq '
     "# " + .title + "\n\n" + (.body // "") + "\n\n## Comentários\n\n" +
     (if (.comments | length) > 0 then
-       ([.comments[] | "- **@" + (.author.login // "anon") + "**: " + (.body // "")] | join("\n\n"))
+       # Dedupe de repetidos consecutivos + cauda de 20: o implementador comenta
+       # "corrida sem veredicto" a cada tentativa e o prompt (que leva o issue
+       # inteiro) rebentava o argv — mesmo E2BIG do implement.sh (#486).
+       ([.comments[] | {a: (.author.login // "anon"), b: (.body // "")}]
+        | reduce .[] as $c ([]; if length > 0 and .[-1].a == $c.a and .[-1].b == $c.b then . else . + [$c] end)
+        | .[-20:]
+        | map("- **@" + .a + "**: " + .b)
+        | join("\n\n"))
      else "(sem comentários)" end)' 2>/dev/null || echo "")
 fi
 
@@ -199,7 +219,10 @@ fi
   echo ""
   printf '%s\n' "$FILES"
   echo ""
-  echo "## Diff (${DIFF_BYTES} bytes no total)"
+  echo "## Diff (${DIFF_BYTES} bytes no total — truncado no prompt a 30000)"
+  echo ""
+  echo "Para o diff COMPLETO, corre no worktree:"
+  echo "  git -C $WT --no-pager diff origin/$BASE...HEAD"
   echo ""
   printf '%s\n' "$DIFF"
 } | sed -e "s|__VERDICT_PATH__|$VERDICT_FILE|g" \
@@ -233,14 +256,24 @@ agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 # Um PR que espera pela quota e recuperavel; um merge errado nao.
 #
 # Com TEAM_REVIEW_HERMES=1 assume mesmo assim, para quem preferir escoar a fila.
+#
+# ALIBABA NO REVIEWER: tambem OPT-IN (TEAM_REVIEW_ALIBABA, omissao 0), pela mesma
+# razao — o pool nao esta medido neste papel e o reviewer e o unico portao antes
+# do main. Verificado ANTES do bloco hermes e sem fall-through: com ambos a 1 e o
+# pool alibaba disponivel, a review vai em alibaba (decisao explicita, nao cascata).
 REVIEW_ENGINE="claude"
-if [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
+if [ "${TEAM_REVIEW_ALIBABA:-0}" = "1" ] \
+   && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && alibaba_available; then
+  REVIEW_ENGINE="alibaba"
+  log "subscricao indisponivel e TEAM_REVIEW_ALIBABA=1 — a julgar no pool alibaba"
+elif [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
    && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && hermes_available; then
   REVIEW_ENGINE="hermes"
   log "subscricao indisponivel e TEAM_REVIEW_HERMES=1 — a julgar em hermes"
 fi
 
 AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="$REVIEW_ENGINE" \
+  AGENT_VERDICT_FILE="$VERDICT_FILE" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
@@ -274,7 +307,9 @@ de um motor que consiga julgá-lo." >/dev/null 2>&1 || true
 }
 
 if ! verdict_readable "$VERDICT_FILE"; then
-  if ! no_verdict_is_real_failure main "$AGENT_RC"; then
+  # F6: o marker é escrito em ${TEAM_SLOT:-main} (rev1..N) — ler "main" aqui era
+  # ler o ficheiro do slot errado e escalar corridas degradadas indevidamente.
+  if ! no_verdict_is_real_failure "${TEAM_SLOT:-main}" "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — PR fica para nova review"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: corrida degradada, sem veredicto
 
