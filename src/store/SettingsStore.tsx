@@ -19,6 +19,10 @@ import {
   DEFAULT_REQUIRE_PASSCODE_AFTER,
 } from '../utils/passcodePolicy';
 import { clampWhitePointLevel } from '../utils/whitePoint';
+import {
+  normalizeFocusPageVisibility,
+  type FocusPageVisibility,
+} from '../utils/focusPageVisibility';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -44,6 +48,12 @@ export interface SettingsState {
   lockSound: boolean;
   focusMode: 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
   focusScheduleEnabled: boolean;
+  /**
+   * Focus filters (#618): por modo de Focus, os índices das páginas da home que
+   * ficam ocultas enquanto esse modo está activo. `off` nunca esconde nada.
+   * Default `{}` — sem entradas, todas as páginas continuam visíveis.
+   */
+  focusPageVisibility: FocusPageVisibility;
   screenTimeEnabled: boolean;
   dailyLimit: number;
   downtime: boolean;
@@ -248,6 +258,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   lockSound: true,
   focusMode: 'off',
   focusScheduleEnabled: false,
+  focusPageVisibility: {},
   screenTimeEnabled: false,
   dailyLimit: 60,
   downtime: false,
@@ -370,6 +381,11 @@ export function SettingsProvider({
             // corrompido (NaN, fora da gama) faria um overlay com opacidade
             // inválida, por isso normaliza-se na leitura.
             whitePointLevel: clampWhitePointLevel(parsed?.whitePointLevel),
+            // focusPageVisibility (#618) decide se páginas inteiras da home
+            // renderizam; um blob corrompido (índices negativos, strings,
+            // valores não-array) faria o filtro esconder páginas ao acaso ou
+            // rebentar no `.includes`, por isso normaliza-se na leitura.
+            focusPageVisibility: normalizeFocusPageVisibility(parsed?.focusPageVisibility),
           }));
         } catch { /* ignore */ }
       }

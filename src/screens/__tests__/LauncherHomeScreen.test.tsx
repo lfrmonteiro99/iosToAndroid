@@ -1,5 +1,7 @@
 import React from 'react';
-import { render, fireEvent, within } from '../../test-utils';
+import { View as RNView, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { render, fireEvent, within, waitFor } from '../../test-utils';
 import {
   LauncherHomeScreen,
   NonAndroidFallback,
@@ -674,5 +676,185 @@ describe('LauncherHomeScreen dock has no app-name labels (#501)', () => {
     const icon = getByLabelText('Open DockOnlyApp');
     expect(icon.props.accessibilityRole).toBe('button');
     expect(() => fireEvent.press(icon)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Focus filters — page visibility per Focus mode (#618)
+// ---------------------------------------------------------------------------
+// Um modo de Focus activo esconde as páginas cujo índice está em
+// settings.focusPageVisibility[focusMode]. Os testes montam o LauncherHomeScreen
+// real com apps suficientes para haver 2 páginas e afirmam sobre os testIDs
+// `launcher-page-grid-N` e sobre os page dots (#603), que têm de refletir o
+// número real de páginas visíveis.
+describe('LauncherHomeScreen — Focus page visibility (#618)', () => {
+  const FOCUS_APP_NAMES = Array.from({ length: 26 }, (_, i) => `FocusApp${i}`);
+
+  function focusApp(name: string): AppsStore.InstalledApp {
+    const pkg = `com.example.${name.toLowerCase()}`;
+    return { name, packageName: pkg, icon: `file:///${pkg}.png`, isSystem: false };
+  }
+
+  function mockFocusApps(apps: AppsStore.InstalledApp[]) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps,
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: apps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  function seedSettings(partial: Record<string, unknown>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      key === '@iostoandroid/settings'
+        ? Promise.resolve(JSON.stringify(partial))
+        : Promise.resolve(null),
+    );
+  }
+
+  /** Conta os page dots (#603): View 7x7 com borderRadius 3.5. */
+  function countDots(root: ReturnType<typeof render>): number {
+    return root.UNSAFE_getAllByType(RNView).filter((n: { props?: { style?: unknown } }) => {
+      const s = StyleSheet.flatten(n.props?.style) as Record<string, unknown> | undefined;
+      return !!s && s.width === 7 && s.height === 7 && s.borderRadius === 3.5;
+    }).length;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('hides a page whose index is listed for the active focus mode', async () => {
+    // 26 apps reais + 14 virtuais = 40 itens; 4x6 = 24/página → 2 páginas.
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(root.queryByTestId('launcher-page-grid-1')).toBeNull();
+    root.unmount();
+  });
+
+  it('shows every page when focusMode is off, even with entries stored', async () => {
+    // O inverso do fix: a configuração existe mas 'off' não filtra nada.
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'off',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    root.unmount();
+  });
+
+  it('ignores hidden pages configured for a DIFFERENT mode than the active one', async () => {
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'sleep',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    root.unmount();
+  });
+
+  it('page dots reflect the real number of visible pages (#603 + #618)', async () => {
+    // Sem filtro: 2 páginas + App Library = 3 dots. Com a página 1 oculta: 2.
+    seedSettings({ gridColumns: 4, gridRows: 6, focusMode: 'off' });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+    const unfiltered = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(unfiltered.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    const dotsWithAllPages = countDots(unfiltered);
+    expect(dotsWithAllPages).toBe(3);
+    unfiltered.unmount();
+
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+    const filtered = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(filtered.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(countDots(filtered)).toBe(dotsWithAllPages - 1);
+    filtered.unmount();
+  });
+
+  it('keeps the first page visible when every page is hidden (no empty home)', async () => {
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [0, 1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(root.queryByTestId('launcher-page-grid-1')).toBeNull();
+    root.unmount();
+  });
+
+  it('survives a corrupted focusPageVisibility blob in AsyncStorage', async () => {
+    // Inválido e hostil: valor não-array, índices negativos e strings.
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [-1, 'x', 1.5], sleep: 'nope' },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    // Nenhum índice válido → nada é escondido, e nada rebenta.
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    root.unmount();
   });
 });

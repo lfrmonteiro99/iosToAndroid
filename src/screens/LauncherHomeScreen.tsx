@@ -70,6 +70,7 @@ import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
+import { hiddenPageIndicesForMode, filterVisiblePages } from '../utils/focusPageVisibility';
 import { clampWithRubberBand } from '../theme/motion';
 
 // ---------------------------------------------------------------------------
@@ -1228,7 +1229,7 @@ export function LauncherHomeScreen() {
   // size (appsPerPage derives from settings, issue #503) re-packs pages
   // without ever reordering an app — there is no per-page stored position to
   // migrate (issue #503).
-  const pages: GridItem[][] = useMemo(() => {
+  const allPages: GridItem[][] = useMemo(() => {
     const out: GridItem[][] = [];
     for (let i = 0; i < gridItems.length; i += appsPerPage) {
       out.push(gridItems.slice(i, i + appsPerPage));
@@ -1239,6 +1240,19 @@ export function LauncherHomeScreen() {
     }
     return out;
   }, [gridItems, appsPerPage]);
+
+  // Focus filters (#618): com um modo de Focus activo, as páginas cujo índice
+  // está em `focusPageVisibility[focusMode]` não renderizam. O índice é o da
+  // paginação completa (`allPages`), por isso esconder a página 1 não renumera
+  // a configuração das restantes. `off` nunca esconde nada.
+  const hiddenPageIndices = useMemo(
+    () => hiddenPageIndicesForMode(settings.focusPageVisibility, settings.focusMode),
+    [settings.focusPageVisibility, settings.focusMode],
+  );
+  const pages: GridItem[][] = useMemo(
+    () => filterVisiblePages(allPages, hiddenPageIndices),
+    [allPages, hiddenPageIndices],
+  );
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
