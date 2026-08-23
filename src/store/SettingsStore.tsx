@@ -14,6 +14,11 @@ import {
   type CategoryOverrideSettings,
   DEFAULT_CATEGORY_OVERRIDES,
 } from '../utils/categoryOverrides';
+import {
+  type RequirePasscodeAfter,
+  DEFAULT_REQUIRE_PASSCODE_AFTER,
+  normalizeRequirePasscodeAfter,
+} from '../utils/passcodePolicy';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -70,6 +75,18 @@ export interface SettingsState {
   boldText: boolean;
   showLockScreen: boolean;
   biometricUnlock: boolean;
+  /**
+   * iOS «Face ID & Passcode → iPhone Unlock»: usar biometria para desbloquear o
+   * launcher. Sub-opção de `biometricUnlock`, que continua a ser o master
+   * on/off — com o master desligado esta não tem efeito nenhum.
+   */
+  faceIdForUnlock: boolean;
+  /**
+   * iOS «Face ID & Passcode → Require Passcode»: quanto tempo depois do último
+   * desbloqueio é que voltar ao ecrã de bloqueio exige autenticação. O default
+   * 'immediately' reproduz o comportamento anterior a #611.
+   */
+  requirePasscodeAfter: RequirePasscodeAfter;
   showSearchLabel: boolean;
   automaticUpdates: boolean;
   updateAvailable: boolean;
@@ -188,6 +205,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   boldText: false,
   showLockScreen: true,
   biometricUnlock: true,
+  faceIdForUnlock: true,
+  requirePasscodeAfter: DEFAULT_REQUIRE_PASSCODE_AFTER,
   showSearchLabel: true,
   automaticUpdates: true,
   updateAvailable: false,
@@ -261,6 +280,9 @@ export function SettingsProvider({
             // uma máscara indefinida, por isso normaliza-se na leitura.
             iconShape: normalizeIconShape(parsed?.iconShape),
             iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
+            // Um valor corrompido aqui decidiria se a passcode é exigida ou
+            // não, por isso normaliza-se na leitura para o mais restritivo.
+            requirePasscodeAfter: normalizeRequirePasscodeAfter(parsed?.requirePasscodeAfter),
           }));
         } catch { /* ignore */ }
       }
