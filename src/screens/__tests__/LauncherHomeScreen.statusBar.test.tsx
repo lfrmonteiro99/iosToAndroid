@@ -29,6 +29,10 @@ function mockApps(overrides: Record<string, unknown> = {}) {
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    hiddenApps: [],
+    visibleApps: [],
+    hideApp: jest.fn(),
+    unhideApp: jest.fn(),
     iconCacheSizeBytes: 0,
     isRebuildingIconCache: false,
     iconCacheRebuildProgress: null,
@@ -117,5 +121,40 @@ describe('LauncherHomeScreen Status Bar (#605)', () => {
         bar.props.barStyle === 'light-content' || bar.props.barStyle === 'dark-content',
       ),
     ).toBe(true);
+  });
+
+  // Inverse of the fix: when statusBarVisible is true the StatusBar must NOT be
+  // hidden, even though other StatusBars may exist elsewhere in the tree.
+  it('Show Status Bar = true leaves every StatusBar unhidden (inverse of fix)', async () => {
+    seedSettings({ statusBarVisible: true, statusBarStyle: 'auto' });
+    const { UNSAFE_queryAllByType } = render(<LauncherHomeScreen />);
+
+    await waitFor(() => expect(UNSAFE_queryAllByType(StatusBar).length).toBeGreaterThan(0));
+    const bars = UNSAFE_queryAllByType(StatusBar);
+    const anyHidden = bars.some((bar: { props: { hidden?: boolean } }) => bar.props.hidden === true);
+    expect(anyHidden).toBe(false);
+  });
+
+  // Boundary / ausente: a setting key can be missing for users who upgraded
+  // before #605 shipped. Missing statusBarStyle must fall back to following the
+  // theme (auto), and missing statusBarVisible must default to visible — never
+  // crash, never hide.
+  it('missing statusBarStyle & statusBarVisible keys fall back safely (no crash, shown)', async () => {
+    seedSettings({}); // no status bar keys at all
+    const { UNSAFE_queryAllByType } = render(<LauncherHomeScreen />);
+
+    await waitFor(() => expect(UNSAFE_queryAllByType(StatusBar).length).toBeGreaterThan(0));
+    const bars = UNSAFE_queryAllByType(StatusBar);
+    const homeBars = bars.filter(
+      (bar: { props: { barStyle?: string } }) => bar.props.barStyle != null,
+    );
+    expect(homeBars.length).toBeGreaterThan(0);
+    expect(
+      homeBars.every((bar: { props: { barStyle?: string } }) =>
+        bar.props.barStyle === 'light-content' || bar.props.barStyle === 'dark-content',
+      ),
+    ).toBe(true);
+    const anyHidden = bars.some((bar: { props: { hidden?: boolean } }) => bar.props.hidden === true);
+    expect(anyHidden).toBe(false);
   });
 });
