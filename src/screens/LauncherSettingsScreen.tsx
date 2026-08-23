@@ -31,6 +31,11 @@ import {
   type PerfBudgetKey,
   type PerfMetrics,
 } from '../utils/perfMetrics';
+import {
+  REQUIRE_PASSCODE_LABELS,
+  REQUIRE_PASSCODE_OPTIONS,
+  normalizeRequirePasscodeAfter,
+} from '../utils/passcodePolicy';
 
 /**
  * #517: os números de arranque têm de ser legíveis em runtime, e não podem
@@ -89,6 +94,7 @@ export function LauncherSettingsScreen() {
   const alert = useAlert();
   const [showPinModal, setShowPinModal] = useState(false);
   const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
+  const [showRequirePasscodePicker, setShowRequirePasscodePicker] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -496,6 +502,30 @@ export function LauncherSettingsScreen() {
             />
           }
         />
+        {/* #611 — sub-opção do master `biometricUnlock` (iOS «iPhone Unlock»). */}
+        <CupertinoListTile
+          title="Face ID for Unlock"
+          leading={{ name: 'scan', color: '#fff', backgroundColor: '#5856D6' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.faceIdForUnlock}
+              onValueChange={(v) => update('faceIdForUnlock', v)}
+            />
+          }
+        />
+        {/* #611 — iOS «Require Passcode». */}
+        <CupertinoListTile
+          title="Require Passcode"
+          leading={{ name: 'time', color: '#fff', backgroundColor: '#FF3B30' }}
+          showChevron
+          trailing={
+            <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+              {REQUIRE_PASSCODE_LABELS[normalizeRequirePasscodeAfter(settings.requirePasscodeAfter)]}
+            </Text>
+          }
+          onPress={() => setShowRequirePasscodePicker(true)}
+        />
         <CupertinoListTile
           title="Change Passcode"
           leading={{ name: 'keypad', color: '#fff', backgroundColor: '#8E8E93' }}
@@ -553,6 +583,21 @@ export function LauncherSettingsScreen() {
             onPress: () => { update('newAppsToHome', true); setShowNewAppsPicker(false); },
           },
         ]}
+        cancelLabel="Cancel"
+      />
+
+      {/* ── Require Passcode after (#611) ──────────────────────── */}
+      <CupertinoActionSheet
+        visible={showRequirePasscodePicker}
+        onClose={() => setShowRequirePasscodePicker(false)}
+        title="Require Passcode"
+        options={REQUIRE_PASSCODE_OPTIONS.map((option) => ({
+          label: REQUIRE_PASSCODE_LABELS[option],
+          onPress: () => {
+            update('requirePasscodeAfter', option);
+            setShowRequirePasscodePicker(false);
+          },
+        }))}
         cancelLabel="Cancel"
       />
 

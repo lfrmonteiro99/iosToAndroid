@@ -75,10 +75,25 @@ function formatNotifTime(timestamp: number): string {
 
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
+import { isPasscodeRequired } from '../utils/passcodePolicy';
 
 const LOCK_PIN_KEY = 'lock_pin';
 const LOCK_PIN_STORAGE_KEY = '@iostoandroid/lock_pin';
 const LOCK_PIN_LEGACY_KEY = '@lock_pin';
+/** Epoch ms do último desbloqueio bem-sucedido — base do «Require Passcode» (#611). */
+const LAST_UNLOCK_KEY = '@iostoandroid/last_unlock_at';
+
+/** Lê o último desbloqueio; devolve null quando não existe ou está corrompido. */
+async function readLastUnlockAt(): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_UNLOCK_KEY);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -312,7 +327,7 @@ function NotificationGroupCard({
 export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigationProp; onUnlock?: () => void }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
-  const { settings } = useSettings();
+  const { settings, isReady: settingsReady } = useSettings();
   const { apps } = useApps();
   const { textScale } = useTheme();
 
@@ -539,7 +554,12 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   // Biometric unlock on mount
   const triggerBiometric = async () => {
     try {
-      const LocalAuth = await import('expo-local-authentication');
+      // require(), not `await import(...)`: Metro compiles both to the same
+      // synchronous module load, but a bare `import()` throws under Jest's
+      // CommonJS environment, which made this catch swallow every call and
+      // turned the biometric prompt into a permanent no-op in tests.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const LocalAuth = require('expo-local-authentication') as typeof import('expo-local-authentication');
       const hasHardware = await LocalAuth.hasHardwareAsync();
       const isEnrolled = await LocalAuth.isEnrolledAsync();
 
@@ -570,9 +590,28 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   };
 
   useEffect(() => {
-    triggerBiometric();
+    // Esperar pelo AsyncStorage do SettingsStore: decidir antes disso usaria os
+    // defaults ('immediately' + Face ID ligado) em vez das escolhas do
+    // utilizador, e o «Require Passcode» nunca se aplicaria.
+    if (!settingsReady) return;
+    // #611 «Require Passcode»: dentro do intervalo escolhido desde o último
+    // desbloqueio, o ecrã de bloqueio aparece mas não exige autenticação — o
+    // swipe-up basta. Fora do intervalo (ou sem registo), exige.
+    let cancelled = false;
+    (async () => {
+      const lastUnlockAt = await readLastUnlockAt();
+      if (cancelled) return;
+      if (!isPasscodeRequired(settings.requirePasscodeAfter, lastUnlockAt, Date.now())) return;
+      // `biometricUnlock` é o master on/off; `faceIdForUnlock` a sub-opção.
+      if (!settings.biometricUnlock || !settings.faceIdForUnlock) {
+        setShowPasscode(true);
+        return;
+      }
+      triggerBiometric();
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [settingsReady]);
 
   // Swipe-up animation
   const translateY = useSharedValue(0);
@@ -590,6 +629,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
 
   const handleUnlock = () => {
     hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    // Registar o instante alimenta a decisão de #611 no próximo bloqueio.
+    AsyncStorage.setItem(LAST_UNLOCK_KEY, String(Date.now())).catch(() => {});
     if (onUnlock) {
       onUnlock();
     } else {
