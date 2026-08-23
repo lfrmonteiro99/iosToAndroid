@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CupertinoNavigationBar } from '../components/CupertinoNavigationBar';
@@ -20,6 +21,8 @@ import { CupertinoEmptyState } from '../components/CupertinoEmptyState';
 import { CupertinoSwitch } from '../components/CupertinoSwitch';
 import { CupertinoTextField } from '../components/CupertinoTextField';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
+import { useAlert } from '../components';
+import { withAutoLockSuppressed } from '../utils/permissions';
 import { hapticSelection } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
@@ -73,6 +76,34 @@ function formatRelative(timestamp: number): string {
 
 type FindMyTab = 'devices' | 'people' | 'items';
 const TAB_VALUES: FindMyTab[] = ['devices', 'people', 'items'];
+
+// ─── Play Sound on this device (issue #266) ──────────────────────────────────
+// Honest scoping: with no backend and no companion device, the only hardware
+// this app can make a noise on is the one it is running on. The alert is a local
+// notification with `sound: true`, following ClockScreen / RemindersScreen's
+// permission + immediate-trigger shape.
+
+async function requestNotificationPermission(): Promise<boolean> {
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === 'granted') return true;
+  const { status } = await withAutoLockSuppressed(() => Notifications.requestPermissionsAsync());
+  return status === 'granted';
+}
+
+export async function playSoundOnThisDevice(): Promise<void> {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Find My',
+      body: 'Playing sound on This Device',
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 1,
+      repeats: false,
+    },
+  });
+}
 
 export function FindMyScreen() {
   const { theme, typography, borderRadius } = useTheme();
@@ -242,6 +273,37 @@ export function FindMyScreen() {
     void persistLostMode(next);
   }, [persistLostMode]);
 
+  // ── Play Sound (issue #266) ────────────────────────────────────────────────
+  // `playingSound` is a ref, not state: the guard has to be effective inside the
+  // same tick as a second press (a double tap fires both handlers before any
+  // re-render), and it must not itself trigger a render.
+  const alert = useAlert();
+  const playingSound = React.useRef(false);
+
+  const handlePlaySound = useCallback(() => {
+    if (playingSound.current) return;
+    playingSound.current = true;
+    void (async () => {
+      try {
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+          alert(
+            'Notifications Are Off',
+            'Find My plays the sound as a notification on this device. Enable notifications for this app in Android Settings to use it.',
+          );
+          return;
+        }
+        await playSoundOnThisDevice();
+        alert('Playing Sound', 'This device will play a sound now.');
+      } catch {
+        // Never swallow the failure: a silent no-op looks identical to success.
+        alert('Could Not Play Sound', 'The notification could not be scheduled on this device.');
+      } finally {
+        playingSound.current = false;
+      }
+    })();
+  }, [alert]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
       <CupertinoNavigationBar title="Find My" largeTitle>
@@ -297,6 +359,17 @@ export function FindMyScreen() {
                         color: '#FFFFFF',
                         backgroundColor: colors.systemBlue,
                       }}
+                    />
+                    <CupertinoListTile
+                      title="Play Sound"
+                      subtitle="Alerts this device only"
+                      leading={{
+                        name: 'volume-high',
+                        color: '#FFFFFF',
+                        backgroundColor: colors.systemBlue,
+                      }}
+                      onPress={handlePlaySound}
+                      showChevron={false}
                     />
                     <CupertinoListTile
                       title="Mark as Lost"
