@@ -788,7 +788,7 @@ export function LauncherHomeScreen() {
   const { settings } = useSettings();
   const device = useDevice();
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
-  const { theme: launcherTheme, textScale } = useTheme();
+  const { theme: launcherTheme, isDark, textScale } = useTheme();
   const colors = launcherTheme.colors;
   const alert = useAlert();
 
@@ -1517,7 +1517,20 @@ export function LauncherHomeScreen() {
           {WallpaperContent}
         </Animated.View>
 
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={
+            settings.statusBarStyle === 'light'
+              ? 'light-content'
+              : settings.statusBarStyle === 'dark'
+              ? 'dark-content'
+              : isDark
+              ? 'light-content'
+              : 'dark-content'
+          }
+          hidden={!settings.statusBarVisible}
+        />
 
       {/* ---------------------------------------------------------------- */}
       {/* Jiggle-mode background tap target (exits edit mode)               */}

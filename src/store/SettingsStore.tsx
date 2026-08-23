@@ -151,6 +151,19 @@ export interface SettingsState {
    * after it was turned off (#601).
    */
   newAppsToHome: boolean;
+  /**
+   * Status bar appearance (iOS «Display & Brightness → Appearance → Style» /
+   * «Home Screen & Dock → Status Bar»). 'light' forces light-content, 'dark'
+   * forces dark-content, 'auto' (default) follows the active theme. Independent
+   * of `showPageDots`/theme switches — this is the user's explicit override.
+   */
+  statusBarStyle: 'light' | 'dark' | 'auto';
+  /**
+   * Whether the status bar is shown on the home screen (iOS «Home Screen &
+   * Dock → Show Status Bar»). Default true. When false, the home-screen
+   * StatusBar is hidden (the launcher chrome moves up to fill the gap).
+   */
+  statusBarVisible: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -225,6 +238,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
   newAppsToHome: true,
+  statusBarStyle: 'auto',
+  statusBarVisible: true,
 };
 
 interface SettingsContextValue {
