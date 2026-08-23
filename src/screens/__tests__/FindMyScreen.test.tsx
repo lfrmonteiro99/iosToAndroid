@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { render } from '../../test-utils';
 import type { RenderAPI } from '@testing-library/react-native';
 import { FindMyScreen } from '../FindMyScreen';
+import type { AppNavigationProp } from '../../navigation/types';
 import * as ContactsStore from '../../store/ContactsStore';
 
 // expo-notifications is mocked locally (same shape as RemindersScreen.test.tsx)
@@ -38,8 +39,10 @@ jest.mock('../../components', () => {
 const ITEMS_KEY = '@iostoandroid/findmy_items';
 const LOST_MODE_KEY = '@iostoandroid/findmy_lost_mode';
 
+const mockNavigation: AppNavigationProp = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
+
 function renderFindMy(): RenderAPI {
-  return render(<FindMyScreen />);
+  return render(<FindMyScreen navigation={mockNavigation} />);
 }
 
 // Returns the shared AsyncStorage mock so individual tests can seed storage.
@@ -93,6 +96,28 @@ describe('FindMyScreen', () => {
     const button = await waitFor(() => getByText('Grant Location Permission'));
     fireEvent.press(button);
     await waitFor(() => expect(requestSpy).toHaveBeenCalled());
+  });
+
+  it('renders a "Location History" entry point in the Devices tab that navigates', async () => {
+    const { getByText } = renderFindMy();
+    // Defaults to the Devices tab, where permission is granted (mock).
+    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+
+    const tile = await waitFor(() => getByText('Location History'));
+    expect(tile).toBeTruthy();
+
+    fireEvent.press(tile);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('FindMyLocationHistory');
+  });
+
+  it('does not render the "Location History" tile before permission is granted', async () => {
+    const loc = jest.requireMock('expo-location');
+    jest.spyOn(loc, 'getForegroundPermissionsAsync').mockResolvedValueOnce({ status: 'undetermined' });
+
+    const { queryByText } = renderFindMy();
+    await waitFor(() => expect(queryByText('Grant Location Permission')).toBeTruthy());
+    // The Devices list (with the new tile) only renders once granted.
+    expect(queryByText('Location History')).toBeNull();
   });
 
   // ─── Lost mode (issue #267) ─────────────────────────────────────────────

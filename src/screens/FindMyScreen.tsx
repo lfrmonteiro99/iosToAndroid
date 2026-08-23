@@ -28,6 +28,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useDevice } from '../store/DeviceStore';
 import { useLocation } from '../store/LocationStore';
 import { useContacts } from '../store/ContactsStore';
+import type { AppNavigationProp } from '../navigation/types';
 
 const LOST_MODE_KEY = '@iostoandroid/findmy_lost_mode';
 
@@ -105,7 +106,11 @@ export async function playSoundOnThisDevice(): Promise<void> {
   });
 }
 
-export function FindMyScreen() {
+// Keeps the `navigation` prop: issue #268 adds a "Location History" tile in the
+// Devices tab that calls `navigation.navigate('FindMyLocationHistory')`. (main's
+// #266 removed the prop while adding Play Sound, which does not need it — the
+// two intentions coexist here.)
+export function FindMyScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, borderRadius } = useTheme();
   const { colors } = theme;
   const { bluetooth } = useDevice();
@@ -390,6 +395,17 @@ export function FindMyScreen() {
                         />
                       }
                       showChevron={false}
+                    />
+                    <CupertinoListTile
+                      title="Location History"
+                      subtitle="View and clear recorded locations"
+                      leading={{
+                        name: 'time-outline',
+                        color: '#FFFFFF',
+                        backgroundColor: colors.systemBlue,
+                      }}
+                      onPress={() => navigation.navigate('FindMyLocationHistory')}
+                      showChevron
                     />
                   </CupertinoListSection>
                 </View>
