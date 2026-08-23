@@ -374,9 +374,12 @@ interface RecategorizeSheetProps {
   currentKey: string;
   onCancel: () => void;
   onSelect: (targetKey: string) => void;
+  /** #606: esconder a app (App Library only). Fica no mesmo sheet do long-press
+   * porque é a mesma acção contextual do iOS ("long-press → Hide App"). */
+  onHide: () => void;
 }
 
-function RecategorizeSheet({ visible, currentKey, onCancel, onSelect }: RecategorizeSheetProps) {
+function RecategorizeSheet({ visible, currentKey, onCancel, onSelect, onHide }: RecategorizeSheetProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -407,6 +410,15 @@ function RecategorizeSheet({ visible, currentKey, onCancel, onSelect }: Recatego
               </Pressable>
             )}
           />
+          <Pressable
+            onPress={onHide}
+            style={[styles.sheetRow, { borderBottomColor: colors.separator }]}
+            accessibilityLabel="Hide App"
+            accessibilityRole="button"
+          >
+            <Text style={[typography.body, { color: colors.systemBlue }]}>Hide App</Text>
+            <Ionicons name="eye-off-outline" size={20} color={colors.systemBlue} />
+          </Pressable>
           <Pressable
             onPress={onCancel}
             style={[styles.sheetCancel, { borderTopColor: colors.separator }]}
@@ -534,7 +546,7 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 export function AppLibraryContent() {
   const { theme } = useTheme();
   const { colors } = theme;
-  const { apps, launchApp, recentApps } = useApps();
+  const { apps, visibleApps, launchApp, recentApps, hideApp } = useApps();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -553,8 +565,8 @@ export function AppLibraryContent() {
   const { settings, update } = useSettings();
   const device = useDevice();
   const categories = useMemo(() => {
-    return buildCategorySections(apps, settings.categoryOverrides, categorizeApp);
-  }, [apps, settings.categoryOverrides]);
+    return buildCategorySections(visibleApps, settings.categoryOverrides, categorizeApp);
+  }, [visibleApps, settings.categoryOverrides]);
 
   // Badge counts — mesma fonte da home (LauncherHomeScreen.tsx:1113): SMS não
   // lidas do device mapeiam para a app Messages. Gateado por
@@ -582,23 +594,23 @@ export function AppLibraryContent() {
     const recentPkgs = [...recentApps]
       .sort((a, b) => b.launchedAt - a.launchedAt)
       .slice(0, 4)
-      .map(r => apps.find(a => a.packageName === r.packageName))
+      .map(r => visibleApps.find(a => a.packageName === r.packageName))
       .filter((a): a is InstalledApp => !!a);
     if (recentPkgs.length > 0) return recentPkgs;
     // Fallback: newest-named apps when no launch history exists
-    return [...apps].sort((a, b) => b.name.localeCompare(a.name)).slice(0, 4);
-  }, [apps, recentApps]);
+    return [...visibleApps].sort((a, b) => b.name.localeCompare(b.name)).slice(0, 4);
+  }, [visibleApps, recentApps]);
 
   // Suggestions — next 4 most-recently-launched apps after Recently Added
   const suggestedApps = useMemo(() => {
     const recentSorted = [...recentApps]
       .sort((a, b) => b.launchedAt - a.launchedAt)
       .slice(4, 8)
-      .map(r => apps.find(a => a.packageName === r.packageName))
+      .map(r => visibleApps.find(a => a.packageName === r.packageName))
       .filter((a): a is InstalledApp => !!a);
     if (recentSorted.length > 0) return recentSorted;
-    return [...apps].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 4);
-  }, [apps, recentApps]);
+    return [...visibleApps].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 4);
+  }, [visibleApps, recentApps]);
 
   // Filtered apps for search
   const filteredApps = useMemo(() => {
@@ -713,6 +725,11 @@ export function AppLibraryContent() {
         onCancel={() => setRecatSheet(null)}
         onSelect={(targetKey) => {
           if (recatSheet) handleRecategorize(recatSheet.packageName, targetKey);
+        }}
+        onHide={() => {
+          if (recatSheet) hideApp(recatSheet.packageName);
+          setRecatSheet(null);
+          setCategoryModal(null);
         }}
       />
     </View>
