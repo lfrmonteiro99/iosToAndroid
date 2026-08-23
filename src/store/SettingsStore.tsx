@@ -117,6 +117,14 @@ export interface SettingsState {
    * renomear não parta a atribuição.
    */
   categoryOverrides: CategoryOverrideSettings;
+  /**
+   * Newly Downloaded Apps destination (iOS «Home Screen & Dock → Newly
+   * Downloaded Apps»). When true (default) a freshly installed app is shown on
+   * the home screen; when false it appears only in the App Library. Already-
+   * installed apps are never moved — the setting only affects apps first seen
+   * after it was turned off (#601).
+   */
+  newAppsToHome: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -186,6 +194,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   iconShape: 'squircle',
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
+  newAppsToHome: true,
 };
 
 interface SettingsContextValue {

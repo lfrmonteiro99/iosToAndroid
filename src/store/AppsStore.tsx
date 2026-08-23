@@ -9,6 +9,7 @@ import { getIconMask, subscribeIconMask, type IconMaskOptions } from '../utils/i
 import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
+const LIBRARY_ONLY_KEY = '@iostoandroid/library_only';
 const APPS_INDEX_KEY = '@iostoandroid/apps_index';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
 const RECENTS_LEGACY_KEY = '@recent_apps';
@@ -75,6 +76,14 @@ interface AppsState {
   homeApps: HomeApp[];
   dockApps: string[]; // package names for bottom dock (max 4)
   isLoading: boolean;
+  /**
+   * Packages the user (or the "App Library Only" default) has asked to keep off
+   * the home screen. Apps here still appear in the App Library. Seeded at
+   * install time when settings.newAppsToHome is false (#601) and grown by the
+   * home-grid long-press "Remove from Home" path — removeFromHome() is kept as
+   * the user-facing equivalent so behaviour is unified.
+   */
+  libraryOnlyApps: string[];
 }
 
 export interface IconCacheRebuildProgress {
@@ -87,6 +96,13 @@ interface AppsContextValue {
   homeApps: HomeApp[];
   dockApps: InstalledApp[];
   nonDockApps: InstalledApp[];
+  /**
+   * Packages kept off the home screen (#601); they still appear in the App
+   * Library. Optional on the context value only so older test mocks that cast a
+   * hand-built object to AppsContextValue keep type-checking — the real provider
+   * always populates it.
+   */
+  libraryOnlyApps?: string[];
   recentPackages: string[];
   recentApps: RecentApp[];
   isLoading: boolean;
@@ -160,6 +176,7 @@ const DEFAULT_ICON_TREATMENT = 'mask-adaptive-only';
 export function AppsProvider({
   children,
   iconTreatment = DEFAULT_ICON_TREATMENT,
+  newAppsToHome = true,
 }: {
   children: React.ReactNode;
   /**
@@ -168,6 +185,13 @@ export function AppsProvider({
    * every existing AppsStore test mounts it without a SettingsProvider above.
    */
   iconTreatment?: string;
+  /**
+   * Whether freshly installed apps go to the home screen (#601). Passed down
+   * from SettingsStore by the app shell (see App.tsx) so AppsProvider stays
+   * usable on its own — every existing AppsStore test mounts it without a
+   * SettingsProvider above, and defaults to true (the current behaviour).
+   */
+  newAppsToHome?: boolean;
 }) {
   const alert = useAlert();
   const alertRef = React.useRef(alert);
@@ -177,6 +201,7 @@ export function AppsProvider({
     homeApps: [],
     dockApps: DEFAULT_DOCK,
     isLoading: true,
+    libraryOnlyApps: [],
   });
   const [isDefault, setIsDefault] = useState(false);
   const [recentApps, setRecentApps] = useState<RecentApp[]>([]);
@@ -214,6 +239,26 @@ export function AppsProvider({
         } catch (e) { logger.warn('AppsStore', 'failed to parse recent apps', e); }
       }
     })();
+  }, []);
+
+  // Load the "App Library Only" set (#601) — persisted separately from the
+  // layout so a reset of the dock/home layout doesn't silently un-hide apps.
+  useEffect(() => {
+    (async () => {
+      const raw = await AsyncStorage.getItem(LIBRARY_ONLY_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setState(prev => ({ ...prev, libraryOnlyApps: parsed.filter((p): p is string => typeof p === 'string') }));
+          }
+        } catch (e) { logger.warn('AppsStore', 'failed to parse library-only set', e); }
+      }
+    })();
+  }, []);
+
+  const persistLibraryOnly = useCallback((pkgs: string[]) => {
+    AsyncStorage.setItem(LIBRARY_ONLY_KEY, JSON.stringify(pkgs));
   }, []);
 
   const addToRecents = useCallback(async (packageName: string) => {
@@ -295,12 +340,13 @@ export function AppsProvider({
     }
 
     if (cachedApps) {
-      setState({
+      setState(prev => ({
+        ...prev,
         allApps: cachedApps,
         homeApps,
         dockApps: resolveDock(cachedApps, dockApps),
         isLoading: false,
-      });
+      }));
     }
 
     try {
@@ -315,11 +361,30 @@ export function AppsProvider({
       setIsDefault(defaultStatus);
       AsyncStorage.setItem(APPS_INDEX_KEY, JSON.stringify(apps));
 
-      setState({
-        allApps: apps,
-        homeApps,
-        dockApps: resolveDock(apps, dockApps),
-        isLoading: false,
+      // #601: when new apps are set to go to the App Library only, any package
+      // we have not seen before (not in the cached index) is seeded into
+      // libraryOnlyApps so it lands in the App Library instead of the home
+      // screen. Apps already known to the launcher are left untouched — the
+      // setting only affects apps first discovered while it is off.
+      setState(prev => {
+        const known = new Set(cachedApps?.map(c => c.packageName) ?? []);
+        const seeded = !newAppsToHome
+          ? apps
+              .map((a: InstalledApp) => a.packageName)
+              .filter((pkg: string) => !prev.libraryOnlyApps.includes(pkg) && !known.has(pkg))
+          : [];
+        const libraryOnlyApps = seeded.length > 0
+          ? [...prev.libraryOnlyApps, ...seeded]
+          : prev.libraryOnlyApps;
+        if (seeded.length > 0) persistLibraryOnly(libraryOnlyApps);
+        return {
+          ...prev,
+          allApps: apps,
+          homeApps,
+          dockApps: resolveDock(apps, dockApps),
+          isLoading: false,
+          libraryOnlyApps,
+        };
       });
     } catch (e) {
       logger.warn('AppsStore', 'background apps refresh failed', e);
@@ -330,7 +395,7 @@ export function AppsProvider({
         setState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [resolveDock, iconMask, iconTreatment]);
+  }, [resolveDock, iconMask, iconTreatment, newAppsToHome, persistLibraryOnly]);
 
   // loadApps depende de iconMask, por isso mudar a forma ou o expoente volta a
   // pedir os ícones ao nativo com a chave de cache nova — a grelha actualiza sem
@@ -419,21 +484,25 @@ export function AppsProvider({
   const addToHome = useCallback((packageName: string) => {
     setState(prev => {
       const exists = prev.homeApps.some(a => a.packageName === packageName);
-      if (exists) return prev;
-      const maxPos = prev.homeApps.reduce((max, a) => Math.max(max, a.position), -1);
-      const homeApps = [...prev.homeApps, { packageName, position: maxPos + 1 }];
+      const homeApps = exists ? prev.homeApps : [...prev.homeApps, { packageName, position: prev.homeApps.reduce((max, a) => Math.max(max, a.position), -1) + 1 }];
+      const libraryOnlyApps = prev.libraryOnlyApps.filter(p => p !== packageName);
+      if (libraryOnlyApps.length !== prev.libraryOnlyApps.length) persistLibraryOnly(libraryOnlyApps);
       persist(prev.dockApps, homeApps);
-      return { ...prev, homeApps };
+      return { ...prev, homeApps, libraryOnlyApps };
     });
-  }, [persist]);
+  }, [persist, persistLibraryOnly]);
 
   const removeFromHome = useCallback((packageName: string) => {
     setState(prev => {
       const homeApps = prev.homeApps.filter(a => a.packageName !== packageName);
+      const libraryOnlyApps = prev.libraryOnlyApps.includes(packageName)
+        ? prev.libraryOnlyApps
+        : [...prev.libraryOnlyApps, packageName];
       persist(prev.dockApps, homeApps);
-      return { ...prev, homeApps };
+      persistLibraryOnly(libraryOnlyApps);
+      return { ...prev, homeApps, libraryOnlyApps };
     });
-  }, [persist]);
+  }, [persist, persistLibraryOnly]);
 
   const addToDock = useCallback((packageName: string) => {
     setState(prev => {
@@ -519,8 +588,8 @@ export function AppsProvider({
   );
 
   const nonDockApps = useMemo(() =>
-    state.allApps.filter(a => !state.dockApps.includes(a.packageName)),
-    [state.allApps, state.dockApps]
+    state.allApps.filter(a => !state.dockApps.includes(a.packageName) && !state.libraryOnlyApps.includes(a.packageName)),
+    [state.allApps, state.dockApps, state.libraryOnlyApps],
   );
 
   // Derive recentPackages (string[]) for backward compatibility
@@ -531,6 +600,7 @@ export function AppsProvider({
     homeApps: state.homeApps,
     dockApps,
     nonDockApps,
+    libraryOnlyApps: state.libraryOnlyApps,
     recentPackages,
     recentApps,
     isLoading: state.isLoading,

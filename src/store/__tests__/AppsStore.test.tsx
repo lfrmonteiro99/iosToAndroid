@@ -293,3 +293,112 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     });
   });
 });
+
+describe('AppsStore — new apps destination (#601: newAppsToHome)', () => {
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: 'file:///icons/b_1.png', isSystem: false };
+
+  // A wrapper that forwards the setting under test, like the app shell
+  // (App.tsx → AppsProviderWithIconTreatment) does with settings.newAppsToHome.
+  const makeWrapper = (newAppsToHome: boolean) => {
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AppsProvider newAppsToHome={newAppsToHome}>{children}</AppsProvider>
+    );
+    Wrapper.displayName = `AppsProviderWithNewAppsToHome(${newAppsToHome})`;
+    return Wrapper;
+  };
+  const wrapperWith = makeWrapper;
+
+  beforeEach(() => {
+    (LauncherModule.getIconCacheSizeBytes as jest.Mock).mockResolvedValue(0);
+    (LauncherModule.clearIconCache as jest.Mock).mockResolvedValue(0);
+    (LauncherModule.getAppInfo as jest.Mock).mockResolvedValue(null);
+  });
+
+  it('newAppsToHome=true (default): a freshly installed app lands on the home screen', async () => {
+    // No cached index → the native scan returns a brand-new package.
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([banana]);
+
+    const { result } = renderHook(() => useApps(), { wrapper: wrapperWith(true) });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(result.current.apps.map(a => a.packageName)).toContain('com.example.banana');
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+    expect(result.current.libraryOnlyApps).not.toContain('com.example.banana');
+  });
+
+  it('newAppsToHome=false: a freshly installed app is kept off the home screen (App Library only)', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([banana]);
+
+    const { result } = renderHook(() => useApps(), { wrapper: wrapperWith(false) });
+    await act(async () => {});
+    await act(async () => {});
+
+    // Still listed in the full app set (so the App Library renders it)…
+    expect(result.current.apps.map(a => a.packageName)).toContain('com.example.banana');
+    // …but excluded from the home grid…
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+    // …and recorded so it stays off home across restarts.
+    expect(result.current.libraryOnlyApps).toContain('com.example.banana');
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/library_only',
+      expect.stringContaining('com.example.banana'),
+    );
+  });
+
+  it('newAppsToHome=false does NOT hide apps that were already known before the toggle was off', async () => {
+    // The cached index already contains banana → it is an "existing" app, not new.
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === APPS_INDEX_KEY ? JSON.stringify([banana]) : null),
+    );
+    // Native scan agrees banana is still installed (no change).
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([banana]);
+
+    const { result } = renderHook(() => useApps(), { wrapper: wrapperWith(false) });
+    await act(async () => {});
+    await act(async () => {});
+
+    // A previously-known app stays on the home screen even with the toggle off.
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+    expect(result.current.libraryOnlyApps).not.toContain('com.example.banana');
+  });
+
+  it('removeFromHome adds the package to libraryOnlyApps so it leaves the home grid', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([banana]);
+
+    const { result } = renderHook(() => useApps(), { wrapper: wrapperWith(true) });
+    await act(async () => {});
+    await act(async () => {});
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+
+    await act(async () => {
+      result.current.removeFromHome('com.example.banana');
+    });
+
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+    expect(result.current.libraryOnlyApps).toContain('com.example.banana');
+  });
+
+  it('addToHome removes the package from libraryOnlyApps so it returns to the home grid', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([banana]);
+
+    const { result } = renderHook(() => useApps(), { wrapper: wrapperWith(true) });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.removeFromHome('com.example.banana');
+    });
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+
+    await act(async () => {
+      result.current.addToHome('com.example.banana');
+    });
+    expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
+    expect(result.current.libraryOnlyApps).not.toContain('com.example.banana');
+  });
+});
