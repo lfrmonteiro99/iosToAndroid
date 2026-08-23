@@ -4,11 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useDevice } from '../../store/DeviceStore';
+import { useSettings } from '../../store/SettingsStore';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  CupertinoActionSheet,
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
@@ -29,7 +31,7 @@ interface DiscoveredDevice {
   bondState: number;
 }
 
-function getDeviceIcon(type: number): keyof typeof Ionicons.glyphMap {
+export function getDeviceIcon(type: number): keyof typeof Ionicons.glyphMap {
   switch (type) {
     case 1:
       return 'laptop-outline';
@@ -37,6 +39,10 @@ function getDeviceIcon(type: number): keyof typeof Ionicons.glyphMap {
       return 'phone-portrait-outline';
     case 7:
       return 'headset-outline';
+    case 8:
+      return 'volume-high-outline';
+    case 9:
+      return 'car-sport-outline';
     default:
       return 'bluetooth';
   }
@@ -45,6 +51,10 @@ function getDeviceIcon(type: number): keyof typeof Ionicons.glyphMap {
 function getDeviceIconBackground(type: number, accentColor: string): string {
   switch (type) {
     case 7:
+      return '#FF9500';
+    case 8:
+      return '#FF9500';
+    case 9:
       return '#FF9500';
     case 1:
       return '#5856D6';
@@ -55,16 +65,55 @@ function getDeviceIconBackground(type: number, accentColor: string): string {
   }
 }
 
+/**
+ * User-overridable device type (issue #615). The native layer reports a raw
+ * `device.type`; the user may relabel a paired device as speaker / headphones /
+ * car / other. This only affects the local UI (icon + intent) — Android's real
+ * Headphone Safety is handled by the OS, not this launcher.
+ */
+export type BluetoothDeviceType = 'speaker' | 'headphones' | 'car' | 'other';
+
+/**
+ * Maps the user-overridden type to the Ionicons glyph + native `device.type`
+ * integer the existing `getDeviceIcon`/`getDeviceIconBackground` already know
+ * how to render. Keeping the override in native-type space means the rest of
+ * the screen (paired + discovered tiles) renders the override for free.
+ */
+const DEVICE_TYPE_TO_NATIVE: Record<BluetoothDeviceType, number> = {
+  speaker: 8,
+  headphones: 7,
+  car: 9,
+  other: 0,
+};
+
+const DEVICE_TYPE_OPTIONS: { label: string; value: BluetoothDeviceType }[] = [
+  { label: 'Speaker', value: 'speaker' },
+  { label: 'Headphones', value: 'headphones' },
+  { label: 'Car Stereo', value: 'car' },
+  { label: 'Other', value: 'other' },
+];
+
+/** Resolve the icon type for a device: override wins over the raw native type. */
+export function getIconTypeForDevice(
+  device: { address: string; type: number },
+  overrides: Record<string, BluetoothDeviceType>,
+): number {
+  const override = overrides[device.address];
+  return override ? DEVICE_TYPE_TO_NATIVE[override] : device.type ?? 0;
+}
+
 export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { bluetooth, bluetoothError, toggleBluetooth, refresh } = useDevice();
+  const { settings, update } = useSettings();
   const alert = useAlert();
 
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
   const [scanning, setScanning] = useState(false);
   const [pairingAddress, setPairingAddress] = useState<string | null>(null);
+  const [typePickerAddress, setTypePickerAddress] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pairedAddresses = new Set(bluetooth.pairedDevices.map((d) => d.address));
@@ -141,6 +190,22 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
       alert('Unpair Failed', 'Could not unpair this device.');
     }
   }, [alert, refresh]);
+
+  // Opens the device-type picker (the iOS "i" override) for a paired device.
+  const openTypePicker = useCallback((address: string) => {
+    setTypePickerAddress(address);
+  }, []);
+
+  // Persists the chosen device type override keyed by device.address (#615).
+  const handleSetType = useCallback((value: BluetoothDeviceType) => {
+    const address = typePickerAddress;
+    setTypePickerAddress(null);
+    if (!address) return;
+    update('bluetoothDeviceTypes', {
+      ...settings.bluetoothDeviceTypes,
+      [address]: value,
+    });
+  }, [typePickerAddress, settings.bluetoothDeviceTypes, update]);
 
   useEffect(() => {
     if (bluetooth.enabled) {
@@ -234,7 +299,7 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
               <CupertinoListSection header="My Devices">
                 {bluetooth.pairedDevices.length > 0 ? (
                   bluetooth.pairedDevices.map((device) => {
-                    const deviceType = device.type ?? 0;
+                    const deviceType = getIconTypeForDevice(device, settings.bluetoothDeviceTypes);
                     return (
                       <CupertinoListTile
                         key={device.address}
@@ -252,7 +317,8 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
                             </Text>
                           </Pressable>
                         }
-                        showChevron={false}
+                        onPress={() => openTypePicker(device.address)}
+                        showChevron
                       />
                     );
                   })
@@ -324,6 +390,17 @@ export function BluetoothScreen({ navigation }: { navigation: AppNavigationProp 
             <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
               When pairing, Android may show a passkey confirmation dialog — this is required for security.
             </Text>
+
+            <CupertinoActionSheet
+              visible={typePickerAddress !== null}
+              onClose={() => setTypePickerAddress(null)}
+              title={typePickerAddress ? `Device Type — ${typePickerAddress}` : 'Device Type'}
+              options={DEVICE_TYPE_OPTIONS.map((option) => ({
+                label: option.label,
+                onPress: () => handleSetType(option.value),
+              }))}
+              cancelLabel="Cancel"
+            />
 
             {scanning && (
               <View style={styles.stopScanRow}>
