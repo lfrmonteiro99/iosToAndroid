@@ -18,6 +18,7 @@ import {
   type RequirePasscodeAfter,
   DEFAULT_REQUIRE_PASSCODE_AFTER,
 } from '../utils/passcodePolicy';
+import { clampWhitePointLevel } from '../utils/whitePoint';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -71,6 +72,10 @@ export interface SettingsState {
   wallpaperIndex: number;
   reduceMotion: boolean;
   reduceTransparency: boolean;
+  /** iOS «Reduce White Point»: dims the brightest colours via a dark overlay over the root container. */
+  reduceWhitePoint: boolean;
+  /** Overlay opacity (1 - whitePointLevel). Gama 0.25–1.0; 1.0 = sem redução. Default 1.0. */
+  whitePointLevel: number;
   boldText: boolean;
   showLockScreen: boolean;
   biometricUnlock: boolean;
@@ -172,6 +177,14 @@ export interface SettingsState {
    */
   statusBarVisible: boolean;
   /**
+   * iOS «Display & Brightness → Auto-Brightness»: when true (default) the OS
+   * ambient-light sensor drives the screen brightness; the manual brightness
+   * slider is disabled and the device stays in AUTOMATIC brightness mode. When
+   * false, the slider takes over with `Brightness.setBrightnessAsync` and the
+   * device is switched to MANUAL brightness mode (#612).
+   */
+  autoBrightness: boolean;
+  /**
    * Siri & Search → Suggestions (#610). When false the App Library's
    * «Suggestions» strip is not rendered. Independent of the two visibility
    * toggles below: this only removes the suggestion strip, not the apps.
@@ -189,6 +202,28 @@ export interface SettingsState {
    * and remain launchable from the home screen.
    */
   searchShowInLibrary: boolean;
+  /**
+   * Dark Mode «Automatic» with a custom schedule (iOS «Display & Brightness →
+   * Appearance → Automatic → Custom Schedule»). When true, the launcher follows
+   * its own Light Until / Dark Until hours instead of the system color scheme.
+   * Only meaningful while `mode` is 'system' (see ThemeContext.resolveIsDark).
+   * Default false — the pre-existing behaviour (follow the OS) is preserved.
+   */
+  darkModeAutomatic: boolean;
+  /**
+   * "Light Until" hour for the custom Dark Mode schedule, 'HH:MM' 24h. The
+   * launcher renders light from midnight up to (and excluding) this instant,
+   * then dark until `darkModeDarkUntil` the next morning. Default '07:00'
+   * matches the iOS custom-schedule default of "Light until 7:00 AM".
+   */
+  darkModeLightUntil: string;
+  /**
+   * "Dark Until" hour for the custom Dark Mode schedule, 'HH:MM' 24h. The
+   * launcher renders dark from `darkModeLightUntil` up to (and excluding) this
+   * instant, then light again. Default '19:00' matches the iOS default of
+   * "Dark until 7:00 PM".
+   */
+  darkModeDarkUntil: string;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -240,6 +275,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   wallpaperIndex: 0,
   reduceMotion: false,
   reduceTransparency: false,
+  reduceWhitePoint: false,
+  whitePointLevel: 1.0,
   boldText: false,
   showLockScreen: true,
   biometricUnlock: true,
@@ -267,9 +304,13 @@ export const DEFAULT_SETTINGS: SettingsState = {
   appLibraryShowSuggestions: true,
   statusBarStyle: 'auto',
   statusBarVisible: true,
+  autoBrightness: true,
   searchShowSuggestions: true,
   searchShowInSearch: true,
   searchShowInLibrary: true,
+  darkModeAutomatic: false,
+  darkModeLightUntil: '07:00',
+  darkModeDarkUntil: '19:00',
 };
 
 interface SettingsContextValue {
@@ -325,6 +366,10 @@ export function SettingsProvider({
             // uma máscara indefinida, por isso normaliza-se na leitura.
             iconShape: normalizeIconShape(parsed?.iconShape),
             iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
+            // whitePointLevel tem de ficar na gama 0.25–1.0; um valor
+            // corrompido (NaN, fora da gama) faria um overlay com opacidade
+            // inválida, por isso normaliza-se na leitura.
+            whitePointLevel: clampWhitePointLevel(parsed?.whitePointLevel),
           }));
         } catch { /* ignore */ }
       }

@@ -21,6 +21,7 @@ import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
+import { WhitePointOverlay } from './src/components/WhitePointOverlay';
 import { HomeIndicator } from './src/components/HomeIndicator';
 import { QuickSwitchHomeBar } from './src/components/QuickSwitchHomeBar';
 import { GestureHost } from './src/components/GestureHost';
@@ -331,6 +332,10 @@ function AppContent() {
         notification={banner}
         onDismiss={() => setBanner(null)}
       />
+
+      {/* iOS «Reduce White Point» — dark overlay over the whole app root,
+          pinned above every screen but tap-through (pointerEvents none). */}
+      <WhitePointOverlay />
     </View>
   );
 }

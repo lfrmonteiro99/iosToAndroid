@@ -22,6 +22,16 @@ const NIGHT_SHIFT_KEY = '@iostoandroid/night_shift';
 
 const ACCENT_KEYS = Object.keys(AccentColors) as AccentColorKey[];
 
+/**
+ * Build the 24h ':00' / ':30' hour-options for the Dark Mode schedule pickers,
+ * matching the granularity of the iOS «Light Until» / «Dark Until» spinners.
+ */
+const SCHEDULE_HOUR_OPTIONS: string[] = Array.from({ length: 48 }, (_, i) => {
+  const h = Math.floor(i / 2);
+  const m = i % 2 === 0 ? '00' : '30';
+  return `${String(h).padStart(2, '0')}:${m}`;
+});
+
 /** 'blue' → 'Blue'. iOS lists the tint options with a capitalised label. */
 function accentLabel(key: AccentColorKey) {
   return key.charAt(0).toUpperCase() + key.slice(1);
@@ -33,12 +43,14 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { brightness, setBrightness } = useDevice();
+  const { brightness, setBrightness, autoBrightness, setAutoBrightness } = useDevice();
   const [showAutoLock, setShowAutoLock] = useState(false);
   const [showTintPicker, setShowTintPicker] = useState(false);
   const [showStatusBarStylePicker, setShowStatusBarStylePicker] = useState(false);
   const [nightShiftEnabled, setNightShiftEnabled] = useState(false);
   const [nightShiftIntensity, setNightShiftIntensity] = useState(0.5);
+  const [showLightUntil, setShowLightUntil] = useState(false);
+  const [showDarkUntil, setShowDarkUntil] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(NIGHT_SHIFT_KEY).then((raw) => {
@@ -85,14 +97,27 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
         {/* Brightness slider */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Brightness">
+            <CupertinoListTile
+              title="Auto-Brightness"
+              trailing={
+                <CupertinoSwitch
+                  value={autoBrightness}
+                  onValueChange={(v) => setAutoBrightness(v)}
+                  testID="auto-brightness-switch"
+                />
+              }
+              showChevron={false}
+            />
             <View style={styles.sliderRow}>
               <Ionicons name="sunny-outline" size={20} color={colors.secondaryLabel} />
               <View style={styles.sliderTrack}>
                 <CupertinoSlider
                   value={brightness}
-                  onValueChange={(v) => setBrightness(v)}
+                  onValueChange={(v) => { if (!autoBrightness) setBrightness(v); }}
                   minimumValue={0}
                   maximumValue={1}
+                  disabled={autoBrightness}
+                  testID="brightness-slider"
                 />
               </View>
               <Ionicons name="sunny" size={20} color={colors.secondaryLabel} />
@@ -128,13 +153,64 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
                 </View>
               </View>
               <CupertinoSegmentedControl
+                testID="appearance-segmented"
                 values={['Light', 'Dark', 'Automatic']}
                 selectedIndex={mode === 'light' ? 0 : mode === 'dark' ? 1 : 2}
-                onChange={(i) => setThemeMode(i === 0 ? 'light' : i === 1 ? 'dark' : 'system')}
+                onChange={(i) => {
+                  // "Light"/"Dark" are explicit; "Automatic" follows the custom
+                  // schedule (darkModeAutomatic) instead of the raw OS scheme.
+                  if (i === 0) {
+                    update('darkModeAutomatic', false);
+                    setThemeMode('light');
+                  } else if (i === 1) {
+                    update('darkModeAutomatic', false);
+                    setThemeMode('dark');
+                  } else {
+                    update('darkModeAutomatic', true);
+                    setThemeMode('system');
+                  }
+                }}
               />
             </View>
           </CupertinoListSection>
         </View>
+
+        {/* Custom Dark Mode schedule — only relevant when "Automatic" with a
+            custom schedule is active, mirroring iOS «Appearance → Automatic →
+            Custom Schedule» (Light Until / Dark Until). */}
+        {mode === 'system' && settings.darkModeAutomatic && (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <CupertinoListSection
+              header="Custom Schedule"
+              footer="Light Until / Dark Until let the launcher follow its own day–night hours instead of the system appearance."
+            >
+              <CupertinoListTile
+                title="Light Until"
+                trailing={
+                  <Text
+                    testID="dark-mode-light-until-value"
+                    style={[typography.body, { color: colors.secondaryLabel }]}
+                  >
+                    {settings.darkModeLightUntil}
+                  </Text>
+                }
+                onPress={() => setShowLightUntil(true)}
+              />
+              <CupertinoListTile
+                title="Dark Until"
+                trailing={
+                  <Text
+                    testID="dark-mode-dark-until-value"
+                    style={[typography.body, { color: colors.secondaryLabel }]}
+                  >
+                    {settings.darkModeDarkUntil}
+                  </Text>
+                }
+                onPress={() => setShowDarkUntil(true)}
+              />
+            </CupertinoListSection>
+          </View>
+        )}
 
         {/* Tint (accent colour) */}
         <View style={{ paddingHorizontal: spacing.md }}>
@@ -312,6 +388,28 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
           { label: 'Dark', onPress: () => { update('statusBarStyle', 'dark'); setShowStatusBarStylePicker(false); } },
           { label: 'Automatic', onPress: () => { update('statusBarStyle', 'auto'); setShowStatusBarStylePicker(false); } },
         ]}
+        cancelLabel="Cancel"
+      />
+
+      <CupertinoActionSheet
+        visible={showLightUntil}
+        onClose={() => setShowLightUntil(false)}
+        title="Light Until"
+        options={SCHEDULE_HOUR_OPTIONS.map((opt) => ({
+          label: opt,
+          onPress: () => { update('darkModeLightUntil', opt); setShowLightUntil(false); },
+        }))}
+        cancelLabel="Cancel"
+      />
+
+      <CupertinoActionSheet
+        visible={showDarkUntil}
+        onClose={() => setShowDarkUntil(false)}
+        title="Dark Until"
+        options={SCHEDULE_HOUR_OPTIONS.map((opt) => ({
+          label: opt,
+          onPress: () => { update('darkModeDarkUntil', opt); setShowDarkUntil(false); },
+        }))}
         cancelLabel="Cancel"
       />
     </View>

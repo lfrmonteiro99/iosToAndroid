@@ -27,6 +27,87 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 
 const TEXT_SIZE_SCALE: Record<number, number> = { 0: 0.85, 1: 1.0, 2: 1.15, 3: 1.3 };
 
+/**
+ * Parse an 'HH:MM' (24h) string into minutes since midnight. Returns null for
+ * anything that is not exactly that shape — a corrupt or missing schedule value
+ * must never be used to flip the theme, so callers fall back to the OS instead.
+ */
+export function parseHHMM(hhmm: string | null | undefined): number | null {
+  if (typeof hhmm !== 'string') return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!m) return null;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/**
+ * Decide darkness purely from the custom schedule for a given instant, in
+ * minutes since midnight. The launcher is light from 00:00 up to (and
+ * excluding) `lightUntil`, then dark until (and excluding) `darkUntil`, then
+ * light again until midnight — matching iOS «Custom Schedule» semantics.
+ *
+ * Returns null when the schedule is unusable (missing/invalid/equal endpoints),
+ * which signals the caller to fall back to the system scheme rather than guess.
+ * This is a pure function so the schedule branch is unit-testable without
+ * faking the clock or the OS color scheme.
+ */
+export function isDarkBySchedule(
+  nowMinutes: number,
+  lightUntil: string,
+  darkUntil: string,
+): boolean | null {
+  const light = parseHHMM(lightUntil);
+  const dark = parseHHMM(darkUntil);
+  if (light === null || dark === null) return null;
+  // Equal endpoints make the interval degenerate (or a zero-length dark window):
+  // there is no coherent schedule, so do not drive isDark from it.
+  if (light === dark) return null;
+
+  if (light < dark) {
+    // Daytime block then dark block, e.g. light until 07:00, dark until 19:00.
+    // Light in [00:00, light) and [dark, 24:00); dark in [light, dark).
+    return nowMinutes >= light && nowMinutes < dark;
+  }
+  // Overnight schedule: dark spans midnight, e.g. light until 19:00,
+  // dark until 07:00. Light in [dark, light); dark everywhere else.
+  return !(nowMinutes >= dark && nowMinutes < light);
+}
+
+/**
+ * Resolve the active `isDark` from the theme mode, the system color scheme, and
+ * the custom Dark Mode schedule. Extracted as a pure function so the scheduled
+ * branch is independently testable.
+ *
+ * @param mode        current theme mode ('system' | 'light' | 'dark')
+ * @param systemDark  whether the OS reports a dark color scheme
+ * @param automatic   whether the custom schedule overrides the OS (only
+ *                    consulted when `mode === 'system'`)
+ * @param lightUntil  'HH:MM' Light-Until of the custom schedule
+ * @param darkUntil   'HH:MM' Dark-Until of the custom schedule
+ * @param now         Date whose local hours/minutes drive the schedule
+ */
+export function resolveIsDark(
+  mode: ThemeMode,
+  systemDark: boolean,
+  automatic: boolean,
+  lightUntil: string,
+  darkUntil: string,
+  now: Date,
+): boolean {
+  if (mode === 'dark') return true;
+  if (mode === 'light') return false;
+  // mode === 'system'
+  if (automatic) {
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const scheduled = isDarkBySchedule(nowMinutes, lightUntil, darkUntil);
+    if (scheduled !== null) return scheduled;
+    // Degenerate/garbage schedule: never silently flip — follow the OS.
+  }
+  return systemDark;
+}
+
 type FontWeightValue = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900' | 'bold' | 'normal';
 
 /**
@@ -118,9 +199,17 @@ export function ThemeProvider({
 
   const { settings } = useSettings();
 
-  // Derive isDark from mode + system color scheme
+  // Derive isDark from mode + system color scheme, or the custom Dark Mode
+  // schedule when the user opted into "Automatic" with a custom schedule.
   const systemScheme = useColorScheme();
-  const isDark = mode === 'system' ? systemScheme === 'dark' : mode === 'dark';
+  const isDark = resolveIsDark(
+    mode,
+    systemScheme === 'dark',
+    settings.darkModeAutomatic,
+    settings.darkModeLightUntil,
+    settings.darkModeDarkUntil,
+    new Date(),
+  );
 
   // Hydrate saved preferences on mount
   useEffect(() => {

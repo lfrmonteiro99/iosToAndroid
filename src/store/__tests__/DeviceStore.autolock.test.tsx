@@ -3,14 +3,22 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import type { PermissionStatus } from 'react-native/Libraries/PermissionsAndroid/PermissionsAndroid';
 import { renderHook, act } from '@testing-library/react-native';
 import { DeviceProvider, useDevice } from '../DeviceStore';
+import { SettingsProvider } from '../SettingsStore';
 import { suppressAutoLock } from '../../utils/permissions';
 
 // Proves App.tsx's auto-lock suppression engages while the native
 // READ_SMS permission dialog (PermissionsAndroid.request) is up — the M11
 // defect: DeviceStore.requestSmsPermission called PermissionsAndroid.request
 // directly, bypassing withAutoLockSuppressed entirely.
+//
+// DeviceProvider now calls useSettings() unconditionally (DeviceStore.tsx:134,
+// introduced for #612 auto-brightness), so it requires a SettingsProvider above
+// it — exactly like App.tsx, src/test-utils.tsx and the #612 test. gateFirstRender
+// is disabled so the provider does not return null on the synchronous render.
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <DeviceProvider>{children}</DeviceProvider>
+  <SettingsProvider gateFirstRender={false}>
+    <DeviceProvider>{children}</DeviceProvider>
+  </SettingsProvider>
 );
 
 describe('DeviceStore requestSmsPermission auto-lock suppression (M11)', () => {
