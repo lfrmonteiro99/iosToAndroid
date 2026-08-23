@@ -54,6 +54,16 @@ export interface SettingsState {
    * Default `{}` — sem entradas, todas as páginas continuam visíveis.
    */
   focusPageVisibility: FocusPageVisibility;
+  /**
+   * Início do horário do Focus agendado, 'HH:MM' 24h. Só relevante quando
+   * `focusScheduleEnabled` está true. Default '09:00' (iOS Work por omissão).
+   */
+  focusScheduleStart: string;
+  /**
+   * Fim do horário do Focus agendado, 'HH:MM' 24h. Só relevante quando
+   * `focusScheduleEnabled` está true. Default '17:00'.
+   */
+  focusScheduleEnd: string;
   screenTimeEnabled: boolean;
   dailyLimit: number;
   downtime: boolean;
@@ -268,6 +278,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   focusMode: 'off',
   focusScheduleEnabled: false,
   focusPageVisibility: {},
+  focusScheduleStart: '09:00',
+  focusScheduleEnd: '17:00',
   screenTimeEnabled: false,
   dailyLimit: 60,
   downtime: false,

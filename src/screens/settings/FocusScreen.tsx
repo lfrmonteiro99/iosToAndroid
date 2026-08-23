@@ -43,6 +43,17 @@ const FOCUS_MODES: FocusModeOption[] = [
 /** Ícones virtuais que o launcher injecta sempre na grelha (ver LauncherHomeScreen.gridItems). */
 const BUILT_IN_APP_COUNT = Object.keys(BUILT_IN_APPS).length;
 
+/** Gera as opções de hora 'HH:MM' de 30 em 30 min (00:00 … 23:30). */
+function buildHalfHourOptions(): string[] {
+  const out: string[] = [];
+  for (let h = 0; h < 24; h += 1) {
+    for (const m of [0, 30]) {
+      out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    }
+  }
+  return out;
+}
+
 export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
@@ -51,6 +62,11 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { nonDockApps } = useApps();
   const { folders } = useFolders();
   const alert = useAlert();
+
+  // Picker de hora para o agendamento (From/To). Opções de 30 em 30 min,
+  // formato 'HH:MM' 24h — segue o padrão do ScreenTime (Start/End).
+  const HOUR_OPTIONS = useMemo(() => buildHalfHourOptions(), []);
+  const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
 
   const isFocusActive = settings.focusMode !== 'off';
   const activeModeLabel = FOCUS_MODES.find((m) => m.key === settings.focusMode)?.label ?? '';
@@ -214,8 +230,46 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
               }
               showChevron={false}
             />
+            {settings.focusScheduleEnabled && (
+              <>
+                <CupertinoListTile
+                  title="From"
+                  trailing={
+                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                      {settings.focusScheduleStart}
+                    </Text>
+                  }
+                  onPress={() => setPickerTarget('start')}
+                  showChevron={false}
+                />
+                <CupertinoListTile
+                  title="To"
+                  trailing={
+                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                      {settings.focusScheduleEnd}
+                    </Text>
+                  }
+                  onPress={() => setPickerTarget('end')}
+                  showChevron={false}
+                />
+              </>
+            )}
           </CupertinoListSection>
         </View>
+
+        <CupertinoActionSheet
+          visible={pickerTarget !== null}
+          onClose={() => setPickerTarget(null)}
+          title={pickerTarget === 'start' ? 'From' : 'To'}
+          options={HOUR_OPTIONS.map((opt) => ({
+            label: opt,
+            onPress: () => {
+              if (pickerTarget === 'start') update('focusScheduleStart', opt);
+              else if (pickerTarget === 'end') update('focusScheduleEnd', opt);
+            },
+          }))}
+          cancelLabel="Cancel"
+        />
       </ScrollView>
 
       {/* Multiselect das páginas ocultas (#618). O CupertinoActionSheet fecha
