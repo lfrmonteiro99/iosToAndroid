@@ -84,6 +84,14 @@ export function SettingsScreen() {
         { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, type: 'navigate', route: 'Privacy' },
       ],
     },
+    {
+      // Launcher-specific configuration (dock, grid, lock screen, passcode).
+      // iOS surfaces per-app settings inside the system Settings app; this is ours.
+      section: 'launcher',
+      items: [
+        { key: 'launcher', title: 'Launcher', icon: 'apps', iconBg: '#5856D6', type: 'navigate', route: 'LauncherSettings' },
+      ],
+    },
   ], [colors.accent, profile.name, profile.email]);
 
   const getTrailing = (item: SettingsItem): string | undefined => {

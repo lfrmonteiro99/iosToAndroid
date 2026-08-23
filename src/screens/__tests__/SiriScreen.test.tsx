@@ -1,4 +1,5 @@
 import React from 'react';
+<<<<<<< Updated upstream
 import { render, fireEvent, waitFor, act } from '../../test-utils';
 import { SiriScreen } from '../SiriScreen';
 import type { AppNavigationProp } from '../../navigation/types';
@@ -32,24 +33,47 @@ const mockCreateQuickAlarm = jest.fn<Promise<Alarm>, [number, number, string?]>(
 jest.mock('../../utils/alarmScheduling', () => ({
   createQuickAlarm: (...args: [number, number, string?]) => mockCreateQuickAlarm(...args),
 }));
+=======
+import { render, fireEvent, waitFor } from '../../test-utils';
+import * as Speech from 'expo-speech';
+import * as LauncherModuleNS from '../../../modules/launcher-module/src';
+import { SiriScreen } from '../SiriScreen';
+import type { AppNavigationProp } from '../navigation/types';
+>>>>>>> Stashed changes
 
-const mockLaunchApp = jest.fn<Promise<void>, [string]>(() => Promise.resolve());
-const mockApps: InstalledApp[] = [
-  { name: 'Calculator', packageName: 'com.iostoandroid.calculator', icon: '', isSystem: false },
-  { name: 'Weather', packageName: 'com.iostoandroid.weather', icon: '', isSystem: false },
-];
+const navMock = { navigate: jest.fn(), goBack: jest.fn() } as unknown as AppNavigationProp;
 
-// Only `useApps` is stubbed: `AppsProvider` (used by test-utils) stays real, and
-// the real provider yields an empty app list under jest because the native
-// launcher module is unavailable, so app-matching could never be exercised.
-jest.mock('../../store/AppsStore', () => {
-  const actual = jest.requireActual('../../store/AppsStore');
+// expo-speech is native; mock it so we can assert the assistant speaks.
+jest.mock('expo-speech', () => ({
+  speak: jest.fn(),
+  stop: jest.fn(),
+}));
+
+// Speech listeners are captured so the test can simulate a recognized
+// utterance coming back from the native SpeechRecognizer.
+const listeners: Record<string, (text: string) => void> = {};
+
+jest.mock('../../../modules/launcher-module/src', () => {
+  const actual = jest.requireActual('../../../modules/launcher-module/src');
   return {
+    __esModule: true,
     ...actual,
-    useApps: () => ({ apps: mockApps, launchApp: mockLaunchApp }),
+    default: {
+      ...actual.default,
+      launchApp: jest.fn(async () => true),
+      startSpeechRecognition: jest.fn(async () => true),
+      stopSpeechRecognition: jest.fn(async () => true),
+    },
+    addSpeechResultListener: jest.fn((cb: (text: string) => void) => {
+      listeners.onSpeechResult = cb;
+      return () => {};
+    }),
+    addSpeechPartialListener: jest.fn(() => () => {}),
+    addSpeechErrorListener: jest.fn(() => () => {}),
   };
 });
 
+<<<<<<< Updated upstream
 /** The clock time the assistant speaks for a given hour/minute in this locale. */
 function spokenTime(hour: number, minute: number): string {
   const d = new Date();
@@ -74,64 +98,67 @@ beforeEach(() => {
   (Speech.speak as jest.Mock).mockClear();
   (Speech.stop as jest.Mock).mockClear();
   mockCreateQuickAlarm.mockClear();
+=======
+beforeEach(() => {
+  jest.clearAllMocks();
+  (Speech.speak as jest.Mock).mockClear();
+>>>>>>> Stashed changes
 });
 
 describe('SiriScreen', () => {
-  it('renders without crashing and shows the text input', () => {
-    const { getByLabelText, toJSON } = render(<SiriScreen navigation={makeNav()} />);
-    expect(toJSON()).toBeTruthy();
-    expect(getByLabelText('Ask Siri')).toBeTruthy();
+  it('renders the greeting', () => {
+    const { getByText } = render(<SiriScreen navigation={navMock} />);
+    expect(getByText('What can I help you with?')).toBeTruthy();
   });
 
-  // ── OPEN_APP ─────────────────────────────────────────────────────────────
-  it('routes "Open Calculator" to launchApp with the Calculator package name', () => {
-    const { nav } = submit('Open Calculator');
-    expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
-    expect(nav.navigate).not.toHaveBeenCalled();
-  });
+  it('text "what time is it" responds and speaks', async () => {
+    const { getByText, getByPlaceholderText } = render(
+      <SiriScreen navigation={navMock} />,
+    );
+    const input = getByPlaceholderText('Type a request');
+    fireEvent.changeText(input, 'what time is it');
+    fireEvent(input, 'submitEditing');
 
-  it('matches the app name case-insensitively and by substring', () => {
-    submit('Open calcul');
-    expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
-  });
-
-  it('shows a "Couldn\'t find" response and does not launch when no app matches', () => {
-    const { getByText, nav } = submit('Open Photoshop');
-    expect(getByText(/Couldn't find/i)).toBeTruthy();
-    expect(getByText(/Photoshop/)).toBeTruthy();
-    expect(mockLaunchApp).not.toHaveBeenCalled();
-    expect(nav.navigate).not.toHaveBeenCalled();
-  });
-
-  // ── CALL_CONTACT ─────────────────────────────────────────────────────────
-  it('routes "Call Alice" to CallScreen with Alice\'s number', () => {
-    const { nav } = submit('Call Alice');
-    expect(nav.navigate).toHaveBeenCalledWith('CallScreen', {
-      name: 'Alice Anderson',
-      number: '+1 (555) 100-0001',
+    await waitFor(() => {
+      expect(getByText(/It's/)).toBeTruthy();
     });
+    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /), expect.any(Object));
   });
 
-  it('matches a contact by last name too', () => {
-    const { nav } = submit('Call anderson');
-    expect(nav.navigate).toHaveBeenCalledWith('CallScreen', {
-      name: 'Alice Anderson',
-      number: '+1 (555) 100-0001',
+  it('spoken command (native result) routes through the same parser', async () => {
+    const { getByText } = render(<SiriScreen navigation={navMock} />);
+
+    // Simulate the native SpeechRecognizer returning "what time is it".
+    listeners.onSpeechResult('what time is it');
+
+    await waitFor(() => {
+      expect(getByText(/It's/)).toBeTruthy();
     });
+    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /), expect.any(Object));
   });
 
-  it('shows a "Couldn\'t find" response and does not navigate for an unknown contact', () => {
-    const { getByText, nav } = submit('Call Zebediah');
-    expect(getByText(/Couldn't find/i)).toBeTruthy();
-    expect(nav.navigate).not.toHaveBeenCalled();
+  it('hold-to-talk starts native recognition and shows listening state', async () => {
+    const { getByLabelText, getByText } = render(
+      <SiriScreen navigation={navMock} />,
+    );
+    const mic = getByLabelText('Hold to talk');
+    fireEvent(mic, 'pressIn');
+
+    await waitFor(() =>
+      expect(LauncherModuleNS.default.startSpeechRecognition).toHaveBeenCalled(),
+    );
+    expect(getByText('Listening…')).toBeTruthy();
   });
 
-  // ── SEND_MESSAGE ─────────────────────────────────────────────────────────
-  it('routes "Send message to Alice" to Conversation with her phone as address', () => {
-    const { nav } = submit('Send message to Alice');
-    expect(nav.navigate).toHaveBeenCalledWith('Conversation', { address: '+1 (555) 100-0001' });
-  });
+  it('unrecognized command speaks the not-supported reply', async () => {
+    const { getByText, getByPlaceholderText } = render(
+      <SiriScreen navigation={navMock} />,
+    );
+    const input = getByPlaceholderText('Type a request');
+    fireEvent.changeText(input, 'make me a sandwich');
+    fireEvent(input, 'submitEditing');
 
+<<<<<<< Updated upstream
   it('does not navigate to Conversation for an unknown message recipient', () => {
     const { getByText, nav } = submit('Send a message to Nobody');
     expect(getByText(/Couldn't find/i)).toBeTruthy();
@@ -254,6 +281,10 @@ describe('SiriScreen', () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
     expect(() => submit('Open Calculator')).not.toThrow();
     expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
+=======
+    await waitFor(() => expect(getByText("That's not supported yet.")).toBeTruthy());
+    expect(Speech.speak).toHaveBeenCalledWith("That's not supported yet.", expect.any(Object));
+>>>>>>> Stashed changes
   });
 
   // ── Speech (issue #256) ──────────────────────────────────────────────────
