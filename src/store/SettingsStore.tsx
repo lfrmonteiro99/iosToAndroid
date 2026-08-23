@@ -242,6 +242,15 @@ export interface SettingsState {
    * "Dark until 7:00 PM".
    */
   darkModeDarkUntil: string;
+  /**
+   * Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
+   * O native devolve o tipo real (`device.type`), mas o utilizador pode
+   * sobrepô-lo no "i" de cada dispositivo emparelhado (Coluna / Auscultadores /
+   * Rádio do Carro / Outro) — isto calibra o ícone e a intenção de uso. É um
+   * override puramente visual/local; o Headphone Safety real é do SO Android.
+   * Chaveado por `device.address` (estável), nunca pelo nome exibido.
+   */
+  bluetoothDeviceTypes: Record<string, 'speaker' | 'headphones' | 'car' | 'other'>;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -331,6 +340,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkModeAutomatic: false,
   darkModeLightUntil: '07:00',
   darkModeDarkUntil: '19:00',
+  bluetoothDeviceTypes: {},
 };
 
 interface SettingsContextValue {
