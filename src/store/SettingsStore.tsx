@@ -19,6 +19,10 @@ import {
   DEFAULT_REQUIRE_PASSCODE_AFTER,
 } from '../utils/passcodePolicy';
 import { clampWhitePointLevel } from '../utils/whitePoint';
+import {
+  normalizeFocusPageVisibility,
+  type FocusPageVisibility,
+} from '../utils/focusPageVisibility';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -45,12 +49,13 @@ export interface SettingsState {
   focusMode: 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
   focusScheduleEnabled: boolean;
   /**
-   * Focus Filters (#617 pai) — per-mode page hiding. Children #617a read this to
-   * remove whole home-screen pages while a focus mode is active.
-   *   mode -> array of hidden page indices (kept as strings for JSON-stable
-   *   serialization; the child coerces to numbers when slicing the pages array).
-   * Empty object = no mode hides any page. `off` mode never reads this; the
-   * child restores the full layout when focusMode === 'off'.
+   * Focus filters (#618): por modo de Focus, os índices das páginas da home que
+   * ficam ocultas enquanto esse modo está activo. `off` nunca esconde nada.
+   * Default `{}` — sem entradas, todas as páginas continuam visíveis.
+   *
+   * Tipo partilhado com o contrato pai #617: `Record<string, string[]>` para
+   * serialização JSON-estável. O util `focusPageVisibility` converte para
+   * números quando fatia o array de páginas.
    */
   focusPageVisibility: Record<string, string[]>;
   /**
@@ -412,6 +417,11 @@ export function SettingsProvider({
             // corrompido (NaN, fora da gama) faria um overlay com opacidade
             // inválida, por isso normaliza-se na leitura.
             whitePointLevel: clampWhitePointLevel(parsed?.whitePointLevel),
+            // focusPageVisibility (#618) decide se páginas inteiras da home
+            // renderizam; um blob corrompido (índices negativos, strings,
+            // valores não-array) faria o filtro esconder páginas ao acaso ou
+            // rebentar no `.includes`, por isso normaliza-se na leitura.
+            focusPageVisibility: normalizeFocusPageVisibility(parsed?.focusPageVisibility),
           }));
         } catch { /* ignore */ }
       }

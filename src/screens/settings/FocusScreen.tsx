@@ -1,9 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
+import { useApps } from '../../store/AppsStore';
+import { useFolders } from '../../store/FoldersStore';
+import { computeLauncherGridGeometry } from '../../utils/launcherGridGeometry';
+import {
+  hiddenPageIndicesForMode,
+  toggleHiddenPage,
+  homePageCount,
+} from '../../utils/focusPageVisibility';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -13,6 +21,7 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+import { BUILT_IN_APPS } from '../LauncherHomeScreen';
 
 type FocusMode = 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
 
@@ -31,6 +40,9 @@ const FOCUS_MODES: FocusModeOption[] = [
   { key: 'personal', label: 'Personal', icon: 'person', iconBg: '#FF9500' },
 ];
 
+/** Ícones virtuais que o launcher injecta sempre na grelha (ver LauncherHomeScreen.gridItems). */
+const BUILT_IN_APP_COUNT = Object.keys(BUILT_IN_APPS).length;
+
 /** Gera as opções de hora 'HH:MM' de 30 em 30 min (00:00 … 23:30). */
 function buildHalfHourOptions(): string[] {
   const out: string[] = [];
@@ -47,6 +59,8 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
+  const { nonDockApps } = useApps();
+  const { folders } = useFolders();
   const alert = useAlert();
 
   // Picker de hora para o agendamento (From/To). Opções de 30 em 30 min,
@@ -56,6 +70,50 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
 
   const isFocusActive = settings.focusMode !== 'off';
   const activeModeLabel = FOCUS_MODES.find((m) => m.key === settings.focusMode)?.label ?? '';
+
+  // Hidden Pages (#618): o multiselect precisa de saber quantas páginas a home
+  // tem. A contagem replica a do launcher — apps virtuais (BUILT_IN_APPS) +
+  // pastas + apps reais fora do dock, em blocos de `cols * gridRows` — através
+  // da mesma `computeLauncherGridGeometry`, para não divergir da paginação real.
+  const [pagePickerMode, setPagePickerMode] = useState<FocusMode | null>(null);
+
+  const pageCount = useMemo(() => {
+    const geometry = computeLauncherGridGeometry(
+      Dimensions.get('window').width,
+      settings.gridColumns,
+      settings.iconSizeScale,
+    );
+    const appsPerPage = geometry.cols * settings.gridRows;
+    const appsInFolders = new Set(folders.flatMap((f) => f.apps));
+    const realApps = nonDockApps.filter((a) => !appsInFolders.has(a.packageName)).length;
+    const itemCount = BUILT_IN_APP_COUNT + folders.length + realApps;
+    return homePageCount(itemCount, appsPerPage);
+  }, [folders, nonDockApps, settings.gridColumns, settings.gridRows, settings.iconSizeScale]);
+
+  const hiddenSummary = useCallback(
+    (mode: FocusMode) => {
+      const hidden = hiddenPageIndicesForMode(settings.focusPageVisibility, mode);
+      if (mode === 'off') return 'All pages';
+      return hidden.length === 0 ? 'None' : `${hidden.length} hidden`;
+    },
+    [settings.focusPageVisibility],
+  );
+
+  const handleToggleHiddenPage = useCallback(
+    (mode: FocusMode, pageIndex: number) => {
+      update('focusPageVisibility', toggleHiddenPage(settings.focusPageVisibility, mode, pageIndex));
+    },
+    [settings.focusPageVisibility, update],
+  );
+
+  const pagePickerOptions = useMemo(() => {
+    if (!pagePickerMode) return [];
+    const hidden = hiddenPageIndicesForMode(settings.focusPageVisibility, pagePickerMode);
+    return Array.from({ length: pageCount }, (_, index) => ({
+      label: `${hidden.includes(index) ? '✓ ' : ''}Page ${index + 1}`,
+      onPress: () => handleToggleHiddenPage(pagePickerMode, index),
+    }));
+  }, [pagePickerMode, pageCount, settings.focusPageVisibility, handleToggleHiddenPage]);
 
   const handleSelectMode = useCallback((mode: FocusModeOption) => {
     const wasActive = settings.focusMode !== 'off';
@@ -138,6 +196,27 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           </CupertinoListSection>
         </View>
 
+        {/* Hidden Pages per mode (#618) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Hidden Pages"
+            footer="While a Focus mode is on, the home-screen pages you pick here are hidden. Off always shows every page."
+          >
+            {FOCUS_MODES.filter((mode) => mode.key !== 'off').map((mode) => (
+              <CupertinoListTile
+                key={`hidden-pages-${mode.key}`}
+                title={`${mode.label} — Hidden Pages`}
+                trailing={
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                    {hiddenSummary(mode.key)}
+                  </Text>
+                }
+                onPress={() => setPagePickerMode(mode.key)}
+              />
+            ))}
+          </CupertinoListSection>
+        </View>
+
         {/* Focus Schedule section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Focus Schedule">
@@ -192,6 +271,21 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           cancelLabel="Cancel"
         />
       </ScrollView>
+
+      {/* Multiselect das páginas ocultas (#618). O CupertinoActionSheet fecha
+          após cada opção (chama sempre onClose depois do onPress), por isso a
+          selecção múltipla faz-se um toque por página: cada linha mostra ✓
+          quando a página já está oculta e o toque alterna esse estado. Padrão do
+          LanguageRegionScreen; não se alterou o componente partilhado para não
+          mexer nos outros ecrãs que dele dependem. */}
+      <CupertinoActionSheet
+        visible={pagePickerMode !== null}
+        onClose={() => setPagePickerMode(null)}
+        title="Hidden Pages"
+        message="Pages hidden while this Focus mode is on."
+        options={pagePickerOptions}
+        cancelLabel="Done"
+      />
     </View>
   );
 }
