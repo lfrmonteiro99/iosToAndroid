@@ -45,6 +45,24 @@ export interface SettingsState {
   focusMode: 'off' | 'doNotDisturb' | 'sleep' | 'work' | 'personal';
   focusScheduleEnabled: boolean;
   /**
+   * Focus Filters (#617 pai) — per-mode page hiding. Children #617a read this to
+   * remove whole home-screen pages while a focus mode is active.
+   *   mode -> array of hidden page indices (kept as strings for JSON-stable
+   *   serialization; the child coerces to numbers when slicing the pages array).
+   * Empty object = no mode hides any page. `off` mode never reads this; the
+   * child restores the full layout when focusMode === 'off'.
+   */
+  focusPageVisibility: Record<string, string[]>;
+  /**
+   * Focus Filters (#617 pai) — per-mode dock override. Children #617b read this
+   * to swap the dock while a focus mode is active.
+   *   mode -> array of dock package names; an empty array means "keep current
+   *   dock" (iOS «Keep Current»), so it is intentionally distinct from a
+   *   missing key (which a child must treat as "no override configured", never
+   *   as "hide everything").
+   */
+  focusDockOverride: Record<string, string[]>;
+  /**
    * Início do horário do Focus agendado, 'HH:MM' 24h. Só relevante quando
    * `focusScheduleEnabled` está true. Default '09:00' (iOS Work por omissão).
    */
@@ -267,6 +285,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   lockSound: true,
   focusMode: 'off',
   focusScheduleEnabled: false,
+  focusPageVisibility: {},
+  focusDockOverride: {},
   focusScheduleStart: '09:00',
   focusScheduleEnd: '17:00',
   screenTimeEnabled: false,
