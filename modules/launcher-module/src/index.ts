@@ -259,6 +259,8 @@ interface LauncherModuleType {
   // Flashlight
   setFlashlight(enabled: boolean): Promise<boolean>;
   isFlashlightOn(): Promise<boolean>;
+  // Wake Screen (Tap to Wake, #608) — wakes the (app-dimmed) screen on tap
+  wakeScreen(): Promise<void>;
   // Call Log
   getCallLog(limit: number): Promise<CallLogEntry[]>;
   makeCall(number: string): Promise<boolean>;
@@ -342,6 +344,7 @@ const stub: LauncherModuleType = {
   getAppStorageStats: async () => [],
   setFlashlight: async () => false,
   isFlashlightOn: async () => false,
+  wakeScreen: async () => { /* stub: app-dimmed wake is best-effort / no-op off-Android */ },
   getCallLog: async () => [],
   makeCall: async () => false,
   getNotifications: async () => [],
@@ -568,6 +571,10 @@ function createBridgedModule(): LauncherModuleType {
     isFlashlightOn: async () => {
       try { return await nativeModule.isFlashlightOn(); }
       catch (e) { console.error('LauncherModule.isFlashlightOn failed:', e); reportBridgeError('isFlashlightOn', e); return false; }
+    },
+    wakeScreen: async () => {
+      try { await nativeModule.wakeScreen(); }
+      catch (e) { console.error('LauncherModule.wakeScreen failed:', e); reportBridgeError('wakeScreen', e); }
     },
     getCallLog: async (limit: number) => {
       try { return await nativeModule.getCallLog(limit); }

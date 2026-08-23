@@ -173,6 +173,16 @@ export function DisplayBrightnessScreen({ navigation }: { navigation: AppNavigat
               }
               showChevron={false}
             />
+            <CupertinoListTile
+              title="Tap to Wake"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.tapToWake}
+                  onValueChange={(v) => update('tapToWake', v)}
+                />
+              }
+              showChevron={false}
+            />
           </CupertinoListSection>
         </View>
 

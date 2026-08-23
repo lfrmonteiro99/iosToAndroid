@@ -34,7 +34,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
-import { addHomePressedListener } from '../../modules/launcher-module/src';
+import { addHomePressedListener, LauncherModuleType } from '../../modules/launcher-module/src';
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
@@ -789,6 +789,13 @@ export function LauncherHomeScreen() {
   const colors = launcherTheme.colors;
   const alert = useAlert();
 
+  // Tap to Wake (#608): the HOME-press effect below is registered with deps
+  // [openFolder, currentPage] (it must not re-subscribe on every render), so
+  // its closure would otherwise capture a stale `settings.tapToWake`. Mirror
+  // the latest value into a ref so the handler always reads the live setting.
+  const tapToWakeRef = useRef(settings.tapToWake);
+  tapToWakeRef.current = settings.tapToWake;
+
   // Grid density (issue #503): columns/icon-scale reshape the geometry, so
   // they're derived per-render from settings instead of the module-level
   // defaults above (which stay 4 cols / scale 1, for callers — dock, folder
@@ -1146,6 +1153,15 @@ export function LauncherHomeScreen() {
   useEffect(() => {
     return addHomePressedListener(() => {
       markWarmStartBegin();
+      // Tap to Wake (#608): when enabled, a tap on the (app-dimmed) screen
+      // wakes it. The native HOME intent only arrives while the app is in the
+      // foreground — i.e. the screen is dimmed by the app, not powered off by
+      // the system — so this is the realistic envelope (documented in the PR).
+      if (tapToWakeRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- mirror SettingsStore.syncFromDevice: require() (not await import()) resolves through Jest's moduleNameMapper and is mockable in tests
+        const launcher = require('../../modules/launcher-module/src') as { default: LauncherModuleType };
+        launcher.default.wakeScreen().catch(() => {});
+      }
       const action = resolveHomePressAction({
         isFolderOpen: openFolder !== null,
         isOnFirstPage: currentPage === 0,

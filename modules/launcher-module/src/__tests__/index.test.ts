@@ -109,7 +109,12 @@ describe('LauncherModule bridge error reporting', () => {
     const methods = Object.keys(mod.default) as (keyof LauncherModuleType)[];
     for (const method of methods) {
       const fn = (mod.default as unknown as Record<string, () => Promise<unknown>>)[method];
-      await expect(fn()).resolves.toBeDefined();
+      // The contract is "never throw, always report": methods that return a
+      // value resolve to that value, void methods resolve to undefined. We
+      // assert the rejection path is swallowed and routed to onBridgeError
+      // rather than relying on a defined return value (a Promise<void> method
+      // legitimately resolves to undefined — see wakeScreen, #608).
+      await expect(fn()).resolves.not.toThrow();
       expect(listener).toHaveBeenCalledWith(method, expect.any(Error));
     }
   });
@@ -513,5 +518,63 @@ describe('deduplication of launcher entries by packageName', () => {
     // Nenhuma app se perde: uma categoria malformada nao e razao para a esconder.
     expect(apps).toHaveLength(2);
     expect(apps.map((a) => a.category)).toEqual(['undefined', 'undefined']);
+  });
+});
+
+describe('wakeScreen — Tap to Wake bridge (#608)', () => {
+  let mod: typeof import('../index');
+  let listener: jest.Mock;
+  let unsubscribe: () => void;
+
+  beforeAll(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterAll(() => {
+    (console.error as jest.Mock).mockRestore();
+  });
+  beforeEach(() => {
+    mockNativeModule = makeNativeModule(false);
+    mod = loadBridge();
+    listener = jest.fn();
+    unsubscribe = mod.onBridgeError(listener);
+  });
+  afterEach(() => {
+    unsubscribe();
+  });
+
+  it('is exposed as a Promise<void> method on the bridge', () => {
+    expect(typeof mod.default.wakeScreen).toBe('function');
+    // A Promise<void> method must resolve (to undefined), never reject, on success.
+    expect(mod.default.wakeScreen()).toBeInstanceOf(Promise);
+  });
+
+  it('calls the native wakeScreen function when invoked', async () => {
+    // Capture the same mock instance the proxy will hand back on every access.
+    const native = jest.fn(() => Promise.resolve());
+    mockNativeModule = makeNativeModule(false, { wakeScreen: native });
+    mod = loadBridge();
+    await mod.default.wakeScreen();
+    expect(native).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a native failure to onBridgeError listeners instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const failingListener = jest.fn();
+    const unsub = mod.onBridgeError(failingListener);
+
+    // Must swallow the rejection (Promise<void>): resolves, does not throw.
+    await expect(mod.default.wakeScreen()).resolves.toBeUndefined();
+    expect(failingListener).toHaveBeenCalledWith('wakeScreen', expect.any(Error));
+    unsub();
+  });
+
+  it('does not report to onBridgeError when the native call succeeds', async () => {
+    // default makeNativeModule(false) → wakeScreen resolves true/undefined.
+    const okListener = jest.fn();
+    const unsub = mod.onBridgeError(okListener);
+    await mod.default.wakeScreen();
+    expect(okListener).not.toHaveBeenCalled();
+    unsub();
   });
 });
