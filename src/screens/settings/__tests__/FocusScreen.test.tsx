@@ -196,7 +196,7 @@ describe('FocusScreen — Hidden Pages (#618)', () => {
         .filter(([key]) => key === '@iostoandroid/settings')
         .pop();
       expect(write).toBeTruthy();
-      expect(JSON.parse(write![1] as string).focusPageVisibility).toEqual({ work: [0] });
+      expect(JSON.parse(write![1] as string).focusPageVisibility).toEqual({ work: ['0'] });
     });
   });
 

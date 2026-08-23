@@ -19,39 +19,39 @@ describe('normalizeFocusPageVisibility', () => {
     expect(normalizeFocusPageVisibility([1, 2])).toEqual({});
   });
 
-  it('mantém índices inteiros e aceita strings decimais', () => {
-    expect(normalizeFocusPageVisibility({ work: [2, '0'] })).toEqual({ work: [0, 2] });
+  it('mantém índices inteiros e aceita strings decimais (normaliza para string)', () => {
+    expect(normalizeFocusPageVisibility({ work: [2, '0'] })).toEqual({ work: ['0', '2'] });
   });
 
   it('descarta negativos, não-inteiros, NaN, vazios e duplicados', () => {
     expect(
       normalizeFocusPageVisibility({ work: [-1, 1.5, NaN, '', 'abc', 3, 3, null] }),
-    ).toEqual({ work: [3] });
+    ).toEqual({ work: ['3'] });
   });
 
   it('descarta modos cujo valor não é array', () => {
-    expect(normalizeFocusPageVisibility({ work: 'nope', sleep: [1] })).toEqual({ sleep: [1] });
+    expect(normalizeFocusPageVisibility({ work: 'nope', sleep: [1] })).toEqual({ sleep: ['1'] });
   });
 
   it('mantém 0 (fronteira: a primeira página é um índice válido)', () => {
-    expect(normalizeFocusPageVisibility({ work: [0] })).toEqual({ work: [0] });
+    expect(normalizeFocusPageVisibility({ work: [0] })).toEqual({ work: ['0'] });
   });
 });
 
 describe('hiddenPageIndicesForMode', () => {
   it('devolve [] para o modo off mesmo com entradas guardadas', () => {
-    expect(hiddenPageIndicesForMode({ off: [0, 1], work: [1] }, 'off')).toEqual([]);
+    expect(hiddenPageIndicesForMode({ off: ['0', '1'], work: ['1'] }, 'off')).toEqual([]);
   });
 
   it('devolve [] para modo desconhecido, vazio ou mapa ausente', () => {
-    expect(hiddenPageIndicesForMode({ work: [1] }, 'sleep')).toEqual([]);
-    expect(hiddenPageIndicesForMode({ work: [1] }, '')).toEqual([]);
+    expect(hiddenPageIndicesForMode({ work: ['1'] }, 'sleep')).toEqual([]);
+    expect(hiddenPageIndicesForMode({ work: ['1'] }, '')).toEqual([]);
     expect(hiddenPageIndicesForMode(undefined, 'work')).toEqual([]);
     expect(hiddenPageIndicesForMode(null, 'work')).toEqual([]);
   });
 
   it('devolve os índices do modo activo', () => {
-    expect(hiddenPageIndicesForMode({ work: [0, 2] }, 'work')).toEqual([0, 2]);
+    expect(hiddenPageIndicesForMode({ work: ['0', '2'] }, 'work')).toEqual([0, 2]);
   });
 });
 
@@ -80,23 +80,23 @@ describe('filterVisiblePages', () => {
 
 describe('toggleHiddenPage', () => {
   it('adiciona um índice ausente e ordena', () => {
-    expect(toggleHiddenPage({ work: [2] }, 'work', 0)).toEqual({ work: [0, 2] });
+    expect(toggleHiddenPage({ work: ['2'] }, 'work', 0)).toEqual({ work: ['0', '2'] });
   });
 
   it('remove um índice já presente (duplo toque volta ao estado inicial)', () => {
     const once = toggleHiddenPage({}, 'work', 1);
-    expect(once).toEqual({ work: [1] });
+    expect(once).toEqual({ work: ['1'] });
     expect(toggleHiddenPage(once, 'work', 1)).toEqual({ work: [] });
   });
 
   it('não muta o mapa recebido', () => {
-    const before = { work: [1] };
+    const before = { work: ['1'] };
     toggleHiddenPage(before, 'work', 2);
-    expect(before).toEqual({ work: [1] });
+    expect(before).toEqual({ work: ['1'] });
   });
 
   it('não toca noutros modos', () => {
-    expect(toggleHiddenPage({ sleep: [0] }, 'work', 1)).toEqual({ sleep: [0], work: [1] });
+    expect(toggleHiddenPage({ sleep: ['0'] }, 'work', 1)).toEqual({ sleep: ['0'], work: ['1'] });
   });
 
   it('ignora índices inválidos', () => {

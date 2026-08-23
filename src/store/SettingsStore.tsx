@@ -52,8 +52,21 @@ export interface SettingsState {
    * Focus filters (#618): por modo de Focus, os índices das páginas da home que
    * ficam ocultas enquanto esse modo está activo. `off` nunca esconde nada.
    * Default `{}` — sem entradas, todas as páginas continuam visíveis.
+   *
+   * Tipo partilhado com o contrato pai #617: `Record<string, string[]>` para
+   * serialização JSON-estável. O util `focusPageVisibility` converte para
+   * números quando fatia o array de páginas.
    */
-  focusPageVisibility: FocusPageVisibility;
+  focusPageVisibility: Record<string, string[]>;
+  /**
+   * Focus Filters (#617 pai) — per-mode dock override. Children #617b read this
+   * to swap the dock while a focus mode is active.
+   *   mode -> array of dock package names; an empty array means "keep current
+   *   dock" (iOS «Keep Current»), so it is intentionally distinct from a
+   *   missing key (which a child must treat as "no override configured", never
+   *   as "hide everything").
+   */
+  focusDockOverride: Record<string, string[]>;
   /**
    * Início do horário do Focus agendado, 'HH:MM' 24h. Só relevante quando
    * `focusScheduleEnabled` está true. Default '09:00' (iOS Work por omissão).
@@ -278,6 +291,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   focusMode: 'off',
   focusScheduleEnabled: false,
   focusPageVisibility: {},
+  focusDockOverride: {},
   focusScheduleStart: '09:00',
   focusScheduleEnd: '17:00',
   screenTimeEnabled: false,

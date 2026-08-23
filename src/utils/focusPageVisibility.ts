@@ -7,28 +7,33 @@
  * que exista uma entrada para ele no armazenamento — «off» significa
  * literalmente sem filtro.
  *
+ * Contrato partilhado com o pai #617: o campo é `Record<string, string[]>`
+ * (strings para serialização JSON-estável). Este util converte para números
+ * internamente sempre que fatia o array de páginas, e re-serializa para strings
+ * quando escreve de volta ao store.
+ *
  * O AsyncStorage é um blob JSON escrito por versões anteriores da app, por isso
  * tudo o que sai dele é tratado como não confiável: `normalizeFocusPageVisibility`
  * é o único ponto que converte esse blob na forma canónica.
  */
 
-/** Mapa canónico: chave = modo de Focus, valor = índices de página ocultos. */
-export type FocusPageVisibility = Record<string, number[]>;
+/** Mapa canónico no store: chave = modo de Focus, valor = índices (como string) ocultos. */
+export type FocusPageVisibility = Record<string, string[]>;
 
 /**
- * Normaliza o valor lido do AsyncStorage para `Record<string, number[]>`.
+ * Normaliza o valor lido do AsyncStorage para `Record<string, string[]>`.
  *
- * Aceita índices como número ou como string decimal (o issue propôs `string[]`;
- * ambas as formas são aceites na leitura para não perder configurações escritas
- * por qualquer das leituras). Descarta: não-objectos, arrays no topo, valores
- * que não sejam array, índices negativos, não inteiros, NaN e duplicados.
+ * Aceita índices como número ou como string decimal — ambas as formas são
+ * aceites na leitura para não perder configurações escritas por qualquer das
+ * versões. Descarta: não-objectos, arrays no topo, valores que não sejam array,
+ * índices negativos, não inteiros, NaN e duplicados. Devolve sempre strings.
  */
 export function normalizeFocusPageVisibility(raw: unknown): FocusPageVisibility {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: FocusPageVisibility = {};
   for (const [mode, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!Array.isArray(value)) continue;
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     for (const entry of value) {
       const n =
         typeof entry === 'number'
@@ -37,24 +42,39 @@ export function normalizeFocusPageVisibility(raw: unknown): FocusPageVisibility 
           ? Number(entry)
           : NaN;
       if (!Number.isInteger(n) || n < 0) continue;
-      seen.add(n);
+      seen.add(String(n));
     }
-    out[mode] = Array.from(seen).sort((a, b) => a - b);
+    out[mode] = Array.from(seen)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map(String);
   }
   return out;
 }
 
+/** Converte a lista (string[]) do modo para números, para fatiar as páginas. */
+function modeIndicesToNumbers(visibility: FocusPageVisibility | undefined | null, mode: string): number[] {
+  if (!visibility || !mode || mode === 'off') return [];
+  const hidden = visibility[mode];
+  if (!Array.isArray(hidden)) return [];
+  const out: number[] = [];
+  for (const entry of hidden) {
+    const n = typeof entry === 'number' ? entry : Number(entry);
+    if (Number.isInteger(n) && n >= 0) out.push(n);
+  }
+  return out.sort((a, b) => a - b);
+}
+
 /**
- * Índices ocultos para o modo activo. 'off' (ou modo vazio/desconhecido)
- * devolve sempre uma lista vazia: todas as páginas ficam visíveis.
+ * Índices ocultos (como números) para o modo activo. 'off' (ou modo
+ * vazio/desconhecido) devolve sempre uma lista vazia: todas as páginas ficam
+ * visíveis.
  */
 export function hiddenPageIndicesForMode(
   visibility: FocusPageVisibility | undefined | null,
   mode: string | undefined | null,
 ): number[] {
-  if (!visibility || !mode || mode === 'off') return [];
-  const hidden = visibility[mode];
-  return Array.isArray(hidden) ? hidden : [];
+  return modeIndicesToNumbers(visibility, mode ?? '');
 }
 
 /**
@@ -86,11 +106,11 @@ export function toggleHiddenPage(
 ): FocusPageVisibility {
   const base: FocusPageVisibility = { ...(visibility ?? {}) };
   if (!Number.isInteger(index) || index < 0) return base;
-  const current = Array.isArray(base[mode]) ? base[mode] : [];
-  const next = current.includes(index)
-    ? current.filter((i) => i !== index)
-    : [...current, index].sort((a, b) => a - b);
-  base[mode] = next;
+  const currentNums = modeIndicesToNumbers(base, mode);
+  const next = currentNums.includes(index)
+    ? currentNums.filter((i) => i !== index)
+    : [...currentNums, index].sort((a, b) => a - b);
+  base[mode] = next.map(String);
   return base;
 }
 
