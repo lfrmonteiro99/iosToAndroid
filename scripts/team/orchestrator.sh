@@ -189,50 +189,17 @@ impl_engine_now() {
 # "failed" cannot be told apart from the exit code) and expensive (12+ API calls
 # every 45 seconds, which is how you get rate-limited).
 ISSUE_CACHE=""
-# Janela de idade dos issues elegíveis. A pipeline só pega em issues criados
-# nesta janela (omissão 36h). Issues EM TRABALHO (qa:wip / qa:review /
-# qa:blocked-*) ficam de fora do filtro — trabalho a meio não é abandonado só
-# porque o issue é antigo. O filtro impede a pipeline de agarrar issues novos
-# que o utilizador ainda não quer mexer.
-TEAM_MAX_ISSUE_AGE_H="${TEAM_MAX_ISSUE_AGE_H:-36}"
-
+# Janela de idade: REMOVIDA. A pipeline pega em TODOS os issues qa:* abertos,
+# independentemente da idade. A ordem de prioridade (ver issues_with) é quem
+# decide a sequência — os mais novos já tinham prioridade via ordenação, não
+# através de exclusão dos antigos.
 refresh_issue_cache() {
   local json
   json=$(gh issue list --repo "$REPO" --state open --limit 300 \
          --json number,labels,createdAt 2>/dev/null) || return 1
   # Explicit shape check: a truncated or error response must not pass as data.
   printf '%s' "$json" | jq -e 'type == "array"' >/dev/null 2>&1 || return 1
-  # Filtrar por idade: manter só issues criados nas últimas TEAM_MAX_ISSUE_AGE_H,
-  # a menos que já estejam em trabalho (wip/review/blocked). Trabalho a meio nunca
-  # é descartado. Usa date -d (lê ISO nativamente) — o fromdateiso8601 do jq
-  # nesta máquina é demasiado rigoroso para o formato do GitHub.
-  local now cut cutoff
-  now=$(date +%s)
-  cutoff=$(( now - ${TEAM_MAX_ISSUE_AGE_H} * 3600 ))
-  local filtered
-  filtered=$(printf '%s' "$json" | jq -c '.[]' 2>/dev/null | while IFS= read -r row; do
-    local created raw ts labels
-    created=$(printf '%s' "$row" | jq -r '.createdAt // ""' 2>/dev/null)
-    labels=$(printf '%s' "$row" | jq -r '[.labels[].name] | join(",")' 2>/dev/null)
-    case ",$labels," in
-      *,qa:wip,*|*,qa:review,*|*,qa:blocked-impl,*|*,qa:blocked-spec,*) echo "$row"; continue ;;
-    esac
-    [ -z "$created" ] && { echo "$row"; continue; }   # sem data => mantém (não julgamos "velho")
-    raw=$(date -d "${created%%Z*}Z" +%s 2>/dev/null || echo "")
-    [ -z "$raw" ] && { echo "$row"; continue; }
-    [ "$raw" -ge "$cutoff" ] && echo "$row"
-  done | jq -s '.' 2>/dev/null)
-  # Fallback quando a janela de prioridade está VAZIA: o jq -s devolve "[]" (string
-  # não-vazia!), pelo que `[ -n "$filtered" ]` nunca via o vazio e o cache ficava
-  # literalmente `[]` — o orquestrador declarava "BACKLOG VAZIO" com issues antigos
-  # qa:ready por apanhar. A janela de 36h é PRIORIDADE, não exclusão: esgotada,
-  # segue para os restantes abertos (issues parqueados sem label qa:* continuam
-  # invisíveis — o issues_with filtra por label).
-  if [ -n "$filtered" ] && [ "$filtered" != "[]" ]; then
-    ISSUE_CACHE="$filtered"
-  else
-    ISSUE_CACHE="$json"
-  fi
+  ISSUE_CACHE="$json"
   return 0
 }
 
