@@ -421,7 +421,13 @@ const AppIcon = React.memo(function AppIcon({
   return (
     <Pressable
       ref={iconRef}
-      style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }, !showLabel && styles.appIconWrapperCompact]}
+      // O `appIconWrapperCompact` (height: ICON_SIZE estático, paddingTop 0)
+      // tem de vir ANTES do { height: wrapperHeight } dinâmico: se vier
+      // depois, sobrepõe a altura da célula e, com showIconLabels=false +
+      // iconSizeScale=1.2, o ícone (maior que ICON_SIZE) transborda para a
+      // linha seguinte da grelha. Com a ordem certa, o compact só contribui
+      // com o paddingTop 0 e a célula é sempre 5 + iconSize sem label.
+      style={[styles.appIconWrapper, !showLabel && styles.appIconWrapperCompact, { width: cellWidth, height: wrapperHeight }]}
       onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -1153,43 +1159,13 @@ export function LauncherHomeScreen() {
     });
   }, [openFolder, currentPage]);
 
-  // Non-Android fallback
-  if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
-    return <NonAndroidFallback />;
-  }
-
-  // Loading
-  if (isLoading) {
-    return (
-      <View style={[styles.root, styles.centered, { backgroundColor: '#1C1C1E' }]}>
-        <CupertinoActivityIndicator />
-      </View>
-    );
-  }
-
-  // Wallpaper gradient
-  const wallpaperColor =
-    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
-  const wallpaperDark = darkenHex(wallpaperColor, 0.28);
-
-  const WallpaperContent =
-    settings.wallpaperIndex === 6 && customWallpaperUri ? (
-      <ImageBackground
-        source={{ uri: customWallpaperUri }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-      </ImageBackground>
-    ) : (
-      <LinearGradient
-        colors={[wallpaperColor, wallpaperDark]}
-        style={StyleSheet.absoluteFillObject}
-      />
-    );
-
-  // Build display items: virtual built-in apps + real apps + folders
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Build display items: virtual built-in apps + real apps + folders.
+  // Moved ABOVE the early returns deliberately (#503 reviewer follow-up):
+  // this useMemo — together with `pages` and the clamp effect below — used to
+  // sit after the isLoading return, so on a render that took the loading path
+  // the hooks were skipped while on the loaded path they ran. That's a
+  // different hook count between renders → "Rendered more hooks than during
+  // the previous render". Same house rule as canSpotlight above.
   const gridItems = useMemo((): GridItem[] => {
     const items: GridItem[] = [];
     const appsInFolders = new Set(folders.flatMap(f => f.apps));
@@ -1233,7 +1209,6 @@ export function LauncherHomeScreen() {
   // size (appsPerPage derives from settings, issue #503) re-packs pages
   // without ever reordering an app — there is no per-page stored position to
   // migrate (issue #503).
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const pages: GridItem[][] = useMemo(() => {
     const out: GridItem[][] = [];
     for (let i = 0; i < gridItems.length; i += appsPerPage) {
@@ -1248,6 +1223,55 @@ export function LauncherHomeScreen() {
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
+
+  // Reviewer follow-up (#503): mudar a densidade (colunas/linhas) encolhe o
+  // número de páginas, e `currentPage` só mudava em handleScroll — ficava
+  // para além de totalPages, os dots perdiam a página activa e o offset do
+  // pager ficava além do conteúdo até ao próximo scroll. Clampar página e
+  // offset juntos. Sem apps suficientes para encolher, currentPage (0) <
+  // totalPages e o efeito é no-op.
+  useEffect(() => {
+    if (currentPage >= totalPages) {
+      const lastPage = Math.max(0, totalPages - 1);
+      setCurrentPage(lastPage);
+      scrollViewRef.current?.scrollTo({ x: lastPage * SCREEN_WIDTH, animated: false });
+    }
+  }, [currentPage, totalPages]);
+
+  // Non-Android fallback
+  if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
+    return <NonAndroidFallback />;
+  }
+
+  // Loading
+  if (isLoading) {
+    return (
+      <View style={[styles.root, styles.centered, { backgroundColor: '#1C1C1E' }]}>
+        <CupertinoActivityIndicator />
+      </View>
+    );
+  }
+
+  // Wallpaper gradient
+  const wallpaperColor =
+    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
+  const wallpaperDark = darkenHex(wallpaperColor, 0.28);
+
+  const WallpaperContent =
+    settings.wallpaperIndex === 6 && customWallpaperUri ? (
+      <ImageBackground
+        source={{ uri: customWallpaperUri }}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode="cover"
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
+      </ImageBackground>
+    ) : (
+      <LinearGradient
+        colors={[wallpaperColor, wallpaperDark]}
+        style={StyleSheet.absoluteFillObject}
+      />
+    );
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
