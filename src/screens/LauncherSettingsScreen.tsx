@@ -352,6 +352,17 @@ export function LauncherSettingsScreen() {
           }
         />
         <CupertinoListTile
+          title="Show Page Dots"
+          leading={{ name: 'apps', color: '#fff', backgroundColor: '#FF9500' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.showPageDots}
+              onValueChange={(v) => update('showPageDots', v)}
+            />
+          }
+        />
+        <CupertinoListTile
           title="Show App Names"
           leading={{ name: 'text-outline', color: '#fff', backgroundColor: '#8E8E93' }}
           showChevron={false}
