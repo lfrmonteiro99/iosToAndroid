@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,11 @@ import { useSettings, SettingsState } from '../store/SettingsStore';
 import { useDevice } from '../store/DeviceStore';
 import { useProfile } from '../store/ProfileStore';
 import {
+  type BackTapAction,
+  type BackTapGesture,
+  labelForBackTapAction,
+} from '../utils/backTap';
+import {
   CupertinoNavigationBar,
   CupertinoListSection,
   CupertinoListTile,
@@ -16,8 +21,25 @@ import {
   CupertinoSearchBar,
   CupertinoSegmentedControl,
   BackEdgeSwipe,
+  useAlert,
 } from '../components';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
+
+// Actions selectable inline for each gesture. Mirrors the catalog in
+// src/screens/settings/BackTapSettingsScreen.tsx (the full picker there adds
+// target selection for openApp/shortcut); the inline version keeps the
+// targetless set so the gesture rows in the main Settings screen stay simple.
+const INLINE_BACK_TAP_ACTIONS: { id: BackTapAction; label: string }[] = [
+  { id: 'none', label: 'None' },
+  { id: 'flash', label: 'Flashlight' },
+  { id: 'toggleWifi', label: 'Toggle Wi-Fi' },
+  { id: 'screenshot', label: 'Screenshot' },
+];
+
+/** Map a BackTapAction to its trailing summary shown on the gesture row. */
+function inlineBackTapLabel(action: BackTapAction): string {
+  return labelForBackTapAction(action);
+}
 
 interface SettingsItem {
   key: string;
@@ -38,6 +60,7 @@ export function SettingsScreen() {
   const { settings, update } = useSettings();
   const device = useDevice();
   const { profile } = useProfile();
+  const alert = useAlert();
 
   const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -131,6 +154,35 @@ export function SettingsScreen() {
       (navigation as AppNavigationProp).navigate(item.route as any);
     }
   };
+
+  // ─── Back Tap (#625 / #772): inline gesture→action mapping ──────────────
+  // Each gesture row opens an action-sheet picker (the same CupertinoAlertDialog
+  // pattern used by the dedicated BackTapSettingsScreen, but scoped to the
+  // targetless actions so this stays a quick-set surface inside Settings).
+  // Targeted actions (openApp/shortcut) are configured on the full screen,
+  // reachable via "Open Settings" below.
+  const setBackTapAction = useCallback(
+    (gesture: BackTapGesture, action: BackTapAction) => {
+      const next = { ...settings.backTap, [gesture]: { action } };
+      update('backTap', next);
+    },
+    [settings.backTap, update],
+  );
+
+  const pickBackTapAction = useCallback(
+    (gesture: BackTapGesture) => {
+      alert('Back Tap — ' + (gesture === 'double' ? 'Double Tap' : 'Triple Tap'), undefined, INLINE_BACK_TAP_ACTIONS.map((opt) => ({
+        text: opt.label,
+        onPress: () => setBackTapAction(gesture, opt.id),
+      })));
+    },
+    [alert, setBackTapAction],
+  );
+
+  const openBackTapSettings = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- route is a dynamic key; BackTapSettings has undefined params
+    (navigation as AppNavigationProp).navigate('BackTapSettings' as any);
+  }, [navigation]);
 
   const renderItem = (item: SettingsItem) => {
     if (item.key === 'profile') {
@@ -242,6 +294,61 @@ export function SettingsScreen() {
             </CupertinoListSection>
           </View>
         ))}
+
+        {!searchQuery.trim() && (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <CupertinoListSection
+              header="Back Tap"
+              footer="Double or triple tap the back of your device to trigger an action. For app or shortcut targets, open Back Tap settings."
+            >
+              <CupertinoListTile
+                title="Back Tap"
+                subtitle={settings.backTap.enabled ? 'On' : 'Off'}
+                leading={{
+                  name: 'hand-left',
+                  color: '#FFFFFF',
+                  backgroundColor: colors.accent,
+                }}
+                trailing={
+                  <CupertinoSwitch
+                    value={settings.backTap.enabled}
+                    onValueChange={(v) => update('backTap', { ...settings.backTap, enabled: v })}
+                  />
+                }
+                showChevron={false}
+              />
+              {settings.backTap.enabled && (
+                <CupertinoListTile
+                  title="Double Tap"
+                  trailing={
+                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                      {inlineBackTapLabel(settings.backTap.double.action)}
+                    </Text>
+                  }
+                  onPress={() => pickBackTapAction('double')}
+                />
+              )}
+              {settings.backTap.enabled && (
+                <CupertinoListTile
+                  title="Triple Tap"
+                  trailing={
+                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                      {inlineBackTapLabel(settings.backTap.triple.action)}
+                    </Text>
+                  }
+                  onPress={() => pickBackTapAction('triple')}
+                />
+              )}
+              {settings.backTap.enabled && (
+                <CupertinoListTile
+                  title="Open Back Tap Settings"
+                  onPress={openBackTapSettings}
+                  isLast
+                />
+              )}
+            </CupertinoListSection>
+          </View>
+        )}
 
         {!searchQuery.trim() && (
           <View style={{ paddingHorizontal: spacing.md }}>
