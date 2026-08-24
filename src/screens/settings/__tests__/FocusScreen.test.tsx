@@ -450,7 +450,7 @@ describe('FocusScreen — Priority Apps (#630)', () => {
   });
 
   it('adds an app to the allow-list and persists it', async () => {
-    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+    const { getByText } = render(<FocusScreen navigation={mockNavigation as never} />);
 
     fireEvent.press(getByText('Allow Notifications In Focus'));
     fireEvent.press(getByText('Slack'));
