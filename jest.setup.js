@@ -73,6 +73,16 @@ jest.mock('expo-location', () => ({
   Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
 }));
 
+// #271 Health: the step-counter sensor does not exist in the JS test
+// environment. Default to "available" so the store's happy path is reachable;
+// individual tests override with mockResolvedValue(false).
+jest.mock('expo-sensors', () => ({
+  Pedometer: {
+    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+    watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
+  },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
