@@ -19,6 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SystemAppIcon } from '../components/SystemAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -335,6 +336,8 @@ interface AppIconProps {
    * monochrome silhouette in, or undefined/null for the normal, untinted
    * icon. Only the icon is affected — `showLabel`'s text is untouched. */
   iconTint?: string | null;
+  /** Gloss sheen on built-in (virtual) icons — follows settings.iconGloss. */
+  gloss?: boolean;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -359,6 +362,7 @@ const AppIcon = React.memo(function AppIcon({
   iconRadius = ICON_RADIUS,
   showLabel = true,
   iconTint,
+  gloss = true,
 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   // Label block (margin + text line) measured at the 393dp reference so the
@@ -454,21 +458,15 @@ const AppIcon = React.memo(function AppIcon({
     >
       <Animated.View style={animatedStyle}>
         {virtualCfg ? (
-          virtualCfg.gradient ? (
-            <LinearGradient
-              testID={`app-icon-box-${app.packageName}`}
-              colors={virtualCfg.gradient}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[styles.appIconPlaceholder, iconBoxSize]}
-            >
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </LinearGradient>
-          ) : (
-            <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize, { backgroundColor: virtualCfg.bg }]}>
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </View>
-          )
+          <SystemAppIcon
+            testID={`app-icon-box-${app.packageName}`}
+            icon={virtualCfg.icon}
+            size={iconSize}
+            gradient={virtualCfg.gradient}
+            bg={virtualCfg.bg}
+            gloss={gloss}
+            iconSize={virtualCfg.iconSize ?? Math.round(iconSize * 0.57)}
+          />
         ) : app.icon ? (
           <Image
             testID={`app-icon-box-${app.packageName}`}
@@ -725,6 +723,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
   textScale?: number;
   iconTint?: string | null;
 }) {
+  const { settings } = useSettings();
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean) as InstalledApp[];
@@ -771,6 +770,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   cellWidth={70}
                   textScale={textScale}
                   iconTint={iconTint}
+                  gloss={settings.iconGloss}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -1874,6 +1874,7 @@ export function LauncherHomeScreen() {
                     showLabel={settings.showIconLabels}
                     textScale={textScale}
                     iconTint={iconTint}
+                    gloss={settings.iconGloss}
                     onPress={handleAppPress}
                     onLongPress={handleLongPress}
                     isJiggling={isJiggling}
@@ -1928,6 +1929,7 @@ export function LauncherHomeScreen() {
                 textScale={textScale}
                 showLabel={false}
                 iconTint={iconTint}
+                gloss={settings.iconGloss}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
