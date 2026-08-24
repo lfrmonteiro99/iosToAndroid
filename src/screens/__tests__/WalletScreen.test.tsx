@@ -3,6 +3,11 @@ import { render, fireEvent, waitFor, act } from '../../test-utils';
 import { WalletScreen } from '../WalletScreen';
 import { WalletProvider, useWallet } from '../../store/WalletStore';
 
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: mockNavigate }),
+}));
+
 // WalletScreen renders through AllProviders (test-utils), which now includes
 // WalletProvider, so useWallet() resolves. The store's isReady gate resolves
 // asynchronously, so every render waits for it before asserting content.
@@ -117,6 +122,29 @@ describe('WalletScreen', () => {
 
     await waitFor(() => expect(api!.passes[0].type).toBe('loyalty'));
     expect(api!.passes[0].title).toBe('Café Card');
+  });
+
+  it('navigates to CardDetail with the tapped pass id (#286)', async () => {
+    let api: ReturnType<typeof useWallet> | null = null;
+    function Probe() {
+      api = useWallet();
+      return null;
+    }
+    const { getByText } = render(
+      <WalletProvider>
+        <Probe />
+        <WalletScreen />
+      </WalletProvider>,
+    );
+    await waitFor(() => expect(api).not.toBeNull());
+    await act(async () => {
+      api!.addPass({ type: 'boarding', title: 'LIS-OPO', code: 'BP1', color: '#007AFF' });
+    });
+    await waitFor(() => expect(getByText('LIS-OPO')).toBeTruthy());
+
+    fireEvent.press(getByText('LIS-OPO'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('CardDetail', { passId: api!.passes[0].id });
   });
 });
 

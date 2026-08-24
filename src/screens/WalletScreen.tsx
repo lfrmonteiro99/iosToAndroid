@@ -9,8 +9,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useWallet, PassType } from '../store/WalletStore';
+import type { AppNavigationProp } from '../navigation/types';
 import {
   CupertinoNavigationBar,
   CupertinoEmptyState,
@@ -21,7 +23,10 @@ import {
 } from '../components';
 
 const PASS_TYPE_VALUES: PassType[] = ['boarding', 'ticket', 'loyalty', 'other'];
-const PASS_TYPE_LABELS: Record<PassType, string> = {
+// Exported so CardDetailScreen can render the same brand-equivalent label for
+// a pass without duplicating the mapping (#286 — see WalletCard/CardStore
+// mismatch note in CardDetailScreen.tsx).
+export const PASS_TYPE_LABELS: Record<PassType, string> = {
   boarding: 'Boarding',
   ticket: 'Ticket',
   loyalty: 'Loyalty',
@@ -179,6 +184,7 @@ export function WalletScreen() {
   const insets = useSafeAreaInsets();
   const { passes, isReady } = useWallet();
   const [adding, setAdding] = useState(false);
+  const navigation = useNavigation<AppNavigationProp>();
 
   const handleAddPressed = useCallback(() => setAdding(true), []);
   const handleCloseSheet = useCallback(() => setAdding(false), []);
@@ -221,11 +227,7 @@ export function WalletScreen() {
               <PassRow
                 key={pass.id}
                 pass={pass}
-                onPress={() => {
-                  // Editing is out of scope for #125 — tapping selects nothing
-                  // destructive. The long-press delete path lives on the tile
-                  // trailing action via the share sheet below.
-                }}
+                onPress={() => navigation.navigate('CardDetail', { passId: pass.id })}
               />
             ))}
           </CupertinoListSection>
