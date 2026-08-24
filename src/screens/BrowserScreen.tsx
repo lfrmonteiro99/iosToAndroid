@@ -315,6 +315,15 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
         testID="browser-webview"
         source={{ uri: currentUrl }}
         style={styles.webview}
+        // react-native-webview v13 wraps the native view in an extra frame
+        // (webViewContainerStyle = [container, containerStyle]). Passing only
+        // `style` flexes the *native* view, but the *frame* needs its own
+        // flex:1 — otherwise, under the New Architecture (app.json sets
+        // newArchEnabled: true), the frame can't claim the column height and the
+        // native WebView keeps its intrinsic Android height and overflows over
+        // the address bar / bottom toolbar (issue #708: blank page, only the
+        // Google logo).
+        containerStyle={styles.webviewFrame}
         incognito={!!activeTab?.isPrivate}
         onLoadStart={() => {
           setLoading(true);
@@ -338,6 +347,7 @@ export function BrowserScreen({ navigation }: { navigation: AppNavigationProp })
       />
 
       <View
+        testID="browser-bottom-toolbar"
         style={[
           styles.bottomToolbar,
           { paddingBottom: insets.bottom + 8, borderTopColor: colors.separator },
@@ -407,6 +417,9 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
       paddingHorizontal: 12,
       paddingVertical: 8,
       backgroundColor: isPrivate ? PRIVATE_BACKGROUND : colors.secondarySystemBackground,
+      // Lift the chrome above the WebView so it can never be covered, even if
+      // the webview frame misbehaves at runtime (issue #708).
+      zIndex: 1,
     },
     addressBar: {
       flex: 1,
@@ -421,6 +434,10 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
     progressTrack: { height: 2, backgroundColor: 'transparent' },
     progressBar: { height: 2, backgroundColor: BROWSER_ACCENT },
     webview: { flex: 1 },
+    // Frame that react-native-webview wraps the native view in. Give it an
+    // explicit flex:1 so it claims the column height and cannot overflow the
+    // chrome (issue #708).
+    webviewFrame: { flex: 1 },
     tabsButton: { justifyContent: 'center', alignItems: 'center' },
     tabsBadge: {
       minWidth: 16,
@@ -448,6 +465,8 @@ function createStyles(colors: CupertinoColors, isPrivate: boolean) {
       paddingTop: 10,
       borderTopWidth: StyleSheet.hairlineWidth,
       backgroundColor: colors.secondarySystemBackground,
+      // Lift the chrome above the WebView so it can never be covered (issue #708).
+      zIndex: 1,
     },
     tabGridHeader: {
       flexDirection: 'row',

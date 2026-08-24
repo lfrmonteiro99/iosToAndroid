@@ -381,6 +381,43 @@ describe('BrowserScreen — Back/Forward toolbar', () => {
   });
 });
 
+describe('BrowserScreen — chrome is never covered by the WebView (issue #708)', () => {
+  // The react-native-webview v13 wraps the native view in an extra flex:1 frame
+  // (webViewContainerStyle = [container, containerStyle]). BrowserScreen only
+  // passed `style={{flex:1}}` to the *native* view, leaving the *frame* without
+  // an explicit flex in some runtime configs (e.g. New Architecture, where
+  // app.json sets newArchEnabled: true). When the frame can't claim the column
+  // height, the native WebView keeps its intrinsic Android height and overflows
+  // over the address bar / bottom toolbar — the "blank page, only the Google
+  // logo" symptom. The fix gives the frame an explicit flex:1 via
+  // containerStyle and lifts the chrome above the WebView with a zIndex.
+
+  it('mounts the WebView with a flex:1 containerStyle so its frame fills the column and cannot overflow the chrome', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const webview = utils.getByTestId('browser-webview');
+    expect(webview.props.containerStyle).toMatchObject({ flex: 1 });
+  });
+
+  it('keeps the top bar above the WebView (zIndex) so it is never covered', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const topBar = utils.getByTestId('browser-topbar');
+    expect(flatStyle(topBar).zIndex).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps the bottom toolbar above the WebView (zIndex) so it is never covered', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    const bottomToolbar = utils.getByTestId('browser-bottom-toolbar');
+    expect(flatStyle(bottomToolbar).zIndex).toBeGreaterThanOrEqual(1);
+  });
+
+  it('still renders the address bar and bottom toolbar as siblings of the WebView', () => {
+    const utils = render(<BrowserScreen navigation={nav} />);
+    expect(utils.getByPlaceholderText('Search or enter website name')).toBeTruthy();
+    expect(utils.getByTestId('browser-bottom-toolbar')).toBeTruthy();
+    expect(utils.getByTestId('browser-webview')).toBeTruthy();
+  });
+});
+
 describe('BrowserScreen — private browsing is per-tab (grid segmented control)', () => {
   // The standalone "Toggle private browsing" Pressable from the single-tab
   // sub-issue no longer exists. Privacy is now driven by the active tab's
