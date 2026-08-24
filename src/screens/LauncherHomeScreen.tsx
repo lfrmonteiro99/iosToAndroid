@@ -51,7 +51,12 @@ import {
 } from '../components';
 import type { BannerNotification } from '../components';
 import type { RootStackParamList } from '../navigation/types';
-import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
+import {
+  darkenHex,
+  clampWallpaperIndex,
+  wallpaperColorFor,
+  CUSTOM_WALLPAPER_INDEX,
+} from '../utils/wallpapers';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
@@ -700,7 +705,7 @@ export function NonAndroidFallback() {
   const { settings } = useSettings();
   const device = useDevice();
 
-  const wallpaper = WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
+  const wallpaper = wallpaperColorFor(settings.wallpaperIndex);
   const wallpaperDark = darkenHex(wallpaper, 0.25);
 
   return (
@@ -1311,13 +1316,17 @@ export function LauncherHomeScreen() {
   }
 
   // Wallpaper gradient
-  const wallpaperColor =
-    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
+  // clampWallpaperIndex saneia settings.wallpaperIndex (lido de AsyncStorage,
+  // fonte não confiável — #674): um blob corrompido com índice não-numérico
+  // daria WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no render.
+  const wallpaperIndex = clampWallpaperIndex(settings.wallpaperIndex);
+  const wallpaperColor = wallpaperColorFor(wallpaperIndex);
   const wallpaperDark = darkenHex(wallpaperColor, 0.28);
 
   const WallpaperContent =
-    settings.wallpaperIndex === 6 && customWallpaperUri ? (
+    wallpaperIndex === CUSTOM_WALLPAPER_INDEX && customWallpaperUri ? (
       <ImageBackground
+        testID="wallpaper-custom-image"
         source={{ uri: customWallpaperUri }}
         style={StyleSheet.absoluteFillObject}
         resizeMode="cover"
