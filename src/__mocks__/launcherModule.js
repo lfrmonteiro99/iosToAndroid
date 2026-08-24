@@ -41,6 +41,12 @@ module.exports = {
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #634 App access (sensor usage)
+    getRecentAccessEvents: jest.fn(() => Promise.resolve([])),
+    getAppAccessCounts: jest.fn(() => Promise.resolve({})),
+    startAccessTrackingService: jest.fn(() => Promise.resolve(false)),
+    stopAccessTrackingService: jest.fn(() => Promise.resolve(false)),
+    isAccessTrackingServiceRunning: jest.fn(() => Promise.resolve(false)),
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
