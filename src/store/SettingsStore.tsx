@@ -19,6 +19,7 @@ import {
   type RequirePasscodeAfter,
   DEFAULT_REQUIRE_PASSCODE_AFTER,
 } from '../utils/passcodePolicy';
+import { clampWallpaperIndex } from '../utils/wallpapers';
 import { clampWhitePointLevel } from '../utils/whitePoint';
 import {
   normalizeFocusPageVisibility,
@@ -430,6 +431,12 @@ export function SettingsProvider({
             // launcher inteiro (#688). Normaliza-se na leitura como os irmãos
             // acima.
             categoryOverrides: normalizeCategoryOverrides(parsed?.categoryOverrides),
+            // wallpaperIndex (#674) indexa WALLPAPERS no render da home; um
+            // valor corrompido (string, NaN, fora de gama) daria
+            // WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no
+            // render → ecrã branco. Saneia-se na leitura, à semelhança dos
+            // campos acima.
+            wallpaperIndex: clampWallpaperIndex(parsed?.wallpaperIndex),
           }));
         } catch { /* ignore */ }
       }
