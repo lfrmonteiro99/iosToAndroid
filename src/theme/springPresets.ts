@@ -52,3 +52,6 @@ export const launcherIconPress: SpringConfig = { damping: 12, stiffness: 200, ma
 // before this file existed (it also happens to equal AnimationConfig.defaultSpring;
 // kept as its own export since AnimationConfig is deprecated).
 export const feedbackSettle: SpringConfig = { damping: 20, stiffness: 300, mass: 1 };
+// CupertinoContextMenu's pop-in: a touch lighter/looser than actionSheetPresent
+// so the card "blooms" rather than slides.
+export const contextMenuPresent: SpringConfig = { damping: 18, stiffness: 320, mass: 1 };

@@ -312,6 +312,23 @@ function MotionReader() {
   );
 }
 
+describe('AccessibilityScreen — Back Tap entry point (#625)', () => {
+  it('renders a Back Tap row that navigates to BackTapSettings', () => {
+    const { getByText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Back Tap'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('BackTapSettings');
+  });
+
+  it('shows the Back Tap subtitle as Off by default', () => {
+    // CupertinoListTile folds title+subtitle into one accessibilityLabel (see
+    // the pre-existing "AssistiveTouch, Off" row above it) — asserting the
+    // full label proves Back Tap's own subtitle rendered, not a stray 'Off'
+    // from the Motion segmented control or AssistiveTouch's row.
+    const { getByLabelText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
+    expect(getByLabelText('Back Tap, Off')).toBeTruthy();
+  });
+});
+
 describe('AccessibilityScreen — Motion (#493: motionIntensity + scrollDeceleration)', () => {
   it('renders the Motion section with Full/Reduced/Off and defaults to Full', () => {
     const { getByText, getAllByText, getByTestId } = render(

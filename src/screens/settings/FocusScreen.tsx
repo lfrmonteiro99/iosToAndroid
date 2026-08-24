@@ -15,7 +15,12 @@ import {
   homePageCount,
 } from '../../utils/focusPageVisibility';
 import { dockOverrideForMode, toggleDockOverrideApp } from '../../utils/focusDockOverride';
-import type { ContextRule, ContextCondition, ContextTargetMode } from '../../utils/contextTriggerEngine';
+import type {
+  ContextRule,
+  ContextCondition,
+  ContextTargetMode,
+  ContextCombinator,
+} from '../../utils/contextTriggerEngine';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -60,8 +65,19 @@ function makeContextRuleId(): string {
   return `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Passo actual do assistente "Add Automation" (#628). null = fechado. */
-type AddRuleStep = 'type' | 'wifiValue' | 'bluetoothValue' | 'mode' | null;
+/**
+ * Passo actual do assistente "Add Automation" (#628, estendido em #642 com
+ * horário + AND/OR). null = fechado.
+ */
+type AddRuleStep =
+  | 'type'
+  | 'wifiValue'
+  | 'bluetoothValue'
+  | 'timeStart'
+  | 'timeEnd'
+  | 'more'
+  | 'mode'
+  | null;
 
 /** Gera as opções de hora 'HH:MM' de 30 em 30 min (00:00 … 23:30). */
 function buildHalfHourOptions(): string[] {
@@ -165,6 +181,39 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
     }));
   }, [dockPickerMode, apps, settings.focusDockOverride, handleToggleDockApp]);
 
+  // Priority Apps (#630): allow-list global de apps que notificam sempre de
+  // imediato, mesmo com um modo de Focus activo (iOS «Allow in Focus»).
+  const [allowListOpen, setAllowListOpen] = useState(false);
+
+  const allowListCount = useMemo(
+    () => (settings.allowListImmediate ?? []).length,
+    [settings.allowListImmediate],
+  );
+
+  const allowListSummary = useCallback(
+    () => (allowListCount === 0 ? 'None' : `${allowListCount} app${allowListCount === 1 ? '' : 's'}`),
+    [allowListCount],
+  );
+
+  const handleToggleAllowList = useCallback(
+    (packageName: string) => {
+      const current = settings.allowListImmediate ?? [];
+      const next = current.includes(packageName)
+        ? current.filter((p) => p !== packageName)
+        : [...current, packageName];
+      update('allowListImmediate', next);
+    },
+    [settings.allowListImmediate, update],
+  );
+
+  const allowListOptions = useMemo(() => {
+    const current = settings.allowListImmediate ?? [];
+    return apps.map((app) => ({
+      label: `${current.includes(app.packageName) ? '✓ ' : ''}${app.name}`,
+      onPress: () => handleToggleAllowList(app.packageName),
+    }));
+  }, [apps, settings.allowListImmediate, handleToggleAllowList]);
+
   const handleSelectMode = useCallback((mode: FocusModeOption) => {
     const wasActive = settings.focusMode !== 'off';
     const willBeActive = mode.key !== 'off';
@@ -185,36 +234,66 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
     }
   }, [settings.focusMode, update, alert]);
 
-  // ── Automation / Context Engine (#628) ────────────────────────────────────
+  // ── Automation / Context Engine (#628, AND/OR + horário em #642) ─────────
   //
-  // Assistente "Add Automation": Wi-Fi/Bluetooth/Location → Focus mode. Cada
-  // regra criada por este assistente tem sempre uma única condição
-  // (combinator 'AND' trivial) — a engine (contextTriggerEngine.ts) já
-  // suporta múltiplas condições com AND/OR, mas construir aqui um editor de
-  // regras compostas é âmbito à parte, fora do que cabe nesta issue; a regra
-  // de negócio real (o motor) está completa e testada, este ecrã é o
-  // primeiro fluxo de autoria mínimo sobre ela.
+  // Assistente "Add Automation": Wi-Fi/Bluetooth/Location/Time → Focus mode,
+  // com N condições combinadas por AND ("têm de bater todas") ou OR ("basta
+  // uma bater"). A engine (contextTriggerEngine.ts) já suportava isto desde
+  // #628; este ecrã é que só deixava criar uma regra com uma única condição
+  // (combinator 'AND' trivial, forçado no código) — este bloco é o editor
+  // real sobre a engine já existente.
+  //
+  // Bug herdado corrigido aqui (não introduzido por #642): CupertinoActionSheet
+  // chama sempre `onClose()` a seguir a `option.onPress()` (mesmo evento
+  // síncrono) — ver src/components/CupertinoActionSheet.tsx:134-138. Quando um
+  // passo do wizard tenta avançar para OUTRO passo através do mesmo estado
+  // `addRuleStep` (ex.: 'type' → 'wifiValue'), a chamada a `onClose()` que se
+  // segue reescreve esse estado para `null` no mesmo batch do React, fechando
+  // o assistente por completo em vez de abrir o passo seguinte. Isto já
+  // afetava o wizard de #628 (Wi-Fi/Bluetooth nunca avançavam de facto — só
+  // "Current Location" escapava por acidente, porque a sua transição corre
+  // dentro de um `.then()` de promise, um render React separado do batch
+  // síncrono do `onClose()`). `goToStep` abaixo adia a transição para depois
+  // desse batch (macrotask), o mesmo mecanismo que já "salvava" o caso da
+  // localização, agora aplicado a todos os passos.
   const device = useDevice();
   const location = useLocation();
   const [addRuleStep, setAddRuleStep] = useState<AddRuleStep>(null);
-  const pendingConditionRef = useRef<ContextCondition | null>(null);
+  const pendingConditionsRef = useRef<ContextCondition[]>([]);
+  const pendingCombinatorRef = useRef<ContextCombinator>('AND');
   const pendingNameRef = useRef('');
+  const pendingTimeStartRef = useRef<string | null>(null);
+
+  const goToStep = useCallback((step: AddRuleStep) => {
+    setTimeout(() => setAddRuleStep(step), 0);
+  }, []);
+
+  const captureCondition = useCallback(
+    (condition: ContextCondition, label: string) => {
+      pendingConditionsRef.current = [...pendingConditionsRef.current, condition];
+      pendingNameRef.current = pendingNameRef.current ? `${pendingNameRef.current} + ${label}` : label;
+      goToStep('more');
+    },
+    [goToStep],
+  );
 
   const finishAddRule = useCallback(
     (mode: ContextTargetMode) => {
-      const condition = pendingConditionRef.current;
+      const conditions = pendingConditionsRef.current;
       setAddRuleStep(null);
-      if (!condition) return;
+      if (conditions.length === 0) return;
       const newRule: ContextRule = {
         id: makeContextRuleId(),
         name: pendingNameRef.current,
         enabled: true,
-        combinator: 'AND',
-        conditions: [condition],
+        combinator: pendingCombinatorRef.current,
+        conditions,
         targetMode: mode,
       };
       update('contextRules', [...settings.contextRules, newRule]);
-      pendingConditionRef.current = null;
+      pendingConditionsRef.current = [];
+      pendingCombinatorRef.current = 'AND';
+      pendingNameRef.current = '';
     },
     [settings.contextRules, update],
   );
@@ -235,34 +314,55 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
     for (const net of device.wifi.networks) ssids.add(net.ssid);
     return Array.from(ssids).map((ssid) => ({
       label: ssid,
-      onPress: () => {
-        pendingConditionRef.current = { type: 'wifi', ssid };
-        pendingNameRef.current = `Wi-Fi: ${ssid}`;
-        setAddRuleStep('mode');
-      },
+      onPress: () => captureCondition({ type: 'wifi', ssid }, `Wi-Fi: ${ssid}`),
     }));
-  }, [addRuleStep, device.wifi.ssid, device.wifi.networks]);
+  }, [addRuleStep, device.wifi.ssid, device.wifi.networks, captureCondition]);
 
   const bluetoothValueOptions = useMemo(() => {
     if (addRuleStep !== 'bluetoothValue') return [];
     return device.bluetooth.pairedDevices.map((d) => ({
       label: d.name || d.address,
+      onPress: () => captureCondition(
+        { type: 'bluetooth', address: d.address },
+        `Bluetooth: ${d.name || d.address}`,
+      ),
+    }));
+  }, [addRuleStep, device.bluetooth.pairedDevices, captureCondition]);
+
+  const timeStartOptions = useMemo(() => {
+    if (addRuleStep !== 'timeStart') return [];
+    return HOUR_OPTIONS.map((opt) => ({
+      label: opt,
       onPress: () => {
-        pendingConditionRef.current = { type: 'bluetooth', address: d.address };
-        pendingNameRef.current = `Bluetooth: ${d.name || d.address}`;
-        setAddRuleStep('mode');
+        pendingTimeStartRef.current = opt;
+        goToStep('timeEnd');
       },
     }));
-  }, [addRuleStep, device.bluetooth.pairedDevices]);
+  }, [addRuleStep, HOUR_OPTIONS, goToStep]);
+
+  const timeEndOptions = useMemo(() => {
+    if (addRuleStep !== 'timeEnd') return [];
+    return HOUR_OPTIONS.map((opt) => ({
+      label: opt,
+      onPress: () => {
+        const start = pendingTimeStartRef.current ?? '00:00';
+        captureCondition({ type: 'time', start, end: opt, weekdays: [] }, `Time: ${start}–${opt}`);
+      },
+    }));
+  }, [addRuleStep, HOUR_OPTIONS, captureCondition]);
 
   const handlePickTriggerType = useCallback(
-    (type: 'wifi' | 'bluetooth' | 'location') => {
+    (type: 'wifi' | 'bluetooth' | 'location' | 'time') => {
       if (type === 'wifi') {
-        setAddRuleStep('wifiValue');
+        goToStep('wifiValue');
         return;
       }
       if (type === 'bluetooth') {
-        setAddRuleStep('bluetoothValue');
+        goToStep('bluetoothValue');
+        return;
+      }
+      if (type === 'time') {
+        goToStep('timeStart');
         return;
       }
       // Location: sem lista de valores para escolher — captura a posição
@@ -274,19 +374,20 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           alert('Location Unavailable', 'Could not read the current location. Check Location permission and try again.');
           return;
         }
-        pendingConditionRef.current = {
-          type: 'location',
-          latitude: current.latitude,
-          longitude: current.longitude,
-          radiusMeters: LOCATION_TRIGGER_RADIUS_METERS,
-        };
-        pendingNameRef.current = `Location (${LOCATION_TRIGGER_RADIUS_METERS}m radius)`;
-        setAddRuleStep('mode');
+        captureCondition(
+          {
+            type: 'location',
+            latitude: current.latitude,
+            longitude: current.longitude,
+            radiusMeters: LOCATION_TRIGGER_RADIUS_METERS,
+          },
+          `Location (${LOCATION_TRIGGER_RADIUS_METERS}m radius)`,
+        );
       }).catch(() => {
         alert('Location Unavailable', 'Could not read the current location. Check Location permission and try again.');
       });
     },
-    [location, alert],
+    [location, alert, goToStep, captureCondition],
   );
 
   const triggerTypeOptions = useMemo(
@@ -294,8 +395,34 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
       { label: 'Wi-Fi Network', onPress: () => handlePickTriggerType('wifi') },
       { label: 'Bluetooth Device', onPress: () => handlePickTriggerType('bluetooth') },
       { label: 'Current Location', onPress: () => handlePickTriggerType('location') },
+      { label: 'Time / Schedule', onPress: () => handlePickTriggerType('time') },
     ],
     [handlePickTriggerType],
+  );
+
+  // Passo "Add Another Condition?": o utilizador escolhe combinar com AND
+  // (têm de bater todas) ou OR (basta uma), ou terminar já com as condições
+  // acumuladas. O combinador escolhido aplica-se à regra toda (a engine não
+  // suporta combinadores por par — ver ContextRule.combinator).
+  const moreOptions = useMemo(
+    () => [
+      {
+        label: 'Require ALL conditions (AND)',
+        onPress: () => {
+          pendingCombinatorRef.current = 'AND';
+          goToStep('type');
+        },
+      },
+      {
+        label: 'Match ANY condition (OR)',
+        onPress: () => {
+          pendingCombinatorRef.current = 'OR';
+          goToStep('type');
+        },
+      },
+      { label: 'Continue', onPress: () => goToStep('mode') },
+    ],
+    [goToStep],
   );
 
   const handleToggleRule = useCallback(
@@ -418,6 +545,24 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           </CupertinoListSection>
         </View>
 
+        {/* Priority Apps (#630) — allow-list que notifica sempre, mesmo em Focus */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Priority Apps"
+            footer="These apps always notify immediately, even when a Focus mode is on."
+          >
+            <CupertinoListTile
+              title="Allow Notifications In Focus"
+              trailing={
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  {allowListSummary()}
+                </Text>
+              }
+              onPress={() => setAllowListOpen(true)}
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Focus Schedule section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Focus Schedule">
@@ -458,42 +603,54 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           </CupertinoListSection>
         </View>
 
-        {/* Automation / Context Engine (#628): regras Wi-Fi/Bluetooth/
-            localização que ativam um Focus mode automaticamente, aditivas ao
-            Focus Schedule acima. */}
+        {/* Automation / Context Engine (#628, AND/OR + horário em #642):
+            regras Wi-Fi/Bluetooth/localização/horário que ativam um Focus
+            mode automaticamente, aditivas ao Focus Schedule acima. */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection
             header="Automation"
-            footer="Automatically turn on a Focus mode when a Wi-Fi network, Bluetooth device, or location matches."
+            footer="Automatically turn on a Focus mode when Wi-Fi, Bluetooth, location, or time matches. Combine several conditions per automation, either requiring all of them or just one."
           >
-            {settings.contextRules.map((rule) => (
-              <CupertinoListTile
-                key={rule.id}
-                title={rule.name || 'Automation'}
-                subtitle={`→ ${FOCUS_MODES.find((m) => m.key === rule.targetMode)?.label ?? rule.targetMode}`}
-                trailing={
-                  <View style={styles.ruleTrailing}>
-                    <CupertinoSwitch
-                      value={rule.enabled}
-                      onValueChange={(v) => handleToggleRule(rule.id, v)}
-                    />
-                    <Text
-                      style={[typography.footnote, { color: colors.systemRed, marginLeft: 12 }]}
-                      onPress={() => handleDeleteRule(rule.id)}
-                      accessibilityLabel={`Delete automation: ${rule.name}`}
-                      accessibilityRole="button"
-                    >
-                      Delete
-                    </Text>
-                  </View>
-                }
-                showChevron={false}
-              />
-            ))}
+            {settings.contextRules.map((rule) => {
+              const modeLabel = FOCUS_MODES.find((m) => m.key === rule.targetMode)?.label ?? rule.targetMode;
+              const subtitle = rule.conditions.length > 1
+                ? `${rule.combinator} of ${rule.conditions.length} → ${modeLabel}`
+                : `→ ${modeLabel}`;
+              return (
+                <CupertinoListTile
+                  key={rule.id}
+                  title={rule.name || 'Automation'}
+                  subtitle={subtitle}
+                  trailing={
+                    <View style={styles.ruleTrailing}>
+                      <CupertinoSwitch
+                        value={rule.enabled}
+                        onValueChange={(v) => handleToggleRule(rule.id, v)}
+                      />
+                      <Text
+                        style={[typography.footnote, { color: colors.systemRed, marginLeft: 12 }]}
+                        onPress={() => handleDeleteRule(rule.id)}
+                        accessibilityLabel={`Delete automation: ${rule.name}`}
+                        accessibilityRole="button"
+                      >
+                        Delete
+                      </Text>
+                    </View>
+                  }
+                  showChevron={false}
+                />
+              );
+            })}
             <CupertinoListTile
               title="Add Automation"
               leading={{ name: 'add-circle', color: '#FFFFFF', backgroundColor: colors.systemGreen ?? '#34C759' }}
-              onPress={() => setAddRuleStep('type')}
+              onPress={() => {
+                pendingConditionsRef.current = [];
+                pendingCombinatorRef.current = 'AND';
+                pendingNameRef.current = '';
+                pendingTimeStartRef.current = null;
+                setAddRuleStep('type');
+              }}
               showChevron={false}
             />
           </CupertinoListSection>
@@ -542,9 +699,23 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
         cancelLabel="Done"
       />
 
-      {/* Assistente "Add Automation" (#628): 3 passos encadeados — tipo de
-          gatilho, valor do gatilho (Wi-Fi/Bluetooth; Location salta este
-          passo, ver handlePickTriggerType), modo de destino. */}
+      {/* Priority Apps (#630): allow-list que notifica sempre em Focus. Mesmo
+          padrão de multiselect dos ecrãs acima — cada toque alterna um app. */}
+      <CupertinoActionSheet
+        visible={allowListOpen}
+        onClose={() => setAllowListOpen(false)}
+        title="Priority Apps"
+        message="These apps notify immediately, even when a Focus mode is on."
+        options={allowListOptions}
+        cancelLabel="Done"
+      />
+
+      {/* Assistente "Add Automation" (#628, AND/OR + horário em #642): tipo de
+          gatilho (Wi-Fi/Bluetooth/Location/Time) → valor do gatilho → "Add
+          Another Condition?" (AND/OR ou terminar) → modo de destino. Location
+          salta o passo de valor (ver handlePickTriggerType). Cada transição
+          usa `goToStep`/`captureCondition`, não `setAddRuleStep` direto — ver
+          o comentário sobre o bug herdado do onClose acima. */}
       <CupertinoActionSheet
         visible={addRuleStep === 'type'}
         onClose={() => setAddRuleStep(null)}
@@ -565,6 +736,28 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
         onClose={() => setAddRuleStep(null)}
         title="Bluetooth Device"
         options={bluetoothValueOptions}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={addRuleStep === 'timeStart'}
+        onClose={() => setAddRuleStep(null)}
+        title="Start Time"
+        options={timeStartOptions}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={addRuleStep === 'timeEnd'}
+        onClose={() => setAddRuleStep(null)}
+        title="End Time"
+        options={timeEndOptions}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={addRuleStep === 'more'}
+        onClose={() => setAddRuleStep(null)}
+        title="Add Another Condition?"
+        message="Add one more condition to this automation, or continue to pick the Focus mode."
+        options={moreOptions}
         cancelLabel="Cancel"
       />
       <CupertinoActionSheet
