@@ -36,6 +36,10 @@ import {
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
 import { normalizeContextRules, type ContextRule } from '../utils/contextTriggerEngine';
+import {
+  normalizePerformanceProfile,
+  type PerformanceProfile,
+} from '../utils/performanceProfile';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -315,7 +319,14 @@ export interface SettingsState {
    */
   darkModeDarkUntil: string;
   /**
-   * Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
+   /**
+    * Power/performance profile (#631 child): 'normal' | 'performance' | 'saver'
+    * | 'sleep' | 'travel'. Espelha os modos de energia do Android num picker do
+    * iOS. Seleccionar um perfil aplica o respectivo patch de triggers (via
+    * `updateMany`) e grava a escolha aqui. Default 'normal' (baseline).
+    */
+   performanceProfile: PerformanceProfile;
+   /** Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
    * O native devolve o tipo real (`device.type`), mas o utilizador pode
    * sobrepô-lo no "i" de cada dispositivo emparelhado (Coluna / Auscultadores /
    * Rádio do Carro / Outro) — isto calibra o ícone e a intenção de uso. É um
@@ -420,6 +431,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkModeLightUntil: '07:00',
   darkModeDarkUntil: '19:00',
   bluetoothDeviceTypes: {},
+  performanceProfile: 'normal',
 };
 
 interface SettingsContextValue {
@@ -509,6 +521,11 @@ export function SettingsProvider({
             // render → ecrã branco. Saneia-se na leitura, à semelhança dos
             // campos acima.
             wallpaperIndex: clampWallpaperIndex(parsed?.wallpaperIndex),
+            // performanceProfile (#631 child): o picker só conhece cinco modos;
+            // um blob corrompido (string à-toa, null, maiúsculas) ativaria um
+            // perfil desconhecido e dispararia triggers errados. Normaliza-se
+            // na leitura para 'normal' (baseline), como os campos acima.
+            performanceProfile: normalizePerformanceProfile(parsed?.performanceProfile),
             // iconTintColor (#620) feeds Image's tintColor style directly; a
             // corrupted/non-hex value from an old blob would silently no-op
             // or paint icons black depending on the platform, so it is
