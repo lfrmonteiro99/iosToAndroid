@@ -26,6 +26,16 @@ import {
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 import { createSnapshot, applySnapshot } from '../../services/BackupSnapshot';
+import { encryptSnapshot, decryptSnapshot } from '../../services/BackupEncryption';
+import { validateSnapshot } from '../../services/BackupValidation';
+import { uploadBackup, listBackups, downloadBackup, type CloudBackupEntry } from '../../services/CloudBackup';
+import {
+  getInitialState,
+  getAccessToken,
+  signIn as googleSignIn,
+  signOut as googleSignOut,
+  type GoogleAuthState,
+} from '../../services/GoogleAuth';
 import {
   isBackupDue,
   loadAutoBackupPrefs,
@@ -101,9 +111,9 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
 
   // Foreground-triggered reminder (issue #283): on the app coming BACK to the
   // foreground after being backgrounded, if a backup is due and Auto Backup is
-  // on, surface a one-tap prompt. The prompt only ever runs the existing
-  // MANUAL backup flow (doExport) — it never uploads unattended, so the
-  // passphrase constraint (#270) holds.
+  // on, surface a one-tap prompt. The prompt only ever re-enters the existing
+  // MANUAL backup flow (handleBackUpNow -> passphrase modal -> uploadBackup) —
+  // it never uploads unattended, so the passphrase constraint (#270) holds.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next !== 'active') return;
@@ -124,30 +134,146 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     [],
   );
 
+  const [googleState, setGoogleState] = useState<GoogleAuthState>(() => getInitialState());
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const [cloudBackupBusy, setCloudBackupBusy] = useState(false);
+  const [cloudRestoreBusy, setCloudRestoreBusy] = useState(false);
+  const [passphraseMode, setPassphraseMode] = useState<'backup' | 'restore' | null>(null);
+  const [passphraseText, setPassphraseText] = useState('');
+  const [showRestoreListModal, setShowRestoreListModal] = useState(false);
+  const [cloudBackups, setCloudBackups] = useState<CloudBackupEntry[]>([]);
+  const [selectedRestoreFileId, setSelectedRestoreFileId] = useState<string | null>(null);
+
+  const handleGoogleConnect = useCallback(async () => {
+    try {
+      setGoogleBusy(true);
+      if (googleState.isSignedIn) {
+        await googleSignOut();
+        setGoogleState({ isSignedIn: false, email: null });
+      } else {
+        const result = await googleSignIn();
+        setGoogleState(result);
+      }
+    } catch (e) {
+      alert('Google Drive', String(e));
+    } finally {
+      setGoogleBusy(false);
+    }
+  }, [googleState.isSignedIn, alert]);
+
+  const handleBackUpNow = useCallback(() => {
+    setPassphraseText('');
+    setPassphraseMode('backup');
+  }, []);
+
+  const handleRestoreFromCloud = useCallback(async () => {
+    try {
+      setCloudRestoreBusy(true);
+      const token = await getAccessToken();
+      if (!token) {
+        alert('Google Drive', 'You need to connect Google Drive first.');
+        return;
+      }
+      const backups = await listBackups(token);
+      setCloudBackups(backups);
+      setShowRestoreListModal(true);
+    } catch (e) {
+      alert('Restore Failed', String(e));
+    } finally {
+      setCloudRestoreBusy(false);
+    }
+  }, [alert]);
+
+  const handleSelectCloudBackup = useCallback((fileId: string) => {
+    setSelectedRestoreFileId(fileId);
+    setShowRestoreListModal(false);
+    setPassphraseText('');
+    setPassphraseMode('restore');
+  }, []);
+
+  const handlePassphraseCancel = useCallback(() => {
+    setPassphraseMode(null);
+    setPassphraseText('');
+    setSelectedRestoreFileId(null);
+  }, []);
+
+  const handlePassphraseConfirm = useCallback(async () => {
+    const mode = passphraseMode;
+    const passphrase = passphraseText;
+    const fileId = selectedRestoreFileId;
+    setPassphraseMode(null);
+    setPassphraseText('');
+
+    if (mode === 'backup') {
+      try {
+        setCloudBackupBusy(true);
+        const token = await getAccessToken();
+        if (!token) {
+          alert('Google Drive', 'You need to connect Google Drive first.');
+          return;
+        }
+        const snapshot = await createSnapshot();
+        const encrypted = encryptSnapshot(snapshot, passphrase);
+        await uploadBackup(encrypted, token);
+        const now = new Date();
+        setLastBackupTime(now.toLocaleString());
+        // Stamp the Auto Backup schedule ONLY after a genuinely successful
+        // upload (issue #283: `lastBackupAt` is set after a successful #279
+        // upload) and only while Auto Backup is on, so with the toggle off the
+        // auto-backup key is never written at all.
+        if (prefsRef.current.enabled) {
+          persistPrefs(withBackupTimestamp(prefsRef.current, now));
+        }
+        alert('Backup Uploaded', 'Your settings were backed up to Google Drive.');
+      } catch (e) {
+        alert('Cloud Backup Failed', String(e));
+      } finally {
+        setCloudBackupBusy(false);
+      }
+      return;
+    }
+
+    if (mode === 'restore' && fileId) {
+      try {
+        setCloudRestoreBusy(true);
+        const token = await getAccessToken();
+        if (!token) {
+          alert('Google Drive', 'You need to connect Google Drive first.');
+          return;
+        }
+        const encrypted = await downloadBackup(fileId, token);
+        const snapshot = decryptSnapshot(encrypted, passphrase);
+        validateSnapshot(snapshot);
+        await applySnapshot(snapshot);
+        alert('Restored', 'Settings restored from Google Drive. Restart the app to apply all changes.');
+      } catch (e) {
+        alert('Error', `Invalid backup data: ${String(e)}`);
+      } finally {
+        setCloudRestoreBusy(false);
+        setSelectedRestoreFileId(null);
+      }
+    }
+  }, [passphraseMode, passphraseText, selectedRestoreFileId, alert, persistPrefs]);
+
   const doExport = useCallback(async () => {
     try {
       setBusy(true);
       const snapshot = await createSnapshot();
       const json = JSON.stringify(snapshot, null, 2);
       await Clipboard.setStringAsync(json);
-      const now = new Date();
-      const nowLabel = now.toLocaleString();
-      setLastBackupTime(nowLabel);
-      // Stamp the Auto Backup schedule so the reminder stops firing until the
-      // next interval — only when Auto Backup is on, so a manual export with
-      // Auto Backup OFF leaves the auto-backup key completely untouched
-      // (regression guard). Always via the manual (supervised) flow, never
-      // silently.
-      if (prefsRef.current.enabled) {
-        persistPrefs(withBackupTimestamp(prefsRef.current, now));
-      }
+      setLastBackupTime(new Date().toLocaleString());
+      // NOTE: the clipboard export (#269) deliberately does NOT stamp the Auto
+      // Backup schedule. Per #283 `lastBackupAt` tracks successful #279 cloud
+      // uploads only; a clipboard copy is not a durable backup, so letting it
+      // silence the reminder for a whole day/week would hide a real gap.
       alert('Backup Copied', 'Settings exported to clipboard. Paste the JSON somewhere safe.');
     } catch (e) {
       alert('Export Failed', String(e));
     } finally {
       setBusy(false);
     }
-  }, [alert, persistPrefs]);
+  }, [alert]);
 
   const handleExport = useCallback(() => {
     setShowExportConfirm(true);
@@ -202,10 +328,17 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     [persistPrefs],
   );
 
+  // The reminder never uploads by itself: it just re-enters the SAME manual
+  // "Back Up Now" flow (#279), which opens the passphrase modal. The passphrase
+  // is always typed fresh and never persisted (#270).
   const handleBackupPrompt = useCallback(() => {
     setShowBackupPrompt(false);
-    void doExport();
-  }, [doExport]);
+    if (!googleState.isSignedIn) {
+      alert('Google Drive', 'Connect Google Drive to run your scheduled backup.');
+      return;
+    }
+    handleBackUpNow();
+  }, [googleState.isSignedIn, alert, handleBackUpNow]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -225,6 +358,25 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Google Drive — OAuth connection (epic #126) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>GOOGLE DRIVE</Text>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title={googleState.isSignedIn ? `Connected: ${googleState.email}` : 'Connect Google Drive'}
+              subtitle={
+                googleState.isSignedIn
+                  ? 'Tap to disconnect'
+                  : 'Back up to your private Drive app folder'
+              }
+              onPress={handleGoogleConnect}
+              trailing={
+                googleBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Backup */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>BACKUP</Text>
@@ -234,6 +386,14 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
               subtitle="Copy app preferences to clipboard as JSON"
               onPress={handleExport}
               trailing={busy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined}
+            />
+            <CupertinoListTile
+              title="Back Up Now"
+              subtitle="Encrypt and upload settings to Google Drive"
+              onPress={googleState.isSignedIn ? handleBackUpNow : undefined}
+              trailing={
+                cloudBackupBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
             />
             {lastBackupTime && (
               <CupertinoListTile
@@ -285,7 +445,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
           </CupertinoListSection>
           {autoEnabled && (
             <Text style={[styles.footer, { color: colors.secondaryLabel }]}>
-              Backups are never uploaded automatically. When a backup is due, you&apos;ll be reminded on app open and can run it with your passphrase, just like a manual export.
+              Backups are never uploaded automatically. When one is due you&apos;ll be reminded on app open, and it only runs after you type your passphrase — exactly like Back Up Now.
             </Text>
           )}
         </View>
@@ -298,6 +458,14 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
               title="Import Settings"
               subtitle="Paste a backup JSON to restore settings"
               onPress={() => setShowImportModal(true)}
+            />
+            <CupertinoListTile
+              title="Restore from Cloud"
+              subtitle="Pick a backup from Google Drive"
+              onPress={googleState.isSignedIn ? handleRestoreFromCloud : undefined}
+              trailing={
+                cloudRestoreBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
             />
           </CupertinoListSection>
         </View>
@@ -380,6 +548,106 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
         </View>
       </Modal>
 
+      {/* Cloud Restore — pick a backup */}
+      <Modal
+        visible={showRestoreListModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRestoreListModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.systemBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.label }]}>Choose a Backup</Text>
+            {cloudBackups.length === 0 ? (
+              <Text style={[styles.modalSubtitle, { color: colors.secondaryLabel }]}>
+                No backups found in Google Drive.
+              </Text>
+            ) : (
+              cloudBackups.map((entry) => (
+                <Pressable
+                  key={entry.id}
+                  style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.separator, marginBottom: 8 }]}
+                  onPress={() => handleSelectCloudBackup(entry.id)}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.modalBtnText, { color: colors.label }]}>
+                    {new Date(entry.createdTime).toLocaleString()}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.separator }]}
+                onPress={() => setShowRestoreListModal(false)}
+                accessibilityLabel="Cancel"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.modalBtnText, { color: colors.label }]}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Passphrase Modal — shared by Back Up Now and Restore from Cloud */}
+      <Modal
+        visible={passphraseMode !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={handlePassphraseCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.systemBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.label }]}>
+              {passphraseMode === 'backup' ? 'Backup Passphrase' : 'Restore Passphrase'}
+            </Text>
+            <Text style={[styles.modalSubtitle, { color: colors.secondaryLabel }]}>
+              {passphraseMode === 'backup'
+                ? 'Choose a passphrase to encrypt this backup. You will need it to restore.'
+                : 'Enter the passphrase used to encrypt this backup.'}
+            </Text>
+            <TextInput
+              style={[
+                styles.textArea,
+                {
+                  backgroundColor: colors.systemGroupedBackground,
+                  color: colors.label,
+                  borderColor: colors.separator,
+                  minHeight: 46,
+                },
+              ]}
+              value={passphraseText}
+              onChangeText={setPassphraseText}
+              placeholder="Passphrase"
+              placeholderTextColor={colors.tertiaryLabel}
+              secureTextEntry
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.separator }]}
+                onPress={handlePassphraseCancel}
+                accessibilityLabel="Cancel"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.modalBtnText, { color: colors.label }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnConfirm, { backgroundColor: colors.systemBlue }]}
+                onPress={handlePassphraseConfirm}
+                disabled={!passphraseText}
+                accessibilityLabel="Confirm"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFFFFF' }]}>Confirm</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Export Disclosure Dialog */}
       <CupertinoAlertDialog
         visible={showExportConfirm}
@@ -403,10 +671,13 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
       <CupertinoAlertDialog
         visible={showBackupPrompt}
         title="Time for your backup"
-        message="Your scheduled backup is due. Back up now? Your settings will be copied to the clipboard, just like a manual export."
+        message="Your scheduled backup is due. Back up now? You'll be asked for your passphrase, exactly like tapping Back Up Now yourself."
         actions={[
           { label: 'Not Now', style: 'cancel', onPress: () => setShowBackupPrompt(false) },
-          { label: 'Back Up Now', style: 'default', onPress: handleBackupPrompt },
+          // Deliberately NOT labelled "Back Up Now": that exact string is
+          // already the BACKUP section tile, and two identical labels on screen
+          // are ambiguous both for screen readers and for by-text queries.
+          { label: 'Back Up', style: 'default', onPress: handleBackupPrompt },
         ]}
         onClose={() => setShowBackupPrompt(false)}
       />

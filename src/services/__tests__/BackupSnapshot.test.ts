@@ -143,15 +143,12 @@ describe('applySnapshot', () => {
     expect(AsyncStorage.setMany).not.toHaveBeenCalled();
   });
 
-  it('coerces non-string values to strings before writing', async () => {
+  it('rejects a non-string value instead of coercing it (issue #274)', async () => {
     const data = {
       '@iostoandroid/language': 'pt',
-      '@iostoandroid/high_contrast': true as unknown, // stored as boolean upstream edge case
+      '@iostoandroid/high_contrast': true as unknown, // boolean value must be rejected, not coerced
     };
-    await applySnapshot(data as Record<string, unknown>);
-
-    const written = (AsyncStorage.setMany as jest.Mock).mock.calls[0][0];
-    expect(written['@iostoandroid/high_contrast']).toBe('true');
-    expect(typeof written['@iostoandroid/high_contrast']).toBe('string');
+    await expect(applySnapshot(data as Record<string, unknown>)).rejects.toThrow();
+    expect(AsyncStorage.setMany).not.toHaveBeenCalled();
   });
 });
