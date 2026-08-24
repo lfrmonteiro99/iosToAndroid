@@ -271,6 +271,16 @@ describe('AppStoreScreen — Search tab', () => {
     fireEvent.press(getByText('Search'));
     expect(getByTestId('app-store-search-disclaimer')).toBeTruthy();
   });
+
+  it('a query matching this app\'s own virtual built-in (Clock) navigates to the internal screen instead of the native launcher bridge (#706)', () => {
+    mockApps([{ name: 'Clock', packageName: 'com.iostoandroid.clock', icon: '', isSystem: false }]);
+    const { getByText, getByPlaceholderText, getByLabelText } = render(<AppStoreScreen navigation={nav} />);
+    fireEvent.press(getByText('Search'));
+    fireEvent.changeText(getByPlaceholderText(/search/i), 'clock');
+    fireEvent.press(getByLabelText('Open Clock'));
+    expect(mockNavigate).toHaveBeenCalledWith('Clock');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
+  });
 });
 
 describe('AppStoreScreen — Categories tab', () => {

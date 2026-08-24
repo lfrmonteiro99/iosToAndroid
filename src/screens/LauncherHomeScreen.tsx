@@ -38,6 +38,7 @@ import { addHomePressedListener, LauncherModuleType } from '../../modules/launch
 import { useApps, InstalledApp, HomeApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 import { useTheme } from '../theme/ThemeContext';
 import { Shape } from '../theme/CupertinoTheme';
 import { useDevice } from '../store/DeviceStore';
@@ -1754,7 +1755,7 @@ export function LauncherHomeScreen() {
         ref={scrollViewRef}
         horizontal
         pagingEnabled
-        decelerationRate={0.998}
+        decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
         showsHorizontalScrollIndicator={false}
         onScroll={handlePageScroll}
         scrollEventThrottle={16}
