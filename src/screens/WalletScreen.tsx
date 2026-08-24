@@ -66,6 +66,10 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
     navigation.navigate('PassEdit', {});
   }, [navigation]);
 
+  const handleScanPressed = useCallback(() => {
+    navigation.navigate('PassScan');
+  }, [navigation]);
+
   const handlePassPressed = useCallback(
     (passId: string) => {
       navigation.navigate('PassEdit', { passId });
@@ -80,14 +84,23 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
         title="Wallet"
         largeTitle={false}
         rightButton={
-          <Pressable
-            onPress={handleAddPressed}
-            accessibilityRole="button"
-            accessibilityLabel="Add pass"
-            style={{ flexDirection: 'row', alignItems: 'center' }}
-          >
-            <Ionicons name="add" size={26} color={colors.systemBlue} />
-          </Pressable>
+          <View style={styles.navBarActions}>
+            <Pressable
+              onPress={handleScanPressed}
+              accessibilityRole="button"
+              accessibilityLabel="Scan pass"
+            >
+              <Ionicons name="camera-outline" size={24} color={colors.systemBlue} />
+            </Pressable>
+            <Pressable
+              onPress={handleAddPressed}
+              accessibilityRole="button"
+              accessibilityLabel="Add pass"
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+            >
+              <Ionicons name="add" size={26} color={colors.systemBlue} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -136,6 +149,7 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   body: { flex: 1 },
+  navBarActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   codeBadge: { maxWidth: 120 },
   addRow: {
     flexDirection: 'row',

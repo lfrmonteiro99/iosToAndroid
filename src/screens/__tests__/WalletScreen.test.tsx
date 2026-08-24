@@ -42,6 +42,16 @@ describe('WalletScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('PassEdit', {});
   });
 
+  it('navigates to PassScan when the "Scan" nav-bar action is tapped', async () => {
+    const navigation = makeNavigation();
+    const { getByLabelText, getByText } = render(<WalletScreen navigation={navigation} />);
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Scan pass'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PassScan');
+  });
+
   it('navigates to PassEdit from the empty-state "Add Pass" action too', async () => {
     const navigation = makeNavigation();
     const { getByText } = render(<WalletScreen navigation={navigation} />);
