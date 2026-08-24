@@ -39,10 +39,12 @@ class ForegroundGuardActivity : AppCompatActivity() {
 
         // Back must behave like "cancel" — go HOME, never release. (AppCompatActivity
         // finalizes onBackPressed(), so we register a dispatcher callback instead.)
-        onBackPressedDispatcher.addCallback(this) {
-            goHome()
-            finish()
-        }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                goHome()
+                finish()
+            }
+        })
 
         val packageName = intent?.getStringExtra(ForegroundMonitorService.EXTRA_PACKAGE)
         if (packageName.isNullOrEmpty() || packageName == OWN_PACKAGE) {
