@@ -11,7 +11,9 @@ function makeNavigation() {
   } as unknown as AppNavigationProp;
 }
 
-function makeRoute(params: { passId?: string } | undefined): AppRouteProp<'PassEdit'> {
+function makeRoute(
+  params: { passId?: string; prefillCode?: string } | undefined,
+): AppRouteProp<'PassEdit'> {
   return {
     key: 'PassEdit-test',
     name: 'PassEdit',
@@ -127,6 +129,58 @@ describe('PassEditScreen', () => {
       );
 
       expect(queryByText('Delete Pass')).toBeNull();
+    });
+  });
+
+  describe('create mode with prefillCode (from PassScanScreen)', () => {
+    it('pre-fills the code field from prefillCode on mount', () => {
+      const { getByPlaceholderText } = render(
+        <PassEditScreen navigation={makeNavigation()} route={makeRoute({ prefillCode: 'SCANNED-XYZ' })} />,
+      );
+
+      expect(getByPlaceholderText('Code / value').props.value).toBe('SCANNED-XYZ');
+    });
+
+    it('does not save automatically from a scan — the user must still tap Done', async () => {
+      const apiRef: { current: ReturnType<typeof useWallet> | null } = { current: null };
+      function Probe() {
+        apiRef.current = useWallet();
+        return null;
+      }
+      const navigation = makeNavigation();
+      render(
+        <>
+          <Probe />
+          <PassEditScreen navigation={navigation} route={makeRoute({ prefillCode: 'SCANNED-XYZ' })} />
+        </>,
+      );
+
+      await waitFor(() => expect(apiRef.current).not.toBeNull());
+      expect(apiRef.current!.passes).toHaveLength(0);
+      expect(navigation.goBack).not.toHaveBeenCalled();
+    });
+
+    it('defaults the pass type to Other and creates it as Other once Done is tapped', async () => {
+      const apiRef: { current: ReturnType<typeof useWallet> | null } = { current: null };
+      function Probe() {
+        apiRef.current = useWallet();
+        return null;
+      }
+      const navigation = makeNavigation();
+      const { getByText, getByPlaceholderText } = render(
+        <>
+          <Probe />
+          <PassEditScreen navigation={navigation} route={makeRoute({ prefillCode: 'SCANNED-XYZ' })} />
+        </>,
+      );
+      await waitFor(() => expect(apiRef.current).not.toBeNull());
+
+      fireEvent.changeText(getByPlaceholderText('Title'), 'Scanned Pass');
+      fireEvent.press(getByText('Done'));
+
+      await waitFor(() => expect(apiRef.current!.passes).toHaveLength(1));
+      expect(apiRef.current!.passes[0].type).toBe('other');
+      expect(apiRef.current!.passes[0].code).toBe('SCANNED-XYZ');
     });
   });
 
