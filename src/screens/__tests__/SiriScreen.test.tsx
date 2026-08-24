@@ -242,7 +242,9 @@ describe('SiriScreen', () => {
   });
 
   // ── Repetition / order ───────────────────────────────────────────────────
-  it('launches twice when the same command is submitted twice (no stale-state swallow)', () => {
+  // Calculator is a built-in: submitting the command twice must navigate to the
+  // internal screen twice (no stale-state swallow), never touch the native launcher.
+  it('navigates to a built-in twice when the same command is submitted twice (no stale-state swallow)', () => {
     const nav = makeNav();
     const { getByLabelText } = render(<SiriScreen navigation={nav} />);
     const field = getByLabelText('Ask Siri');
@@ -250,10 +252,12 @@ describe('SiriScreen', () => {
     fireEvent(field, 'submitEditing');
     fireEvent.changeText(field, 'Open Calculator');
     fireEvent(field, 'submitEditing');
-    expect(mockLaunchApp).toHaveBeenCalledTimes(2);
+    expect(nav.navigate).toHaveBeenCalledTimes(2);
+    expect(nav.navigate).toHaveBeenCalledWith('Calculator');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
   });
 
-  it('clears the previous "couldn\'t find" answer once a later command succeeds', () => {
+  it('clears the previous "couldn\'t find" answer once a later built-in command succeeds', () => {
     const nav = makeNav();
     const { getByLabelText, queryByText } = render(<SiriScreen navigation={nav} />);
     const field = getByLabelText('Ask Siri');
@@ -263,13 +267,17 @@ describe('SiriScreen', () => {
     fireEvent.changeText(field, 'Open Calculator');
     fireEvent(field, 'submitEditing');
     expect(queryByText(/Couldn't find/i)).toBeNull();
+    expect(nav.navigate).toHaveBeenCalledWith('Calculator');
   });
 
   // ── Async ────────────────────────────────────────────────────────────────
-  it('does not throw when launchApp rejects', () => {
+  // Real (non-built-in) apps still go through the native launcher; the failure
+  // path still reports a friendly message. Calculator is built-in, so we assert
+  // the native-launch failure path against a real app instead.
+  it('does not throw when launchApp rejects (real app)', () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
-    expect(() => submit('Open Calculator')).not.toThrow();
-    expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
+    expect(() => submit('Open Spotify')).not.toThrow();
+    expect(mockLaunchApp).toHaveBeenCalledWith('com.spotify');
   });
 
   // ── Speech (issue #256) ──────────────────────────────────────────────────
@@ -284,13 +292,13 @@ describe('SiriScreen', () => {
     expect(Speech.speak).not.toHaveBeenCalled();
   });
 
-  it('speaks the launchApp-failure response when launchApp rejects', async () => {
+  it('speaks the launchApp-failure response when a real app launch rejects', async () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
-    submit('Open Calculator');
+    submit('Open Spotify');
     // Success response set synchronously, failure response set in async .catch.
-    expect(Speech.speak).toHaveBeenCalledWith('Opening Calculator.');
+    expect(Speech.speak).toHaveBeenCalledWith('Opening Spotify.');
     await waitFor(() =>
-      expect(Speech.speak).toHaveBeenCalledWith("Couldn't open Calculator."),
+      expect(Speech.speak).toHaveBeenCalledWith("Couldn't open Spotify."),
     );
     expect(Speech.speak).toHaveBeenCalledTimes(2);
   });
@@ -311,6 +319,36 @@ describe('SiriScreen', () => {
     fireEvent.changeText(field, 'Open Calculator');
     fireEvent(field, 'submitEditing');
     expect(Speech.speak).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Built-in apps open through internal navigation (#700) ────────────────
+  // Built-in apps (Calculator, Notes, Weather, …) are virtual screens of this
+  // app, not real Android packages — they are absent from the native
+  // PackageManager list the assistant searches (`apps`). Routing them through
+  // the native launcher module would surface the Android home screen (the
+  // #697 class of bug). They must open via the in-app route, exactly like the
+  // home grid (BUILT_IN_APPS) and the Control Center do.
+  it('opens a built-in app (Calculator) via internal navigation, not the native launcher', () => {
+    const nav = makeNav();
+    submit('Open Calculator', nav);
+    expect(nav.navigate).toHaveBeenCalledWith('Calculator');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
+  });
+
+  it('opens a built-in app even when the spoken name carries trailing punctuation', () => {
+    const nav = makeNav();
+    submit('Open Calculator.', nav);
+    expect(nav.navigate).toHaveBeenCalledWith('Calculator');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
+  });
+
+  it('still reports an unknown (non-built-in) app as not found and launches nothing', () => {
+    const nav = makeNav();
+    submit('Open Photoshop', nav);
+    // No internal route, no native launch — an unknown app opens nothing. The
+    // "Couldn't find" reply is asserted via the not-found guard on response text.
+    expect(nav.navigate).not.toHaveBeenCalled();
+    expect(mockLaunchApp).not.toHaveBeenCalled();
   });
 });
 
@@ -404,11 +442,14 @@ describe('SiriScreen voice input', () => {
   });
 
   it('an incoming final speech result runs the same command pipeline as typed input', async () => {
-    const { getByLabelText } = await renderScreen();
+    const { getByLabelText, nav } = await renderScreen();
     await tapMic(getByLabelText);
     expect(listeners.result).toBeDefined();
     await act(async () => { listeners.result?.('Open Calculator'); });
-    expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
+    // Calculator is a built-in, so voice input routes it through the in-app
+    // navigator (issue #700), not the native launcher module.
+    expect(nav.navigate).toHaveBeenCalledWith('Calculator');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
   });
 
   it('a partial result populates the text field so the user sees the transcript', async () => {
