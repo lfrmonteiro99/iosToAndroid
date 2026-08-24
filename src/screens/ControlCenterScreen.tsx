@@ -342,10 +342,17 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
 
       {/* Control Center sheet */}
       <GestureDetector gesture={swipeDownGesture}>
-        <Animated.View
-          style={[styles.sheet, { paddingBottom: insets.bottom + 16 }, sheetStyle]}
-        >
-          <GlassSurface intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+        <Animated.View style={sheetStyle}>
+          {/* The glass IS the sheet: the controls are CHILDREN of the blur
+              surface, never siblings painted after a childless absolute-fill
+              BlurView. On Android the dimezisBlurView surface is a native view
+              that composites above later siblings, which blanked the whole
+              panel (#684). */}
+          <GlassSurface
+            intensity={80}
+            tint="dark"
+            style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
+          >
 
           {/* Drag handle */}
           <View style={styles.handle} />
@@ -400,8 +407,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
           {/* Music controls                                                  */}
           {/* ------------------------------------------------------------ */}
           <View style={styles.section}>
-            <View style={styles.musicCard}>
-              <GlassSurface intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+            <GlassSurface intensity={25} tint="dark" style={styles.musicCard}>
               <View style={styles.musicInner}>
                 <View style={styles.musicAlbumArt}>
                   <Ionicons name="musical-notes-outline" size={28} color="rgba(255,255,255,0.4)" />
@@ -466,7 +472,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                   </Pressable>
                 </View>
               </View>
-            </View>
+            </GlassSurface>
           </View>
 
           {/* ------------------------------------------------------------ */}
@@ -570,7 +576,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
               accessibilityLabel="Screen Mirroring"
               accessibilityRole="button"
             >
-              <GlassSurface intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+              <GlassSurface intensity={25} tint="dark" style={styles.mirrorFill}>
               <View style={styles.mirrorInner}>
                 <Ionicons name="tv-outline" size={18} color="#ffffff" />
                 <Text style={[styles.mirrorLabel, { fontSize: 14 * textScale }]}>Screen Mirroring</Text>
@@ -581,6 +587,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
                   style={{ marginLeft: 'auto' as unknown as number }}
                 />
               </View>
+              </GlassSurface>
             </Pressable>
           </View>
 
@@ -595,6 +602,7 @@ export function ControlCenterScreen({ navigation }: { navigation: AppNavigationP
               {batteryLevel}% {device.battery.isCharging ? '· Charging' : ''}
             </Text>
           </View>
+          </GlassSurface>
         </Animated.View>
       </GestureDetector>
     </View>
@@ -789,6 +797,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  mirrorFill: {
+    width: '100%',
   },
   mirrorInner: {
     flexDirection: 'row',
