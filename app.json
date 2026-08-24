@@ -95,6 +95,12 @@
         }
       ],
       [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.PLACEHOLDER_REPLACE_ME"
+        }
+      ],
+      [
         "expo-font",
         {
           "android": {
