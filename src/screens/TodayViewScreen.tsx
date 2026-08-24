@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { GlassSurface } from '../components';
+import { computeWidgetGrid, type WidgetSize } from '../widgets/widgetGrid';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -57,6 +58,18 @@ const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = {
   upNext: 'calendar-outline',
   messages: 'chatbubble-ellipses-outline',
   screenTime: 'hourglass-outline',
+};
+
+// iOS-style widget sizes. small = 2x2 (one grid cell), medium/large span the
+// full 2-column width (4x2 / 4x4). Larger widgets (weather/upNext) are full
+// width; the compact ones (battery/messages/screenTime) sit two-per-row.
+const DEFAULT_SIZES: Record<WidgetType, WidgetSize> = {
+  battery: 'small',
+  storage: 'small',
+  weather: 'medium',
+  upNext: 'medium',
+  messages: 'small',
+  screenTime: 'small',
 };
 
 async function loadWidgetConfig(): Promise<WidgetType[]> {
@@ -684,7 +697,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
             {/* Date header */}
             <Text style={[styles.dateText, { fontSize: 28 * textScale }]}>{today}</Text>
 
-            {/* Widgets — rendered in configured order */}
+            {/* Widgets — rendered in configured order as an iOS 2-column grid */}
             {editMode ? (
               <EditWidgetsPanel
                 enabled={enabled}
@@ -692,7 +705,31 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
               />
             ) : (
               <>
-                {loaded && enabled.map((type) => widgetMap[type])}
+                {loaded && (() => {
+                  const items = enabled.map((type) => ({
+                    id: type,
+                    type,
+                    size: DEFAULT_SIZES[type],
+                    node: widgetMap[type],
+                  }));
+                  const placed = computeWidgetGrid(items.map(({ id, size }) => ({ id, size })));
+                  const byId = new Map(items.map((it) => [it.id, it]));
+                  return (
+                    <View style={styles.widgetGrid}>
+                      {placed.map((p) => (
+                        <View
+                          key={p.id}
+                          style={[
+                            styles.widgetGridCell,
+                            p.size === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
+                          ]}
+                        >
+                          {byId.get(p.id as WidgetType)!.node}
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
 
                 {/* Edit button */}
                 <Pressable
@@ -701,7 +738,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
                   accessibilityLabel="Edit Widgets"
                   accessibilityRole="button"
                 >
-                  <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.6)" />
+                  <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.5)" />
                   <Text style={[styles.editOpenBtnText, { fontSize: 14 * textScale }]}>Edit Widgets</Text>
                 </Pressable>
               </>
@@ -730,6 +767,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
+  // iOS 2-column widget grid
+  widgetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  widgetGridCell: {
+    marginBottom: 14,
+  },
+  // small = one column (~half width); medium/large = full width
+  widgetCellSmall: {
+    width: '48%',
+  },
+  widgetCellFull: {
+    width: '100%',
+  },
+
   // Date header
   dateText: {
     color: '#ffffff',
@@ -743,7 +797,7 @@ const styles = StyleSheet.create({
   widgetCard: {
     borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: 0,
     backgroundColor: 'rgba(30,30,35,0.6)',
   },
   widgetContent: {
