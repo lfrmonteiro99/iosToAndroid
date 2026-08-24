@@ -35,6 +35,11 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import {
+  type BackTapConfig,
+  DEFAULT_BACK_TAP,
+  normalizeBackTap,
+} from '../utils/backTap';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -313,6 +318,14 @@ export interface SettingsState {
    * Chaveado por `device.address` (estável), nunca pelo nome exibido.
    */
   bluetoothDeviceTypes: Record<string, 'speaker' | 'headphones' | 'car' | 'other'>;
+  /**
+   * Back Tap (#625): associa double/triple tap a uma acção (flash, toggleWifi,
+   * openApp, shortcut, screenshot). O detector físico de toques nas costas do
+   * dispositivo é um detalhe de UI nativa; aqui vive o mapeamento persistido,
+   * normalizado na leitura para que um blob corrompido (acção desconhecida,
+   * openApp sem packageName) não dispare um intent partido.
+   */
+  backTap: BackTapConfig;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -409,6 +422,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkModeLightUntil: '07:00',
   darkModeDarkUntil: '19:00',
   bluetoothDeviceTypes: {},
+  backTap: DEFAULT_BACK_TAP,
 };
 
 interface SettingsContextValue {
@@ -486,6 +500,11 @@ export function SettingsProvider({
             // launcher inteiro (#688). Normaliza-se na leitura como os irmãos
             // acima.
             categoryOverrides: normalizeCategoryOverrides(parsed?.categoryOverrides),
+            // backTap (#625) é lido do mesmo blob não confiável do AsyncStorage;
+            // um mapeamento corrompido (acção desconhecida, openApp sem
+            // packageName, enabled não-booleano) rebentaria o detector de
+            // gestos ou dispararia um intent partido — normaliza-se na leitura.
+            backTap: normalizeBackTap(parsed?.backTap),
             // wallpaperIndex (#674) indexa WALLPAPERS no render da home; um
             // valor corrompido (string, NaN, fora de gama) daria
             // WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no
