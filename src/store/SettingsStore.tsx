@@ -35,6 +35,11 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import {
+  normalizeAllowList,
+  normalizePerAppDelivery,
+  type PerAppDelivery,
+} from '../utils/notificationAppRules';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -162,6 +167,26 @@ export interface SettingsState {
   automaticUpdates: boolean;
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
+  /**
+   * iOS «Notifications -> Allow in Focus» por app (issue #630): apps nesta
+   * lista notificam sempre de imediato, mesmo com um modo de Focus activo.
+   * Lista de package names; vazia = nenhuma app prioritária.
+   */
+  allowListImmediate: string[];
+  /**
+   * Política de entrega por app (issue #630): packageName -> 'immediate' |
+   * 'scheduled' | 'digest' | 'blocked'. Ausência de uma app = 'immediate'.
+   * 'scheduled'/'digest' embalam para o Scheduled Summary; 'blocked' nunca
+   * entrega.
+   */
+  perAppDelivery: PerAppDelivery;
+  /**
+   * iOS «Reduce Interruptions» (issue #630): quando true, embala para o
+   * Scheduled Summary todas as notificações que NÃO estejam na allow-list
+   * imediata — equivalente a dar a todas as apps a política 'scheduled',
+   * excepto as que estão na allow-list.
+   */
+  reduceInterruptions: boolean;
   fontChoice: 'inter' | 'system';
   /**
    * Whether the squircle mask (#480) is applied to app icons before caching.
@@ -381,6 +406,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   automaticUpdates: true,
   updateAvailable: false,
   scheduledSummaryIdx: 0,
+  allowListImmediate: [],
+  perAppDelivery: {},
+  reduceInterruptions: false,
   fontChoice: 'inter',
   iconTreatment: 'mask-adaptive-only',
   pressFeedback: 'scale-opacity',
@@ -503,6 +531,14 @@ export function SettingsProvider({
             // presente e válido vence sempre o campo legado.
             motionIntensity: normalizeMotionIntensity(parsed?.motionIntensity, parsed?.reduceMotion),
             scrollDeceleration: normalizeScrollDeceleration(parsed?.scrollDeceleration),
+            // allowListImmediate / perAppDelivery (#630) vêm do mesmo blob não
+            // confiável do AsyncStorage. Uniões/corrupção (valores não-array,
+            // chaves vazias, políticas desconhecidas) fariam routeNotification
+            // ler configurações inválidas e entregar/bloquear apps erradas, por
+            // isso normalizam-se na leitura como o resto dos campos acima.
+            allowListImmediate: normalizeAllowList(parsed?.allowListImmediate),
+            perAppDelivery: normalizePerAppDelivery(parsed?.perAppDelivery),
+            reduceInterruptions: Boolean(parsed?.reduceInterruptions),
           }));
         } catch { /* ignore */ }
       }

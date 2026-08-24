@@ -354,3 +354,86 @@ describe('FocusScreen — Dock Apps (#619)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Priority Apps allow-list (#630) — apps que notificam sempre, mesmo em Focus
+// ---------------------------------------------------------------------------
+describe('FocusScreen — Priority Apps (#630)', () => {
+  function app(pkg: string, name: string): AppsStore.InstalledApp {
+    return { name, packageName: pkg, icon: `file:///${pkg}.png`, isSystem: false };
+  }
+
+  const APPS = [app('com.slack', 'Slack'), app('com.gmail', 'Gmail'), app('com.notion', 'Notion')];
+
+  function mockApps() {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: APPS,
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: APPS,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      compactHomeLayout: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    mockApps();
+  });
+
+  it('renders the Priority Apps row with "None" when empty', () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+    expect(getByText('Allow Notifications In Focus')).toBeTruthy();
+    expect(getAllByText('None').length).toBeGreaterThan(0);
+  });
+
+  it('adds an app to the allow-list and persists it', async () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Allow Notifications In Focus'));
+    fireEvent.press(getByText('Slack'));
+
+    await waitFor(() => expect(getByText('1 app')).toBeTruthy());
+
+    await waitFor(() => {
+      const write = (AsyncStorage.setItem as jest.Mock).mock.calls
+        .filter(([key]) => key === '@iostoandroid/settings')
+        .pop();
+      expect(JSON.parse(write![1] as string).allowListImmediate).toEqual(['com.slack']);
+    });
+  });
+
+  it('removes an app when tapped twice (double tap is a no-op)', async () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Allow Notifications In Focus'));
+    fireEvent.press(getByText('Slack'));
+    await waitFor(() => expect(getByText('1 app')).toBeTruthy());
+
+    fireEvent.press(getByText('Allow Notifications In Focus'));
+    fireEvent.press(getByText('✓ Slack'));
+
+    await waitFor(() => expect(getAllByText('None').length).toBeGreaterThan(0));
+  });
+});

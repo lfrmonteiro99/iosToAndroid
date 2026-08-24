@@ -146,6 +146,39 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
     }));
   }, [dockPickerMode, apps, settings.focusDockOverride, handleToggleDockApp]);
 
+  // Priority Apps (#630): allow-list global de apps que notificam sempre de
+  // imediato, mesmo com um modo de Focus activo (iOS «Allow in Focus»).
+  const [allowListOpen, setAllowListOpen] = useState(false);
+
+  const allowListCount = useMemo(
+    () => (settings.allowListImmediate ?? []).length,
+    [settings.allowListImmediate],
+  );
+
+  const allowListSummary = useCallback(
+    () => (allowListCount === 0 ? 'None' : `${allowListCount} app${allowListCount === 1 ? '' : 's'}`),
+    [allowListCount],
+  );
+
+  const handleToggleAllowList = useCallback(
+    (packageName: string) => {
+      const current = settings.allowListImmediate ?? [];
+      const next = current.includes(packageName)
+        ? current.filter((p) => p !== packageName)
+        : [...current, packageName];
+      update('allowListImmediate', next);
+    },
+    [settings.allowListImmediate, update],
+  );
+
+  const allowListOptions = useMemo(() => {
+    const current = settings.allowListImmediate ?? [];
+    return apps.map((app) => ({
+      label: `${current.includes(app.packageName) ? '✓ ' : ''}${app.name}`,
+      onPress: () => handleToggleAllowList(app.packageName),
+    }));
+  }, [apps, settings.allowListImmediate, handleToggleAllowList]);
+
   const handleSelectMode = useCallback((mode: FocusModeOption) => {
     const wasActive = settings.focusMode !== 'off';
     const willBeActive = mode.key !== 'off';
@@ -269,6 +302,24 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           </CupertinoListSection>
         </View>
 
+        {/* Priority Apps (#630) — allow-list que notifica sempre, mesmo em Focus */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Priority Apps"
+            footer="These apps always notify immediately, even when a Focus mode is on."
+          >
+            <CupertinoListTile
+              title="Allow Notifications In Focus"
+              trailing={
+                <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                  {allowListSummary()}
+                </Text>
+              }
+              onPress={() => setAllowListOpen(true)}
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Focus Schedule section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Focus Schedule">
@@ -349,6 +400,17 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
         title="Dock Apps"
         message="Pick up to 4 apps for this mode's dock. Leave none selected to keep the normal dock."
         options={dockPickerOptions}
+        cancelLabel="Done"
+      />
+
+      {/* Priority Apps (#630): allow-list que notifica sempre em Focus. Mesmo
+          padrão de multiselect dos ecrãs acima — cada toque alterna um app. */}
+      <CupertinoActionSheet
+        visible={allowListOpen}
+        onClose={() => setAllowListOpen(false)}
+        title="Priority Apps"
+        message="These apps notify immediately, even when a Focus mode is on."
+        options={allowListOptions}
         cancelLabel="Done"
       />
     </View>
