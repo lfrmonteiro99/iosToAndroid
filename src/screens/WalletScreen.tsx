@@ -9,8 +9,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useWallet, PassType } from '../store/WalletStore';
+import { useCard, WalletCard } from '../store/CardStore';
+import { BRAND_LABELS } from './CardEditScreen';
 import {
   CupertinoNavigationBar,
   CupertinoEmptyState,
@@ -19,6 +22,7 @@ import {
   CupertinoTextField,
   CupertinoSegmentedControl,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 const PASS_TYPE_VALUES: PassType[] = ['boarding', 'ticket', 'loyalty', 'other'];
 const PASS_TYPE_LABELS: Record<PassType, string> = {
@@ -56,6 +60,31 @@ function PassRow({
             {pass.code}
           </Text>
         </View>
+      }
+    />
+  );
+}
+
+const BRAND_ICON_COLOR: Record<WalletCard['brand'], string> = {
+  visa: '#1A1F71',
+  mastercard: '#EB001B',
+  amex: '#2E77BC',
+  other: '#8E8E93',
+};
+
+function CardRow({ card }: { card: WalletCard }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+  return (
+    <CupertinoListTile
+      title={card.label}
+      subtitle={BRAND_LABELS[card.brand]}
+      showChevron={false}
+      leading={{ name: 'card', color: '#FFFFFF', backgroundColor: BRAND_ICON_COLOR[card.brand] }}
+      trailing={
+        <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+          {`•••• ${card.last4}`}
+        </Text>
       }
     />
   );
@@ -174,14 +203,19 @@ function AddPassSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function WalletScreen() {
+  const navigation = useNavigation<AppNavigationProp>();
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { passes, isReady } = useWallet();
+  const { passes, isReady: walletReady } = useWallet();
+  const { cards, isReady: cardsReady } = useCard();
   const [adding, setAdding] = useState(false);
+
+  const isReady = walletReady && cardsReady;
 
   const handleAddPressed = useCallback(() => setAdding(true), []);
   const handleCloseSheet = useCallback(() => setAdding(false), []);
+  const handleAddCardPressed = useCallback(() => navigation.navigate('CardEdit'), [navigation]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -203,7 +237,7 @@ export function WalletScreen() {
 
       {!isReady ? (
         <View style={styles.body} />
-      ) : passes.length === 0 ? (
+      ) : passes.length === 0 && cards.length === 0 ? (
         <CupertinoEmptyState
           icon="wallet-outline"
           title="No Passes"
@@ -216,19 +250,21 @@ export function WalletScreen() {
           style={styles.body}
           contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: insets.bottom + 24 }}
         >
-          <CupertinoListSection header="Passes">
-            {passes.map((pass) => (
-              <PassRow
-                key={pass.id}
-                pass={pass}
-                onPress={() => {
-                  // Editing is out of scope for #125 — tapping selects nothing
-                  // destructive. The long-press delete path lives on the tile
-                  // trailing action via the share sheet below.
-                }}
-              />
-            ))}
-          </CupertinoListSection>
+          {passes.length > 0 && (
+            <CupertinoListSection header="Passes">
+              {passes.map((pass) => (
+                <PassRow
+                  key={pass.id}
+                  pass={pass}
+                  onPress={() => {
+                    // Editing is out of scope for #125 — tapping selects nothing
+                    // destructive. The long-press delete path lives on the tile
+                    // trailing action via the share sheet below.
+                  }}
+                />
+              ))}
+            </CupertinoListSection>
+          )}
 
           <Pressable
             onPress={handleAddPressed}
@@ -239,6 +275,26 @@ export function WalletScreen() {
             <Ionicons name="add" size={20} color={colors.systemBlue} />
             <Text style={[typography.body, { color: colors.systemBlue, marginLeft: 12 }]}>
               Add Pass
+            </Text>
+          </Pressable>
+
+          {cards.length > 0 && (
+            <CupertinoListSection header="Cards">
+              {cards.map((card) => (
+                <CardRow key={card.id} card={card} />
+              ))}
+            </CupertinoListSection>
+          )}
+
+          <Pressable
+            onPress={handleAddCardPressed}
+            accessibilityRole="button"
+            accessibilityLabel="Add card"
+            style={[styles.addRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+          >
+            <Ionicons name="add" size={20} color={colors.systemBlue} />
+            <Text style={[typography.body, { color: colors.systemBlue, marginLeft: 12 }]}>
+              Add Card
             </Text>
           </Pressable>
         </ScrollView>

@@ -78,6 +78,15 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
 }));
 
+// Default secure-store mock (CardStore, LockScreen, LauncherSettingsScreen).
+// Individual test files may still override with their own jest.mock('expo-secure-store', ...)
+// when they need a stateful in-memory implementation.
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => Promise.resolve(null)),
+  setItemAsync: jest.fn(() => Promise.resolve()),
+  deleteItemAsync: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: {
