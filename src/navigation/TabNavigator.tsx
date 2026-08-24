@@ -57,6 +57,7 @@ import { SiriScreen } from '../screens/SiriScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
 import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
+import { ProtectedAppsScreen } from '../screens/ProtectedAppsScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
 import { HealthScreen } from '../screens/HealthScreen';
 import { ClockScreen } from '../screens/ClockScreen';
@@ -167,6 +168,7 @@ export function TabNavigator() {
           #712. */}
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left', presentation: 'transparentModal' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="ProtectedApps" component={ProtectedAppsScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
   );
 }
