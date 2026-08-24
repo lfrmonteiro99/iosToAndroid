@@ -8,9 +8,12 @@ import type { AppNavigationProp } from '../../navigation/types';
 // WalletProvider, so useWallet() resolves. The store's isReady gate resolves
 // asynchronously, so every render waits for it before asserting content.
 //
-// Issue #281 replaces the issue-#280 inline add-sheet flow with navigation to
-// a dedicated PassEditScreen — WalletScreen now requires a `navigation` prop
-// and only dispatches navigate() calls; it owns no form state of its own.
+// Issue #281 replaced the issue-#280 inline add-sheet flow with navigation to
+// a dedicated PassEditScreen for creating passes. Issue #746 added
+// PassDetailScreen (view/delete) reached by tapping an existing row. Issue
+// #284 added a "Scan" nav-bar action that opens PassScanScreen. WalletScreen
+// now requires a `navigation` prop and only dispatches navigate() calls; it
+// owns no form state of its own.
 
 function makeNavigation() {
   return {
@@ -62,7 +65,48 @@ describe('WalletScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('PassEdit', {});
   });
 
-  it('navigates to PassEdit with the pass id when an existing row is tapped (edit mode)', async () => {
+  it('does not render the issue-280 inline add sheet anymore (no "New Pass" title in WalletScreen)', async () => {
+    const navigation = makeNavigation();
+    const { getByLabelText, queryByText, getByText } = render(<WalletScreen navigation={navigation} />);
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Add pass'));
+
+    // The old inline sheet rendered "New Pass" as a header inside WalletScreen.
+    // Now that affordance lives on PassEditScreen; WalletScreen must not open it.
+    expect(queryByText('New Pass')).toBeNull();
+  });
+
+  it('deletes a pass and the list returns to the empty state', async () => {
+    // Seed one pass directly through the store, then render.
+    let api: ReturnType<typeof useWallet> | null = null;
+    function Probe() {
+      api = useWallet();
+      return null;
+    }
+    const { getByText, queryByText, unmount } = render(
+      <WalletProvider>
+        <Probe />
+        <WalletScreen navigation={makeNavigation()} />
+      </WalletProvider>,
+    );
+    await waitFor(() => expect(api).not.toBeNull());
+    await act(async () => {
+      api!.addPass({ type: 'ticket', title: 'ToDelete', code: 'X', color: '#000' });
+    });
+
+    await waitFor(() => expect(getByText('ToDelete')).toBeTruthy());
+
+    await act(async () => {
+      api!.deletePass(api!.passes[0].id);
+    });
+
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+    expect(queryByText('ToDelete')).toBeNull();
+    unmount();
+  });
+
+  it('navigates to PassDetail with the tapped pass id when a row is pressed', async () => {
     let api: ReturnType<typeof useWallet> | null = null;
     function Probe() {
       api = useWallet();
@@ -77,25 +121,12 @@ describe('WalletScreen', () => {
     );
     await waitFor(() => expect(api).not.toBeNull());
     await act(async () => {
-      api!.addPass({ type: 'boarding', title: 'TAP Lisbon-Porto', code: 'ABC123', color: '#007AFF' });
+      api!.addPass({ type: 'boarding', title: 'TAP LIS-OPO', code: 'ABC123', color: '#007AFF' });
     });
 
-    await waitFor(() => expect(getByText('TAP Lisbon-Porto')).toBeTruthy());
-    fireEvent.press(getByText('TAP Lisbon-Porto'));
+    await waitFor(() => expect(getByText('TAP LIS-OPO')).toBeTruthy());
+    fireEvent.press(getByText('TAP LIS-OPO'));
 
-    const id = api!.passes[0].id;
-    expect(navigation.navigate).toHaveBeenCalledWith('PassEdit', { passId: id });
-  });
-
-  it('does not render the issue-280 inline add sheet anymore (no "New Pass" title in WalletScreen)', async () => {
-    const navigation = makeNavigation();
-    const { getByLabelText, queryByText, getByText } = render(<WalletScreen navigation={navigation} />);
-    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
-
-    fireEvent.press(getByLabelText('Add pass'));
-
-    // The old inline sheet rendered "New Pass" as a header inside WalletScreen.
-    // Now that affordance lives on PassEditScreen; WalletScreen must not open it.
-    expect(queryByText('New Pass')).toBeNull();
+    expect(navigation.navigate).toHaveBeenCalledWith('PassDetail', { passId: api!.passes[0].id });
   });
 });
