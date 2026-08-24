@@ -17,6 +17,8 @@ const base = {
   requestActivityPermission: jest.fn(async () => false),
   isReady: true,
   stepHistory: [] as { date: string; steps: number }[],
+  isHealthConnectAvailable: false,
+  syncFromHealthConnect: jest.fn(async () => false),
 };
 
 // A fixed fixture: 3 consecutive days in the same ISO week and month, so the
@@ -134,5 +136,52 @@ describe('HealthScreen', () => {
     const { queryByTestId, getByText } = render(<HealthScreen />);
     expect(queryByTestId('bar-0')).toBeNull();
     expect(getByText('No data yet')).toBeTruthy();
+  });
+
+  describe('Health Connect sync button', () => {
+    it('is hidden when Health Connect is unavailable (the common case)', () => {
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: false });
+      const { queryByText } = render(<HealthScreen />);
+      expect(queryByText('Sync with Health Connect')).toBeNull();
+    });
+
+    it('appears only when isHealthConnectAvailable === true', () => {
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: true });
+      const { getByText } = render(<HealthScreen />);
+      expect(getByText('Sync with Health Connect')).toBeTruthy();
+    });
+
+    it('does not change the rest of the screen when unavailable', () => {
+      // Regression guard: when Health Connect is absent the screen must render
+      // exactly as before this issue — same title, same Trends, same empty hint.
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: false, stepHistory: [] });
+      const { getByText, queryByTestId, queryByText } = render(<HealthScreen />);
+      expect(getByText('Health')).toBeTruthy();
+      expect(getByText('Steps')).toBeTruthy();
+      expect(getByText('Trends')).toBeTruthy();
+      expect(getByText('No data yet')).toBeTruthy();
+      expect(queryByTestId('bar-0')).toBeNull();
+      expect(queryByText('Sync with Health Connect')).toBeNull();
+    });
+
+    it('calls syncFromHealthConnect when tapped, and never throws when absent', () => {
+      const syncFromHealthConnect = jest.fn(async () => true);
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: true, syncFromHealthConnect });
+      const { getByText } = render(<HealthScreen />);
+      fireEvent.press(getByText('Sync with Health Connect'));
+      expect(syncFromHealthConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('a double tap does not fire two syncs', () => {
+      // Pins the recurring double-tap defect: the screen must not let two rapid
+      // presses open two concurrent syncs.
+      const syncFromHealthConnect = jest.fn(async () => true);
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: true, syncFromHealthConnect });
+      const { getByText } = render(<HealthScreen />);
+      const button = getByText('Sync with Health Connect');
+      fireEvent.press(button);
+      fireEvent.press(button);
+      expect(syncFromHealthConnect).toHaveBeenCalledTimes(1);
+    });
   });
 });

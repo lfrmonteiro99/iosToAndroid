@@ -44,9 +44,12 @@ export function HealthScreen() {
     requestActivityPermission,
     isReady,
     stepHistory,
+    isHealthConnectAvailable,
+    syncFromHealthConnect,
   } = useHealth();
 
   const [granularity, setGranularity] = useState<Granularity>('Daily');
+  const [syncing, setSyncing] = useState(false);
 
   const showSteps = permissionGranted === true;
   const needsPermission = isReady && isPedometerAvailable && permissionGranted !== true;
@@ -55,6 +58,17 @@ export function HealthScreen() {
   const handleGrant = useCallback(() => {
     void requestActivityPermission();
   }, [requestActivityPermission]);
+
+  const handleSync = useCallback(() => {
+    // Guard the button itself too: on the common (unavailable) path it is never
+    // rendered, but if it ever is, calling sync on an absent module is a safe
+    // no-op that returns false — never a throw.
+    if (!isHealthConnectAvailable) return;
+    setSyncing(true);
+    void syncFromHealthConnect()
+      .catch(() => false)
+      .finally(() => setSyncing(false));
+  }, [isHealthConnectAvailable, syncFromHealthConnect]);
 
   const chartData = (() => {
     switch (granularity) {
@@ -108,6 +122,17 @@ export function HealthScreen() {
             {needsPermission ? (
               <View style={{ marginTop: spacing.md }}>
                 <CupertinoButton title="Grant Activity Permission" variant="filled" onPress={handleGrant} />
+              </View>
+            ) : null}
+
+            {isHealthConnectAvailable ? (
+              <View style={{ marginTop: spacing.md }}>
+                <CupertinoButton
+                  title="Sync with Health Connect"
+                  variant="filled"
+                  onPress={handleSync}
+                  disabled={syncing}
+                />
               </View>
             ) : null}
           </CupertinoCard>

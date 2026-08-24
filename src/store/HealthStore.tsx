@@ -4,6 +4,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pedometer } from 'expo-sensors';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import { logger } from '../utils/logger';
+// Static import of the Health Connect bridge. The bridge is tiny and already
+// defensive on its own: its `requireNativeModule('HealthConnectModule')` is
+// wrapped in try/catch and falls back to a stub that reports "unavailable" /
+// "no data", so importing it can never throw and the rest of the app never
+// depends on Health Connect being present. (A dynamic `import()` is used in
+// DeviceStore for the launcher module, but this repo's Jest does not enable
+// --experimental-vm-modules, so dynamic import rejects here — the static
+// import keeps the same safety guarantee and stays testable.)
+import {
+  type HealthConnectModuleType,
+  type StepHistoryEntry,
+  isAvailable as healthConnectIsAvailable,
+  getTodayStepsFromHealthConnect as healthConnectGetSteps,
+  applyHealthConnectSteps as healthConnectApplySteps,
+} from '../../modules/health-connect-module/src';
+
+// A single bridge object carrying all three surfaces, used as the "module is
+// present" marker in `healthConnectModuleRef`. Its native calls are already
+// defensive (null/stub on any failure), so holding it is safe on every device.
+const healthConnectBridge: HealthConnectModuleType & {
+  getTodayStepsFromHealthConnect: () => Promise<number | null>;
+  applyHealthConnectSteps: (
+    history: readonly StepHistoryEntry[],
+    today: string,
+    steps: number,
+  ) => StepHistoryEntry[];
+} = {
+  isAvailable: healthConnectIsAvailable,
+  getTodayStepsFromHealthConnect: healthConnectGetSteps,
+  applyHealthConnectSteps: healthConnectApplySteps,
+};
 
 /** One persisted day of steps. `date` is the LOCAL calendar day, 'YYYY-MM-DD'. */
 export interface DailySteps {
@@ -22,6 +53,21 @@ export interface HealthContextValue {
   isReady: boolean;
   /** Full persisted day-by-day history, the same array written to AsyncStorage. */
   stepHistory: DailySteps[];
+  /**
+   * Whether Health Connect is installed and reports SDK_AVAILABLE. `false` on
+   * every non-Android, every device without the app, and after any failure —
+   * "unknown" must behave exactly like "absent", so the rest of the app never
+   * depends on Health Connect being present.
+   */
+  isHealthConnectAvailable: boolean;
+  /**
+   * Read-only pull of today's steps from Health Connect, REPLACING (not
+   * summing) the local Pedometer total. Returns `false` — a no-op — whenever
+   * Health Connect is unavailable, the read permission is denied, the native
+   * call rejects, or the value is unusable. Never throws, so callers never
+   * need their own try/catch.
+   */
+  syncFromHealthConnect: () => Promise<boolean>;
 }
 
 export const HEALTH_DAILY_STEPS_KEY = '@iostoandroid/health_daily_steps';
@@ -68,6 +114,7 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const [isPedometerAvailable, setIsPedometerAvailable] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [isHealthConnectAvailable, setIsHealthConnectAvailable] = useState(false);
 
   const [stepHistory, setStepHistory] = useState<DailySteps[]>([]);
   const historyRef = useRef<DailySteps[]>([]);
@@ -81,6 +128,11 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   // Last value seen from the pedometer. `null` = no sample yet, so the next one
   // only establishes the baseline. See startWatching for why.
   const lastCumulativeRef = useRef<number | null>(null);
+  // The Health Connect bridge, already imported statically above. We keep a
+  // cached `available` flag; the bridge itself is always present (its own
+  // internal stub makes `requireNativeModule` failures harmless), so callers
+  // only ever rely on the boolean, never on the native module being there.
+  const healthConnectModuleRef = useRef<HealthConnectModuleType | null>(null);
 
   // Hydrate the persisted history and probe the sensor once. `isReady` flips
   // even when the sensor is missing or the read fails, so the screen is never
@@ -128,7 +180,30 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       setIsReady(true);
     };
 
+    // Health Connect is a separate installable app/service, so it is absent on
+    // most devices/emulators. Probing it must NEVER gate the screen, so it runs
+    // fire-and-forget after the screen is already live. Any failure — missing
+    // module, unavailable SDK, native rejection — collapses to `false`.
+    const probeHealthConnect = async () => {
+      // The bridge is statically imported and internally stubbed, so it is
+      // always present and `isAvailable` never throws — but treat any surprise
+      // as "unavailable" so a broken native surface can never flip the app.
+      let hcAvailable = false;
+      try {
+        hcAvailable = (await healthConnectIsAvailable()) === true;
+      } catch (e) {
+        logger.warn('HealthStore', 'health-connect isAvailable failed', e);
+        hcAvailable = false;
+      }
+      if (cancelled) return;
+      // Stash the bridge so `syncFromHealthConnect` can refuse to run when Health
+      // Connect is absent (defensive: the screen hides the button anyway).
+      healthConnectModuleRef.current = hcAvailable ? healthConnectBridge : null;
+      setIsHealthConnectAvailable(hcAvailable);
+    };
+
     void probe();
+    void probeHealthConnect();
 
     return () => {
       cancelled = true;
@@ -224,6 +299,39 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isPedometerAvailable, startWatching]);
 
+  const syncFromHealthConnect = useCallback(async (): Promise<boolean> => {
+    // No-op when Health Connect was found to be absent during the probe. The
+    // screen only shows the button when `isHealthConnectAvailable === true`,
+    // but the guard here makes the function itself safe to call from anywhere.
+    if (!healthConnectModuleRef.current) return false;
+    // `getTodayStepsFromHealthConnect` is itself availability-gated and returns
+    // `null` (never a fabricated 0) on any failure; `applyHealthConnectSteps`
+    // REPLACES today's entry instead of summing it.
+    let steps: number | null;
+    try {
+      steps = await healthConnectGetSteps();
+    } catch (e) {
+      logger.warn('HealthStore', 'syncFromHealthConnect read failed', e);
+      return false;
+    }
+    // `null` means "no answer" (permission denied / no data) — not a step total
+    // to write. Leave the local Pedometer value untouched rather than clobbering
+    // it with nothing.
+    if (steps === null) return false;
+    // REPLACE today's entry with Health Connect's authoritative total. Health
+    // Connect measures the same steps the Pedometer already counted, so summing
+    // the two would double-count — never add.
+    const merged = healthConnectApplySteps(historyRef.current, localDateKey(), steps);
+    historyRef.current = merged;
+    todayStepsRef.current = steps;
+    setStepHistory(merged);
+    setTodaySteps(steps);
+    await AsyncStorage.setItem(HEALTH_DAILY_STEPS_KEY, JSON.stringify(merged)).catch((e) => {
+      logger.warn('HealthStore', 'health-connect daily steps write failed', e);
+    });
+    return true;
+  }, []);
+
   const value = useMemo<HealthContextValue>(
     () => ({
       todaySteps,
@@ -232,8 +340,19 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       requestActivityPermission,
       isReady,
       stepHistory,
+      isHealthConnectAvailable,
+      syncFromHealthConnect,
     }),
-    [todaySteps, isPedometerAvailable, permissionGranted, requestActivityPermission, isReady, stepHistory],
+    [
+      todaySteps,
+      isPedometerAvailable,
+      permissionGranted,
+      requestActivityPermission,
+      isReady,
+      stepHistory,
+      isHealthConnectAvailable,
+      syncFromHealthConnect,
+    ],
   );
 
   return <HealthContext.Provider value={value}>{children}</HealthContext.Provider>;
