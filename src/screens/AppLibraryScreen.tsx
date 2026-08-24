@@ -218,11 +218,18 @@ function touchHitSlop(size: number) {
 export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, onLaunchApp, cardWidth, badgeCounts, showNotifications }: CategoryCardProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const iconSize = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
-  const iconHitSlop = touchHitSlop(iconSize);
-  const miniSize = (iconSize - MINI_GAP) / 2;
-
+  const iconSize2x2 = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
   const hasQuadrant = apps.length >= QUADRANT_MIN_APPS;
+  // 1-3 apps can't fill a 2x2 grid, and an empty 4th cell reads as a white hole
+  // (issue #679). Collapse them to a single row so no empty trailing cell is
+  // reserved. 4 apps keep the 2x2 grid; 5+ keep the mini-icon quadrant.
+  const isSingleRow = !hasQuadrant && apps.length > 0 && apps.length <= 3;
+  const iconSize = isSingleRow
+    ? (cardWidth - 24 - (apps.length - 1) * 3) / apps.length
+    : iconSize2x2;
+  const iconHitSlop = touchHitSlop(iconSize);
+  const miniSize = (iconSize2x2 - MINI_GAP) / 2;
+
   const largeApps = hasQuadrant ? apps.slice(0, 3) : apps.slice(0, 4);
   const miniApps = hasQuadrant ? apps.slice(3, 3 + MAX_QUADRANT_MINIS) : [];
 
@@ -254,7 +261,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
     >
       {/* 3 large icons (each opens its app directly) plus, once there are
           more apps than fit, a mini-icon quadrant that opens the category */}
-      <View style={styles.iconGrid}>
+      <View style={[styles.iconGrid, { flexWrap: isSingleRow ? 'nowrap' : 'wrap' }]} testID="category-icon-grid">
         {largeApps.map((a) => (
           <Pressable
             key={a.packageName}
