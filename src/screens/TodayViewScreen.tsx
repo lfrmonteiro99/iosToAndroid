@@ -28,6 +28,7 @@ import { GestureHaptics } from '../utils/gestureHaptics';
 
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
+import { Shape } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 
@@ -57,6 +58,20 @@ const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = {
   upNext: 'calendar-outline',
   messages: 'chatbubble-ellipses-outline',
   screenTime: 'hourglass-outline',
+};
+
+// iOS-style Today View grid: 2 columns. 'small' widgets take one column
+// (side-by-side pairs); 'medium'/'large' widgets span both columns, with
+// 'large' getting extra vertical room for denser content (e.g. event lists).
+type WidgetSize = 'small' | 'medium' | 'large';
+
+const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
+  battery: 'small',
+  storage: 'small',
+  weather: 'medium',
+  upNext: 'large',
+  messages: 'small',
+  screenTime: 'small',
 };
 
 async function loadWidgetConfig(): Promise<WidgetType[]> {
@@ -119,12 +134,14 @@ interface WidgetCardProps {
   style?: object;
   onPress?: () => void;
   accessibilityLabel?: string;
+  testID?: string;
 }
 
-function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCardProps) {
+function WidgetCard({ children, style, onPress, accessibilityLabel, testID }: WidgetCardProps) {
   if (onPress) {
     return (
       <Pressable
+        testID={testID}
         style={({ pressed }) => [styles.widgetCard, style, pressed && { opacity: 0.7 }]}
         onPress={onPress}
         accessibilityLabel={accessibilityLabel}
@@ -136,7 +153,7 @@ function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCard
     );
   }
   return (
-    <View style={[styles.widgetCard, style]}>
+    <View testID={testID} style={[styles.widgetCard, style]}>
       <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={styles.widgetContent}>{children}</View>
     </View>
@@ -168,7 +185,7 @@ function BatteryWidget({ level, isCharging, onPress }: { level: number; isChargi
   const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
 
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}>
+    <WidgetCard testID="widget-card-battery" onPress={onPress} accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={28} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Battery</Text>
@@ -202,7 +219,7 @@ function StorageWidget({
   const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : theme.colors.accent;
 
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
+    <WidgetCard testID="widget-card-storage" onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
       <View style={styles.widgetRow}>
         <Ionicons name="server-outline" size={22} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Storage</Text>
@@ -228,7 +245,7 @@ function WeatherWidget({ temp, condition, icon, city }: { temp: number; conditio
 
   if (isUnavailable) {
     return (
-      <WidgetCard>
+      <WidgetCard testID="widget-card-weather">
         <View style={styles.widgetRow}>
           <Ionicons name="cloud-offline-outline" size={22} color="rgba(255,255,255,0.4)" />
           <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
@@ -241,7 +258,7 @@ function WeatherWidget({ temp, condition, icon, city }: { temp: number; conditio
   }
 
   return (
-    <WidgetCard>
+    <WidgetCard testID="widget-card-weather">
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color="#FFD60A" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
@@ -279,7 +296,7 @@ function formatEventTime(ts: number, allDay: boolean): string {
 function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
   const { textScale } = useTheme();
   return (
-    <WidgetCard>
+    <WidgetCard testID="widget-card-upNext">
       <View style={styles.widgetRow}>
         <Ionicons name="calendar-outline" size={22} color="#FF9F0A" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Up Next</Text>
@@ -311,7 +328,7 @@ function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
 function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress?: () => void }) {
   const { textScale } = useTheme();
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={`Messages: ${unreadCount > 0 ? `${unreadCount} unread` : 'No unread messages'}`}>
+    <WidgetCard testID="widget-card-messages" onPress={onPress} accessibilityLabel={`Messages: ${unreadCount > 0 ? `${unreadCount} unread` : 'No unread messages'}`}>
       <View style={styles.widgetRow}>
         <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Messages</Text>
@@ -356,7 +373,7 @@ function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
   }, []);
 
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={totalMinutes !== null ? `Screen Time: ${formatScreenTime(totalMinutes)} today` : 'Screen Time'}>
+    <WidgetCard testID="widget-card-screenTime" onPress={onPress} accessibilityLabel={totalMinutes !== null ? `Screen Time: ${formatScreenTime(totalMinutes)} today` : 'Screen Time'}>
       <View style={styles.widgetRow}>
         <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
@@ -684,7 +701,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
             {/* Date header */}
             <Text style={[styles.dateText, { fontSize: 28 * textScale }]}>{today}</Text>
 
-            {/* Widgets — rendered in configured order */}
+            {/* Widgets — 2-column grid; small widgets pair up, medium/large span full width */}
             {editMode ? (
               <EditWidgetsPanel
                 enabled={enabled}
@@ -692,7 +709,23 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
               />
             ) : (
               <>
-                {loaded && enabled.map((type) => widgetMap[type])}
+                {loaded && (
+                  <View style={styles.widgetGrid}>
+                    {enabled.map((type) => (
+                      <View
+                        key={type}
+                        testID={`widget-cell-${type}`}
+                        style={[
+                          styles.widgetCell,
+                          WIDGET_SIZES[type] === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
+                          WIDGET_SIZES[type] === 'large' && styles.widgetCellLarge,
+                        ]}
+                      >
+                        {widgetMap[type]}
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 {/* Edit button */}
                 <Pressable
@@ -739,11 +772,32 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // Widget card
-  widgetCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
+  // 2-column widget grid
+  widgetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  widgetCell: {
     marginBottom: 14,
+  },
+  // 'small' = one column (~half width, pairs up); 'medium'/'large' = full width
+  widgetCellSmall: {
+    width: '48%',
+  },
+  widgetCellFull: {
+    width: '100%',
+  },
+  widgetCellLarge: {
+    minHeight: 220,
+  },
+
+  // Widget card — flex: 1 lets it fill a taller grid cell (e.g. the 'large'
+  // size's extra minHeight) instead of leaving a blank gap under the content.
+  widgetCard: {
+    flex: 1,
+    borderRadius: Shape.widgetSmall.radius,
+    overflow: 'hidden',
     backgroundColor: 'rgba(30,30,35,0.6)',
   },
   widgetContent: {
