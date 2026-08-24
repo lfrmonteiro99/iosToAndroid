@@ -22,6 +22,12 @@ import {
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 import { createSnapshot, applySnapshot } from '../../services/BackupSnapshot';
+import {
+  getInitialState,
+  signIn as googleSignIn,
+  signOut as googleSignOut,
+  type GoogleAuthState,
+} from '../../services/GoogleAuth';
 
 export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
@@ -36,6 +42,26 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
   const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const alert = useAlert();
+
+  const [googleState, setGoogleState] = useState<GoogleAuthState>(() => getInitialState());
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const handleGoogleConnect = useCallback(async () => {
+    try {
+      setGoogleBusy(true);
+      if (googleState.isSignedIn) {
+        await googleSignOut();
+        setGoogleState({ isSignedIn: false, email: null });
+      } else {
+        const result = await googleSignIn();
+        setGoogleState(result);
+      }
+    } catch (e) {
+      alert('Google Drive', String(e));
+    } finally {
+      setGoogleBusy(false);
+    }
+  }, [googleState.isSignedIn, alert]);
 
   const doExport = useCallback(async () => {
     try {
@@ -107,6 +133,25 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Google Drive — OAuth connection (epic #126) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>GOOGLE DRIVE</Text>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title={googleState.isSignedIn ? `Connected: ${googleState.email}` : 'Connect Google Drive'}
+              subtitle={
+                googleState.isSignedIn
+                  ? 'Tap to disconnect'
+                  : 'Back up to your private Drive app folder'
+              }
+              onPress={handleGoogleConnect}
+              trailing={
+                googleBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Backup */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>BACKUP</Text>

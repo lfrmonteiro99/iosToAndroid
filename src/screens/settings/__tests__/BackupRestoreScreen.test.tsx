@@ -7,7 +7,7 @@ import { AlertProvider } from '../../../components/AlertProvider';
 // test-utils wrapper does not mount AlertProvider, so useAlert() is a no-op there
 // and the "Invalid backup data" alert would never reach the DOM. Wrap with
 // AlertProvider so the alert dialog actually renders and can be asserted.
-const renderScreen = (navigation: unknown) =>
+const renderScreen = (navigation: unknown = mockNavigation) =>
   render(
     <AlertProvider>
       <BackupRestoreScreen navigation={navigation as never} />
@@ -18,6 +18,20 @@ const mockSetStringAsync = jest.fn<Promise<void>, [string]>();
 jest.mock('expo-clipboard', () => ({
   setStringAsync: jest.fn((s: string) => mockSetStringAsync(s)),
   getStringAsync: jest.fn().mockResolvedValue(''),
+}));
+
+// We mock the GoogleAuth service so the screen's conditional rendering and
+// sign-in/sign-out dispatch are tested against the REAL screen component,
+// not the native module. Two states are exercised: signed out (default) and
+// signed in (override).
+const mockSignIn = jest.fn();
+const mockSignOut = jest.fn();
+const mockGetInitialState = jest.fn();
+
+jest.mock('../../../services/GoogleAuth', () => ({
+  getInitialState: (...args: unknown[]) => mockGetInitialState(...args),
+  signIn: (...args: unknown[]) => mockSignIn(...args),
+  signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
 // ALL_DATA contains both settings and non-settings keys.
@@ -57,6 +71,9 @@ describe('BackupRestoreScreen', () => {
       }
       return Promise.resolve(result);
     });
+    mockGetInitialState.mockReturnValue({ isSignedIn: false, email: null });
+    mockSignIn.mockResolvedValue({ isSignedIn: true, email: 'user@gmail.com' });
+    mockSignOut.mockResolvedValue(undefined);
   });
 
   it('renders without crashing', () => {
@@ -85,6 +102,12 @@ describe('BackupRestoreScreen', () => {
     expect(exported['@iostoandroid/theme_preference']).toBe('dark');
     expect(exported['@iostoandroid/sms_messages']).toBeUndefined();
     expect(exported['@iostoandroid/notes']).toBeUndefined();
+  });
+
+  it('opens the export disclosure dialog when Export Settings is tapped', () => {
+    const { getByText } = renderScreen(mockNavigation);
+    fireEvent.press(getByText('Export Settings'));
+    expect(getByText(/copies your app preferences/i)).toBeTruthy();
   });
 
   it('does not call getAllKeys during export', async () => {
@@ -191,5 +214,65 @@ describe('BackupRestoreScreen', () => {
 
     await waitFor(() => expect(queryByText(/Invalid backup data/)).toBeTruthy());
     expect(mockSetMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('BackupRestoreScreen — Google Drive section', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetMany.mockImplementation((keys: string[]) => {
+      const result: Record<string, string | null> = {};
+      for (const k of keys) {
+        result[k] = ALL_DATA[k] ?? null;
+      }
+      return Promise.resolve(result);
+    });
+    mockGetInitialState.mockReturnValue({ isSignedIn: false, email: null });
+    mockSignIn.mockResolvedValue({ isSignedIn: true, email: 'user@gmail.com' });
+    mockSignOut.mockResolvedValue(undefined);
+  });
+
+  it('shows the "Connect Google Drive" action when signed out', () => {
+    const { getByText } = renderScreen();
+    expect(getByText('Connect Google Drive')).toBeTruthy();
+    expect(getByText('Back up to your private Drive app folder')).toBeTruthy();
+  });
+
+  it('shows the connected account email when signed in', () => {
+    mockGetInitialState.mockReturnValue({ isSignedIn: true, email: 'user@gmail.com' });
+    const { getByText } = renderScreen();
+    expect(getByText('Connected: user@gmail.com')).toBeTruthy();
+    expect(getByText('Tap to disconnect')).toBeTruthy();
+  });
+
+  it('calls signIn() when the Connect tile is tapped while signed out', () => {
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Connect Google Drive'));
+    expect(mockSignIn).toHaveBeenCalledTimes(1);
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('calls signOut() when the connected tile is tapped while signed in', () => {
+    mockGetInitialState.mockReturnValue({ isSignedIn: true, email: 'user@gmail.com' });
+    const { getByText } = renderScreen();
+    fireEvent.press(getByText('Connected: user@gmail.com'));
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  it('seeds the signed-in state from getInitialState on mount (no signIn call)', () => {
+    mockGetInitialState.mockReturnValue({ isSignedIn: true, email: 'user@gmail.com' });
+    renderScreen();
+    expect(mockGetInitialState).toHaveBeenCalledTimes(1);
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  // Regression guard: the existing Export/Import/Reset behaviour must be wholly
+  // unchanged by the additive Google Drive section.
+  it('still renders the Export, Import, and Reset tiles', () => {
+    const { getByText } = renderScreen();
+    expect(getByText('Export Settings')).toBeTruthy();
+    expect(getByText('Import Settings')).toBeTruthy();
+    expect(getByText('Reset All Settings')).toBeTruthy();
   });
 });
