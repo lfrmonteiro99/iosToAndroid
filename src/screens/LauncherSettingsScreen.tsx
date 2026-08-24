@@ -67,6 +67,10 @@ export function formatPerfValue(value: number | null, budget: PerfBudgetKey): st
   return `${Math.round(value)} ms (${target})`;
 }
 
+// Top of the App Icon Size slider range (#503): the iOS «Large (no text)»
+// preset (#621) — reaching it also hides app-name labels.
+const ICON_SIZE_SCALE_LARGE = 1.2;
+
 // Default dock package names — mirrors AppsStore constant
 const DEFAULT_DOCK = [
   'com.iostoandroid.phone',
@@ -98,7 +102,7 @@ export function LauncherSettingsScreen() {
   const { theme, typography, isDark, toggleTheme, textScale } = themeCtx;
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update, reset: resetSettings } = useSettings();
+  const { settings, update, updateMany, reset: resetSettings } = useSettings();
   const { dockApps, apps, hiddenApps, unhideApp } = useApps();
   const { folders, deleteFolder } = useFolders();
 
@@ -265,6 +269,18 @@ export function LauncherSettingsScreen() {
 
   const perf = usePerfMetrics();
 
+  // iOS «Grande» esconde os nomes das apps — ao chegar ao topo da gama
+  // (Large), combina-se com showIconLabels=false num único update atómico.
+  // Abaixo do máximo o comportamento fica inalterado: o utilizador continua a
+  // controlar showIconLabels pelo switch "Show App Names".
+  const handleIconSizeChange = (v: number) => {
+    if (v >= ICON_SIZE_SCALE_LARGE) {
+      updateMany({ iconSizeScale: v, showIconLabels: false });
+    } else {
+      update('iconSizeScale', v);
+    }
+  };
+
   const doneButton = (
     <Text
       style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}
@@ -315,9 +331,9 @@ export function LauncherSettingsScreen() {
         <View style={styles.sliderRow}>
           <CupertinoSlider
             value={settings.iconSizeScale}
-            onValueChange={(v) => update('iconSizeScale', v)}
+            onValueChange={handleIconSizeChange}
             minimumValue={0.8}
-            maximumValue={1.2}
+            maximumValue={ICON_SIZE_SCALE_LARGE}
           />
         </View>
         <CupertinoListTile
