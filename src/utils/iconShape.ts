@@ -17,8 +17,8 @@ export const ICON_SHAPE_LABELS: readonly string[] = ['Squircle', 'Circle', 'Roun
 /** Gama útil do expoente do superelipse (§1.6: o valor exacto é incerto). */
 export const ICON_SHAPE_EXPONENT_MIN = 2.0;
 export const ICON_SHAPE_EXPONENT_MAX = 8.0;
-/** Palpite da especificação para o squircle do iOS. */
-export const DEFAULT_ICON_SHAPE_EXPONENT = 4.7;
+/** Superellipse approximation closest to Apple's continuous corner (#480). */
+export const DEFAULT_ICON_SHAPE_EXPONENT = 5.0;
 
 /** Expoente fixo de um círculo perfeito (|x|^2 + |y|^2 = r^2). */
 const CIRCLE_EXPONENT = 2.0;
