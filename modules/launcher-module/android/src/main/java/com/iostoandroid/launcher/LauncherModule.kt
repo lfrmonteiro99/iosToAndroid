@@ -1670,6 +1670,7 @@ class LauncherModule : Module() {
         // squircle mask; backfill them with the icon's edge colour so the
         // silhouette stays solid (#465/#480, now addressed).
         return backfillTransparentCorners(square)
+    }
 
     /**
      * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
