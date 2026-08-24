@@ -80,7 +80,11 @@ describe('HealthStore', () => {
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('accumulates watched deltas into todaySteps and persists them', async () => {
+  // `steps` no callback do Pedometer é CUMULATIVO desde o início da subscrição
+  // (expo-sensors PedometerModule.kt:21-32 ancora em `values[0] - 1` e emite
+  // `values[0] - ancora`), não um delta por evento. Somar cada emissão inflaciona
+  // o total de forma quadrática em hardware real.
+  it('treats the watched steps as cumulative, not as a per-event delta', async () => {
     renderStore();
     await waitFor(() => expect(box.latest?.isReady).toBe(true));
     await act(async () => {
@@ -88,12 +92,81 @@ describe('HealthStore', () => {
     });
     const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
     await act(async () => {
-      cb({ steps: 7 });
+      cb({ steps: 1 });
+      cb({ steps: 2 });
       cb({ steps: 3 });
     });
-    expect(box.latest?.todaySteps).toBe(10);
+    // Três passos reais dão 3, não 1+2+3=6.
+    expect(box.latest?.todaySteps).toBe(3);
     const written = JSON.parse(setItemMock.mock.calls.at(-1)![1] as string);
-    expect(written).toEqual([{ date: localDateKey(), steps: 10 }]);
+    expect(written).toEqual([{ date: localDateKey(), steps: 3 }]);
+  });
+
+  it('does not inflate the total on large cumulative readings', async () => {
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 500 });
+      cb({ steps: 1000 });
+      cb({ steps: 1500 });
+    });
+    // Somar as emissões daria 3000 — mais do dobro dos passos reais.
+    expect(box.latest?.todaySteps).toBe(1500);
+  });
+
+  it('a repeated cumulative reading adds nothing (no new steps)', async () => {
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 10 });
+      cb({ steps: 10 });
+    });
+    expect(box.latest?.todaySteps).toBe(10);
+  });
+
+  it('re-anchors when the cumulative counter restarts lower (reboot/re-subscribe)', async () => {
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 50 });
+    });
+    expect(box.latest?.todaySteps).toBe(50);
+    await act(async () => {
+      cb({ steps: 5 }); // contador reiniciou: âncora nova, nada creditado
+    });
+    expect(box.latest?.todaySteps).toBe(50);
+    await act(async () => {
+      cb({ steps: 7 }); // +2 desde a nova âncora
+    });
+    expect(box.latest?.todaySteps).toBe(52);
+  });
+
+  it('adds the session cumulative on top of the persisted total for today', async () => {
+    const today = localDateKey();
+    getItemMock.mockResolvedValue(JSON.stringify([{ date: today, steps: 42 }]));
+    renderStore();
+    await waitFor(() => expect(box.latest?.todaySteps).toBe(42));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 1 });
+      cb({ steps: 2 });
+    });
+    expect(box.latest?.todaySteps).toBe(44);
   });
 
   it('a second grant does not stack a second subscription (double tap)', async () => {
@@ -170,7 +243,7 @@ describe('HealthStore', () => {
     expect(box.latest?.todaySteps).toBe(0);
   });
 
-  it('ignores non-positive and non-finite deltas', async () => {
+  it('ignores negative, non-finite and missing readings without corrupting the anchor', async () => {
     renderStore();
     await waitFor(() => expect(box.latest?.isReady).toBe(true));
     await act(async () => {
@@ -181,9 +254,16 @@ describe('HealthStore', () => {
       cb({ steps: 0 });
       cb({ steps: -5 });
       cb({ steps: NaN });
+      cb({ steps: Infinity });
       cb({});
     });
     expect(box.latest?.todaySteps).toBe(0);
+    // A leitura válida seguinte vale por si: as leituras lixo não deixaram uma
+    // âncora absurda (com -5 como âncora isto daria 9).
+    await act(async () => {
+      cb({ steps: 4 });
+    });
+    expect(box.latest?.todaySteps).toBe(4);
   });
 
   it('does not update state after unmount (late sensor callback)', async () => {

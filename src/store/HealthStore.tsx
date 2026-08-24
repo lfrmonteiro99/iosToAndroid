@@ -71,6 +71,8 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const dayRef = useRef<string>(localDateKey());
   const subscriptionRef = useRef<{ remove: () => void } | null>(null);
   const mountedRef = useRef(true);
+  // Última leitura CUMULATIVA vista nesta subscrição (ver startWatching).
+  const lastCumulativeRef = useRef(0);
 
   // Hydrate the persisted history and probe the sensor once. `isReady` flips
   // even when the sensor is missing or the read fails, so the screen is never
@@ -128,10 +130,30 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     // Idempotent: a second grant (or a double tap on the button) must not
     // stack two subscriptions, which would double-count every step.
     if (subscriptionRef.current) return;
+    // Cada subscrição recomeça a contagem cumulativa do zero no lado nativo
+    // (o listener reseta `stepsAtTheBeginning`), logo a âncora recomeça também.
+    lastCumulativeRef.current = 0;
     try {
       subscriptionRef.current = Pedometer.watchStepCount((result) => {
         if (!mountedRef.current) return;
-        const delta = typeof result?.steps === 'number' && Number.isFinite(result.steps) ? result.steps : 0;
+        // `result.steps` é o total CUMULATIVO desde o início desta subscrição, e
+        // não os passos deste evento: expo-sensors (PedometerModule.kt:21-32)
+        // guarda `stepsAtTheBeginning = values[0] - 1` na primeira emissão e
+        // emite sempre `values[0] - stepsAtTheBeginning`. Somar cada emissão
+        // inflacionava o dia de forma quadrática em hardware real.
+        const cumulative =
+          typeof result?.steps === 'number' && Number.isFinite(result.steps) && result.steps >= 0
+            ? result.steps
+            : null;
+        // Leitura impossível (ausente, NaN, negativa): descartada sem tocar na
+        // âncora, para não creditar um salto absurdo na leitura válida seguinte.
+        if (cumulative === null) return;
+        const last = lastCumulativeRef.current;
+        lastCumulativeRef.current = cumulative;
+        // Contador a descer = recomeço (reboot do sensor, nova subscrição):
+        // reancora e não credita nada, em vez de contar um delta negativo.
+        if (cumulative < last) return;
+        const delta = cumulative - last;
         if (delta <= 0) return;
         const today = localDateKey();
         setTodaySteps((prev) => {
