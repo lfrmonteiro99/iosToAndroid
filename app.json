@@ -2,7 +2,7 @@
   "expo": {
     "name": "iosToAndroid",
     "slug": "iosToAndroid",
-    "version": "1.78.12",
+    "version": "1.78.13",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
