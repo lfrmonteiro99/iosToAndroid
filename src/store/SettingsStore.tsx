@@ -21,6 +21,7 @@ import {
 } from '../utils/passcodePolicy';
 import { clampWallpaperIndex } from '../utils/wallpapers';
 import { clampWhitePointLevel } from '../utils/whitePoint';
+import { DEFAULT_ICON_TINT_COLOR, normalizeIconTintColor } from '../utils/iconTint';
 import {
   normalizeFocusPageVisibility,
   type FocusPageVisibility,
@@ -178,6 +179,19 @@ export interface SettingsState {
   iconSizeScale: number;
   /** Whether app names render under grid icons (issue #503). */
   showIconLabels: boolean;
+  /**
+   * iOS «Home Screen → Edit → Customize → Tint (Tinted)» (issue #620): when
+   * true, every real app icon on the home grid, dock, and folder overlay
+   * renders as a monochrome silhouette in `iconTintColor` instead of its
+   * normal artwork. Default false (unmasked icons, the pre-#620 behaviour).
+   */
+  iconTintEnabled: boolean;
+  /**
+   * The tint colour applied when `iconTintEnabled` is true. 6-digit hex.
+   * Default is the app's default accent (blue) — see
+   * `utils/iconTint.DEFAULT_ICON_TINT_COLOR`.
+   */
+  iconTintColor: string;
   /**
    * Whether the home-screen page dots (iOS «Home Screen & Dock → Show Page
    * Dots») render when there is more than one page. Independent of
@@ -374,6 +388,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   gridRows: 6,
   iconSizeScale: 1.0,
   showIconLabels: true,
+  iconTintEnabled: false,
+  iconTintColor: DEFAULT_ICON_TINT_COLOR,
   showPageDots: true,
   appLaunchAnimation: true,
   appLaunchDurationMs: 280,
@@ -476,6 +492,11 @@ export function SettingsProvider({
             // render → ecrã branco. Saneia-se na leitura, à semelhança dos
             // campos acima.
             wallpaperIndex: clampWallpaperIndex(parsed?.wallpaperIndex),
+            // iconTintColor (#620) feeds Image's tintColor style directly; a
+            // corrupted/non-hex value from an old blob would silently no-op
+            // or paint icons black depending on the platform, so it is
+            // normalized on read like the fields above.
+            iconTintColor: normalizeIconTintColor(parsed?.iconTintColor),
             // motionIntensity (#493) substitui reduceMotion como fonte de
             // verdade; um blob pré-#493 só tem `reduceMotion: true|false`, por
             // isso migra-se para 'reduced'|'full'. Um motionIntensity já

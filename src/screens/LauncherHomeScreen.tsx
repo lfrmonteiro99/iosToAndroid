@@ -35,7 +35,7 @@ import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
 import { addHomePressedListener, LauncherModuleType } from '../../modules/launcher-module/src';
-import { useApps, InstalledApp } from '../store/AppsStore';
+import { useApps, InstalledApp, HomeApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
 import { scrollDecelerationValue } from '../utils/motionIntensity';
@@ -331,6 +331,10 @@ interface AppIconProps {
   /** Whether the app name renders under the icon (issue #503). #501: the dock
    * reuses AppIcon but has no name label under the icon. */
   showLabel?: boolean;
+  /** Tinted Icons (#620): hex colour to render the icon artwork as a
+   * monochrome silhouette in, or undefined/null for the normal, untinted
+   * icon. Only the icon is affected — `showLabel`'s text is untouched. */
+  iconTint?: string | null;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -354,6 +358,7 @@ const AppIcon = React.memo(function AppIcon({
   iconSize = ICON_SIZE,
   iconRadius = ICON_RADIUS,
   showLabel = true,
+  iconTint,
 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   // Label block (margin + text line) measured at the 393dp reference so the
@@ -468,7 +473,8 @@ const AppIcon = React.memo(function AppIcon({
           <Image
             testID={`app-icon-box-${app.packageName}`}
             source={{ uri: app.icon }}
-            style={[styles.appIconImage, iconBoxSize]}
+            style={[styles.appIconImage, iconBoxSize, iconTint ? { tintColor: iconTint } : null]}
+            tintColor={iconTint ?? undefined}
             resizeMode="contain"
           />
         ) : (
@@ -549,9 +555,76 @@ function PageDots({ total, current, show }: PageDotsProps) {
 // Grid item type
 // ---------------------------------------------------------------------------
 
-type GridItem =
+export type GridItem =
   | { type: 'app'; app: InstalledApp }
-  | { type: 'folder'; folder: AppFolder };
+  | { type: 'folder'; folder: AppFolder }
+  | { type: 'empty'; key: string };
+
+/**
+ * Lays out the real (non-dock, non-folder, non-built-in-duplicate) home apps
+ * by their `homeApps[].position` (#762), instead of just their order in
+ * `eligibleApps`. Apps with no `homeApps` entry yet (never explicitly placed)
+ * are appended after every recorded position, in their existing order, so
+ * today's behaviour for an untouched layout is unchanged.
+ *
+ * A position only becomes an `'empty'` slot when **no `homeApps` entry claims
+ * it at all** — which is exactly what `removeFromHome` leaves behind, and the
+ * only real hole there is. That distinction is the whole point of this
+ * function: `assignHomePositions` (`AppsStore.tsx`) numbers the FULL app scan,
+ * so dock apps, folder members, built-in duplicates (#438) and hidden /
+ * library-only apps all own a position while never rendering in the grid.
+ * Treating "no eligible app at position i" as a hole invented a blank cell for
+ * every one of them — on a clean install, for every user. Those positions are
+ * skipped instead: no icon, no empty slot, nothing.
+ *
+ * The returned array never has trailing empty slots past the last real app —
+ * only interior gaps — so a hole can never manifest as a whole extra blank
+ * page at the end of the pager (#762 AC).
+ */
+export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: HomeApp[]): GridItem[] {
+  const eligiblePkgs = new Set(eligibleApps.map(a => a.packageName));
+  // Positions owned by an entry that never renders in the grid. They are not
+  // holes — they are somebody else's slot.
+  const reserved = new Set<number>();
+  for (const entry of homeApps) {
+    if (!eligiblePkgs.has(entry.packageName)) reserved.add(entry.position);
+  }
+
+  const positioned = new Map<number, InstalledApp>();
+  const unpositioned: InstalledApp[] = [];
+  for (const app of eligibleApps) {
+    const entry = homeApps.find(h => h.packageName === app.packageName);
+    if (entry && !positioned.has(entry.position)) {
+      positioned.set(entry.position, app);
+    } else {
+      unpositioned.push(app);
+    }
+  }
+  // Appended apps start past EVERY recorded position (not just the eligible
+  // ones), so they can never land on a reserved slot and silently swallow it.
+  let nextPos = homeApps.reduce(
+    (max, h) => Math.max(max, h.position),
+    positioned.size > 0 ? Math.max(...positioned.keys()) : -1,
+  ) + 1;
+  for (const app of unpositioned) {
+    positioned.set(nextPos, app);
+    nextPos += 1;
+  }
+
+  // maxPos is the last position held by a RENDERED app: anything beyond it is
+  // reserved-only tail, and padding it would spawn a blank page at the end.
+  const maxPos = positioned.size > 0 ? Math.max(...positioned.keys()) : -1;
+  const items: GridItem[] = [];
+  for (let i = 0; i <= maxPos; i++) {
+    const app = positioned.get(i);
+    if (app) {
+      items.push({ type: 'app', app });
+    } else if (!reserved.has(i)) {
+      items.push({ type: 'empty', key: `empty-${i}` });
+    }
+  }
+  return items;
+}
 
 // ---------------------------------------------------------------------------
 // FolderIcon
@@ -570,6 +643,7 @@ const FolderIcon = React.memo(function FolderIcon({
   iconSize = ICON_SIZE,
   iconRadius = ICON_RADIUS,
   showLabel = true,
+  iconTint,
 }: {
   folder: AppFolder;
   cellWidth: number;
@@ -580,6 +654,7 @@ const FolderIcon = React.memo(function FolderIcon({
   iconSize?: number;
   iconRadius?: number;
   showLabel?: boolean;
+  iconTint?: string | null;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -616,7 +691,13 @@ const FolderIcon = React.memo(function FolderIcon({
         <View style={styles.folderGrid}>
           {folderApps.map((app, i) =>
             app?.icon ? (
-              <Image key={i} source={{ uri: app.icon }} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }]} />
+              <Image
+                key={i}
+                testID={`folder-mini-icon-${folder.id}-${i}`}
+                source={{ uri: app.icon }}
+                style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }, iconTint ? { tintColor: iconTint } : null]}
+                tintColor={iconTint ?? undefined}
+              />
             ) : (
               <View key={i} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius, backgroundColor: 'rgba(255,255,255,0.3)' }]} />
             )
@@ -634,7 +715,7 @@ const FolderIcon = React.memo(function FolderIcon({
 // FolderOverlay
 // ---------------------------------------------------------------------------
 
-function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1 }: {
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1, iconTint }: {
   folder: AppFolder;
   apps: InstalledApp[];
   onClose: () => void;
@@ -642,6 +723,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
   onLongPressApp: (app: InstalledApp) => void;
   onRename: (newName: string) => void;
   textScale?: number;
+  iconTint?: string | null;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -688,6 +770,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   app={app}
                   cellWidth={70}
                   textScale={textScale}
+                  iconTint={iconTint}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -822,6 +905,11 @@ export function LauncherHomeScreen() {
     [settings.gridColumns, settings.iconSizeScale],
   );
   const appsPerPage = gridGeometry.cols * settings.gridRows;
+
+  // Tinted Icons (#620): resolved once per render, shared by every AppIcon
+  // call site below (grid, dock, folder overlay) so a single setting change
+  // stays a single source of truth instead of three copies of the ternary.
+  const iconTint = settings.iconTintEnabled ? settings.iconTintColor : undefined;
 
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
@@ -1246,25 +1334,22 @@ export function LauncherHomeScreen() {
       items.push({ type: 'folder', folder });
     }
 
-    // Add real installed apps (not in dock, not in folders, and not an Android
-    // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438),
-    // ordered by homeApps.position (#760) instead of the native scan order
-    // nonDockApps comes in. Apps without a recorded position (shouldn't
-    // happen once AppsStore has assigned one on load, but kept defensive)
-    // sort after every positioned app, in their original relative order —
-    // Array#sort is stable, so ties fall back to scan order.
-    const positionByPackage = new Map(homeApps.map(h => [h.packageName, h.position]));
-    const orderedNonDockApps = [...nonDockApps].sort((a, b) => {
-      const posA = positionByPackage.get(a.packageName) ?? Number.MAX_SAFE_INTEGER;
-      const posB = positionByPackage.get(b.packageName) ?? Number.MAX_SAFE_INTEGER;
-      return posA - posB;
-    });
-    for (const app of orderedNonDockApps) {
-      if (BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName)) continue;
-      if (!appsInFolders.has(app.packageName)) {
-        items.push({ type: 'app', app });
-      }
-    }
+    // Real installed apps (not in dock, not in folders, and not an Android
+    // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438)
+    // are laid out by homeApps[].position, gaps included (#762) — dock,
+    // folders and the virtual built-ins above are untouched by this and stay
+    // contiguous.
+    //
+    // Supersedes the plain position sort that landed in main for #760:
+    // layoutHomeAppsWithGaps orders by the same homeApps.position and keeps
+    // main's fallback for apps with no recorded position (appended after the
+    // highest known position, in scan order), but additionally materialises
+    // unclaimed positions as 'empty' slots instead of letting the next app
+    // pull up into the hole.
+    const eligibleApps = nonDockApps.filter(
+      app => !BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName) && !appsInFolders.has(app.packageName),
+    );
+    items.push(...layoutHomeAppsWithGaps(eligibleApps, homeApps));
     return items;
   }, [nonDockApps, dockApps, folders, homeApps]);
 
@@ -1747,6 +1832,21 @@ export function LauncherHomeScreen() {
               onLayout={pageIndex === 0 ? markGridVisible : undefined}
             >
               {pageItems.map((item) => {
+                if (item.type === 'empty') {
+                  // #762: a position with no app renders a blank cell instead
+                  // of letting the next app slide up into it — no Pressable,
+                  // no accessibility role, nothing tappable here.
+                  return (
+                    <View
+                      key={item.key}
+                      testID={`grid-empty-slot-${item.key}`}
+                      style={{
+                        width: gridGeometry.cellWidth,
+                        height: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+                      }}
+                    />
+                  );
+                }
                 if (item.type === 'folder') {
                   return (
                     <FolderIcon
@@ -1758,6 +1858,7 @@ export function LauncherHomeScreen() {
                       showLabel={settings.showIconLabels}
                       apps={apps}
                       textScale={textScale}
+                      iconTint={iconTint}
                       onPress={handleOpenFolder}
                       onLongPress={handleFolderLongPress}
                     />
@@ -1772,6 +1873,7 @@ export function LauncherHomeScreen() {
                     iconRadius={gridGeometry.iconRadius}
                     showLabel={settings.showIconLabels}
                     textScale={textScale}
+                    iconTint={iconTint}
                     onPress={handleAppPress}
                     onLongPress={handleLongPress}
                     isJiggling={isJiggling}
@@ -1825,6 +1927,7 @@ export function LauncherHomeScreen() {
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
                 showLabel={false}
+                iconTint={iconTint}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
@@ -1848,6 +1951,7 @@ export function LauncherHomeScreen() {
           folder={openFolder}
           apps={apps}
           textScale={textScale}
+          iconTint={iconTint}
           onClose={() => setOpenFolder(null)}
           onLaunchApp={(app) => {
             setOpenFolder(null);
