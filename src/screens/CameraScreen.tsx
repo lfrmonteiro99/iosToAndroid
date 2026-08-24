@@ -27,8 +27,13 @@ try {
   const mod = require('expo-camera');
   CameraViewComponent = mod.CameraView;
   useCameraPermissionsHook = mod.useCameraPermissions;
-} catch {
-  // expo-camera not available
+} catch (err) {
+  // expo-camera not available (e.g. its native module is missing from a build).
+  // We intentionally stay IN-APP: the screen falls back to a clear placeholder
+  // rather than launching a system camera app or escaping to the Android home.
+  // Log the reason so the failure is diagnosable instead of silently swallowed.
+  // eslint-disable-next-line no-console
+  console.warn('[CameraScreen] expo-camera unavailable, using placeholder:', err);
 }
 
 // Stub hook for when expo-camera is unavailable
@@ -38,7 +43,7 @@ function useStubPermissions(): [null, () => Promise<null>] {
 
 const useCamPerms = useCameraPermissionsHook ?? useStubPermissions;
 
-type CameraModeType = 'PHOTO' | 'VIDEO' | 'PORTRAIT';
+type CameraModeType = 'PHOTO' | 'VIDEO';
 
 export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) {
   const insets = useSafeAreaInsets();
@@ -172,8 +177,10 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
     setMode(newMode);
   }, []);
 
-  // Determine camera mode prop for expo-camera
-  const cameraMode = mode === 'VIDEO' ? 'video' : 'picture';
+  // Determine camera mode prop for expo-camera. The expo-camera v17 API only
+  // supports 'picture' | 'video' — there is no 'portrait' capture mode, so we
+  // do NOT offer a PORTRAIT control (it would be a dead/lying button).
+  const cameraMode: 'picture' | 'video' = mode === 'VIDEO' ? 'video' : 'picture';
 
   // Fallback: expo-camera not available
   const cameraUnavailable = !CameraViewComponent || !useCameraPermissionsHook;
@@ -273,7 +280,7 @@ export function CameraScreen({ navigation }: { navigation: AppNavigationProp }) 
 
       {/* Mode selector */}
       <View style={styles.modeRow}>
-        {(['VIDEO', 'PHOTO', 'PORTRAIT'] as CameraModeType[]).map((m) => (
+        {(['VIDEO', 'PHOTO'] as CameraModeType[]).map((m) => (
           <Pressable
             key={m}
             onPress={() => selectMode(m)}
