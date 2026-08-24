@@ -24,7 +24,7 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { CupertinoPressable } from './CupertinoPressable';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
-import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
+import { useMotionIntensity, settle } from '../utils/useGestureReduceMotion';
 import { IDLE_DIM_MS } from '../utils/gestureConfig';
 import { assistiveTouchSnap, assistiveTouchMenuReveal } from '../theme/springPresets';
 
@@ -135,8 +135,8 @@ interface AssistiveTouchProps {
 export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const reduceMotion = useGestureReduceMotion();
-  const reduceMotionShared = useSharedValue(reduceMotion);
+  const motionIntensity = useMotionIntensity();
+  const motionIntensityShared = useSharedValue(motionIntensity);
   const {
     enabled,
     idleOpacity,
@@ -174,11 +174,11 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   const hiddenForFullscreen = autoHideFullscreen && !!currentRoute && FULLSCREEN_ROUTES.has(currentRoute);
   const visible = enabled && !temporarilyHidden && !hiddenForFullscreen;
 
-  // Sync reduceMotion into shared value so worklets can read it
+  // Sync motionIntensity into shared value so worklets can read it
   useEffect(() => {
-    reduceMotionShared.value = reduceMotion;
+    motionIntensityShared.value = motionIntensity;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion]);
+  }, [motionIntensity]);
 
   // ── Drag position (shared values for smooth dragging) ─────────────────────
   const translateX = useSharedValue(edge === 'right' ? SCREEN_W - size - 8 : 8);
@@ -187,10 +187,10 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
   // Re-snap to stored edge when edge prop changes (after settings reset)
   useEffect(() => {
     const targetX = edge === 'right' ? SCREEN_W - size - 8 : 8;
-    translateX.value = reduceMotion ? targetX : withSpring(targetX, SNAP_SPRING);
-    // Shared values are stable refs; reduceMotion and translateX identity don't drive re-runs
+    translateX.value = settle(targetX, SNAP_SPRING, motionIntensity);
+    // Shared values are stable refs; motionIntensity and translateX identity don't drive re-runs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edge, size, reduceMotion]);
+  }, [edge, size, motionIntensity]);
 
   // ── Idle dim ──────────────────────────────────────────────────────────────
   const opacity = useSharedValue(1);
@@ -230,12 +230,14 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     setFullyOpen(false);
     if (fullyOpenTimer.current) clearTimeout(fullyOpenTimer.current);
     fullyOpenTimer.current = setTimeout(() => setFullyOpen(true), 150);
-    menuScale.value = reduceMotion
-      ? withTiming(1, { duration: 150 })
-      : withSpring(1, assistiveTouchMenuReveal);
+    menuScale.value = motionIntensity === 'off'
+      ? 1
+      : motionIntensity === 'reduced'
+        ? withTiming(1, { duration: 150 })
+        : withSpring(1, assistiveTouchMenuReveal);
     menuOpacity.value = withTiming(1, { duration: 160 });
     wake();
-  }, [menuScale, menuOpacity, wake, hapticFeedback, reduceMotion]);
+  }, [menuScale, menuOpacity, wake, hapticFeedback, motionIntensity]);
 
   const closeMenu = useCallback(() => {
     menuScale.value = withTiming(0, { duration: 150 });
@@ -387,7 +389,7 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
     })
     .onEnd((e) => {
       'worklet';
-      const rm = reduceMotionShared.value;
+      const rm = motionIntensityShared.value;
       // Magnetic snap to nearest horizontal edge
       const snapLeft = 8;
       const snapRight = SCREEN_W - size - 8;

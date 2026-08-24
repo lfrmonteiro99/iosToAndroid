@@ -13,6 +13,7 @@ import {
 } from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
+import { useSettings } from '../../store/SettingsStore';
 import { Shape } from '../../theme/CupertinoTheme';
 
 function flattenStyle(style: unknown): Record<string, unknown>[] {
@@ -41,6 +42,7 @@ describe('LauncherHomeScreen', () => {
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -225,6 +227,7 @@ describe('LauncherHomeScreen wallpaper parallax (#433)', () => {
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -299,6 +302,7 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
       launchApp,
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -422,6 +426,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -571,6 +576,7 @@ describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -591,6 +597,34 @@ describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
 
     const paginationScrollView = getByTestId('launcher-pager');
     expect(paginationScrollView.props.decelerationRate).toBe(0.998);
+  });
+
+  // #493: scrollDeceleration exposes the 0.998 literal above as a setting.
+  // 'fast' maps to 0.99 — see src/utils/motionIntensity.ts:scrollDecelerationValue.
+  // Drives the update directly via useSettings() rather than seeding
+  // AsyncStorage — the async hydration path is already covered by
+  // SettingsStore.motionIntensity.test.tsx, and depending on it here made
+  // this assertion flaky under full-suite load (passed in isolation, missed
+  // its waitFor window when 44 sibling tests ran first in the same file).
+  it('sets decelerationRate to 0.99 when scrollDeceleration is "fast"', async () => {
+    mockLoadedApps();
+
+    function SetScrollDeceleration() {
+      const { update } = useSettings();
+      React.useEffect(() => { update('scrollDeceleration', 'fast'); }, [update]);
+      return null;
+    }
+
+    const { getByTestId } = render(
+      <>
+        <SetScrollDeceleration />
+        <LauncherHomeScreen />
+      </>,
+    );
+
+    await waitFor(() =>
+      expect(getByTestId('launcher-pager').props.decelerationRate).toBe(0.99),
+    );
   });
 });
 
@@ -631,6 +665,7 @@ describe('LauncherHomeScreen dock has no app-name labels (#501)', () => {
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -708,6 +743,7 @@ describe('LauncherHomeScreen — Focus page visibility (#618)', () => {
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
@@ -889,6 +925,7 @@ describe('LauncherHomeScreen — Focus dock override (#619)', () => {
       launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+      compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),

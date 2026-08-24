@@ -200,3 +200,59 @@ describe('LauncherSettingsScreen — secção App Library (#602)', () => {
     );
   });
 });
+
+describe('LauncherSettingsScreen — Compact Layout button (#762)', () => {
+  const LAYOUT_KEY = '@iostoandroid/apps_layout';
+
+  it('reassigns homeApps positions sequentially, removing holes without dropping any app', async () => {
+    const store = setupMemoryAsyncStorage({
+      [LAYOUT_KEY]: JSON.stringify({
+        dockApps: [],
+        homeApps: [
+          { packageName: 'com.example.apple', position: 0 },
+          { packageName: 'com.example.banana', position: 3 },
+          { packageName: 'com.example.cherry', position: 5 },
+        ],
+      }),
+    });
+
+    const { getByText } = render(<LauncherSettingsScreen />);
+    await waitFor(() => expect(getByText('Compact Layout')).toBeTruthy());
+
+    fireEvent.press(getByText('Compact Layout'));
+
+    await waitFor(() => {
+      const persisted = JSON.parse(store.get(LAYOUT_KEY) as string);
+      expect(persisted.homeApps).toEqual([
+        { packageName: 'com.example.apple', position: 0 },
+        { packageName: 'com.example.banana', position: 1 },
+        { packageName: 'com.example.cherry', position: 2 },
+      ]);
+    });
+  });
+
+  it('is a no-op on a layout with no holes (idempotent, does not reorder)', async () => {
+    const store = setupMemoryAsyncStorage({
+      [LAYOUT_KEY]: JSON.stringify({
+        dockApps: [],
+        homeApps: [
+          { packageName: 'com.example.apple', position: 0 },
+          { packageName: 'com.example.banana', position: 1 },
+        ],
+      }),
+    });
+
+    const { getByText } = render(<LauncherSettingsScreen />);
+    await waitFor(() => expect(getByText('Compact Layout')).toBeTruthy());
+
+    fireEvent.press(getByText('Compact Layout'));
+
+    await waitFor(() => {
+      const persisted = JSON.parse(store.get(LAYOUT_KEY) as string);
+      expect(persisted.homeApps).toEqual([
+        { packageName: 'com.example.apple', position: 0 },
+        { packageName: 'com.example.banana', position: 1 },
+      ]);
+    });
+  });
+});
