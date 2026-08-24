@@ -59,3 +59,21 @@ export {
 export { CupertinoContextMenu } from './CupertinoContextMenu';
 export type { ContextMenuItem, CupertinoContextMenuProps } from './CupertinoContextMenu';
 export type { GlassSurfaceProps } from './GlassSurface';
+export {
+  ALL_WIDGET_TYPES,
+  DEFAULT_ENABLED as DEFAULT_ENABLED_WIDGETS,
+  WIDGET_CONFIG_KEY,
+  WIDGET_LABELS,
+  WIDGET_ICONS,
+  loadWidgetConfig,
+  saveWidgetConfig,
+  useWidgetConfig,
+  useWidgetMap,
+  BatteryWidget,
+  StorageWidget,
+  WeatherWidget,
+  UpNextWidget,
+  MessagesWidget,
+  ScreenTimeWidget,
+} from './TodayWidgets';
+export type { WidgetType, CalendarEventItem } from './TodayWidgets';

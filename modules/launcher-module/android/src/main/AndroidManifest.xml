@@ -22,7 +22,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- #636 Back Tap: foreground sensor service needs a foreground notification -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <!-- TYPE_SENSOR foreground service (#770): Android 14+ requires the
+         foreground-service permission that matches the service's
+         foregroundServiceType. The back-tap detector reads the accelerometer,
+         so the SENSOR type is the correct one — HEALTH would impose the wrong
+         contract and demand FOREGROUND_SERVICE_HEALTH instead. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SENSOR" />
 
     <application>
         <service
@@ -39,7 +44,7 @@
         <service
             android:name=".TapSensorService"
             android:exported="false"
-            android:foregroundServiceType="health" />
+            android:foregroundServiceType="sensor" />
 
         <!-- #634: foreground service that polls UsageStats + AppOps for camera /
              mic / location access. Its own low-importance notification is shown via
