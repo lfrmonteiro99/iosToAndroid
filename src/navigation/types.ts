@@ -32,6 +32,8 @@ export type RootStackParamList = {
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
   Wallet: undefined;
   PassDetail: { passId: string };
+  PassEdit: { passId?: string; prefillCode?: string };
+  PassScan: undefined;
 
   // Settings
   Settings: undefined;

@@ -142,14 +142,42 @@ describe('PassDetailScreen', () => {
     await waitFor(() => expect(api!.passes.length).toBe(0));
   });
 
-  it('never renders an Edit affordance (out of scope for this issue)', async () => {
-    const { getByText, queryByText } = render(
+  it('renders an Edit button that navigates to PassEdit with the open pass id', async () => {
+    const navigation = makeNavigation();
+    let api: ReturnType<typeof useWallet> | null = null;
+    const { getByText } = render(
       <WalletProvider>
-        <Harness navigation={makeNavigation()} />
+        <Harness navigation={navigation} onApi={(a) => { api = a; }} />
       </WalletProvider>,
     );
     await waitFor(() => expect(getByText('TAP LIS-OPO')).toBeTruthy());
 
+    fireEvent.press(getByText('Edit'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PassEdit', { passId: api!.passes[0].id });
+  });
+
+  it('does not show an Edit button on the not-found state', () => {
+    const { queryByText } = render(
+      <PassDetailScreen navigation={makeNavigation()} route={makeRoute('does-not-exist')} />,
+    );
+
     expect(queryByText('Edit')).toBeNull();
+  });
+
+  it('pressing Edit does not also trigger delete or navigate back', async () => {
+    const navigation = makeNavigation();
+    let api: ReturnType<typeof useWallet> | null = null;
+    const { getByText } = render(
+      <WalletProvider>
+        <Harness navigation={navigation} onApi={(a) => { api = a; }} />
+      </WalletProvider>,
+    );
+    await waitFor(() => expect(getByText('TAP LIS-OPO')).toBeTruthy());
+
+    fireEvent.press(getByText('Edit'));
+
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(api!.passes.length).toBe(1);
   });
 });
