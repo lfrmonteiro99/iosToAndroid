@@ -74,6 +74,13 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const dayRef = useRef<string>(localDateKey());
   const subscriptionRef = useRef<{ remove: () => void } | null>(null);
   const mountedRef = useRef(true);
+  // Today's running total, mirrored outside React state so the sensor callback
+  // computes the next total deterministically instead of doing it (and writing
+  // to storage) inside a setState updater, which React may invoke twice.
+  const todayStepsRef = useRef(0);
+  // Last value seen from the pedometer. `null` = no sample yet, so the next one
+  // only establishes the baseline. See startWatching for why.
+  const lastCumulativeRef = useRef<number | null>(null);
 
   // Hydrate the persisted history and probe the sensor once. `isReady` flips
   // even when the sensor is missing or the read fails, so the screen is never
@@ -83,18 +90,26 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     mountedRef.current = true;
     let cancelled = false;
 
+    const isAvailable = async (): Promise<boolean> => {
+      if (Platform.OS !== 'android') return false;
+      try {
+        // Not just `.catch`: on a build where expo-sensors is missing, the
+        // module proxy throws SYNCHRONOUSLY on the call, so there is no
+        // promise to attach a handler to.
+        return (await Pedometer.isAvailableAsync()) === true;
+      } catch (e) {
+        logger.warn('HealthStore', 'isAvailableAsync failed', e);
+        return false;
+      }
+    };
+
     const probe = async () => {
       const [raw, available] = await Promise.all([
         AsyncStorage.getItem(HEALTH_DAILY_STEPS_KEY).catch((e) => {
           logger.warn('HealthStore', 'daily steps read failed', e);
           return null;
         }),
-        Platform.OS === 'android'
-          ? Pedometer.isAvailableAsync().catch((e) => {
-              logger.warn('HealthStore', 'isAvailableAsync failed', e);
-              return false;
-            })
-          : Promise.resolve(false),
+        isAvailable(),
       ]);
       if (cancelled) return;
       const history = parseHistory(raw);
@@ -105,8 +120,11 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       const stored = history.find((h) => h.date === today);
       // Restore today's running total so an app restart does not reset the day
       // back to zero. Other days stay in the array for the aggregation consumer.
-      if (stored) setTodaySteps(stored.steps);
-      setIsPedometerAvailable(available === true);
+      if (stored) {
+        todayStepsRef.current = stored.steps;
+        setTodaySteps(stored.steps);
+      }
+      setIsPedometerAvailable(available);
       setIsReady(true);
     };
 
@@ -136,18 +154,42 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     try {
       subscriptionRef.current = Pedometer.watchStepCount((result) => {
         if (!mountedRef.current) return;
-        const delta = typeof result?.steps === 'number' && Number.isFinite(result.steps) ? result.steps : 0;
-        if (delta <= 0) return;
+        // `result.steps` is CUMULATIVE, not a delta: expo-sensors'
+        // PedometerModule.kt latches `stepsAtTheBeginning` on the first sensor
+        // event and then emits `values[0] - stepsAtTheBeginning`, a total that
+        // only grows while the listener lives. Treating each sample as a delta
+        // would add the whole running total on every event — 1, 11, 26 would
+        // read as 38 steps instead of 25, inflating the day without bound on
+        // real hardware.
+        const cumulative =
+          typeof result?.steps === 'number' && Number.isFinite(result.steps) && result.steps >= 0
+            ? result.steps
+            : null;
+        // A garbage sample is dropped WITHOUT touching the baseline, so the
+        // next valid sample is still measured from the last real reading.
+        if (cumulative === null) return;
+
+        const previous = lastCumulativeRef.current;
+        lastCumulativeRef.current = cumulative;
+        // First sample: it is the counter's starting point, not steps walked
+        // since the app opened. It sets the baseline and adds nothing.
+        if (previous === null) return;
+        // A value below the baseline means the native counter restarted (the
+        // listener was re-attached, or the device rebooted). Re-baseline —
+        // never subtract, which would eat steps already counted.
+        if (cumulative <= previous) return;
+
+        const delta = cumulative - previous;
         const today = localDateKey();
-        setTodaySteps((prev) => {
-          // Local date changed while the app stayed open: close the previous
-          // day at its total and start the new one from this delta.
-          const base = today === dayRef.current ? prev : 0;
-          dayRef.current = today;
-          const next = base + delta;
-          persist(next, today);
-          return next;
-        });
+        // Local date changed while the app stayed open: close the previous day
+        // at its total and start the new one from this delta. The sensor
+        // baseline is unaffected — the counter does not restart at midnight.
+        const base = today === dayRef.current ? todayStepsRef.current : 0;
+        dayRef.current = today;
+        const next = base + delta;
+        todayStepsRef.current = next;
+        setTodaySteps(next);
+        persist(next, today);
       });
     } catch (e) {
       logger.warn('HealthStore', 'watchStepCount failed', e);
