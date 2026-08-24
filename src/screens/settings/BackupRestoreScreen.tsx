@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
@@ -18,10 +20,23 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoAlertDialog,
+  CupertinoSwitch,
+  CupertinoSegmentedControl,
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
 import { createSnapshot, applySnapshot } from '../../services/BackupSnapshot';
+import {
+  isBackupDue,
+  loadAutoBackupPrefs,
+  saveAutoBackupPrefs,
+  withBackupTimestamp,
+  DEFAULT_AUTO_BACKUP_PREFS,
+  type AutoBackupPrefs,
+  type BackupFrequency,
+} from '../../services/AutoBackupSchedule';
+
+const FREQUENCY_OPTIONS: BackupFrequency[] = ['daily', 'weekly'];
 
 export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
@@ -35,7 +50,80 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false);
+
+  // Auto Backup prefs (issue #283).
+  const [autoEnabled, setAutoEnabled] = useState(DEFAULT_AUTO_BACKUP_PREFS.enabled);
+  const [autoFrequency, setAutoFrequency] = useState<BackupFrequency>(DEFAULT_AUTO_BACKUP_PREFS.frequency);
+  const [autoLastBackupAt, setAutoLastBackupAt] = useState<string | null>(DEFAULT_AUTO_BACKUP_PREFS.lastBackupAt);
+
   const alert = useAlert();
+
+  // Mirror the live prefs into a ref so the AppState listener (registered once)
+  // always evaluates the current state, never a stale closure.
+  const prefsRef = useRef<AutoBackupPrefs>({
+    enabled: autoEnabled,
+    frequency: autoFrequency,
+    lastBackupAt: autoLastBackupAt,
+  });
+  useEffect(() => {
+    prefsRef.current = { enabled: autoEnabled, frequency: autoFrequency, lastBackupAt: autoLastBackupAt };
+  }, [autoEnabled, autoFrequency, autoLastBackupAt]);
+
+  // Tracks whether the user has already interacted with the toggle in this
+  // session. The persisted prefs load asynchronously on mount; if that load
+  // settles after the user has toggled, we must NOT clobber their choice.
+  const userTouched = useRef(false);
+
+  // Last known AppState, updated by the foreground listener. Lets the mount-time
+  // prefs load decide whether to surface the reminder without depending on
+  // AppState.currentState (which is null under jest/no-native).
+  const lastAppState = useRef<AppStateStatus>('unknown');
+
+  // Load persisted Auto Backup prefs on mount.
+  useEffect(() => {
+    let cancelled = false;
+    loadAutoBackupPrefs().then((prefs) => {
+      if (cancelled || userTouched.current) return;
+      setAutoEnabled(prefs.enabled);
+      setAutoFrequency(prefs.frequency);
+      setAutoLastBackupAt(prefs.lastBackupAt);
+      // If a backup is already due when the prefs finish loading and the app is
+      // in the foreground, surface the reminder now (the AppState listener may
+      // have fired earlier with stale default prefs).
+      if (lastAppState.current === 'active' && isBackupDue(prefs, new Date())) {
+        setShowBackupPrompt(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Foreground-triggered reminder (issue #283): on app becoming active, if a
+  // backup is due and Auto Backup is on, surface a one-tap prompt. The prompt
+  // only ever runs the existing MANUAL backup flow (doExport) — it never
+  // uploads unattended, so the passphrase constraint (#270) holds.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next: AppStateStatus) => {
+      lastAppState.current = next;
+      if (next !== 'active') return;
+      if (isBackupDue(prefsRef.current, new Date())) {
+        setShowBackupPrompt(true);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const persistPrefs = useCallback(
+    (next: AutoBackupPrefs) => {
+      setAutoEnabled(next.enabled);
+      setAutoFrequency(next.frequency);
+      setAutoLastBackupAt(next.lastBackupAt);
+      void saveAutoBackupPrefs(next);
+    },
+    [],
+  );
 
   const doExport = useCallback(async () => {
     try {
@@ -43,15 +131,24 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
       const snapshot = await createSnapshot();
       const json = JSON.stringify(snapshot, null, 2);
       await Clipboard.setStringAsync(json);
-      const now = new Date().toLocaleString();
-      setLastBackupTime(now);
+      const now = new Date();
+      const nowLabel = now.toLocaleString();
+      setLastBackupTime(nowLabel);
+      // Stamp the Auto Backup schedule so the reminder stops firing until the
+      // next interval — only when Auto Backup is on, so a manual export with
+      // Auto Backup OFF leaves the auto-backup key completely untouched
+      // (regression guard). Always via the manual (supervised) flow, never
+      // silently.
+      if (prefsRef.current.enabled) {
+        persistPrefs(withBackupTimestamp(prefsRef.current, now));
+      }
       alert('Backup Copied', 'Settings exported to clipboard. Paste the JSON somewhere safe.');
     } catch (e) {
       alert('Export Failed', String(e));
     } finally {
       setBusy(false);
     }
-  }, [alert]);
+  }, [alert, persistPrefs]);
 
   const handleExport = useCallback(() => {
     setShowExportConfirm(true);
@@ -88,6 +185,28 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
       setBusy(false);
     }
   }, [alert]);
+
+  const handleToggleAuto = useCallback(
+    (enabled: boolean) => {
+      userTouched.current = true;
+      persistPrefs({ ...prefsRef.current, enabled });
+    },
+    [persistPrefs],
+  );
+
+  const handleFrequencyChange = useCallback(
+    (index: number) => {
+      userTouched.current = true;
+      const frequency = FREQUENCY_OPTIONS[index] ?? 'daily';
+      persistPrefs({ ...prefsRef.current, frequency });
+    },
+    [persistPrefs],
+  );
+
+  const handleBackupPrompt = useCallback(() => {
+    setShowBackupPrompt(false);
+    void doExport();
+  }, [doExport]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -130,6 +249,46 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
               />
             )}
           </CupertinoListSection>
+        </View>
+
+        {/* Auto Backup */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>AUTO BACKUP</Text>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title="Auto Backup"
+              subtitle="Remind me to back up when due"
+              showChevron={false}
+              trailing={
+                <CupertinoSwitch
+                  value={autoEnabled}
+                  onValueChange={handleToggleAuto}
+                  testID="auto-backup-switch"
+                />
+              }
+            />
+            {autoEnabled && (
+              <CupertinoListTile
+                title="Frequency"
+                showChevron={false}
+                trailing={
+                  <View style={{ width: 160 }}>
+                    <CupertinoSegmentedControl
+                      values={['Daily', 'Weekly']}
+                      selectedIndex={FREQUENCY_OPTIONS.indexOf(autoFrequency)}
+                      onChange={handleFrequencyChange}
+                      testID="auto-backup-frequency"
+                    />
+                  </View>
+                }
+              />
+            )}
+          </CupertinoListSection>
+          {autoEnabled && (
+            <Text style={[styles.footer, { color: colors.secondaryLabel }]}>
+              Backups are never uploaded automatically. When a backup is due, you&apos;ll be reminded on app open and can run it with your passphrase, just like a manual export.
+            </Text>
+          )}
         </View>
 
         {/* Restore */}
@@ -239,6 +398,18 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
           },
         ]}
         onClose={() => setShowExportConfirm(false)}
+      />
+
+      {/* Auto Backup Reminder Dialog — foreground-triggered only, runs the manual flow */}
+      <CupertinoAlertDialog
+        visible={showBackupPrompt}
+        title="Time for your backup"
+        message="Your scheduled backup is due. Back up now? Your settings will be copied to the clipboard, just like a manual export."
+        actions={[
+          { label: 'Not Now', style: 'cancel', onPress: () => setShowBackupPrompt(false) },
+          { label: 'Back Up Now', style: 'default', onPress: handleBackupPrompt },
+        ]}
+        onClose={() => setShowBackupPrompt(false)}
       />
 
       {/* Reset Confirm Dialog */}
