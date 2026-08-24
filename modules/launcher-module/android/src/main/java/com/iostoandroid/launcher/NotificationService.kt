@@ -60,15 +60,16 @@ class NotificationService : NotificationListenerService() {
         instance = this
     }
 
-    private fun emitToJS(eventName: String, sbn: StatusBarNotification) {
+    private fun emitToJS(eventName: String, data: NotificationData) {
         try {
-            val extras = sbn.notification.extras
             val bundle = Bundle().apply {
-                putString("id", sbn.key)
-                putString("packageName", sbn.packageName)
-                putString("title", extras.getCharSequence("android.title")?.toString() ?: "")
-                putString("text", extras.getCharSequence("android.text")?.toString() ?: "")
-                putDouble("postedAt", sbn.postTime.toDouble())
+                putString("id", data.id)
+                putString("key", data.key)
+                putString("packageName", data.packageName)
+                putString("title", data.title)
+                putString("text", data.text)
+                putDouble("time", data.time.toDouble())
+                putBoolean("isOngoing", data.isOngoing)
             }
             LauncherModule.emitEvent(eventName, bundle)
         } catch (e: Exception) {
@@ -104,7 +105,7 @@ class NotificationService : NotificationListenerService() {
             notifications.removeAt(notifications.size - 1)
         }
 
-        emitToJS("onNotificationPosted", sbn)
+        emitToJS("onNotificationPosted", data)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
@@ -118,7 +119,7 @@ class NotificationService : NotificationListenerService() {
             }
         }
 
-        emitToJS("onNotificationRemoved", sbn)
+        emitToJS("onNotificationRemoved", data)
     }
 
     override fun onDestroy() {

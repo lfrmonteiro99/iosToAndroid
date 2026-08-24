@@ -811,25 +811,46 @@ function addModuleListener<TPayload>(
 
 /**
  * Subscribe to new notifications as they arrive.
+ * The native event (a Bundle sent from NotificationService) may be partial —
+ * older builds only carried `id`/`packageName`/`title`/`text`/`postedAt`, and
+ * even now we normalize defensively — so this bridge turns it into a full
+ * `DeviceNotification`: `key` falls back to `id`, `time` falls back to
+ * `postedAt`, and `isOngoing` defaults to `false`. A never-`undefined` object
+ * keeps the screen's grouping/mapping (which keys by `packageName`/`key`) safe
+ * instead of throwing and blanking the whole center.
  * Returns an unsubscribe function — call it in the useEffect cleanup.
  */
 export function addNotificationListener(
   listener: (n: DeviceNotification) => void,
 ): () => void {
-  const sub = addModuleListener('onNotificationPosted', listener);
+  const sub = addModuleListener('onNotificationPosted', (raw: Partial<DeviceNotification> & { postedAt?: number }) => {
+    const norm: DeviceNotification = {
+      id: raw.id ?? '',
+      key: raw.key ?? raw.id ?? '',
+      packageName: raw.packageName ?? '',
+      title: raw.title ?? '',
+      text: raw.text ?? '',
+      time: typeof raw.time === 'number' ? raw.time : (raw.postedAt ?? 0),
+      isOngoing: raw.isOngoing ?? false,
+    };
+    listener(norm);
+  });
   return () => sub.remove();
 }
 
 /**
  * Subscribe to notification removals.
- * The callback receives the notification key (string id).
+ * The callback receives the notification **key** (string id) — matching the
+ * `key` the screen uses to key and remove rows. The native `onNotificationRemoved`
+ * event historically carried `id` but not `key`, so we prefer `key` and fall
+ * back to `id` only when `key` is absent.
  * Returns an unsubscribe function — call it in the useEffect cleanup.
  */
 export function addNotificationRemovedListener(
-  listener: (id: string) => void,
+  listener: (key: string) => void,
 ): () => void {
-  const sub = addModuleListener('onNotificationRemoved', (n: { id: string }) => {
-    listener(n.id);
+  const sub = addModuleListener('onNotificationRemoved', (n: { id?: string; key?: string }) => {
+    listener(n.key ?? n.id ?? '');
   });
   return () => sub.remove();
 }
