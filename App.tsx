@@ -198,9 +198,20 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem('@iostoandroid/onboarding_done').then(val => {
-      setShowOnboarding(val !== 'true');
-    });
+    AsyncStorage.getItem('@iostoandroid/onboarding_done')
+      .then(val => {
+        setShowOnboarding(val !== 'true');
+      })
+      .catch(() => {
+        // A failed read (corrupted DB, permission error, concurrent write
+        // during launch — all real RN scenarios) must NOT leave
+        // `showOnboarding` stuck at `null`, or `AppContent` returns `null`
+        // forever and the launcher + App Library are unreachable (#676).
+        // Default to the launcher rather than trapping the user on a blank
+        // screen; a pristine first run still resolves `null` (→ onboarding)
+        // through the `.then` path above, so this only changes the error case.
+        setShowOnboarding(false);
+      });
   }, []);
 
   useEffect(() => {
