@@ -76,6 +76,7 @@ import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
 import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 import { hiddenPageIndicesForMode, filterVisiblePages } from '../utils/focusPageVisibility';
+import { dockOverrideForMode } from '../utils/focusDockOverride';
 import { clampWithRubberBand } from '../theme/motion';
 
 // ---------------------------------------------------------------------------
@@ -1328,6 +1329,29 @@ export function LauncherHomeScreen() {
     [allPages, hiddenPageIndices],
   );
 
+  // Focus dock override (#619, filho de #617): com um modo de Focus activo,
+  // `focusDockOverride[focusMode]` pode substituir os 4 ícones do dock por
+  // outros pacotes. `dockOverrideForMode` já trata 'off', chave ausente e
+  // lista vazia como "sem override" (devolve null), por isso o fallback para
+  // o `dockApps` normal cobre esses três casos de uma vez. Os package names
+  // resolvem contra `apps` (todos os instalados) e o `dockApps` real (cobre
+  // apps virtuais já resolvidos, ex.: Phone/Messages, que só existem como
+  // InstalledApp dentro do dock persistido) — um package que já não existe em
+  // nenhum dos dois é descartado, nunca renderiza um ícone vazio/quebrado.
+  const dockOverridePkgs = useMemo(
+    () => dockOverrideForMode(settings.focusDockOverride, settings.focusMode),
+    [settings.focusDockOverride, settings.focusMode],
+  );
+  const effectiveDockApps: InstalledApp[] = useMemo(() => {
+    if (!dockOverridePkgs) return dockApps;
+    const byPackageName = new Map<string, InstalledApp>();
+    for (const app of apps) byPackageName.set(app.packageName, app);
+    for (const app of dockApps) byPackageName.set(app.packageName, app);
+    return dockOverridePkgs
+      .map((pkg) => byPackageName.get(pkg))
+      .filter((app): app is InstalledApp => !!app);
+  }, [dockOverridePkgs, dockApps, apps]);
+
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
 
@@ -1829,14 +1853,14 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
-      <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
+      <View testID="launcher-dock" style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
         <GlassSurface
           intensity={90}
           tint="dark"
           style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
-            {dockApps.slice(0, 4).map((app) => (
+            {effectiveDockApps.slice(0, 4).map((app) => (
               <AppIcon
                 key={app.packageName}
                 app={app}
@@ -1851,7 +1875,7 @@ export function LauncherHomeScreen() {
               />
             ))}
             {/* Fill empty dock slots */}
-            {Array.from({ length: Math.max(0, 4 - dockApps.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 4 - effectiveDockApps.length) }).map((_, i) => (
               <View key={`empty-${i}`} style={{ width: DOCK_CELL_WIDTH }} />
             ))}
           </View>
