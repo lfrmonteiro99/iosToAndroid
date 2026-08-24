@@ -555,18 +555,33 @@ export type GridItem =
 /**
  * Lays out the real (non-dock, non-folder, non-built-in-duplicate) home apps
  * by their `homeApps[].position` (#762), instead of just their order in
- * `eligibleApps`. A position nobody claims renders as an `'empty'` slot
- * rather than being skipped — skipping it is what let the next app "pull up"
- * into the hole. Apps with no `homeApps` entry yet (never explicitly placed —
- * e.g. every app before this feature existed) are appended right after the
- * highest known position, in their existing order, so today's behaviour for
- * an untouched layout is unchanged.
+ * `eligibleApps`. Apps with no `homeApps` entry yet (never explicitly placed)
+ * are appended after every recorded position, in their existing order, so
+ * today's behaviour for an untouched layout is unchanged.
+ *
+ * A position only becomes an `'empty'` slot when **no `homeApps` entry claims
+ * it at all** — which is exactly what `removeFromHome` leaves behind, and the
+ * only real hole there is. That distinction is the whole point of this
+ * function: `assignHomePositions` (`AppsStore.tsx`) numbers the FULL app scan,
+ * so dock apps, folder members, built-in duplicates (#438) and hidden /
+ * library-only apps all own a position while never rendering in the grid.
+ * Treating "no eligible app at position i" as a hole invented a blank cell for
+ * every one of them — on a clean install, for every user. Those positions are
+ * skipped instead: no icon, no empty slot, nothing.
  *
  * The returned array never has trailing empty slots past the last real app —
  * only interior gaps — so a hole can never manifest as a whole extra blank
  * page at the end of the pager (#762 AC).
  */
 export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: HomeApp[]): GridItem[] {
+  const eligiblePkgs = new Set(eligibleApps.map(a => a.packageName));
+  // Positions owned by an entry that never renders in the grid. They are not
+  // holes — they are somebody else's slot.
+  const reserved = new Set<number>();
+  for (const entry of homeApps) {
+    if (!eligiblePkgs.has(entry.packageName)) reserved.add(entry.position);
+  }
+
   const positioned = new Map<number, InstalledApp>();
   const unpositioned: InstalledApp[] = [];
   for (const app of eligibleApps) {
@@ -577,16 +592,28 @@ export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: H
       unpositioned.push(app);
     }
   }
-  let nextPos = positioned.size > 0 ? Math.max(...positioned.keys()) + 1 : 0;
+  // Appended apps start past EVERY recorded position (not just the eligible
+  // ones), so they can never land on a reserved slot and silently swallow it.
+  let nextPos = homeApps.reduce(
+    (max, h) => Math.max(max, h.position),
+    positioned.size > 0 ? Math.max(...positioned.keys()) : -1,
+  ) + 1;
   for (const app of unpositioned) {
     positioned.set(nextPos, app);
     nextPos += 1;
   }
+
+  // maxPos is the last position held by a RENDERED app: anything beyond it is
+  // reserved-only tail, and padding it would spawn a blank page at the end.
   const maxPos = positioned.size > 0 ? Math.max(...positioned.keys()) : -1;
   const items: GridItem[] = [];
   for (let i = 0; i <= maxPos; i++) {
     const app = positioned.get(i);
-    items.push(app ? { type: 'app', app } : { type: 'empty', key: `empty-${i}` });
+    if (app) {
+      items.push({ type: 'app', app });
+    } else if (!reserved.has(i)) {
+      items.push({ type: 'empty', key: `empty-${i}` });
+    }
   }
   return items;
 }
