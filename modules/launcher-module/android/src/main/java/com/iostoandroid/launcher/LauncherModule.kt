@@ -634,6 +634,15 @@ class LauncherModule : Module() {
                 "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
                 "notification" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
                 "privacy" -> Settings.ACTION_PRIVACY_SETTINGS
+                // ACTION_PRIVACY_DASHBOARD (the native Privacy Dashboard / App Privacy
+                // Report) only exists on API 31+ (Android 12). On older APIs the
+                // constant is absent, so we guard the SDK level and fall back to the
+                // general privacy settings — a crash here would surface as a dead tile.
+                "privacy_dashboard" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Settings.ACTION_PRIVACY_DASHBOARD
+                } else {
+                    Settings.ACTION_PRIVACY_SETTINGS
+                }
                 "security" -> Settings.ACTION_SECURITY_SETTINGS
                 "cast" -> "android.settings.CAST_SETTINGS"
                 "hotspot" -> "android.settings.TETHER_SETTINGS"

@@ -31,6 +31,25 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
 
   const alert = useAlert();
 
+  // Android 12 (API 31) exposes Settings.ACTION_PRIVACY_DASHBOARD — the real
+  // system Privacy Dashboard, powered by the OS's own app-ops data (no invented
+  // counts). Below that, or on iOS, there is no native panel, so we explain the
+  // requirement instead of opening a dead or wrong screen.
+  const isPrivacyDashboardAvailable =
+    Platform.OS === 'android' && parseInt(String(Platform.Version), 10) >= 31;
+
+  const handleOpenPrivacyReport = useCallback(() => {
+    if (isPrivacyDashboardAvailable) {
+      LauncherModule.openSystemSettings('privacy_dashboard');
+    } else {
+      alert(
+        'App Privacy Report Unavailable',
+        'The system Privacy Dashboard is available on Android 12 or later. ' +
+          'Your device does not provide it, so there is no native report to open.'
+      );
+    }
+  }, [isPrivacyDashboardAvailable, alert]);
+
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [requestingPermissions, setRequestingPermissions] = useState(false);
@@ -227,6 +246,30 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
                 />
               );
             })}
+          </CupertinoListSection>
+        </View>
+
+        {/* App Privacy Report — opens the real system Privacy Dashboard (API 31+).
+            We never build our own counts; below Android 12 the tap explains the
+            requirement instead of opening a dead screen. */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            footer={
+              isPrivacyDashboardAvailable
+                ? 'Opens the system Privacy Dashboard showing real app access to your camera, microphone and location.'
+                : 'Requires Android 12 or later. Your device does not expose the system Privacy Dashboard.'
+            }
+          >
+            <CupertinoListTile
+              title="App Privacy Report"
+              leading={{
+                name: 'shield-checkmark',
+                color: '#FFFFFF',
+                backgroundColor: colors.systemBlue,
+              }}
+              showChevron
+              onPress={handleOpenPrivacyReport}
+            />
           </CupertinoListSection>
         </View>
 
