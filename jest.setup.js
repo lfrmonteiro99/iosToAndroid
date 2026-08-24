@@ -76,6 +76,11 @@ jest.mock('expo-location', () => ({
 // #271 Health: the step-counter sensor does not exist in the JS test
 // environment. Default to "available" so the store's happy path is reachable;
 // individual tests override with mockResolvedValue(false).
+// NOTE: on Android, Pedometer.watchStepCount emits a CUMULATIVE count since the
+// observation started (the first event is always 1 — the sensor's baseline
+// offset). The HealthStore subtracts the previous reading to recover the real
+// per-event delta. Tests must feed cumulative sequences (e.g. [1, 11, 26]),
+// never arbitrary per-event deltas.
 jest.mock('expo-sensors', () => ({
   Pedometer: {
     isAvailableAsync: jest.fn(() => Promise.resolve(true)),

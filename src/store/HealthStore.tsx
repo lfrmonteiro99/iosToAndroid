@@ -25,7 +25,7 @@ export interface HealthContextValue {
 export const HEALTH_DAILY_STEPS_KEY = '@iostoandroid/health_daily_steps';
 
 /** Local calendar day as 'YYYY-MM-DD' (NOT UTC — the day boundary is the user's). */
-export function localDateKey(date: Date = new Date()): string {
+export function localDateKey(date: Date = new Date(Date.now())): string {
   const y = date.getFullYear();
   const m = `${date.getMonth() + 1}`.padStart(2, '0');
   const d = `${date.getDate()}`.padStart(2, '0');
@@ -71,6 +71,13 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const dayRef = useRef<string>(localDateKey());
   const subscriptionRef = useRef<{ remove: () => void } | null>(null);
   const mountedRef = useRef(true);
+  // Last cumulative reading seen from the sensor. On Android,
+  // Pedometer.watchStepCount emits a CUMULATIVE count since the observation
+  // started (the sensor's native baseline offset means the first event is
+  // always 1). We subtract the previous reading to recover the real per-event
+  // delta instead of summing the cumulative value. `null` until the first
+  // event, which only seeds the baseline and adds nothing.
+  const lastCumulativeRef = useRef<number | null>(null);
 
   // Hydrate the persisted history and probe the sensor once. `isReady` flips
   // even when the sensor is missing or the read fails, so the screen is never
@@ -113,6 +120,7 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       mountedRef.current = false;
       subscriptionRef.current?.remove();
       subscriptionRef.current = null;
+      lastCumulativeRef.current = null;
     };
   }, []);
 
@@ -131,7 +139,16 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     try {
       subscriptionRef.current = Pedometer.watchStepCount((result) => {
         if (!mountedRef.current) return;
-        const delta = typeof result?.steps === 'number' && Number.isFinite(result.steps) ? result.steps : 0;
+        const v = typeof result?.steps === 'number' && Number.isFinite(result.steps) ? result.steps : 0;
+        if (v <= 0) return; // non-finite or non-positive readings carry no real delta
+        // First event seeds the baseline (the sensor's always-1 reading) and
+        // adds nothing. Subsequent events contribute the true delta.
+        if (lastCumulativeRef.current === null) {
+          lastCumulativeRef.current = v;
+          return;
+        }
+        const delta = v - lastCumulativeRef.current;
+        lastCumulativeRef.current = v;
         if (delta <= 0) return;
         const today = localDateKey();
         setTodaySteps((prev) => {

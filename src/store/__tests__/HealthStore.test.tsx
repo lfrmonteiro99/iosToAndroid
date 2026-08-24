@@ -80,7 +80,12 @@ describe('HealthStore', () => {
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('accumulates watched deltas into todaySteps and persists them', async () => {
+  it('accumulates CUMULATIVE sensor readings into todaySteps and persists them', async () => {
+    // On Android, Pedometer.watchStepCount emits a CUMULATIVE count since the
+    // observation started (first event is always 1 — the sensor's baseline
+    // offset). The store must subtract the previous cumulative to recover the
+    // real delta, not add the cumulative value itself.
+    // Sequence [1, 11, 26] -> real steps walked = 26 - 1 = 25.
     renderStore();
     await waitFor(() => expect(box.latest?.isReady).toBe(true));
     await act(async () => {
@@ -88,12 +93,13 @@ describe('HealthStore', () => {
     });
     const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
     await act(async () => {
-      cb({ steps: 7 });
-      cb({ steps: 3 });
+      cb({ steps: 1 });
+      cb({ steps: 11 });
+      cb({ steps: 26 });
     });
-    expect(box.latest?.todaySteps).toBe(10);
+    expect(box.latest?.todaySteps).toBe(25);
     const written = JSON.parse(setItemMock.mock.calls.at(-1)![1] as string);
-    expect(written).toEqual([{ date: localDateKey(), steps: 10 }]);
+    expect(written).toEqual([{ date: localDateKey(), steps: 25 }]);
   });
 
   it('a second grant does not stack a second subscription (double tap)', async () => {
@@ -104,6 +110,95 @@ describe('HealthStore', () => {
       await box.latest!.requestActivityPermission();
     });
     expect(watchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('first cumulative event seeds the baseline and adds nothing (never sums the 1)', async () => {
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 1 });
+    });
+    expect(box.latest?.todaySteps).toBe(0);
+  });
+
+  it('two cumulative events yield the difference, not the sum', async () => {
+    // [1, 2] -> the user walked 1 step (2 - 1), not 3.
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 1 });
+      cb({ steps: 2 });
+    });
+    expect(box.latest?.todaySteps).toBe(1);
+  });
+
+  it('ignores a zero delta between two identical cumulative readings', async () => {
+    // [1, 1, 11] -> first(1) seeds baseline, second(1) gives delta 0 (skipped),
+    // third(11) gives delta 10 -> total 10.
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 1 });
+      cb({ steps: 1 });
+      cb({ steps: 11 });
+    });
+    expect(box.latest?.todaySteps).toBe(10);
+  });
+
+  it('rolls over to a new local day at zero and counts the new day from its first delta', async () => {
+    // Simulate the app crossing local midnight while open. The sensor reading
+    // is always cumulative since observation start (never resets), so the
+    // first event after midnight is delta = current - lastCumulative, and the
+    // new day starts from 0 + that delta. Day 1: [1, 11] -> 10 steps (last
+    // cumulative = 11). Day 2: reading 20 -> delta 20 - 11 = 9 -> new day
+    // total 9 (steps that straddled midnight are attributed to day 2 — the
+    // acknowledged approximation for the minimal slice).
+    const realDate = Date.now;
+    const day1 = new Date(2026, 0, 1, 23, 59, 58);
+    const day2 = new Date(2026, 0, 2, 0, 0, 5);
+    jest.spyOn(Date, 'now').mockReturnValue(day1.getTime());
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 1 });
+      cb({ steps: 11 });
+    });
+    expect(box.latest?.todaySteps).toBe(10);
+    // Cross midnight.
+    jest.spyOn(Date, 'now').mockReturnValue(day2.getTime());
+    const keyOf = (d: Date) => {
+      const y = d.getFullYear();
+      const m = `${d.getMonth() + 1}`.padStart(2, '0');
+      const dd = `${d.getDate()}`.padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+    await act(async () => {
+      cb({ steps: 20 });
+    });
+    expect(box.latest?.todaySteps).toBe(9);
+    const written = JSON.parse(setItemMock.mock.calls.at(-1)![1] as string);
+    expect(written).toEqual([
+      { date: keyOf(day1), steps: 10 },
+      { date: keyOf(day2), steps: 9 },
+    ]);
+    jest.spyOn(Date, 'now').mockRestore();
+    (Date as unknown as { now: typeof realDate }).now = realDate;
   });
 
   it('does not request permission when the pedometer is unavailable', async () => {
@@ -170,7 +265,12 @@ describe('HealthStore', () => {
     expect(box.latest?.todaySteps).toBe(0);
   });
 
-  it('ignores non-positive and non-finite deltas', async () => {
+  it('recovers deltas from cumulative readings, ignoring non-finite input', async () => {
+    // {steps: 1} is the always-1 first event: it seeds the baseline and adds
+    // nothing. {steps: 0} would be a non-finite-preceded reset -> treated as
+    // missing (v=0) so it neither advances the baseline nor adds steps.
+    // {steps: -5} gives a negative delta -> skipped. {steps: NaN} and {} both
+    // yield v=0 (not finite) -> skipped. Final real delta is 0.
     renderStore();
     await waitFor(() => expect(box.latest?.isReady).toBe(true));
     await act(async () => {
@@ -178,6 +278,7 @@ describe('HealthStore', () => {
     });
     const cb = watchMock.mock.calls[0][0] as (r: unknown) => void;
     await act(async () => {
+      cb({ steps: 1 });
       cb({ steps: 0 });
       cb({ steps: -5 });
       cb({ steps: NaN });
