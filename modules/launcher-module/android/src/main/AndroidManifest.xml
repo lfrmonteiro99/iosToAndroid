@@ -30,5 +30,17 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- #634: foreground service that polls UsageStats + AppOps for camera /
+             mic / location access. Its own low-importance notification is shown via
+             AccessEventsService.buildNotification(); it must NOT be typed as a
+             dataSync/location/etc. foregroundServiceType because none of those
+             exact types match "observe all three sensors" and a wrong type would
+             require a matching permission on API 34+. Leaving it untyped keeps the
+             API contract valid for a passive observer. -->
+        <service
+            android:name=".AccessEventsService"
+            android:exported="false"
+            android:stopWithTask="false" />
     </application>
 </manifest>
