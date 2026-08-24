@@ -340,6 +340,10 @@ jest.mock('./modules/launcher-module/src', () => ({
   addSpeechResultListener: jest.fn(() => jest.fn()),
   addSpeechPartialResultListener: jest.fn(() => jest.fn()),
   addSpeechErrorListener: jest.fn(() => jest.fn()),
+  // NotificationCenterScreen subscribes to live posted/removed events (#646).
+  // Return a no-op unsubscribe; individual tests override with mockReturnValue.
+  addNotificationListener: jest.fn(() => jest.fn()),
+  addNotificationRemovedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
