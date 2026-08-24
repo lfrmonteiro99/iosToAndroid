@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -29,6 +30,7 @@ import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
 
@@ -576,6 +578,7 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 export function AppLibraryContent() {
   const { theme } = useTheme();
   const { colors } = theme;
+  const navigation = useNavigation<AppNavigationProp>();
   // `apps` é a lista completa (usada só pela procura, para que uma app
   // escondida continue lançável) e `visibleApps` é a lista sem as escondidas
   // (#606), usada nas categorias e nos strips.
@@ -687,8 +690,11 @@ export function AppLibraryContent() {
 
   const handleLaunch = useCallback((packageName: string) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    launchApp(packageName);
-  }, [launchApp]);
+    // Built-in virtual apps (Weather, Calculator, …) must open the in-app
+    // iOS-style screen via navigation, not the native launcher bridge — see
+    // launchBuiltInOrExternal.
+    launchBuiltInOrExternal(packageName, navigation, launchApp);
+  }, [launchApp, navigation]);
 
   const isSearching = query.trim().length > 0;
 
