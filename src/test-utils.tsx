@@ -11,6 +11,7 @@ import { BookmarksProvider } from './store/BookmarksStore';
 import { LocationProvider } from './store/LocationStore';
 import { ReadingListProvider } from './store/ReadingListStore';
 import { HealthProvider } from './store/HealthStore';
+import { WalletProvider } from './store/WalletStore';
 
 // gateFirstRender={false} on the two gated providers.
 //
@@ -35,9 +36,11 @@ function AllProviders({ children }: { children: React.ReactNode }) {
                   <BookmarksProvider>
                   <LocationProvider>
                     <ReadingListProvider>
-                      <HealthProvider>
-                        {children}
-                      </HealthProvider>
+                      <WalletProvider>
+                        <HealthProvider>
+                          {children}
+                        </HealthProvider>
+                      </WalletProvider>
                     </ReadingListProvider>
                   </LocationProvider>
                   </BookmarksProvider>

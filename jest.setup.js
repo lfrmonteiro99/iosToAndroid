@@ -61,6 +61,43 @@ jest.mock('expo-contacts', () => ({
   SortTypes: { LastName: 'lastName' },
 }));
 
+// Mock @react-native-google-signin/google-signin — the native module cannot be
+// exercised in the JS-only test environment. Default state is SIGNED OUT
+// (hasPreviousSignIn false, getCurrentUser null); tests override these per case.
+jest.mock('@react-native-google-signin/google-signin', () => ({
+  GoogleSignin: {
+    configure: jest.fn(),
+    hasPlayServices: jest.fn(() => Promise.resolve(true)),
+    signIn: jest.fn(() =>
+      Promise.resolve({
+        type: 'success',
+        data: {
+          user: {
+            id: '1',
+            name: 'Test User',
+            email: 'user@gmail.com',
+            photo: null,
+            familyName: null,
+            givenName: 'Test',
+          },
+          scopes: ['https://www.googleapis.com/auth/drive.appdata'],
+          idToken: 'id-token',
+          serverAuthCode: null,
+        },
+      }),
+    ),
+    addScopes: jest.fn(() => Promise.resolve(null)),
+    signInSilently: jest.fn(() => Promise.resolve({ type: 'noSavedCredentialFound', data: null })),
+    signOut: jest.fn(() => Promise.resolve(null)),
+    revokeAccess: jest.fn(() => Promise.resolve(null)),
+    hasPreviousSignIn: jest.fn(() => false),
+    getCurrentUser: jest.fn(() => null),
+    clearCachedAccessToken: jest.fn(() => Promise.resolve(null)),
+    getTokens: jest.fn(() => Promise.resolve({ idToken: 'id-token', accessToken: 'access-token-123' })),
+  },
+  statusCodes: {},
+}));
+
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
   requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
@@ -356,6 +393,9 @@ jest.mock('./modules/launcher-module/src', () => ({
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
     // #608 Tap to Wake
     wakeScreen: jest.fn(() => Promise.resolve()),
+    // #626 Live Activities
+    postLiveActivity: jest.fn(() => Promise.resolve(true)),
+    cancelLiveActivity: jest.fn(() => Promise.resolve(true)),
   },
 }));
 

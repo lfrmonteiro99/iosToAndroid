@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { validateSnapshot } from './BackupValidation';
 
 // Explicit allow-list derived from SettingsStore.tsx, ThemeContext.tsx, and
 // each settings screen that writes its own AsyncStorage keys.
@@ -59,18 +60,21 @@ export async function createSnapshot(): Promise<BackupSnapshot> {
 }
 
 /**
- * Applies a previously created snapshot: rejects non-object input (primitives,
- * arrays, and null) and writes only allow-listed keys via AsyncStorage.setMany.
- * Values are coerced to strings (matching the former import behaviour).
+ * Applies a previously created snapshot. Validates the parsed backup shape first
+ * (rejects non-objects, arrays, null, empty payloads, non-string values, and
+ * over-long keys/values) so a corrupt or foreign backup fails cleanly instead of
+ * partially overwriting AsyncStorage. Then writes only allow-listed keys via
+ * AsyncStorage.setMany.
+ *
+ * `validateSnapshot` throws InvalidBackupError (a subclass of Error) on rejection,
+ * which surfaces to BackupRestoreScreen's existing "Invalid backup data" alert.
  */
 export async function applySnapshot(data: unknown): Promise<void> {
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-    throw new Error('Expected a JSON object');
-  }
+  validateSnapshot(data);
   const filtered: BackupSnapshot = {};
-  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(data)) {
     if (EXPORTABLE_SET.has(k)) {
-      filtered[k] = String(v);
+      filtered[k] = v;
     }
   }
   await AsyncStorage.setMany(filtered);

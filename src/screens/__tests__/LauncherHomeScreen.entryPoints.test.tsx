@@ -45,6 +45,7 @@ function mockLoadedApps(overrides: Partial<ReturnType<typeof AppsStore.useApps>>
     launchApp: mockLaunchApp,
     addToHome: jest.fn(),
     removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
     addToDock: jest.fn(),
     removeFromDock: jest.fn(),
     removeFromRecents: jest.fn(),

@@ -36,6 +36,17 @@ import {
   REQUIRE_PASSCODE_OPTIONS,
   normalizeRequirePasscodeAfter,
 } from '../utils/passcodePolicy';
+import { AccentColors, type AccentColorKey } from '../theme/CupertinoTheme';
+
+// Tinted Icons colour swatches (issue #620): reuses the app's named accent
+// palette instead of a bespoke colour list, so «Tinted Icons» and «Display &
+// Brightness → Tint» always offer the same six options.
+const ICON_TINT_KEYS = Object.keys(AccentColors) as AccentColorKey[];
+
+/** 'blue' → 'Blue'. Mirrors DisplayBrightnessScreen's accentLabel. */
+function iconTintLabel(key: AccentColorKey) {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 /**
  * #517: os números de arranque têm de ser legíveis em runtime, e não podem
@@ -55,6 +66,10 @@ export function formatPerfValue(value: number | null, budget: PerfBudgetKey): st
   if (value === null || !Number.isFinite(value)) return `sem medição (${target})`;
   return `${Math.round(value)} ms (${target})`;
 }
+
+// Top of the App Icon Size slider range (#503): the iOS «Large (no text)»
+// preset (#621) — reaching it also hides app-name labels.
+const ICON_SIZE_SCALE_LARGE = 1.2;
 
 // Default dock package names — mirrors AppsStore constant
 const DEFAULT_DOCK = [
@@ -87,14 +102,15 @@ export function LauncherSettingsScreen() {
   const { theme, typography, isDark, toggleTheme, textScale } = themeCtx;
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update, reset: resetSettings } = useSettings();
-  const { dockApps, apps, hiddenApps, unhideApp } = useApps();
+  const { settings, update, updateMany, reset: resetSettings } = useSettings();
+  const { dockApps, apps, hiddenApps, unhideApp, compactHomeLayout } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
   const [showPinModal, setShowPinModal] = useState(false);
   const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
   const [showRequirePasscodePicker, setShowRequirePasscodePicker] = useState(false);
+  const [showIconTintPicker, setShowIconTintPicker] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -253,6 +269,18 @@ export function LauncherSettingsScreen() {
 
   const perf = usePerfMetrics();
 
+  // iOS «Grande» esconde os nomes das apps — ao chegar ao topo da gama
+  // (Large), combina-se com showIconLabels=false num único update atómico.
+  // Abaixo do máximo o comportamento fica inalterado: o utilizador continua a
+  // controlar showIconLabels pelo switch "Show App Names".
+  const handleIconSizeChange = (v: number) => {
+    if (v >= ICON_SIZE_SCALE_LARGE) {
+      updateMany({ iconSizeScale: v, showIconLabels: false });
+    } else {
+      update('iconSizeScale', v);
+    }
+  };
+
   const doneButton = (
     <Text
       style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}
@@ -299,16 +327,43 @@ export function LauncherSettingsScreen() {
             </Text>
           }
           showChevron={false}
-          isLast
         />
         <View style={styles.sliderRow}>
           <CupertinoSlider
             value={settings.iconSizeScale}
-            onValueChange={(v) => update('iconSizeScale', v)}
+            onValueChange={handleIconSizeChange}
             minimumValue={0.8}
-            maximumValue={1.2}
+            maximumValue={ICON_SIZE_SCALE_LARGE}
           />
         </View>
+        <CupertinoListTile
+          title="Tinted Icons"
+          leading={{ name: 'color-palette', color: '#fff', backgroundColor: '#FF2D55' }}
+          showChevron={false}
+          isLast={!settings.iconTintEnabled}
+          trailing={
+            <CupertinoSwitch
+              value={settings.iconTintEnabled}
+              onValueChange={(v) => update('iconTintEnabled', v)}
+            />
+          }
+        />
+        {settings.iconTintEnabled && (
+          <CupertinoListTile
+            title="Tint Color"
+            leading={{ name: 'color-fill', color: '#fff', backgroundColor: settings.iconTintColor }}
+            isLast
+            trailing={
+              <View style={styles.tintTrailing}>
+                <View
+                  testID="icon-tint-swatch"
+                  style={[styles.tintSwatch, { backgroundColor: settings.iconTintColor }]}
+                />
+              </View>
+            }
+            onPress={() => setShowIconTintPicker(true)}
+          />
+        )}
       </CupertinoListSection>
 
       {/* ── Home Screen ────────────────────────────────────────── */}
@@ -490,6 +545,17 @@ export function LauncherSettingsScreen() {
           />
         </View>
         <View style={styles.buttonRow}>
+          {/* #762: reassigns homeApps positions sequentially (0,1,2,...),
+              closing every hole left by removing/moving icons — no app is
+              lost, only positions shift. Non-destructive, so no `destructive`
+              styling unlike the reset buttons below. */}
+          <CupertinoButton
+            title="Compact Layout"
+            variant="tinted"
+            onPress={compactHomeLayout}
+          />
+        </View>
+        <View style={[styles.buttonRow, { marginTop: 8 }]}>
           <CupertinoButton
             title="Reset Home Layout"
             variant="tinted"
@@ -630,6 +696,21 @@ export function LauncherSettingsScreen() {
         cancelLabel="Cancel"
       />
 
+      {/* ── Tinted Icons colour (#620) ──────────────────────────── */}
+      <CupertinoActionSheet
+        visible={showIconTintPicker}
+        onClose={() => setShowIconTintPicker(false)}
+        title="Tint Color"
+        options={ICON_TINT_KEYS.map((key) => ({
+          label: iconTintLabel(key),
+          onPress: () => {
+            update('iconTintColor', AccentColors[key].light);
+            setShowIconTintPicker(false);
+          },
+        }))}
+        cancelLabel="Cancel"
+      />
+
       {/* ── Diagnostics (#517) ─────────────────────────────────── */}
       <CupertinoListSection header="Diagnostics">
         <CupertinoListTile
@@ -713,6 +794,16 @@ const styles = StyleSheet.create({
   sliderRow: {
     paddingHorizontal: 16,
     paddingBottom: 12,
+  },
+  tintTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tintSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   gridControlRow: {
     paddingHorizontal: 16,
