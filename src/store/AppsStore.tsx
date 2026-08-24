@@ -71,6 +71,30 @@ export function normalizeRecentApps(raw: unknown): RecentApp[] {
   return out.slice(0, MAX_RECENTS);
 }
 
+/**
+ * Garante que toda app em `apps` tem uma entrada em `homeApps` (#760).
+ *
+ * `homeApps` é a fonte de verdade da ordem/pertença na grelha (lida por
+ * LauncherHomeScreen), mas até este fix só era escrita por addToHome/
+ * removeFromHome — nunca por loadApps nem pelo listener de instalação — pelo
+ * que apps carregadas pelo scan nativo nunca tinham `position`. Qualquer app
+ * em falta recebe a próxima posição livre (`maxPos + 1`), na ordem em que
+ * aparece em `apps`: numa instalação limpa isso reproduz a ordem de scan
+ * actual (sem regressão visual); múltiplas apps em falta na mesma chamada
+ * recebem posições sequenciais sem colidir, porque o `maxPos` de referência é
+ * calculado uma única vez, antes do loop. Entradas já existentes em
+ * `homeApps` não são tocadas. Devolve a mesma referência quando não há nada a
+ * acrescentar, para não invalidar memoização a jusante.
+ */
+export function assignHomePositions(homeApps: HomeApp[], apps: InstalledApp[]): HomeApp[] {
+  const known = new Set(homeApps.map(h => h.packageName));
+  const missing = apps.filter(a => !known.has(a.packageName));
+  if (missing.length === 0) return homeApps;
+  let nextPosition = homeApps.reduce((max, h) => Math.max(max, h.position), -1) + 1;
+  const additions: HomeApp[] = missing.map(a => ({ packageName: a.packageName, position: nextPosition++ }));
+  return [...homeApps, ...additions];
+}
+
 // Dynamic import to avoid crashing the module on non-Android. Falls back to a
 // synchronous require when dynamic import() is unavailable (e.g. Jest's VM
 // without --experimental-vm-modules) so moduleNameMapper mocks still apply in tests.
@@ -396,6 +420,14 @@ export function AppsProvider({
     ).slice(0, 4); // max 4 in dock
   }, []);
 
+  // Moved above the install/uninstall effect below (was declared after it,
+  // near launchApp) so that effect's applyIndex() can persist homeApps
+  // position assignments (#760) without a temporal-dead-zone reference to a
+  // `const` declared later in the component body.
+  const persist = useCallback((dockApps: string[], homeApps: HomeApp[]) => {
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ dockApps, homeApps }));
+  }, []);
+
   // Forma da máscara dos ícones (#482). Lida do módulo utils/iconShape (mesmo
   // padrão de utils/haptics): o SettingsStore publica-a lá, e este store
   // subscreve — sem acoplar o AppsProvider ao SettingsProvider.
@@ -461,6 +493,14 @@ export function AppsProvider({
     }
 
     if (cachedApps) {
+      // #760: cachedApps paints immediately, so it needs positions of its own
+      // rather than waiting for the native-scan branch below — otherwise the
+      // first paint after a fresh install (no homeApps persisted yet) would
+      // render with every app falling back to "no position" and jump once
+      // the scan-branch setState assigns real ones a moment later. Not
+      // persisted here: it's the ephemeral fast-paint state, immediately
+      // superseded by the canonical merge below.
+      homeApps = assignHomePositions(homeApps, cachedApps);
       setState(prev => ({
         ...prev,
         allApps: cachedApps,
@@ -498,10 +538,16 @@ export function AppsProvider({
           ? [...prev.libraryOnlyApps, ...seeded]
           : prev.libraryOnlyApps;
         if (seeded.length > 0) persistLibraryOnly(libraryOnlyApps);
+        // #760: assign a position to any app the saved layout doesn't know
+        // about yet — first-ever load (homeApps === []) or a package that
+        // was installed while the app wasn't running to catch the broadcast.
+        // In scan order, so a clean install reproduces today's visual order.
+        const mergedHomeApps = assignHomePositions(homeApps, apps);
+        if (mergedHomeApps !== homeApps) persist(dockApps, mergedHomeApps);
         return {
           ...prev,
           allApps: apps,
-          homeApps,
+          homeApps: mergedHomeApps,
           dockApps: resolveDock(apps, dockApps),
           isLoading: false,
           libraryOnlyApps,
@@ -516,7 +562,7 @@ export function AppsProvider({
         setState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [resolveDock, iconMask, iconTreatment, newAppsToHome, persistLibraryOnly]);
+  }, [resolveDock, iconMask, iconTreatment, newAppsToHome, persistLibraryOnly, persist]);
 
   // loadApps depende de iconMask, por isso mudar a forma ou o expoente volta a
   // pedir os ícones ao nativo com a chave de cache nova — a grelha actualiza sem
@@ -542,7 +588,12 @@ export function AppsProvider({
         const next = reduce(prev.allApps);
         if (next === prev.allApps) return prev;
         AsyncStorage.setItem(APPS_INDEX_KEY, JSON.stringify(next));
-        return { ...prev, allApps: next, dockApps: resolveDock(next, prev.dockApps) };
+        // #760: a package installed while the launcher is running (broadcast,
+        // not a fresh loadApps()) needs its own position — the removed case
+        // just shrinks `next`, so assignHomePositions is a no-op for it.
+        const homeApps = assignHomePositions(prev.homeApps, next);
+        if (homeApps !== prev.homeApps) persist(prev.dockApps, homeApps);
+        return { ...prev, allApps: next, homeApps, dockApps: resolveDock(next, prev.dockApps) };
       });
     };
 
@@ -576,11 +627,7 @@ export function AppsProvider({
       mounted = false;
       unsubscribe();
     };
-  }, [resolveDock, iconTreatment]);
-
-  const persist = useCallback((dockApps: string[], homeApps: HomeApp[]) => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ dockApps, homeApps }));
-  }, []);
+  }, [resolveDock, iconTreatment, persist]);
 
   // Returns whether the launch actually succeeded (#509) — callers that show
   // an icon-expand transition need this to revert it on failure instead of

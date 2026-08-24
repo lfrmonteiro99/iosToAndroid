@@ -493,7 +493,6 @@ describe('AppsStore — home grid holes (#762: removeFromHome no longer recompac
       { packageName: 'com.example.cherry', position: 2 },
     ]);
     (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
-
     const { result } = renderHook(() => useApps(), { wrapper });
     await act(async () => {});
     await act(async () => {});
@@ -523,11 +522,9 @@ describe('AppsStore — home grid holes (#762: removeFromHome no longer recompac
       { packageName: 'com.example.cherry', position: 5 },
     ]);
     (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
-
     const { result } = renderHook(() => useApps(), { wrapper });
     await act(async () => {});
     await act(async () => {});
-
     await act(async () => {
       result.current.compactHomeLayout();
     });
@@ -537,6 +534,70 @@ describe('AppsStore — home grid holes (#762: removeFromHome no longer recompac
       { packageName: 'com.example.banana', position: 1 },
       { packageName: 'com.example.cherry', position: 2 },
     ]);
+  });
+});
+
+// ─── #760: homeApps.position é a fonte de verdade da ordem/pertença ────────
+//
+// addToHome/removeFromHome já escreviam `position`, mas nada mais o fazia:
+// uma app carregada pelo scan nativo (loadApps) nunca ganhava entrada em
+// homeApps. Sem posição, LauncherHomeScreen não tem por onde ordenar a
+// grelha que não seja a ordem de scan — daí este fix atribuir a próxima
+// posição livre (maxPos + 1) a qualquer app em falta, na primeira leitura.
+describe('AppsStore — homeApps.position atribuída ao carregar (#760)', () => {
+  it('instalação limpa (sem homeApps persistido) atribui position sequencial na ordem de scan', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    const apps = [
+      { name: 'Alpha', packageName: 'com.example.alpha', icon: '', isSystem: false },
+      { name: 'Beta', packageName: 'com.example.beta', icon: '', isSystem: false },
+      { name: 'Gamma', packageName: 'com.example.gamma', icon: '', isSystem: false },
+    ];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(apps);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.alpha', position: 0 },
+      { packageName: 'com.example.beta', position: 1 },
+      { packageName: 'com.example.gamma', position: 2 },
+    ]);
+  });
+
+  it('uma app já com position guardada não é reatribuída, e as em falta continuam a partir do maxPos', async () => {
+    const savedLayout = JSON.stringify({
+      dockApps: [],
+      homeApps: [{ packageName: 'com.example.beta', position: 5 }],
+    });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(savedLayout);
+    const apps = [
+      { name: 'Alpha', packageName: 'com.example.alpha', icon: '', isSystem: false },
+      { name: 'Beta', packageName: 'com.example.beta', icon: '', isSystem: false },
+    ];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(apps);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    // Beta mantém a position persistida (5); Alpha (nova para o homeApps) fica
+    // a seguir ao maxPos existente, não reinicia do zero.
+    expect(result.current.homeApps).toEqual(expect.arrayContaining([
+      { packageName: 'com.example.beta', position: 5 },
+      { packageName: 'com.example.alpha', position: 6 },
+    ]));
+  });
+
+  it('persiste o homeApps calculado para que o próximo arranque não repita o cálculo', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    const apps = [{ name: 'Alpha', packageName: 'com.example.alpha', icon: '', isSystem: false }];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(apps);
+
+    renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/apps_layout',
+      JSON.stringify({ dockApps: ['com.iostoandroid.phone', 'com.iostoandroid.messages', 'com.iostoandroid.contacts', 'com.iostoandroid.settings'], homeApps: [{ packageName: 'com.example.alpha', position: 0 }] }),
+    );
   });
 });
 

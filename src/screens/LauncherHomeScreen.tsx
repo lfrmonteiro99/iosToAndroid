@@ -824,9 +824,9 @@ export function LauncherHomeScreen() {
 
   const {
     apps,
-    homeApps,
     nonDockApps,
     dockApps,
+    homeApps,
     isLoading,
     launchApp,
     isDefaultLauncher,
@@ -1288,6 +1288,13 @@ export function LauncherHomeScreen() {
     // are laid out by homeApps[].position, gaps included (#762) — dock,
     // folders and the virtual built-ins above are untouched by this and stay
     // contiguous.
+    //
+    // Supersedes the plain position sort that landed in main for #760:
+    // layoutHomeAppsWithGaps orders by the same homeApps.position and keeps
+    // main's fallback for apps with no recorded position (appended after the
+    // highest known position, in scan order), but additionally materialises
+    // unclaimed positions as 'empty' slots instead of letting the next app
+    // pull up into the hole.
     const eligibleApps = nonDockApps.filter(
       app => !BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName) && !appsInFolders.has(app.packageName),
     );
