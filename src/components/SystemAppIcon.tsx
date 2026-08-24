@@ -25,6 +25,8 @@ export interface SystemAppIconProps {
   gradient?: [string, string];
   /** Solid fallback colour when [gradient] is absent. */
   bg?: string;
+  /** Top gloss highlight (the glassy iOS sheen). Default true. */
+  gloss?: boolean;
   /** Glyph size in dp (defaults to ~57% of the tile). */
   iconSize?: number;
   /** Forwarded for tests: `app-icon-box-<packageName>`. */
@@ -40,6 +42,7 @@ export function SystemAppIcon({
   size,
   gradient,
   bg,
+  gloss = true,
   iconSize,
   testID,
   style,
@@ -63,12 +66,14 @@ export function SystemAppIcon({
         style={StyleSheet.absoluteFill}
       />
       {/* Gloss: white sheen fading out across the top third of the tile. */}
-      <LinearGradient
-        colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.0)']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 0.55 }}
-        style={StyleSheet.absoluteFill}
-      />
+      {gloss && (
+        <LinearGradient
+          colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.0)']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 0.55 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       <Ionicons
         name={icon}
         size={glyph}
