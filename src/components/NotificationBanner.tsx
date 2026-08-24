@@ -14,7 +14,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticNotification } from '../utils/haptics';
-import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { useMotionIntensity } from '../utils/useGestureReduceMotion';
 import { notificationBannerEnter, notificationBannerScale, feedbackSettle } from '../theme/springPresets';
 
 export interface BannerNotification {
@@ -37,7 +37,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const reduceMotion = useGestureReduceMotion();
+  const motionIntensity = useMotionIntensity();
 
   const translateY = useSharedValue(-150);
   const scale = useSharedValue(0.95);
@@ -58,12 +58,18 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
     }, 250);
   }, [onDismiss, translateY, scale, opacity]);
 
-  // Show animation
+  // Show animation. §3.2 regra 4 (#493): cortar animação nunca corta háptica —
+  // hapticNotification() dispara incondicionalmente, ANTES do branch por
+  // motionIntensity, para todos os 3 estados incluindo 'off'.
   useEffect(() => {
     if (notification) {
       hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
       opacity.value = 1;
-      if (reduceMotion) {
+      if (motionIntensity === 'off') {
+        // Salto directo — sem withSpring/withTiming, sem transição.
+        translateY.value = 0;
+        scale.value = 1;
+      } else if (motionIntensity === 'reduced') {
         translateY.value = withTiming(0, { duration: 150 });
         scale.value = withTiming(1, { duration: 150 });
       } else {
@@ -80,7 +86,7 @@ export function NotificationBanner({ notification, onDismiss }: Props) {
         }
       };
     }
-  }, [notification, reduceMotion, translateY, scale, opacity, dismiss]);
+  }, [notification, motionIntensity, translateY, scale, opacity, dismiss]);
 
   // Swipe UP to dismiss (iOS gesture)
   const swipeGesture = Gesture.Pan()

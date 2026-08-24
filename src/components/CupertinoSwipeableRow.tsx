@@ -4,13 +4,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
-import { useGestureReduceMotion, settle } from '../utils/useGestureReduceMotion';
+import { useMotionIntensity, settle } from '../utils/useGestureReduceMotion';
 import { feedbackSettle } from '../theme/springPresets';
 
 export interface SwipeAction {
@@ -39,16 +38,16 @@ export function CupertinoSwipeableRow({
   onOpen,
 }: CupertinoSwipeableRowProps) {
   const { typography } = useTheme();
-  const reduceMotion = useGestureReduceMotion();
-  const reduceMotionShared = useSharedValue(reduceMotion);
+  const motionIntensity = useMotionIntensity();
+  const motionIntensityShared = useSharedValue(motionIntensity);
   const translateX = useSharedValue(0);
   const contextX = useSharedValue(0);
 
-  // Sync reduceMotion into shared value so worklets can read it
+  // Sync motionIntensity into shared value so worklets can read it
   useEffect(() => {
-    reduceMotionShared.value = reduceMotion;
+    motionIntensityShared.value = motionIntensity;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion]);
+  }, [motionIntensity]);
 
   // Always hold the latest onOpen so gesture doesn't capture a stale ref
   const onOpenRef = useRef(onOpen);
@@ -57,11 +56,11 @@ export function CupertinoSwipeableRow({
   // Close this row when parent signals another row is now open
   useEffect(() => {
     if (isOpen === false) {
-      translateX.value = reduceMotion ? 0 : withSpring(0, SPRING_CONFIG);
+      translateX.value = settle(0, SPRING_CONFIG, motionIntensity);
     }
-    // Shared values are stable refs; reduceMotion is a reactive dep
+    // Shared values are stable refs; motionIntensity is a reactive dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, reduceMotion]);
+  }, [isOpen, motionIntensity]);
 
   const maxTrailing = trailingActions.length * ACTION_WIDTH;
   const maxLeading = leadingActions.length * ACTION_WIDTH;
@@ -92,7 +91,7 @@ export function CupertinoSwipeableRow({
     .onEnd((e) => {
       'worklet';
       const velocity = e.velocityX;
-      const rm = reduceMotionShared.value;
+      const rm = motionIntensityShared.value;
       // translateX is a literal dp offset — e.velocityX is already dp/sec.
       // Decide snap position
       if (velocity < -500 && trailingActions.length > 0) {
@@ -117,7 +116,7 @@ export function CupertinoSwipeableRow({
   }));
 
   const handleActionPress = (action: SwipeAction) => {
-    translateX.value = reduceMotion ? 0 : withSpring(0, SPRING_CONFIG);
+    translateX.value = settle(0, SPRING_CONFIG, motionIntensity);
     action.onPress();
   };
 
