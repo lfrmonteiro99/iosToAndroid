@@ -52,3 +52,7 @@ export const launcherIconPress: SpringConfig = { damping: 12, stiffness: 200, ma
 // before this file existed (it also happens to equal AnimationConfig.defaultSpring;
 // kept as its own export since AnimationConfig is deprecated).
 export const feedbackSettle: SpringConfig = { damping: 20, stiffness: 300, mass: 1 };
+// iOS long-press context menu (spec §13): a soft spring scale+fade as the menu
+// pops in beside the pressed element. Values tuned to match the alert/action
+// sheet family's "present" feel rather than the snappier launcher-icon press.
+export const contextMenuPresent: SpringConfig = { damping: 22, stiffness: 320, mass: 1 };
