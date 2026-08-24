@@ -197,7 +197,7 @@ export function PrivacyMonitorScreen({ navigation }: { navigation: AppNavigation
         )}
 
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
-          Contagens por app agregadas a partir do histórico de AppOps do sistema (igual ao Painel de Privacidade do Android).
+          Apps instaladas que declaram permissão de acesso a cada sensor, agregadas localmente a partir dos manifestos através da PackageManager (API pública). Não são contagens de utilização real — o Android não expõe o histórico de acessos de apps de terceiros a apps externas.
         </Text>
       </ScrollView>
     </View>

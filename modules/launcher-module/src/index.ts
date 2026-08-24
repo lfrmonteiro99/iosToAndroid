@@ -1,5 +1,6 @@
 import { requireNativeModule } from 'expo';
 import { Platform } from 'react-native';
+import { aggregateAppAccessByType } from '../../../src/utils/appAccessAggregation';
 
 export interface InstalledApp {
   name: string;
@@ -165,10 +166,11 @@ export interface InstalledKeyboard {
 }
 
 // ── Privacy Monitor (#624) ──────────────────────────────────────────────
-// Aggregated, per-app access counts for each privacy sensor. The native side
-// reads AppOps usage (OPSTR_CAMERA / RECORD_AUDIO / FINE_LOCATION / DATA_USAGE)
-// and groups access events by packageName. JS renders one card per sensor and,
-// when expanded, a ranked bar list of apps (Instagram 12×, WhatsApp 4×).
+// Per-sensor breakdown of which installed apps declare the matching
+// permission (camera / microphone / location / internet). The native side
+// enumerates installed packages and reads each manifest's declared
+// permissions via PackageManager.GET_PERMISSIONS — a public API. JS renders
+// one card per sensor and, when expanded, a ranked bar list of apps.
 export type PrivacySensorKey = 'camera' | 'microphone' | 'location' | 'network';
 
 export interface PrivacySensorUsage {
@@ -191,6 +193,37 @@ export interface PrivacyReport {
   generatedAt: number;
   sensors: PrivacySensorSummary[];
 }
+
+// ── App access (sensor usage) — issue #634 ────────────────────────────────
+
+/**
+ * One observed sensor access, emitted by the native foreground service
+ * (`AccessEventsService`) / `LauncherModule.getRecentAccessEvents`. `appName`
+ * is best-effort and may be missing on the wire — the aggregator falls back to
+ * `packageName`. `accessType` is one of camera | microphone | location; the
+ * native side only reports types it has a real signal for (UsageStats window
+ * + AppOps noteOp for camera/mic, and a coarse/fine location op for location).
+ */
+export interface AccessEvent {
+  packageName: string;
+  appName?: string;
+  accessType: 'camera' | 'microphone' | 'location';
+  timestamp: number;
+}
+
+/**
+ * Aggregated view the UI consumes: `{ packageName: { accessType: { count,
+ * lastAccess, ... } } }`. Produced by `aggregateAppAccessByType` (see
+ * src/utils/appAccessAggregation.ts) over the raw {@link AccessEvent} stream.
+ */
+export interface AppAccessCount {
+  packageName: string;
+  appName: string;
+  count: number;
+  lastAccess: number;
+}
+export type AppAccessCounts = Record<'camera' | 'microphone' | 'location', AppAccessCount>;
+export type AppAccessCountMap = Record<string, AppAccessCounts>;
 
 /**
  * Máscara a aplicar aos ícones, decidida em JS (src/utils/iconShape.ts) e
@@ -328,6 +361,26 @@ interface LauncherModuleType {
   startSpeechRecognition(): Promise<boolean>;
   stopSpeechRecognition(): Promise<boolean>;
   isSpeechRecognitionAvailable(): Promise<boolean>;
+  // App access (sensor usage, #634): a foreground service observes camera /
+  // microphone / location access over the trailing window; getRecentAccessEvents
+  // returns the raw stream, getAppAccessCounts returns it aggregated by package.
+  getRecentAccessEvents(limit: number): Promise<AccessEvent[]>;
+  getAppAccessCounts(windowHours: number): Promise<AppAccessCountMap>;
+  startAccessTrackingService(): Promise<boolean>;
+  stopAccessTrackingService(): Promise<boolean>;
+  isAccessTrackingServiceRunning(): Promise<boolean>;
+  // Foreground monitor + Protected-Apps gate (#627 child issue). The native
+  // AccessibilityService (ForegroundMonitorService) watches the foreground app
+  // and, after setProtectedApps([...]) seeds its in-memory set, shows a
+  // BiometricPrompt before releasing a protected package. The launcher pushes
+  // its AppsStore set down here whenever it changes.
+  setProtectedApps(packageNames: string[]): Promise<boolean>;
+  // True when the AccessibilityService is enabled in system settings (the user
+  // must toggle it there — we cannot do it for them). Used to warn the user
+  // that the global gate is inactive.
+  isForegroundMonitorEnabled(): Promise<boolean>;
+  // Opens the Accessibility settings screen so the user can enable the service.
+  openAccessibilitySettings(): Promise<boolean>;
   // Live Activities (Android equivalent of iOS Live Activities, #626): an
   // ongoing notification whose title/text/progress updates in place.
   // `progress`/`maxProgress` are normalized client-side (clampLiveActivityProgress)
@@ -425,6 +478,14 @@ const stub: LauncherModuleType = {
   startSpeechRecognition: async () => false,
   stopSpeechRecognition: async () => false,
   isSpeechRecognitionAvailable: async () => false,
+  getRecentAccessEvents: async () => [],
+  getAppAccessCounts: async () => ({}),
+  startAccessTrackingService: async () => false,
+  stopAccessTrackingService: async () => false,
+  isAccessTrackingServiceRunning: async () => false,
+  setProtectedApps: async () => false,
+  isForegroundMonitorEnabled: async () => false,
+  openAccessibilitySettings: async () => false,
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
   mediaPrev: async () => false,
@@ -787,6 +848,51 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.isSpeechRecognitionAvailable(); }
       catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
     },
+    getRecentAccessEvents: async (limit: number) => {
+      try {
+        const raw = await nativeModule.getRecentAccessEvents(limit);
+        return Array.isArray(raw) ? raw : [];
+      } catch (e) { console.error('LauncherModule.getRecentAccessEvents failed:', e); reportBridgeError('getRecentAccessEvents', e); return []; }
+    },
+    getAppAccessCounts: async (windowHours: number) => {
+      try {
+        // The aggregation is shared, pure, and unit-tested independently
+        // (src/utils/appAccessAggregation.test.ts). We feed it the raw native
+        // stream straight from the bridge — no reimplementation here — so this
+        // method can only fail to wire correctly, never to compute wrongly.
+        const raw = await nativeModule.getRecentAccessEvents(0) as AccessEvent[];
+        return aggregateAppAccessByType(Array.isArray(raw) ? raw : [], windowHours);
+      } catch (e) { console.error('LauncherModule.getAppAccessCounts failed:', e); reportBridgeError('getAppAccessCounts', e); return {}; }
+    },
+    startAccessTrackingService: async () => {
+      try { return await nativeModule.startAccessTrackingService(); }
+      catch (e) { console.error('LauncherModule.startAccessTrackingService failed:', e); reportBridgeError('startAccessTrackingService', e); return false; }
+    },
+    stopAccessTrackingService: async () => {
+      try { return await nativeModule.stopAccessTrackingService(); }
+      catch (e) { console.error('LauncherModule.stopAccessTrackingService failed:', e); reportBridgeError('stopAccessTrackingService', e); return false; }
+    },
+    isAccessTrackingServiceRunning: async () => {
+      try { return await nativeModule.isAccessTrackingServiceRunning(); }
+      catch (e) { console.error('LauncherModule.isAccessTrackingServiceRunning failed:', e); reportBridgeError('isAccessTrackingServiceRunning', e); return false; }
+    },
+    // #627 child issue: push the protected set to the foreground monitor.
+    // Accepts null/undefined from a careless caller → normalize to [] so the
+    // service never receives a malformed payload; a null set is "nothing
+    // protected", not a rejected promise.
+    setProtectedApps: async (packageNames: string[]) => {
+      const list = Array.isArray(packageNames) ? packageNames : [];
+      try { return await nativeModule.setProtectedApps(list); }
+      catch (e) { console.error('LauncherModule.setProtectedApps failed:', e); reportBridgeError('setProtectedApps', e); return false; }
+    },
+    isForegroundMonitorEnabled: async () => {
+      try { return await nativeModule.isForegroundMonitorEnabled(); }
+      catch (e) { console.error('LauncherModule.isForegroundMonitorEnabled failed:', e); reportBridgeError('isForegroundMonitorEnabled', e); return false; }
+    },
+    openAccessibilitySettings: async () => {
+      try { return await nativeModule.openAccessibilitySettings(); }
+      catch (e) { console.error('LauncherModule.openAccessibilitySettings failed:', e); reportBridgeError('openAccessibilitySettings', e); return false; }
+    },
     postLiveActivity: async (id: string, title: string, text: string, progress: number, maxProgress: number) => {
       try {
         const { percent, indeterminate } = clampLiveActivityProgress(progress, maxProgress);
@@ -846,25 +952,46 @@ function addModuleListener<TPayload>(
 
 /**
  * Subscribe to new notifications as they arrive.
+ * The native event (a Bundle sent from NotificationService) may be partial —
+ * older builds only carried `id`/`packageName`/`title`/`text`/`postedAt`, and
+ * even now we normalize defensively — so this bridge turns it into a full
+ * `DeviceNotification`: `key` falls back to `id`, `time` falls back to
+ * `postedAt`, and `isOngoing` defaults to `false`. A never-`undefined` object
+ * keeps the screen's grouping/mapping (which keys by `packageName`/`key`) safe
+ * instead of throwing and blanking the whole center.
  * Returns an unsubscribe function — call it in the useEffect cleanup.
  */
 export function addNotificationListener(
   listener: (n: DeviceNotification) => void,
 ): () => void {
-  const sub = addModuleListener('onNotificationPosted', listener);
+  const sub = addModuleListener('onNotificationPosted', (raw: Partial<DeviceNotification> & { postedAt?: number }) => {
+    const norm: DeviceNotification = {
+      id: raw.id ?? '',
+      key: raw.key ?? raw.id ?? '',
+      packageName: raw.packageName ?? '',
+      title: raw.title ?? '',
+      text: raw.text ?? '',
+      time: typeof raw.time === 'number' ? raw.time : (raw.postedAt ?? 0),
+      isOngoing: raw.isOngoing ?? false,
+    };
+    listener(norm);
+  });
   return () => sub.remove();
 }
 
 /**
  * Subscribe to notification removals.
- * The callback receives the notification key (string id).
+ * The callback receives the notification **key** (string id) — matching the
+ * `key` the screen uses to key and remove rows. The native `onNotificationRemoved`
+ * event historically carried `id` but not `key`, so we prefer `key` and fall
+ * back to `id` only when `key` is absent.
  * Returns an unsubscribe function — call it in the useEffect cleanup.
  */
 export function addNotificationRemovedListener(
-  listener: (id: string) => void,
+  listener: (key: string) => void,
 ): () => void {
-  const sub = addModuleListener('onNotificationRemoved', (n: { id: string }) => {
-    listener(n.id);
+  const sub = addModuleListener('onNotificationRemoved', (n: { id?: string; key?: string }) => {
+    listener(n.key ?? n.id ?? '');
   });
   return () => sub.remove();
 }
@@ -944,4 +1071,35 @@ export function addPackageChangedListener(
   listener: (change: PackageChange) => void,
 ): () => void {
   const sub = addModuleListener<PackageChange>('onPackageChanged', listener);  return () => sub.remove();
+}
+
+/**
+ * Subscribe to real-time app sensor-access events emitted by the native
+ * foreground service (`AccessEventsService`) per issue #634. Each event names
+ * the package and the sensor used (camera | microphone | location) and the
+ * access timestamp; the service coalesces bursts and only emits when a NEW
+ * access begins (see AccessEventsService.kt for the de-bounce rationale).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addAppAccessListener(
+  listener: (event: AccessEvent) => void,
+): () => void {
+  const sub = addModuleListener<AccessEvent>('onAppAccess', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to foreground-app changes reported by ForegroundMonitorService
+ * (#627 child issue). The callback receives the package name that just moved
+ * to the foreground, or '' for HOME / no app. The launcher uses this to keep
+ * its own UI in sync and to know when the native BiometricPrompt gate fired.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addForegroundAppListener(
+  listener: (packageName: string) => void,
+): () => void {
+  const sub = addModuleListener<{ packageName: string }>('onForegroundAppChanged', (n: { packageName: string }) => {
+    listener(n.packageName);
+  });
+  return () => sub.remove();
 }

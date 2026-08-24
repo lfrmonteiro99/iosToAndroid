@@ -10,11 +10,23 @@ const baseSettings = {
   notificationBadges: false,
   notificationPreviews: 'always' as const,
   scheduledSummaryIdx: 0,
+  reduceInterruptions: false,
+  perAppDelivery: {},
 };
 
 jest.mock('../../../store/SettingsStore', () => ({
   useSettings: jest.fn(() => ({ settings: baseSettings, update: mockUpdate })),
   SettingsProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+jest.mock('../../../store/AppsStore', () => ({
+  useApps: jest.fn(() => ({
+    apps: [
+      { name: 'Slack', packageName: 'com.slack', icon: '', isSystem: false },
+      { name: 'Gmail', packageName: 'com.gmail', icon: '', isSystem: false },
+    ],
+  })),
+  AppsProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
@@ -48,9 +60,9 @@ describe('NotificationsScreen', () => {
     expect(toJSON()).toBeTruthy();
   });
 
-  it('renders exactly three toggles (Allow Notifications, Sounds, Badges)', () => {
+  it('renders exactly four toggles (Allow Notifications, Sounds, Badges, Reduce Interruptions)', () => {
     const { getAllByRole } = render(<NotificationsScreen navigation={mockNavigation as never} />);
-    expect(getAllByRole('switch')).toHaveLength(3);
+    expect(getAllByRole('switch')).toHaveLength(4);
   });
 
   it('Allow Notifications switch is wired to notificationsEnabled', () => {
@@ -71,5 +83,27 @@ describe('NotificationsScreen', () => {
     fireEvent.press(switchForRow(root, 'Badges'));
     expect(mockUpdate).toHaveBeenCalledWith('notificationBadges', true);
     expect(mockUpdate).not.toHaveBeenCalledWith('notificationsEnabled', expect.anything());
+  });
+
+  it('renders the Reduce Interruptions toggle and wires it', () => {
+    const root = render(<NotificationsScreen navigation={mockNavigation as never} />);
+    fireEvent.press(switchForRow(root, 'Reduce Interruptions'));
+    expect(mockUpdate).toHaveBeenCalledWith('reduceInterruptions', true);
+  });
+
+  it('renders one Notification Delivery row per app and defaults to Immediate', () => {
+    const { getByText, getAllByText } = render(<NotificationsScreen navigation={mockNavigation as never} />);
+    // Slack e Gmail vêm do mock de useApps; cada um mostra "Immediate".
+    expect(getByText('Slack')).toBeTruthy();
+    expect(getByText('Gmail')).toBeTruthy();
+    expect(getAllByText('Immediate').length).toBe(2);
+  });
+
+  it('sets an app delivery policy and persists it', () => {
+    const root = render(<NotificationsScreen navigation={mockNavigation as never} />);
+    fireEvent.press(root.getByText('Slack'));
+    // O action sheet abre; escolhe "Blocked".
+    fireEvent.press(root.getByText('Blocked'));
+    expect(mockUpdate).toHaveBeenCalledWith('perAppDelivery', { 'com.slack': 'blocked' });
   });
 });

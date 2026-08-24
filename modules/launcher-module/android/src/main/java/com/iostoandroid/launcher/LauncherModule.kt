@@ -65,6 +65,14 @@ class LauncherModule : Module() {
         private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
 
         /**
+         * Protected-app set pushed from JS (AppsStore) so the foreground monitor
+         * can gate apps launched OUTSIDE the launcher (recent apps / share sheet /
+         * deep link) — the JS gate in launchApp only covers in-launcher opens.
+         * Read by ForegroundMonitorService on every foreground transition.
+         */
+        @Volatile var protectedApps: Set<String> = emptySet()
+
+        /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
          * by plugins/withLauncherIntent.js) to forward events to JavaScript.
          * Uses Expo's built-in event emitter — declared via Events(...) in the definition.
@@ -84,7 +92,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onAppAccess", "onForegroundAppChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -910,6 +918,33 @@ class LauncherModule : Module() {
             cancelLiveActivity(id)
         }
 
+        // ── Foreground monitor + Protected-Apps gate (#627 child issue) ──
+
+        AsyncFunction("setProtectedApps") { packageNames: List<String>? ->
+            // A null payload (careless caller / older JS) means "nothing
+            // protected", not a crash — normalize to an immutable empty set.
+            LauncherModule.protectedApps = (packageNames ?: emptyList()).toSet()
+            true
+        }
+
+        AsyncFunction("isForegroundMonitorEnabled") {
+            // The AccessibilityService exposes its own enabled state to the
+            // system; querying Settings is the canonical way to read it
+            // (#627 — we cannot enable it programmatically).
+            val svc = Context.ACCESSIBILITY_SERVICE
+            val am = context.getSystemService(svc) as? android.view.accessibility.AccessibilityManager
+            am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                ?.any { it.resolveInfo.serviceInfo.packageName == context.packageName && it.resolveInfo.serviceInfo.name == ForegroundMonitorService::class.java.name }
+                ?: false
+        }
+
+        AsyncFunction("openAccessibilitySettings") {
+            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        }
+
         // ── SMS Send ─────────────────────────────────────────────────────
 
         AsyncFunction("sendSms") { address: String, body: String ->
@@ -1212,19 +1247,24 @@ class LauncherModule : Module() {
         }
 
         // ── Privacy Monitor (#624) ─────────────────────────────────────────
-        // Aggregate per-app access counts for each privacy sensor using AppOps
-        // historical ops (OPSTR_CAMERA / OPSTR_RECORD_AUDIO / OPSTR_FINE_LOCATION
-        // / OPSTR_DATA_USAGE). These are the same ops Android surfaces in the
-        // system "Privacy Dashboard", so the numbers match what the OS shows.
-        // The result is grouped by packageName and ranked so JS can render one
-        // card per sensor with a top-apps bar breakdown.
+        // Per-sensor breakdown of which INSTALLED apps *declare* the matching
+        // permission in their manifest (camera / microphone / location /
+        // internet), enumerated locally via PackageManager.GET_PERMISSIONS — a
+        // public API. Apps with the QUERY_ALL_PACKAGES permission (declared in
+        // this module's manifest) can enumerate every package, so this is a
+        // real, on-device catalogue of "which apps can access each sensor".
+        //
+        // NOTE: the Android Privacy Dashboard uses hidden @SystemApi
+        // (AppOpsManager.getHistoricalOps) that is unavailable to third-party
+        // apps, so real per-app *access counts* across other apps are not
+        // obtainable without root/Shizuku. We therefore report the set of apps
+        // that *can* access each sensor — never fabricated access tallies. `count`
+        // is 1 per app (it denotes "this app is in the set"), `totalAccesses`
+        // mirrors the number of apps, and `topApps` is the ranked app list.
         AsyncFunction("getPrivacyReport") {
             try {
-                val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
                 val pm = context.packageManager
                 val endTime = System.currentTimeMillis()
-                // Trailing 30-day window — matches the OS Privacy Dashboard range.
-                val startTime = endTime - 30L * 24 * 60 * 60 * 1000
 
                 fun appLabel(pkg: String): String {
                     return try {
@@ -1233,74 +1273,78 @@ class LauncherModule : Module() {
                     } catch (e: Exception) { pkg }
                 }
 
-                fun sensorReport(opStr: String, sensor: String, label: String, icon: String, bg: String): Map<String, Any> {
-                    val ops = try {
-                        appOps.getHistoricalOpsFromUid(
-                            android.os.Process.myUid(),
-                            listOf(opStr),
-                            startTime,
-                            endTime,
-                        ).getOps()
-                    } catch (e: Exception) { emptyList<android.app.AppOpsManager.HistoricalOp>() }
-
-                    val byApp = mutableMapOf<String, Int>()
-                    for (op in ops) {
-                        for (i in 0 until op.uidCount()) {
-                            val uid = op.getUid(i)
-                            val pkg = try { pm.getNameForUid(uid) } catch (e: Exception) { null }
-                            val pkgName = pkg ?: continue
-                            val accessCount = op.getUidOps(i).getOpCount()
-                            if (accessCount > 0) {
-                                byApp[pkgName] = byApp.getOrDefault(pkgName, 0) + accessCount
-                            }
+                // Apps that declare [perm] in their manifest. Public API:
+                // GET_PERMISSIONS exposes requestedPermissions; null when the
+                // package is gone mid-iteration — treated as "no apps" rather
+                // than thrown.
+                fun appsWithPermission(perm: String): List<Pair<String, String>> {
+                    val result = mutableListOf<Pair<String, String>>()
+                    val installed = try {
+                        pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                    } catch (e: Exception) { emptyList<ApplicationInfo>() }
+                    for (ai in installed) {
+                        val perms = try {
+                            pm.getPackageInfo(ai.packageName, PackageManager.GET_PERMISSIONS)
+                                .requestedPermissions
+                        } catch (e: Exception) { null }
+                        if (perms != null && perms.contains(perm)) {
+                            result.add(ai.packageName to appLabel(ai.packageName))
                         }
                     }
+                    return result
+                }
 
-                    val ranked = byApp.entries
-                        .sortedByDescending { it.value }
-                        .map { (pkg, count) ->
+                fun sensorReport(
+                    perm: String,
+                    sensor: String,
+                    label: String,
+                    icon: String,
+                    bg: String,
+                ): Map<String, Any> {
+                    val ranked = appsWithPermission(perm)
+                        .sortedBy { (pkg, _) -> pkg.lowercase() }
+                        .map { (pkg, name) ->
                             mapOf(
                                 "packageName" to pkg,
-                                "appName" to appLabel(pkg),
-                                "count" to count,
+                                "appName" to name,
+                                "count" to 1,
                             )
                         }
-                    val total = byApp.values.sum()
                     mapOf(
                         "sensor" to sensor,
                         "label" to label,
                         "icon" to icon,
                         "bg" to bg,
-                        "totalAccesses" to total,
-                        "appCount" to byApp.size,
+                        "totalAccesses" to ranked.size,
+                        "appCount" to ranked.size,
                         "topApps" to ranked,
                     )
                 }
 
                 val sensors = listOf(
                     sensorReport(
-                        android.app.AppOpsManager.OPSTR_CAMERA,
+                        android.Manifest.permission.CAMERA,
                         "camera",
                         "Camera",
                         "camera",
                         "#1C1C1E",
                     ),
                     sensorReport(
-                        android.app.AppOpsManager.OPSTR_RECORD_AUDIO,
+                        android.Manifest.permission.RECORD_AUDIO,
                         "microphone",
                         "Microphone",
                         "mic",
                         "#FF2D55",
                     ),
                     sensorReport(
-                        android.app.AppOpsManager.OPSTR_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
                         "location",
                         "Location",
                         "location",
                         "#007AFF",
                     ),
                     sensorReport(
-                        android.app.AppOpsManager.OPSTR_DATA_USAGE,
+                        android.Manifest.permission.INTERNET,
                         "network",
                         "Network",
                         "globe",
@@ -1454,6 +1498,55 @@ class LauncherModule : Module() {
 
         AsyncFunction("isSpeechRecognitionAvailable") {
             SpeechRecognizer.isRecognitionAvailable(context)
+        }
+
+        // ── App access (sensor usage) — issue #634 ────────────────────────
+        //
+        // A foreground service (AccessEventsService) polls the UsageStats event
+        // stream + AppOps "last access" timestamps every 15s and emits onAppAccess
+        // for genuinely NEW camera/mic/location use by a foreground app. These
+        // three methods are the RN surface for it. There is no universal broadcast
+        // for sensor access, so this is a heuristic over the usage-access data the
+        // app already requests for Screen Time — see AccessEventsService.kt for
+        // the per-OEM limitations.
+
+        AsyncFunction("getRecentAccessEvents") { limit: Int ->
+            try {
+                val svc = AccessEventsService.instance
+                val events = svc?.getRecentEvents(limit) ?: emptyList()
+                events.map { e ->
+                    mapOf(
+                        "packageName" to e.packageName,
+                        "appName" to e.appName,
+                        "accessType" to e.accessType,
+                        "timestamp" to e.timestamp,
+                    )
+                }
+            } catch (e: Exception) { emptyList<Map<String, Any>>() }
+        }
+
+        AsyncFunction("startAccessTrackingService") {
+            try {
+                val intent = Intent(context, AccessEventsService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.startService(intent)
+                }
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopAccessTrackingService") {
+            try {
+                context.stopService(Intent(context, AccessEventsService::class.java))
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isAccessTrackingServiceRunning") {
+            AccessEventsService.instance != null
         }
 
         // ── Lifecycle ────────────────────────────────────────────────────
