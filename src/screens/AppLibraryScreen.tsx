@@ -113,10 +113,10 @@ export function categorizeApp(app: InstalledApp): string {
   // `category` é normalizado para 'undefined' pelo helper nativo `withCategory`,
   // mas o `name` NÃO — um payload nativo corrompido ou um índice em cache
   // antigo pode entregar uma app sem `name` (undefined/null). Sem a guarda,
-  // `app.name.toLowerCase()` rebentava e, como a AppLibraryContent é a última
+  // `app.name.toLowerCase()` rebentaria e, como a AppLibraryContent é a última
   // página do pager da home (montada inline em LauncherHomeScreen), o throw
-  // derrubava o launcher inteiro e aparecia o ecrã inicial do Android (#699).
-  // Trata-se como string vazia, exatamente como já se faz com o packageName.
+  // derrubava o launcher inteiro e a página da App Library aparecia em branco
+  // (#696 / #699). Trata-se como string vazia, à semelhança do packageName.
   const nameLower = (app.name ?? '').toLowerCase();
   // packageName pode ser undefined (apps virtuais sem packageName real) — não
   // deixar que isso rebente a cascata; trata-se como string vazia.
@@ -159,11 +159,11 @@ const AppIcon = React.memo(function AppIcon({
     (() => {
       // Fallback letter icon. `app.name` pode estar ausente (payload nativo
       // corrompido / índice em cache antigo — o helper `withCategory` só
-      // normaliza `category`), e a AppLibraryContent é a última página do
-      // pager da home; um `app.name.charAt(0)` sobre undefined/null derrubaria
-      // o launcher inteiro e mostraria o ecrã do Android (#699). Usa a
-      // inicial do packageName como 2ª linha de defesa, e um '?' se também não
-      // houver packageName — nunca rebenta.
+      // normaliza `category`, não `name`), e a AppLibraryContent é a última
+      // página do pager da home; um `app.name.charAt(0)` sobre undefined/null
+      // derrubaria o launcher inteiro e mostraria o ecrã em branco (#696 / #699).
+      // Usa a inicial do packageName como 2ª linha de defesa, e um '?' se também
+      // não houver packageName — nunca rebenta.
       const fallbackName = app.name ?? app.packageName ?? '';
       const letter = (fallbackName.charAt(0) || '?').toUpperCase();
       const hue = (fallbackName.charCodeAt(0) || 0) % 360;
@@ -652,8 +652,8 @@ export function AppLibraryContent() {
       .filter((a): a is InstalledApp => !!a);
     if (recentPkgs.length > 0) return recentPkgs;
     // Fallback: newest-named apps when no launch history exists. Comparador
-    // seguro: um `name` ausente (payload nativo corrompido — #699) não pode
-    // rebentar a grelha; ordena-se como string vazia.
+    // seguro: um `name` ausente (payload nativo corrompido — #696 / #699) não
+    // pode rebentar a grelha; ordena-se como string vazia.
     return [...visibleApps]
       .sort((a, b) => (b.name ?? '').localeCompare(a.name ?? ''))
       .slice(0, 4);
@@ -669,8 +669,8 @@ export function AppLibraryContent() {
       .map(r => visibleApps.find(a => a.packageName === r.packageName))
       .filter((a): a is InstalledApp => !!a);
     if (recentSorted.length > 0) return recentSorted;
-    // Comparador seguro: `name` ausente não rebenta (payload nativo
-    // corrompido — #699).
+    // Comparador seguro: `name` ausente não rebenta (payload nativo corrompido
+    // — #696 / #699).
     return [...visibleApps]
       .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
       .slice(0, 4);
