@@ -439,19 +439,35 @@ class LauncherModule : Module() {
         AsyncFunction("getBluetoothInfo") {
             val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val adapter = btManager?.adapter
+            // On Android 12+ (API 31) BluetoothAdapter.getName()/getAddress()
+            // require the runtime BLUETOOTH_CONNECT permission; without it they
+            // throw SecurityException (#675). The safe-call (?.) only guards a
+            // null adapter — it does NOT catch a thrown exception — so reading
+            // name/address outside a try would reject the whole promise and
+            // surface a LogBox toast on every launch. Read each field under its
+            // own guard and fall back to the same values the issue expected
+            // ("Unknown" / "") instead of letting the call fail.
+            val isEnabled = adapter?.isEnabled ?: false
+            val name = try {
+                adapter?.name ?: "Unknown"
+            } catch (e: SecurityException) { "Unknown" }
+            val address = try {
+                adapter?.address ?: ""
+            } catch (e: SecurityException) { "" }
+            val paired = try {
+                adapter?.bondedDevices?.map { device ->
+                    mapOf(
+                        "name" to (device.name ?: "Unknown"),
+                        "address" to device.address,
+                        "type" to device.type
+                    )
+                } ?: emptyList()
+            } catch (e: SecurityException) { emptyList<Map<String, Any>>() }
             mapOf(
-                "enabled" to (adapter?.isEnabled ?: false),
-                "name" to (adapter?.name ?: "Unknown"),
-                "address" to (adapter?.address ?: ""),
-                "pairedDevices" to (try {
-                    adapter?.bondedDevices?.map { device ->
-                        mapOf(
-                            "name" to (device.name ?: "Unknown"),
-                            "address" to device.address,
-                            "type" to device.type
-                        )
-                    } ?: emptyList()
-                } catch (e: SecurityException) { emptyList<Map<String, Any>>() })
+                "enabled" to isEnabled,
+                "name" to name,
+                "address" to address,
+                "pairedDevices" to paired
             )
         }
 

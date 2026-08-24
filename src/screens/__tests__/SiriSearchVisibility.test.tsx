@@ -100,7 +100,7 @@ describe('Siri & Search — visibilidade na App Library (#610)', () => {
     mockStoredSettings({ searchShowInLibrary: false });
     const { getByPlaceholderText, queryAllByText, queryByText } = render(<AppLibraryContent />);
     await waitFor(() => expect(queryByText('Categories')).toBeTruthy());
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'Face');
+    fireEvent.changeText(getByPlaceholderText('Search'), 'Face');
     await waitFor(() => expect(queryAllByText('Facebook')).toHaveLength(0));
   });
 
