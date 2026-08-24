@@ -511,6 +511,6 @@ describe('AppLibraryScreen entry point to the App Store', () => {
     fireEvent.press(getByLabelText('Back'));
     expect(mockGoBack).toHaveBeenCalled();
     expect(getByText('App Library')).toBeTruthy();
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 });

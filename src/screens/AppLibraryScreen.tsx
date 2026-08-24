@@ -668,7 +668,7 @@ export function AppLibraryContent() {
         <CupertinoSearchBar
           value={query}
           onChangeText={setQuery}
-          placeholder="App Library"
+          placeholder="Search"
           autoFocus={false}
         />
       </View>

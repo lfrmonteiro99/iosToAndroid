@@ -483,7 +483,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
   it('shows the App Library search bar directly on mount, with no tap required', () => {
     mockLoadedApps();
     const { getByPlaceholderText } = render(<LauncherHomeScreen />);
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 
   it('shows the Categories section directly, without navigating anywhere first', () => {
@@ -511,7 +511,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
     // to the search-results view, proving the search bar is wired to real
     // state inside the embedded component, not just visually present.
     expect(getByText('Categories')).toBeTruthy();
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'zzz-no-such-app');
+    fireEvent.changeText(getByPlaceholderText('Search'), 'zzz-no-such-app');
     expect(queryByText('Categories')).toBeNull();
   });
 });

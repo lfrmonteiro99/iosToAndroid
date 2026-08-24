@@ -18,21 +18,29 @@ describe('AppLibraryScreen', () => {
 
   it('shows the App Library search input', () => {
     const { getByPlaceholderText } = render(<AppLibraryScreen navigation={nav} />);
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    // iOS App Library search bar always shows the "Search" placeholder.
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 
   it('typing activates search results view without crashing', () => {
     const { getByPlaceholderText } = render(<AppLibraryScreen navigation={nav} />);
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'Settings');
+    fireEvent.changeText(getByPlaceholderText('Search'), 'Settings');
     // Re-query after state update — no crash is the assertion
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 
   it('clearing search returns to category view without crashing', () => {
     const { getByPlaceholderText } = render(<AppLibraryScreen navigation={nav} />);
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'foo');
-    fireEvent.changeText(getByPlaceholderText('App Library'), '');
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    fireEvent.changeText(getByPlaceholderText('Search'), 'foo');
+    fireEvent.changeText(getByPlaceholderText('Search'), '');
+    expect(getByPlaceholderText('Search')).toBeTruthy();
+  });
+
+  it('search bar placeholder is "Search", never the screen title "App Library" (#677)', () => {
+    const { getByPlaceholderText } = render(<AppLibraryScreen navigation={nav} />);
+    // O placeholder NÃO deve ser o título do ecrã.
+    expect(() => getByPlaceholderText('App Library')).toThrow();
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 });
 
@@ -125,7 +133,8 @@ describe('AppLibraryContent — toggle Show Suggestions (#602)', () => {
     expect(queryByText('Suggestions')).toBeNull();
     // O que NÃO deve mudar:
     expect(getByText('Categories')).toBeTruthy();
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    // iOS App Library search bar always shows the "Search" placeholder.
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 
   it('Show Suggestions = false não quebra a pesquisa nem as categorias', async () => {
@@ -133,9 +142,9 @@ describe('AppLibraryContent — toggle Show Suggestions (#602)', () => {
       settings: { appLibraryShowSuggestions: false },
     });
     await waitFor(() => expect(queryByText('Recently Added')).toBeNull());
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'Face');
+    fireEvent.changeText(getByPlaceholderText('Search'), 'Face');
     // A pesquisa ativa e continua a mostrar resultados (Facebook) sem crash.
-    await waitFor(() => expect(getByPlaceholderText('App Library')).toBeTruthy());
+    await waitFor(() => expect(getByPlaceholderText('Search')).toBeTruthy());
   });
 });
 

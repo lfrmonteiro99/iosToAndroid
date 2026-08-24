@@ -137,7 +137,7 @@ describe('LauncherHomeScreen: paginação não re-renderiza os AppIcon já monta
     // não é virtualizada ela já está montada — o que prova que avançámos é o
     // efeito de handleScroll (setCurrentPage), verificável indirectamente
     // via o próprio disparo sem excepção e via PageDots (testado abaixo).
-    expect(queryByPlaceholderText('App Library')).toBeTruthy();
+    expect(queryByPlaceholderText('Search')).toBeTruthy();
 
     const pager = getByTestId('launcher-pager');
     expect(() => act(() => {
