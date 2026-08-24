@@ -956,11 +956,34 @@ export function LauncherHomeScreen() {
   }));
 
 
+  // Tracks where a pan gesture began (absolute Y) so the *down-swipe →
+  // Spotlight* gesture can be suppressed when the finger starts in the top
+  // strip — that strip is claimed by the Control Center / Notification Center
+  // overlays, and a down-swipe there must open the iOS Notification Center,
+  // never the Spotlight frame. React Native Gesture Handler runs a parent
+  // (this pan) and a nested child (the CC/NC overlay) *simultaneously* when
+  // nothing excludes the other, so without this guard both the Spotlight
+  // reveal frame and the Android-style notification panel preview fire at
+  // once (issue #687).
+  const panStartY = useSharedValue(0);
+  // Height of the top strip reserved for CC/NC (mirrors zones().topStripHeight).
+  const topStripHeight = gestureConfig.topZoneHeightDp + 20;
+
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
+    .onBegin((e) => {
+      'worklet';
+      panStartY.value = e.absoluteY;
+    })
     .onUpdate((e) => {
       'worklet';
       if (!canSpotlightShared.value) return;
+      // Suppress the Spotlight reveal when the gesture started in the top strip
+      // that belongs to the Control Center / Notification Center overlays.
+      if (panStartY.value <= topStripHeight) {
+        spotlightProgress.value = 0;
+        return;
+      }
       if (e.translationY <= 0) {
         spotlightProgress.value = 0;
         return;
@@ -990,7 +1013,9 @@ export function LauncherHomeScreen() {
       }
 
       // Down-swipe → Spotlight (commit check)
-      if (canSpotlightShared.value && translationY > 0) {
+      // Suppressed when the gesture started in the top strip (CC/NC zone) so a
+      // down-swipe there opens the iOS Notification Center instead (#687).
+      if (canSpotlightShared.value && translationY > 0 && panStartY.value > topStripHeight) {
         spotlightT.value = Date.now();
         pushSample(spotlightBuf.value, event.translationX, event.translationY, spotlightT.value);
         const { vy } = sampledVelocity(spotlightBuf.value, spotlightT.value);
