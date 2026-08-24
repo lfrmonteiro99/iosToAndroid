@@ -16,12 +16,14 @@ import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
 import { useApps } from '../store/AppsStore';
+import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { Glass } from '../theme/CupertinoTheme';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import { GlassSurface, useAlert } from '../components';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 
 const getLauncher = async () => {
   try {
@@ -87,6 +89,7 @@ export function NotificationCenterScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { apps, launchApp } = useApps();
+  const { settings } = useSettings();
   const alert = useAlert();
 
   const [notifications, setNotifications] = useState<DeviceNotification[]>([]);
@@ -285,7 +288,7 @@ export function NotificationCenterScreen() {
             style={styles.scroll}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
             showsVerticalScrollIndicator={false}
-            decelerationRate={0.998}
+            decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
           >
             {groups.length === 0 ? (
               <View style={styles.emptyState}>

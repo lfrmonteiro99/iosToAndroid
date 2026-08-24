@@ -143,15 +143,35 @@ describe('applySnapshot', () => {
     expect(AsyncStorage.setMany).not.toHaveBeenCalled();
   });
 
-  it('coerces non-string values to strings before writing', async () => {
+  it('rejects a non-string value instead of coercing it (issue #274)', async () => {
     const data = {
       '@iostoandroid/language': 'pt',
-      '@iostoandroid/high_contrast': true as unknown, // stored as boolean upstream edge case
+      '@iostoandroid/high_contrast': true as unknown, // boolean value must be rejected, not coerced
     };
-    await applySnapshot(data as Record<string, unknown>);
+    await expect(applySnapshot(data as Record<string, unknown>)).rejects.toThrow();
+    expect(AsyncStorage.setMany).not.toHaveBeenCalled();
+  });
 
-    const written = (AsyncStorage.setMany as jest.Mock).mock.calls[0][0];
-    expect(written['@iostoandroid/high_contrast']).toBe('true');
-    expect(typeof written['@iostoandroid/high_contrast']).toBe('string');
+  it('rejects a multi-MB entry whose UTF-16 length is under the ceiling, writing nothing', async () => {
+    // 1_000_000 CJK code units === 3 MB of UTF-8. A `.length` ceiling accepts it
+    // and hands 3 MB straight to setMany; the byte ceiling must refuse it, and
+    // the well-formed sibling key must not be written either — no partial write.
+    const data = {
+      '@iostoandroid/language': 'pt',
+      '@iostoandroid/settings': '好'.repeat(1_000_000),
+    };
+    await expect(applySnapshot(data)).rejects.toThrow(/exceeds 1000000 bytes/);
+    expect(AsyncStorage.setMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized key on a non-allow-listed entry before any write', async () => {
+    // The oversized key would be filtered out by the allow-list anyway; validation
+    // runs first, so the whole payload is refused rather than silently trimmed.
+    const data = {
+      '@iostoandroid/language': 'pt',
+      ['好'.repeat(200)]: 'v', // 200 code units, 600 bytes
+    };
+    await expect(applySnapshot(data)).rejects.toThrow(/exceeds 256 bytes/);
+    expect(AsyncStorage.setMany).not.toHaveBeenCalled();
   });
 });

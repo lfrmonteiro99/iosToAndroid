@@ -17,6 +17,7 @@ import { CURATED_APPS, type CuratedApp } from '../data/curatedApps';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 import type { InstalledApp } from '../store/AppsStore';
+import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
 
 // Segment labels live in one place — inserting/reordering a tab means
 // changing this array only, not the render branches below.
@@ -258,11 +259,14 @@ export function AppStoreScreen({ navigation }: { navigation: AppNavigationProp }
     [apps],
   );
 
+  // Built-in virtual apps (Clock, Calculator, …) surfaced here via the
+  // installed-apps search match must open the in-app iOS-style screen, not be
+  // handed to the native launcher bridge — see launchBuiltInOrExternal (#706).
   const handleOpen = useCallback(
     (packageName: string) => {
-      launchApp(packageName);
+      launchBuiltInOrExternal(packageName, navigation, launchApp);
     },
-    [launchApp],
+    [navigation, launchApp],
   );
 
   // Guarded the same way CupertinoShareSheet guards its Linking calls: probe

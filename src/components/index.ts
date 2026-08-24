@@ -1,3 +1,5 @@
+export { CupertinoBarChart } from './CupertinoBarChart';
+export type { BarChartDatum } from './CupertinoBarChart';
 export { CupertinoButton } from './CupertinoButton';
 export { CupertinoSwitch } from './CupertinoSwitch';
 export { CupertinoTextField } from './CupertinoTextField';
@@ -15,6 +17,8 @@ export { CupertinoProgressBar } from './CupertinoProgressBar';
 export { CupertinoPicker } from './CupertinoPicker';
 export { CupertinoSwipeableRow } from './CupertinoSwipeableRow';
 export { CupertinoEmptyState } from './CupertinoEmptyState';
+export { PassCodeVisual } from './PassCodeVisual';
+export type { PassCodeVisualProps } from './PassCodeVisual';
 export { ErrorBoundary } from './ErrorBoundary';
 export { AlertProvider, useAlert } from './AlertProvider';
 export { CupertinoSkeleton, SkeletonListRow, SkeletonCard } from './CupertinoSkeleton';
