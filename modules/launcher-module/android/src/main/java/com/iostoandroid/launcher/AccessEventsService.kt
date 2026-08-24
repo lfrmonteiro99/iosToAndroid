@@ -74,21 +74,6 @@ class AccessEventsService : Service() {
         private const val EVENT_LOOKBACK_MS = 60_000L
 
         @Volatile var instance: AccessEventsService? = null
-
-        /** Ring buffer of raw access events for getRecentAccessEvents(). */
-        private val recent = ConcurrentLinkedQueue<AccessEvent>()
-        private const val MAX_RECENT = 500
-
-        // packageName\0type -> last timestamp we already emitted, so we only
-        // forward NEW accesses.
-        private val lastReported = mutableMapOf<String, Long>()
-
-        fun getRecentEvents(cap: Int): List<AccessEvent> {
-            val all = recent.toList()
-            return if (cap <= 0) all else all.takeLast(cap)
-        }
-
-        fun clearRecent() = recent.clear()
     }
 
     data class AccessEvent(
@@ -97,6 +82,21 @@ class AccessEventsService : Service() {
         val accessType: String, // "camera" | "microphone" | "location"
         val timestamp: Long,
     )
+
+    // Per-instance ring buffer of raw access events for getRecentAccessEvents().
+    private val recent = ConcurrentLinkedQueue<AccessEvent>()
+    private const val MAX_RECENT = 500
+
+    // packageName\u0000type -> last timestamp we already emitted, so we only
+    // forward NEW accesses.
+    private val lastReported = mutableMapOf<String, Long>()
+
+    fun getRecentEvents(cap: Int): List<AccessEvent> {
+        val all = recent.toList()
+        return if (cap <= 0) all else all.takeLast(cap)
+    }
+
+    fun clearRecent() = recent.clear()
 
     private val running = AtomicBoolean(false)
     private var pollThread: HandlerThread? = null
@@ -232,13 +232,6 @@ class AccessEventsService : Service() {
         }
     }
 
-    /**
-     * AppOpsManager does not expose a public "get last access time" before API 29.
-     * The hidden `getOpsForPackage` is the only source of that timestamp, but it is
-     * a @hide API absent from the public compile stub — so it is reached via
-     * reflection (see [lastOpTime]). On failure (older/vendor ROMs without the
-     * hidden method) we simply report no access time (0L) rather than crash.
-     */
     /**
      * AppOpsManager.getOpsForPackage(...) is a @hide API — it is NOT present in the
      * public compile stub, so calling it directly fails to compile. The only stable
