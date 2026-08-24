@@ -465,6 +465,7 @@ const AppIcon = React.memo(function AppIcon({
             gradient={virtualCfg.gradient}
             bg={virtualCfg.bg}
             gloss={gloss}
+            tint={iconTint}
             iconSize={virtualCfg.iconSize ?? Math.round(iconSize * 0.57)}
           />
         ) : app.icon ? (
