@@ -72,7 +72,7 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
 
   const handlePassPressed = useCallback(
     (passId: string) => {
-      navigation.navigate('PassEdit', { passId });
+      navigation.navigate('PassDetail', { passId });
     },
     [navigation],
   );

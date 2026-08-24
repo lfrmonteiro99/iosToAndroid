@@ -1,6 +1,6 @@
 {
   "name": "iostoandroid",
-  "version": "1.83.0",
+  "version": "1.93.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -41,6 +41,7 @@
     "expo-network": "~8.0.8",
     "expo-notifications": "~0.32.11",
     "expo-secure-store": "~15.0.7",
+    "expo-sensors": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-speech": "~12.0.2",
     "expo-status-bar": "~3.0.9",

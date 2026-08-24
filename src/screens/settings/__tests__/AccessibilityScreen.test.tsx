@@ -47,10 +47,16 @@ describe('AccessibilityScreen', () => {
     expect(getByText('High Contrast')).toBeTruthy();
   });
 
-  it('renders Bold Text and Reduce Motion toggles unchanged', () => {
+  it('renders Bold Text toggle unchanged', () => {
     const { getByText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
     expect(getByText('Bold Text')).toBeTruthy();
-    expect(getByText('Reduce Motion')).toBeTruthy();
+  });
+
+  // #493: Reduce Motion (binary) was replaced by the Motion section's 3-way
+  // Full/Reduced/Off control — see the "Motion (#493)" describe block below.
+  it('does not render the old Reduce Motion switch label', () => {
+    const { queryByText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
+    expect(queryByText('Reduce Motion')).toBeNull();
   });
 
   // Red step: with the old shadow state, pressing the switch only updated local
@@ -66,9 +72,9 @@ describe('AccessibilityScreen', () => {
 
     expect(getByTestId('hc-value').props.children).toBe('false');
 
-    // Switch order in the Vision section: [0] Bold Text, [1] Reduce Motion, [2] High Contrast
+    // Switch order in the Vision section (#493 removed Reduce Motion): [0] Bold Text, [1] High Contrast
     const switches = getAllByRole('switch');
-    fireEvent.press(switches[2]);
+    fireEvent.press(switches[1]);
 
     expect(getByTestId('hc-value').props.children).toBe('true');
   });
@@ -88,10 +94,10 @@ describe('AccessibilityScreen', () => {
 
     expect(getByTestId('rt-value').props.children).toBe('false');
 
-    // Vision section order: [0] Bold Text, [1] Reduce Motion, [2] High Contrast,
-    // [3] Reduce Transparency, [4] Smart Invert, [5] Color Filters
+    // Vision section order (#493 removed Reduce Motion): [0] Bold Text, [1] High Contrast,
+    // [2] Reduce Transparency, [3] Smart Invert, [4] Color Filters
     const switches = getAllByRole('switch');
-    fireEvent.press(switches[3]);
+    fireEvent.press(switches[2]);
 
     expect(getByTestId('rt-value').props.children).toBe('true');
   });
@@ -239,10 +245,10 @@ describe('AccessibilityScreen — Reduce White Point (#614)', () => {
 
     expect(getByTestId('wp-value').props.children).toBe('false|1');
 
-    // Vision section order: Bold Text, Reduce Motion, High Contrast,
+    // Vision section order (#493 removed Reduce Motion): Bold Text, High Contrast,
     // Reduce Transparency, Smart Invert, Color Filters, Reduce White Point
     const switches = getAllByRole('switch');
-    fireEvent.press(switches[6]);
+    fireEvent.press(switches[5]);
 
     expect(getByTestId('wp-value').props.children).toBe('true|1');
   });
@@ -265,7 +271,7 @@ describe('AccessibilityScreen — Reduce White Point (#614)', () => {
 
     // turn on
     const switches = getAllByRole('switch');
-    fireEvent.press(switches[6]);
+    fireEvent.press(switches[5]);
     expect(getByTestId('wp-value').props.children).toBe('true|1');
 
     const sliders = UNSAFE_queryAllByType(CupertinoSlider);
@@ -288,9 +294,99 @@ describe('AccessibilityScreen — Reduce White Point (#614)', () => {
     );
 
     const switches = getAllByRole('switch');
-    fireEvent.press(switches[6]);
+    fireEvent.press(switches[5]);
     expect(getByTestId('wp-value').props.children).toBe('true|1');
-    fireEvent.press(switches[6]);
+    fireEvent.press(switches[5]);
     expect(getByTestId('wp-value').props.children).toBe('false|1');
+  });
+});
+
+// Reads motionIntensity + scrollDeceleration directly from SettingsStore —
+// proves the controls reach the global store, not just local screen state.
+function MotionReader() {
+  const { settings } = useSettings();
+  return (
+    <Text testID="motion-value">
+      {`${settings.motionIntensity}|${settings.scrollDeceleration}|${String(settings.reduceMotion)}`}
+    </Text>
+  );
+}
+
+describe('AccessibilityScreen — Motion (#493: motionIntensity + scrollDeceleration)', () => {
+  it('renders the Motion section with Full/Reduced/Off and defaults to Full', () => {
+    const { getByText, getAllByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <MotionReader />
+      </>,
+    );
+    expect(getByText('Full')).toBeTruthy();
+    expect(getByText('Reduced')).toBeTruthy();
+    // 'Off' also labels the AssistiveTouch subtitle further down the screen
+    // (enabled: false in the mocked store) — the Motion segment is the first match.
+    expect(getAllByText('Off').length).toBeGreaterThanOrEqual(1);
+    expect(getByTestId('motion-value').props.children).toBe('full|normal|false');
+  });
+
+  it('selecting Reduced updates motionIntensity and derives reduceMotion=true', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <MotionReader />
+      </>,
+    );
+
+    fireEvent.press(getByText('Reduced'));
+
+    expect(getByTestId('motion-value').props.children).toBe('reduced|normal|true');
+  });
+
+  it('selecting Off updates motionIntensity and derives reduceMotion=true', () => {
+    const { getAllByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <MotionReader />
+      </>,
+    );
+
+    // First 'Off' match is the Motion segmented control (AssistiveTouch's
+    // subtitle 'Off' renders further down the screen).
+    fireEvent.press(getAllByText('Off')[0]);
+
+    expect(getByTestId('motion-value').props.children).toBe('off|normal|true');
+  });
+
+  it('selecting Off then Full again returns reduceMotion to false (no stuck state)', () => {
+    const { getByText, getAllByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <MotionReader />
+      </>,
+    );
+
+    fireEvent.press(getAllByText('Off')[0]);
+    expect(getByTestId('motion-value').props.children).toBe('off|normal|true');
+
+    fireEvent.press(getByText('Full'));
+    expect(getByTestId('motion-value').props.children).toBe('full|normal|false');
+  });
+
+  it('renders the Scroll Deceleration section with Normal/Fast, defaults to Normal', () => {
+    const { getByText } = render(<AccessibilityScreen navigation={mockNavigation as never} />);
+    expect(getByText('Normal')).toBeTruthy();
+    expect(getByText('Fast')).toBeTruthy();
+  });
+
+  it('selecting Fast updates scrollDeceleration without touching motionIntensity', () => {
+    const { getByText, getByTestId } = render(
+      <>
+        <AccessibilityScreen navigation={mockNavigation as never} />
+        <MotionReader />
+      </>,
+    );
+
+    fireEvent.press(getByText('Fast'));
+
+    expect(getByTestId('motion-value').props.children).toBe('full|fast|false');
   });
 });

@@ -66,4 +66,33 @@ describe('settle()', () => {
     expect(() => settle(100, 'mediumSettle', true, 999)).not.toThrow();
     expect(settle(100, 'mediumSettle', true, 999)).toBe(100);
   });
+
+  // #493: settle() now also accepts the tri-state MotionIntensity directly,
+  // so the 3 named haptic-anchor components can pass it through without a
+  // boolean-collapsing step. Per the file-level note above, the mocked
+  // withSpring/withTiming are both identity here AND settle() is 'worklet'
+  // (closure-captured by the reanimated Babel plugin), so these assertions
+  // are compile/no-throw/pass-through smoke tests, same class as the
+  // pre-existing boolean cases above — they do NOT prove which branch ran.
+  // That proof lives at the component level instead (NotificationBanner's
+  // motionIntensity branch is plain JS, not a worklet, so it CAN be spied on
+  // — see NotificationBanner.motionIntensity.test.tsx).
+  it('accepts "full" as an explicit tri-state value, equivalent to reduceMotion=false', () => {
+    expect(() => settle(100, 'mediumSettle', 'full', 500)).not.toThrow();
+    expect(settle(100, 'mediumSettle', 'full', 500)).toBe(100);
+  });
+
+  it('accepts "reduced" as an explicit tri-state value, equivalent to reduceMotion=true', () => {
+    expect(() => settle(100, 'mediumSettle', 'reduced', 500)).not.toThrow();
+    expect(settle(100, 'mediumSettle', 'reduced', 500)).toBe(100);
+  });
+
+  it('accepts "off" without throwing and resolves to the target value with no velocity requirement', () => {
+    expect(() => settle(100, 'mediumSettle', 'off')).not.toThrow();
+    expect(settle(100, 'mediumSettle', 'off')).toBe(100);
+  });
+
+  it('"off" ignores an extreme velocity — no animation, so momentum is irrelevant', () => {
+    expect(settle(42, 'mediumSettle', 'off', 99999)).toBe(42);
+  });
 });
