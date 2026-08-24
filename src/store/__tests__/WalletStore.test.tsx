@@ -177,6 +177,71 @@ describe('WalletStore', () => {
     expect(result.current.getPass('missing')).toBeUndefined();
   });
 
+  describe('updatePass', () => {
+    it('updates the given field and keeps the rest of the pass unchanged', async () => {
+      const { result } = renderHook(() => useWallet(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.addPass({
+          type: 'boarding',
+          title: 'Original',
+          subtitle: 'Flight 123',
+          code: 'ABC123',
+          color: '#007AFF',
+        });
+      });
+      const original = result.current.passes[0];
+
+      await act(async () => {
+        result.current.updatePass(original.id, { title: 'Novo' });
+      });
+
+      const updated = result.current.getPass(original.id);
+      expect(updated?.title).toBe('Novo');
+      expect(updated?.subtitle).toBe(original.subtitle);
+      expect(updated?.code).toBe(original.code);
+      expect(updated?.color).toBe(original.color);
+      expect(updated?.type).toBe(original.type);
+      expect(updated?.createdAt).toBe(original.createdAt);
+      expect(updated?.id).toBe(original.id);
+    });
+
+    it('on a missing id is a no-op (does not alter passes)', async () => {
+      const { result } = renderHook(() => useWallet(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.addPass({ type: 'ticket', title: 'Kept', code: 'X', color: '#000' });
+      });
+
+      await act(async () => {
+        expect(() => result.current.updatePass('nope', { title: 'x' })).not.toThrow();
+      });
+
+      expect(result.current.passes).toHaveLength(1);
+      expect(result.current.passes[0].title).toBe('Kept');
+    });
+
+    it('with an empty patch does not alter the pass', async () => {
+      const { result } = renderHook(() => useWallet(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.addPass({
+          type: 'loyalty', title: 'Untouched', subtitle: 'Sub', code: 'C', color: '#111',
+        });
+      });
+      const original = result.current.passes[0];
+
+      await act(async () => {
+        result.current.updatePass(original.id, {});
+      });
+
+      expect(result.current.getPass(original.id)).toEqual(original);
+    });
+  });
+
   it('hydrates passes from AsyncStorage on mount', async () => {
     const stored = [
       { id: 'p1', type: 'loyalty', title: 'Stored Card', code: 'STORED', color: '#FF3B30', createdAt: '2025-01-01T00:00:00Z' },
