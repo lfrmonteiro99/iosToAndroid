@@ -73,6 +73,7 @@ export type RootStackParamList = {
   TodayView: undefined;
   LauncherSettings: undefined;
   ProtectedApps: undefined;
+  PerformanceProfile: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;
