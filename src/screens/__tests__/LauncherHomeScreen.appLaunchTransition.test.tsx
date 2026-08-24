@@ -47,6 +47,7 @@ function mockApps(app: AppsStore.InstalledApp, launchApp = jest.fn(() => Promise
     launchApp,
     addToHome: jest.fn(),
     removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
     addToDock: jest.fn(),
     removeFromDock: jest.fn(),
     removeFromRecents: jest.fn(),
