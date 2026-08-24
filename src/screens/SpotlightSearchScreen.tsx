@@ -20,6 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
+import { resolveInternalRoute } from '../utils/builtInAppRoutes';
 
 // ---------------------------------------------------------------------------
 // Fuzzy matching
@@ -364,9 +365,18 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
     setHistory(updatedHistory);
 
     switch (item.type) {
-      case 'app':
-        launchApp(item.app.packageName);
+      case 'app': {
+        // #701: a app Android que duplica um built-in (Google Photos, Google
+        // Clock, …) é listada aqui com o nome do nosso ecrã, por isso resolve-se
+        // primeiro a rota interna — como já fazia a grelha da home.
+        const internalRoute = resolveInternalRoute(item.app.packageName);
+        if (internalRoute) {
+          navigation.navigate(internalRoute as never);
+        } else {
+          launchApp(item.app.packageName);
+        }
         break;
+      }
       case 'contact':
         navigation.navigate('ContactDetail', { contactId: item.contactId });
         break;

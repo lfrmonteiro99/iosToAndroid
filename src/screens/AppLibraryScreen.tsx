@@ -31,6 +31,7 @@ import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
+import { resolveInternalRoute } from '../utils/builtInAppRoutes';
 
 // ---------------------------------------------------------------------------
 // Category detection
@@ -573,7 +574,7 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 // page of the paginated home screen (LauncherHomeScreen) — see issue #434.
 // Keeping this in one place means the two call sites can't drift apart the
 // way twin overlays did in #384.
-export function AppLibraryContent() {
+export function AppLibraryContent({ navigation }: { navigation?: AppNavigationProp } = {}) {
   const { theme } = useTheme();
   const { colors } = theme;
   // `apps` é a lista completa (usada só pela procura, para que uma app
@@ -687,8 +688,19 @@ export function AppLibraryContent() {
 
   const handleLaunch = useCallback((packageName: string) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // #701: a app Android que duplica um built-in (Google Photos, Google Clock,
+    // …) aparece aqui com o MESMO nome do nosso ecrã ("Photos"), por isso tem de
+    // abrir o nosso ecrã, como já acontecia na grelha da home. Sem navigation
+    // (a App Library também é a última página do pager, #434, onde é montada sem
+    // prop) cai-se no lançamento externo em vez de rebentar.
+    const internalRoute = resolveInternalRoute(packageName);
+    if (internalRoute && navigation) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rotas de built-ins não têm params; os overloads de navigate exigem a spec
+      navigation.navigate(internalRoute as any);
+      return;
+    }
     launchApp(packageName);
-  }, [launchApp]);
+  }, [launchApp, navigation]);
 
   const isSearching = query.trim().length > 0;
 
@@ -835,7 +847,7 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
           </Pressable>
         }
       />
-      <AppLibraryContent />
+      <AppLibraryContent navigation={navigation} />
     </View>
   );
 }

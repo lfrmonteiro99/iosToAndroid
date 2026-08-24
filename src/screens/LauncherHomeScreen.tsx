@@ -148,54 +148,19 @@ export function computePagerRubberBandOffset(
   return clampWithRubberBand(translationX, 0, 0, dimension);
 }
 
-// Built-in app routing: packageName → navigation screen name
-export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
-  'com.iostoandroid.phone': 'Phone',
-  'com.iostoandroid.messages': 'Messages',
-  'com.iostoandroid.contacts': 'Contacts',
-  'com.iostoandroid.settings': 'Settings',
-  'com.iostoandroid.weather': 'Weather',
-  'com.iostoandroid.clock': 'Clock',
-  'com.iostoandroid.camera': 'Camera',
-  'com.iostoandroid.photos': 'Photos',
-  'com.iostoandroid.calendar': 'Calendar',
-  'com.iostoandroid.calculator': 'Calculator',
-  'com.iostoandroid.notes': 'Notes',
-  'com.iostoandroid.reminders': 'Reminders',
-  'com.iostoandroid.mail': 'Mail',
-  'com.iostoandroid.browser': 'Browser',
-};
-
-// Known Android packages that duplicate a built-in app (issue #438).
-//
-// The home screen shows a virtual icon for every entry of BUILT_IN_APPS, which
-// opens the internal iOS-style screen. The real Android app that serves the
-// same function has a different packageName, so it used to pass through the
-// grid filter untouched and render a second icon with the SAME label that
-// launched an external app instead — one "Phone" going to the internal screen,
-// another going to the Google Dialer.
-//
-// Product decision (issue #438, option 1): the Android duplicate is hidden from
-// the home screen grid. This is an explicit alias list, not a heuristic: dialer
-// / messaging package names vary by OEM, so unlisted equivalents are simply not
-// deduped rather than being guessed at. The App Library (AppLibraryScreen) is
-// unaffected and keeps listing everything that is installed.
-export const BUILT_IN_APP_ANDROID_ALIASES: Record<string, readonly string[]> = {
-  'com.iostoandroid.phone': ['com.google.android.dialer', 'com.android.dialer'],
-  'com.iostoandroid.messages': ['com.google.android.apps.messaging', 'com.android.messaging'],
-  'com.iostoandroid.contacts': ['com.google.android.contacts', 'com.android.contacts'],
-  'com.iostoandroid.settings': ['com.android.settings'],
-  'com.iostoandroid.clock': ['com.google.android.deskclock', 'com.android.deskclock'],
-  'com.iostoandroid.camera': ['com.google.android.GoogleCamera', 'com.android.camera2'],
-  'com.iostoandroid.photos': ['com.google.android.apps.photos'],
-  'com.iostoandroid.calendar': ['com.google.android.calendar', 'com.android.calendar'],
-  'com.iostoandroid.calculator': ['com.google.android.calculator', 'com.android.calculator2'],
-};
-
-// Flat set of every Android package that duplicates a built-in app.
-export const BUILT_IN_DUPLICATE_PACKAGES: ReadonlySet<string> = new Set(
-  Object.values(BUILT_IN_APP_ANDROID_ALIASES).flat(),
-);
+// A tabela de routing dos built-ins mudou para src/utils/builtInAppRoutes.ts
+// (#701) para poder ser usada também pela App Library e pelo Spotlight sem
+// criar um ciclo de imports (este ficheiro importa AppLibraryScreen). Re-exporta-se
+// daqui para não quebrar os consumidores existentes.
+export {
+  BUILT_IN_APPS,
+  BUILT_IN_APP_ANDROID_ALIASES,
+  BUILT_IN_DUPLICATE_PACKAGES,
+} from '../utils/builtInAppRoutes';
+import {
+  BUILT_IN_APPS,
+  BUILT_IN_DUPLICATE_PACKAGES,
+} from '../utils/builtInAppRoutes';
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
 export const VIRTUAL_ICON_CONFIG: Record<string, {
@@ -1750,7 +1715,7 @@ export function LauncherHomeScreen() {
           key="app-library"
           style={[styles.page, styles.appLibraryPage, lastPageOverscrollStyle]}
         >
-          <AppLibraryContent />
+          <AppLibraryContent navigation={navigation} />
         </Animated.View>
       </ScrollView>
 
