@@ -94,3 +94,51 @@ describe('CategoryCard — quadrant layout', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// iOS-style transparent cluster: App Library categories are NOT white rounded
+// cards. On iOS the category is a title + a cluster of icons sitting directly
+// on the blurred wallpaper, no closed card container. (issue #680)
+// ---------------------------------------------------------------------------
+
+// Collect every style entry applied to the *root* CategoryCard container so we
+// can assert on the card's own box, not on the inner icon grid.
+function rootStyleEntries(json: ReturnType<ReturnType<typeof renderCard>['toJSON']>) {
+  const style = json?.props?.style;
+  if (!style) return [];
+  return Array.isArray(style) ? style : [style];
+}
+
+describe('CategoryCard — iOS-style transparent cluster (no card)', () => {
+  it('does not render a white/rounded card container; icons sit directly on the background', () => {
+    const { toJSON } = renderCard(5);
+    const entries = rootStyleEntries(toJSON());
+    const hasCardBackground = entries.some(
+      (e) => e && typeof e === 'object' && 'backgroundColor' in e,
+    );
+    const hasRoundedCorner = entries.some(
+      (e) => e && typeof e === 'object' && 'borderRadius' in e,
+    );
+    expect(hasCardBackground).toBe(false);
+    expect(hasRoundedCorner).toBe(false);
+  });
+
+  it('keeps the container width + inset padding but drops the card background and corners', () => {
+    const { toJSON } = renderCard(4);
+    const entries = rootStyleEntries(toJSON());
+    const flat = Object.assign({}, ...(entries.filter(Boolean) as object[]));
+    expect((flat as { width?: number }).width).toBe(CARD_WIDTH);
+    expect((flat as { padding?: number }).padding).toBe(12);
+    expect((flat as { backgroundColor?: string }).backgroundColor).toBeUndefined();
+    expect((flat as { borderRadius?: number }).borderRadius).toBeUndefined();
+  });
+
+  it('renders an empty category (0 apps) without a card background', () => {
+    const { getByText, toJSON } = renderCard(0);
+    expect(getByText('0 apps')).toBeTruthy();
+    const entries = rootStyleEntries(toJSON());
+    expect(
+      entries.some((e) => e && typeof e === 'object' && 'backgroundColor' in e),
+    ).toBe(false);
+  });
+});

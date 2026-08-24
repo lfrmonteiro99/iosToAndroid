@@ -233,14 +233,20 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
   // where an animated style per card would make a page transition's
   // useAnimatedStyle cost grow with the number of categories (the exact
   // invariant #518 protects). The ad hoc 0.8 opacity is gone either way.
+  // iOS App Library categories are NOT closed white cards: a title sits above a
+  // translucent cluster of icons laid directly on the blurred wallpaper. The
+  // category container therefore carries no card background and no rounded
+  // corners (the preset card chrome belongs to list rows / sheets, not here).
+  // Only the width + inset padding are kept; the pressed state is dropped too
+  // because there is no painted surface to darken — the whole card opens the
+  // category anyway, so a pressed backdrop would be pure card chrome.
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.categoryCard,
+      style={[
+        styles.categoryCluster,
         {
           width: cardWidth,
-          backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground,
         },
       ]}
       accessibilityLabel={`${title} category, ${apps.length} app${apps.length !== 1 ? 's' : ''}`}
@@ -864,10 +870,10 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
-  categoryCard: {
-    borderRadius: 20,
+  categoryCluster: {
+    // No card: iOS lays the icon cluster directly on the wallpaper. Only the
+    // inset padding + column width are kept so the icons don't touch the edges.
     padding: 12,
-    overflow: 'hidden',
   },
   iconGrid: {
     flexDirection: 'row',
