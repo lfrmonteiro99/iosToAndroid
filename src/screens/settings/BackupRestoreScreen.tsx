@@ -21,6 +21,7 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+import { validateSnapshot } from '../../services/BackupValidation';
 
 // Explicit allow-list derived from SettingsStore.tsx, ThemeContext.tsx, and
 // each settings screen that writes its own AsyncStorage keys.
@@ -107,9 +108,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     try {
       setImporting(true);
       const data = JSON.parse(importText.trim());
-      if (typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('Expected a JSON object');
-      }
+      validateSnapshot(data);
       const filtered: Record<string, string> = {};
       for (const [k, v] of Object.entries(data)) {
         if (EXPORTABLE_SET.has(k)) {
