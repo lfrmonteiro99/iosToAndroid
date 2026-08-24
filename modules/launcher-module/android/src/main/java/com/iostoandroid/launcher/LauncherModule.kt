@@ -84,7 +84,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -1345,6 +1345,25 @@ class LauncherModule : Module() {
 
         AsyncFunction("isSpeechRecognitionAvailable") {
             SpeechRecognizer.isRecognitionAvailable(context)
+        }
+
+        AsyncFunction("startTapDetection") {
+            // #636: start the foreground sensor service that detects double/triple
+            // back taps via accelerometer + gyroscope and emits `onBackTap`.
+            // Best-effort: on a device without the sensors or the foreground
+            // permission the service simply won't start, and callers should not
+            // reject the whole promise over it.
+            try {
+                TapSensorService.start(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopTapDetection") {
+            try {
+                TapSensorService.stop(context)
+                true
+            } catch (e: Exception) { false }
         }
 
         // ── Lifecycle ────────────────────────────────────────────────────

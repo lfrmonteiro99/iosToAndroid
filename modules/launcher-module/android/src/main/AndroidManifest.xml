@@ -20,6 +20,9 @@
         tools:ignore="ProtectedPermissions" />
     <!-- #608 Tap to Wake: needed to wake the (app-dimmed) screen via PowerManager.ACQUIRE_CAUSES_WAKEUP -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- #636 Back Tap: foreground sensor service needs a foreground notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
     <application>
         <service
@@ -30,5 +33,12 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- #636 Back Tap: detects double/triple taps on the device back via
+             accelerometer + gyroscope. Runs as a foreground service so the
+             detector survives the launcher being backgrounded. -->
+        <service
+            android:name=".TapSensorService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
     </application>
 </manifest>
