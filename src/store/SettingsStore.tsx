@@ -25,6 +25,7 @@ import {
   normalizeFocusPageVisibility,
   type FocusPageVisibility,
 } from '../utils/focusPageVisibility';
+import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -424,6 +425,12 @@ export function SettingsProvider({
             // valores não-array) faria o filtro esconder páginas ao acaso ou
             // rebentar no `.includes`, por isso normaliza-se na leitura.
             focusPageVisibility: normalizeFocusPageVisibility(parsed?.focusPageVisibility),
+            // focusDockOverride (#619, filho de #617) troca os ícones do dock
+            // por modo de Focus; um blob corrompido (não-array, entradas não
+            // string) faria o `.map`/`.slice(0, 4)` do LauncherHomeScreen
+            // render pacotes inexistentes ou rebentar — normaliza-se na
+            // leitura como os irmãos acima.
+            focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a

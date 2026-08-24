@@ -155,6 +155,51 @@ describe('AppsStore — reacts to package install/uninstall broadcasts', () => {
     expect(result.current.apps.map(a => a.packageName)).toEqual(['com.example.cherry']);
   });
 
+  // #760: homeApps.position é a fonte de verdade da ordem/pertença — uma app
+  // instalada via broadcast (sem passar por loadApps) também precisa de uma
+  // entrada, senão fica sem posição atribuída até ao próximo arranque.
+  it('atribui a próxima position livre a uma app instalada via broadcast', async () => {
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    // cherry (única app do getInstalledApps deste ficheiro) já ganhou position: 0 no loadApps.
+    expect(result.current.homeApps).toEqual([{ packageName: 'com.example.cherry', position: 0 }]);
+
+    await act(async () => {
+      await getHandler()({ action: 'added', packageName: 'com.example.banana' });
+    });
+
+    expect(result.current.homeApps).toEqual(expect.arrayContaining([
+      { packageName: 'com.example.cherry', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]));
+  });
+
+  it('N instalações em rápida sucessão recebem positions sequenciais sem colidir', async () => {
+    (LauncherModule.getAppInfo as jest.Mock).mockImplementation((packageName: string) =>
+      Promise.resolve({ name: packageName, packageName, icon: '', isSystem: false }),
+    );
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    const handler = getHandler();
+    await act(async () => {
+      await Promise.all([
+        handler({ action: 'added', packageName: 'com.example.a1' }),
+        handler({ action: 'added', packageName: 'com.example.a2' }),
+        handler({ action: 'added', packageName: 'com.example.a3' }),
+      ]);
+    });
+
+    const positions = result.current.homeApps.map(h => h.position);
+    // Sem duplicados: cada app instalada em concorrência ficou com a sua própria position.
+    expect(new Set(positions).size).toBe(positions.length);
+    expect(result.current.homeApps.map(h => h.packageName)).toEqual(
+      expect.arrayContaining(['com.example.cherry', 'com.example.a1', 'com.example.a2', 'com.example.a3']),
+    );
+  });
+
   it('a removal for an unknown package leaves the list untouched', async () => {
     const { result } = renderHook(() => useApps(), { wrapper });
     await act(async () => {});
