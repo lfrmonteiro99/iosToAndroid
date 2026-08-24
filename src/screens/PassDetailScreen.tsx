@@ -68,6 +68,16 @@ export function PassDetailScreen({ navigation, route }: PassDetailScreenProps) {
             <Text style={[typography.body, { color: colors.systemBlue }]}>Wallet</Text>
           </Pressable>
         }
+        rightButton={
+          <Pressable
+            onPress={() => navigation.navigate('PassEdit', { passId: pass.id })}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit pass"
+          >
+            <Text style={[typography.body, { color: colors.systemBlue }]}>Edit</Text>
+          </Pressable>
+        }
       />
 
       <ScrollView
