@@ -15,9 +15,19 @@ export const NAMED_WALLPAPERS: readonly NamedWallpaper[] = [
 export const WALLPAPERS: readonly string[] = NAMED_WALLPAPERS.map((w) => w.color);
 
 /**
+ * Índice sentinel de wallpaper personalizado (imagem escolhida pelo utilizador).
+ * Não indexa WALLPAPERS: `WallpaperScreen` grava 6 e a home mostra o
+ * ImageBackground guardado em '@iostoandroid/custom_wallpaper'. O domínio válido
+ * de `settings.wallpaperIndex` é portanto [0, 6].
+ */
+export const CUSTOM_WALLPAPER_INDEX = 6;
+
+/**
  * Normaliza um índice de wallpaper lido de fonte não confiável (AsyncStorage,
- * settings legados de versões antigas). Devolve 0 para não-inteiro / negativo e
- * clampa ao intervalo válido [0, WALLPAPERS.length - 1].
+ * settings legados de versões antigas). Devolve 0 para NaN / não-numérico /
+ * negativo e clampa ao domínio válido [0, CUSTOM_WALLPAPER_INDEX] — 6 é
+ * preservado porque é o sentinel de wallpaper personalizado, não um valor fora
+ * de gama.
  *
  * Sem isto, um `wallpaperIndex` corrompido (string, NaN, fora de gama) passaria
  * a `WALLPAPERS[Math.min(index, len-1)] === undefined` e `darkenHex(undefined)`
@@ -25,8 +35,18 @@ export const WALLPAPERS: readonly string[] = NAMED_WALLPAPERS.map((w) => w.color
  */
 export function clampWallpaperIndex(index: unknown): number {
   const n = typeof index === 'number' ? index : Number(index);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.min(Math.floor(n), WALLPAPERS.length - 1);
+  if (Number.isNaN(n)) return 0;
+  return Math.min(Math.max(Math.floor(n), 0), CUSTOM_WALLPAPER_INDEX);
+}
+
+/**
+ * Cor de gradiente a usar para um `wallpaperIndex` qualquer. O sentinel custom
+ * (6) não tem cor própria — cai na primeira cor, que só é pintada quando não
+ * existe imagem personalizada guardada.
+ */
+export function wallpaperColorFor(index: unknown): string {
+  const i = clampWallpaperIndex(index);
+  return (WALLPAPERS[Math.min(i, WALLPAPERS.length - 1)] ?? WALLPAPERS[0]) as string;
 }
 
 /** Darken a hex colour by `amount` (0–1) to build a gradient end stop. */

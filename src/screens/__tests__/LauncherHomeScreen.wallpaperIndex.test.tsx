@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, waitFor } from '../../test-utils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppsStore from '../../store/AppsStore';
 import * as SettingsStore from '../../store/SettingsStore';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
@@ -82,5 +83,49 @@ describe('LauncherHomeScreen — wallpaperIndex inválido (#674)', () => {
   it('darkenHex não rebenta com input inválido (undef/NaN)', () => {
     expect(() => darkenHex(undefined as unknown as string, 0.28)).not.toThrow();
     expect(() => darkenHex(NaN as unknown as string, 0.28)).not.toThrow();
+  });
+});
+
+// Retrabalho #674: o saneamento não pode destruir o wallpaper personalizado.
+// wallpaperIndex === 6 é o sentinel de custom (WallpaperScreen grava 6), por
+// isso o clamp tem de o preservar e a home tem de continuar a pintar a imagem.
+describe('LauncherHomeScreen — wallpaper personalizado (índice 6)', () => {
+  beforeEach(() => {
+    mockApps();
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === '@iostoandroid/custom_wallpaper' ? 'file:///custom.jpg' : null),
+    );
+  });
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('renderiza o ImageBackground custom quando wallpaperIndex === 6', async () => {
+    withSettings({ wallpaperIndex: 6 });
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => {
+      expect(utils.getByTestId('wallpaper-custom-image')).toBeTruthy();
+    }, { timeout: 3000 });
+  });
+
+  it('mantém o custom mesmo com o índice em string "6" (blob legado)', async () => {
+    withSettings({ wallpaperIndex: '6' as unknown as number });
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => {
+      expect(utils.getByTestId('wallpaper-custom-image')).toBeTruthy();
+    }, { timeout: 3000 });
+  });
+
+  it('o inverso do fix: índice de cor (2) NÃO mostra a imagem custom', async () => {
+    withSettings({ wallpaperIndex: 2 });
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(utils.getByTestId('wallpaper-layer')).toBeTruthy(), { timeout: 3000 });
+    expect(utils.queryByTestId('wallpaper-custom-image')).toBeNull();
+  });
+
+  it('índice 6 sem imagem guardada cai no gradiente, sem rebentar', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    withSettings({ wallpaperIndex: 6 });
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(utils.getByTestId('wallpaper-layer')).toBeTruthy(), { timeout: 3000 });
+    expect(utils.queryByTestId('wallpaper-custom-image')).toBeNull();
   });
 });
