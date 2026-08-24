@@ -786,6 +786,7 @@ export function LauncherHomeScreen() {
     apps,
     nonDockApps,
     dockApps,
+    homeApps,
     isLoading,
     launchApp,
     isDefaultLauncher,
@@ -1243,15 +1244,26 @@ export function LauncherHomeScreen() {
     }
 
     // Add real installed apps (not in dock, not in folders, and not an Android
-    // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438)
-    for (const app of nonDockApps) {
+    // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438),
+    // ordered by homeApps.position (#760) instead of the native scan order
+    // nonDockApps comes in. Apps without a recorded position (shouldn't
+    // happen once AppsStore has assigned one on load, but kept defensive)
+    // sort after every positioned app, in their original relative order —
+    // Array#sort is stable, so ties fall back to scan order.
+    const positionByPackage = new Map(homeApps.map(h => [h.packageName, h.position]));
+    const orderedNonDockApps = [...nonDockApps].sort((a, b) => {
+      const posA = positionByPackage.get(a.packageName) ?? Number.MAX_SAFE_INTEGER;
+      const posB = positionByPackage.get(b.packageName) ?? Number.MAX_SAFE_INTEGER;
+      return posA - posB;
+    });
+    for (const app of orderedNonDockApps) {
       if (BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName)) continue;
       if (!appsInFolders.has(app.packageName)) {
         items.push({ type: 'app', app });
       }
     }
     return items;
-  }, [nonDockApps, dockApps, folders]);
+  }, [nonDockApps, dockApps, folders, homeApps]);
 
   // Paginate grid items — memoizado (#518): sem isto, este array era
   // recriado em TODO o render (incluindo o causado por um simples avanço de
