@@ -71,6 +71,8 @@ import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { CardEditScreen } from '../screens/CardEditScreen';
+import { PassEditScreen } from '../screens/PassEditScreen';
+import { PassScanScreen } from '../screens/PassScanScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -119,6 +121,8 @@ export function TabNavigator() {
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
       <Stack.Screen name="Wallet" component={WalletScreen} options={{ animation }} />
       <Stack.Screen name="CardEdit" component={CardEditScreen} options={{ animation }} />
+      <Stack.Screen name="PassEdit" component={PassEditScreen} options={{ animation }} />
+      <Stack.Screen name="PassScan" component={PassScanScreen} options={{ animation, gestureEnabled: false }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />
