@@ -20,6 +20,7 @@ import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { parseCommand } from '../assistant/commandParser';
 import { speak, stopSpeaking } from '../assistant/speech';
+import { BUILT_IN_APPS } from './LauncherHomeScreen';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 import { createQuickAlarm } from '../utils/alarmScheduling';
@@ -29,6 +30,20 @@ import { withAutoLockSuppressed } from '../utils/permissions';
 const GREETING = 'What can I help you with?';
 const LISTENING = 'Listening…';
 const NOT_SUPPORTED = "That's not supported yet.";
+
+// Built-in apps are virtual screens of this app, not real Android packages:
+// their `packageName` (com.iostoandroid.*) is absent from the PackageManager
+// list the assistant searches (`apps`), and getLaunchIntentForPackage returns
+// null for them. Routing them through the native launcher would drop back to
+// the Android home screen (#697 class of bug). The home grid and the Control
+// Center already open them via navigation; the assistant must do the same.
+//
+// BUILT_IN_APPS maps packageName -> route, and its route names (Calculator,
+// Notes, Weather, …) are exactly the spoken app names Siri matches, so we
+// invert it into a display-name -> route lookup.
+const BUILT_IN_APP_BY_NAME: Record<string, keyof typeof BUILT_IN_APPS> = Object.fromEntries(
+  Object.entries(BUILT_IN_APPS).map(([, route]) => [String(route).toLowerCase(), route]),
+);
 
 /** Format a Date the way the assistant speaks a clock time ("2:05 PM"). */
 export function formatAssistantTime(date: Date): string {
@@ -110,6 +125,17 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
 
     switch (command.type) {
       case 'OPEN_APP': {
+        // Built-in apps (Calculator, Notes, Weather, …) are virtual screens of
+        // this app, not real Android packages — route them through the in-app
+        // navigator so they open internally instead of falling back to the
+        // Android home screen (issue #700; same class of bug as #697).
+        const builtInRoute = BUILT_IN_APP_BY_NAME[command.appName.trim().toLowerCase()];
+        if (builtInRoute) {
+          reply = `Opening ${command.appName.trim()}.`;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- built-in routes all have undefined params; navigate overloads require params spec
+          navigation.navigate(builtInRoute as any);
+          break;
+        }
         const app = findApp(command.appName);
         if (!app) {
           reply = `Couldn't find an app called "${command.appName}".`;
