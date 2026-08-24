@@ -20,6 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
+import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
 
 // ---------------------------------------------------------------------------
 // Fuzzy matching
@@ -365,7 +366,10 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
 
     switch (item.type) {
       case 'app':
-        launchApp(item.app.packageName);
+        // Built-in virtual apps (Weather, Calculator, …) must open the in-app
+        // iOS-style screen, not be handed to the native launcher bridge — see
+        // launchBuiltInOrExternal.
+        launchBuiltInOrExternal(item.app.packageName, navigation, launchApp);
         break;
       case 'contact':
         navigation.navigate('ContactDetail', { contactId: item.contactId });
