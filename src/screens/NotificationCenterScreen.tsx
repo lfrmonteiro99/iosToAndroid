@@ -216,16 +216,28 @@ export function NotificationCenterScreen() {
   const groups: NotificationGroup[] = React.useMemo(() => {
     const map = new Map<string, NotificationGroup>();
     for (const notif of notifications) {
-      if (!map.has(notif.packageName)) {
-        const appInfo = apps.find(a => a.packageName === notif.packageName);
-        map.set(notif.packageName, {
-          packageName: notif.packageName,
-          appName: appInfo?.name ?? notif.packageName.split('.').pop() ?? notif.packageName,
+      // The native bridge (modules/launcher-module/src) deliberately passes
+      // through notifications whose packageName is missing/non-string
+      // (dedupeByPackageName keeps malformed native data instead of coercing it).
+      // A bare `notif.packageName.split('.')` here would throw on `undefined`/
+      // `null` and take down the entire screen, which the app-wide ErrorBoundary
+      // then replaces with a near-white fallback — the "blank white, no content"
+      // reported for the notification center. Key such entries under a stable,
+      // per-notification id and label them "Unknown" instead of crashing.
+      const pkg = typeof notif.packageName === 'string' ? notif.packageName : '';
+      const groupKey = pkg || `unknown:${notif.key}`;
+      if (!map.has(groupKey)) {
+        const appInfo = pkg
+          ? apps.find(a => a.packageName === pkg)
+          : undefined;
+        map.set(groupKey, {
+          packageName: pkg,
+          appName: appInfo?.name ?? (pkg ? pkg.split('.').pop() ?? pkg : 'Unknown'),
           appIcon: appInfo?.icon ?? '',
           notifications: [],
         });
       }
-      map.get(notif.packageName)!.notifications.push(notif);
+      map.get(groupKey)!.notifications.push(notif);
     }
     return Array.from(map.values());
   }, [notifications, apps]);
@@ -308,7 +320,8 @@ export function NotificationCenterScreen() {
                       const isRead = readIds.has(notif.key);
                       const isExpanded = expandedNotifKey === notif.key;
                       const isReplying = replyingKey === notif.key;
-                      const isMessageApp = notif.packageName.includes('message') || notif.packageName.includes('sms') || notif.packageName.includes('whatsapp') || notif.packageName.includes('telegram') || notif.packageName.includes('signal');
+                      const isMessageApp = typeof notif.packageName === 'string'
+                        && (notif.packageName.includes('message') || notif.packageName.includes('sms') || notif.packageName.includes('whatsapp') || notif.packageName.includes('telegram') || notif.packageName.includes('signal'));
                       return (
                         <CupertinoSwipeableRow
                           key={notif.key}
