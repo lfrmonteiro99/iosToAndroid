@@ -60,6 +60,10 @@ class LauncherModule : Module() {
         @Volatile private var instance: LauncherModule? = null
         @Volatile var activeRecognizer: SpeechRecognizer? = null
 
+        // Live Activities (#626): one shared low-importance channel for every
+        // ongoing notification posted via postLiveActivity.
+        private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
+
         /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
          * by plugins/withLauncherIntent.js) to forward events to JavaScript.
@@ -890,6 +894,22 @@ class LauncherModule : Module() {
             true
         }
 
+        // ── Live Activities (#626) ──────────────────────────────────────
+        // Android has no single equivalent of iOS Live Activities; the closest
+        // native primitive is an ongoing (non-swipeable), low-priority
+        // notification whose content is replaced in place. postLiveActivity is
+        // an upsert: calling it again with the same id updates the existing
+        // notification (NotificationManagerCompat.notify keyed by a stable id
+        // derived from it) instead of creating a duplicate.
+
+        AsyncFunction("postLiveActivity") { id: String, title: String, text: String, percent: Int, indeterminate: Boolean ->
+            postOrUpdateLiveActivity(id, title, text, percent, indeterminate)
+        }
+
+        AsyncFunction("cancelLiveActivity") { id: String ->
+            cancelLiveActivity(id)
+        }
+
         // ── SMS Send ─────────────────────────────────────────────────────
 
         AsyncFunction("sendSms") { address: String, body: String ->
@@ -1354,6 +1374,49 @@ class LauncherModule : Module() {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    // Live Activities (#626). id.hashCode() collisions are astronomically
+    // unlikely for the small number of concurrent live activities a real
+    // caller would ever run, and even a collision only means two activities
+    // share one notification slot — not a crash.
+    private fun liveActivityNotificationId(id: String): Int = id.hashCode()
+
+    private fun ensureLiveActivityChannel() {
+        val manager = androidx.core.app.NotificationManagerCompat.from(context)
+        if (manager.getNotificationChannel(LIVE_ACTIVITY_CHANNEL_ID) != null) return
+        val channel = androidx.core.app.NotificationChannelCompat.Builder(
+            LIVE_ACTIVITY_CHANNEL_ID,
+            android.app.NotificationManager.IMPORTANCE_LOW
+        ).setName("Live Activities").build()
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun postOrUpdateLiveActivity(
+        id: String,
+        title: String,
+        text: String,
+        percent: Int,
+        indeterminate: Boolean,
+    ): Boolean {
+        if (id.isBlank()) return false
+        ensureLiveActivityChannel()
+        val notification = androidx.core.app.NotificationCompat.Builder(context, LIVE_ACTIVITY_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(100, percent.coerceIn(0, 100), indeterminate)
+            .build()
+        androidx.core.app.NotificationManagerCompat.from(context).notify(liveActivityNotificationId(id), notification)
+        return true
+    }
+
+    private fun cancelLiveActivity(id: String): Boolean {
+        if (id.isBlank()) return false
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(liveActivityNotificationId(id))
+        return true
+    }
 
     private fun hasPermission(permission: String): Boolean {
         return androidx.core.content.ContextCompat.checkSelfPermission(
