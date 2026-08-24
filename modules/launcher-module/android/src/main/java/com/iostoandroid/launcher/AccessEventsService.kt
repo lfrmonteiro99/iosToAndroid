@@ -233,31 +233,51 @@ class AccessEventsService : Service() {
     }
 
     /**
-     * AppOpsManager does not expose a public "get last access time" before API 29;
-     * on API 29+ we read it via noteOp's returned AttributionOp or, more simply,
-     * via the hidden-ish `AppOpsManager.noteOp` side effect. The supported, stable
-     * path is `getOpsForPackage` through AppOpsManager (hidden on older APIs but
-     * present via reflection-free AppOpsManager.getOpsForPackage on API 19+). We
-     * use it directly; it returns the op's lastAccessTime when the op has run.
+     * AppOpsManager does not expose a public "get last access time" before API 29.
+     * The hidden `getOpsForPackage` is the only source of that timestamp, but it is
+     * a @hide API absent from the public compile stub — so it is reached via
+     * reflection (see [lastOpTime]). On failure (older/vendor ROMs without the
+     * hidden method) we simply report no access time (0L) rather than crash.
+     */
+    /**
+     * AppOpsManager.getOpsForPackage(...) is a @hide API — it is NOT present in the
+     * public compile stub, so calling it directly fails to compile. The only stable
+     * way to reach it is reflection; the runtime call itself is guarded by a
+     * try/catch so a device without the hidden method simply reports no access
+     * time (0L) instead of crashing.
      */
     private fun lastOpTime(appOps: AppOpsManager, pm: PackageManager, pkg: String, opStr: String): Long {
         val uid = try {
             pm.getPackageUid(pkg, 0)
         } catch (e: Exception) { return 0L }
         return try {
-            @Suppress("DEPRECATION")
-            val ops = appOps.getOpsForPackage(uid, pkg, arrayOf(opStr))
-            if (ops.isNullOrEmpty()) return 0L
+            val getOps = AppOpsManager::class.java.getMethod(
+                "getOpsForPackage", Int::class.javaPrimitiveType, String::class.java, Array<String>::class.java
+            )
+            // getOpsForPackage returns a List<PackageOps> (a @hide type); reflect it.
+            val rawOps = getOps?.invoke(appOps, uid, pkg, arrayOf(opStr))
+            val ops = rawOps as? List<*> ?: return 0L
+            if (ops.isEmpty()) return 0L
+            // Each element is a PackageOps with an `ops: List<OpEntry>` field.
             val pkgOps = ops.firstOrNull() ?: return 0L
-            val opEntry = pkgOps.ops?.firstOrNull { it.opStr == opStr } ?: return 0L
+            val opsField = pkgOps.javaClass.getField("ops")
+            @Suppress("UNCHECKED_CAST")
+            val opList = opsField.get(pkgOps) as? List<Any> ?: return 0L
+            val opEntry = opList.firstOrNull { entry ->
+                val opStrField = entry.javaClass.getField("opStr")
+                opStrField.get(entry) as? String == opStr
+            } ?: return 0L
             // getLastAccessTime() is API 29+; fall back to getTime() (deprecated)
             // on older APIs. We guard the call by SDK version.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                opEntry.lastAccessTime
+            val t = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val m = opEntry.javaClass.getMethod("getLastAccessTime")
+                m.invoke(opEntry) as? Long
             } else {
                 @Suppress("DEPRECATION")
-                opEntry.time
+                val m = opEntry.javaClass.getMethod("getTime")
+                m.invoke(opEntry) as? Long
             }
+            t ?: 0L
         } catch (e: Exception) {
             0L
         }
@@ -268,7 +288,7 @@ class AccessEventsService : Service() {
         // Only count an access as "recent" if it happened inside the trailing
         // window we actually scanned this tick.
         if (ts < now - EVENT_LOOKBACK_MS) return
-        val key = "$pkg\0$type"
+        val key = "$pkg\u0000$type"
         val prev = lastReported[key] ?: 0L
         if (ts <= prev) return // not a new access since we last reported
         lastReported[key] = ts
