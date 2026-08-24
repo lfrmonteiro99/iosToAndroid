@@ -1,9 +1,10 @@
 package com.iostoandroid.launcher
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 
@@ -21,7 +22,10 @@ import androidx.biometric.BiometricPrompt
  * The activity never "approves" the app itself — absence of a cancelled prompt
  * is the approval.
  */
-class ForegroundGuardActivity : Activity() {
+// AppCompatActivity (FragmentActivity) is required: android.app.Activity cannot
+// host a BiometricPrompt (its only constructors take FragmentActivity/Fragment),
+// which is what broke assembleRelease on every PR merge (#805).
+class ForegroundGuardActivity : AppCompatActivity() {
 
     companion object {
         private const val OWN_PACKAGE = "com.iostoandroid.launcher"
@@ -32,6 +36,15 @@ class ForegroundGuardActivity : Activity() {
         // No visible content — the window is fully transparent (see styles). The
         // biometric prompt draws on top of whatever app is in the foreground.
         setContentView(FrameLayout(this))
+
+        // Back must behave like "cancel" — go HOME, never release. (AppCompatActivity
+        // finalizes onBackPressed(), so we register a dispatcher callback instead.)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                goHome()
+                finish()
+            }
+        })
 
         val packageName = intent?.getStringExtra(ForegroundMonitorService.EXTRA_PACKAGE)
         if (packageName.isNullOrEmpty() || packageName == OWN_PACKAGE) {
@@ -107,11 +120,5 @@ class ForegroundGuardActivity : Activity() {
             val pm = packageManager
             pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
         }.getOrDefault(packageName)
-    }
-
-    override fun onBackPressed() {
-        // Back must behave like "cancel" — go HOME, never release.
-        goHome()
-        super.onBackPressed()
     }
 }
