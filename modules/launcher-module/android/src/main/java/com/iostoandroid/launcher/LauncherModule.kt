@@ -92,7 +92,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onBackTapDetected", "onAppAccess", "onForegroundAppChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's

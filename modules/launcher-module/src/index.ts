@@ -1056,6 +1056,19 @@ export interface BackTapEvent {
 }
 
 /**
+ * Emitted by the native back-tap sensor service (#625 / #636) as a lightweight
+ * "a back tap gesture was detected" signal — distinct from {@link BackTapEvent},
+ * which only travels over the richer `onBackTap` event. The callback receives a
+ * single field, `count` (2 for a double tap, 3 for a triple tap), so consumers
+ * that only need to know the tap count (not the raw impulse timestamps) can
+ * subscribe here without parsing `taps`. Surfaced to JS via the
+ * `addBackTapDetectedListener` subscription.
+ */
+export interface BackTapDetectedEvent {
+  count: number;
+}
+
+/**
  * Subscribe to apps being installed, uninstalled or updated on the device.
  * Backed by a dynamically registered BroadcastReceiver on the Kotlin side
  * (PackageChangeReceiver) — implicit package broadcasts are not delivered to
@@ -1079,6 +1092,20 @@ export function addBackTapListener(
   listener: (event: BackTapEvent) => void,
 ): () => void {
   const sub = addModuleListener<BackTapEvent>('onBackTap', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to the lightweight "back tap detected" signal emitted by the native
+ * TapSensorService (#625 / #636). Unlike `addBackTapListener` (which carries the
+ * full [BackTapEvent]: type/count/taps), this only forwards `{ count }` — 2 for
+ * a double tap, 3 for a triple tap — for consumers that just need the tap count.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addBackTapDetectedListener(
+  listener: (event: BackTapDetectedEvent) => void,
+): () => void {
+  const sub = addModuleListener<BackTapDetectedEvent>('onBackTapDetected', listener);
   return () => sub.remove();
 }
 
