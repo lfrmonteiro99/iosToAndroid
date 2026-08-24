@@ -35,6 +35,11 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import {
+  type SmartBatteryProfile,
+  normalizeSmartBatteryProfile,
+  clampSmartBatteryThreshold,
+} from '../utils/smartBatteryProfiles';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -113,6 +118,27 @@ export interface SettingsState {
   vpnEnabled: boolean;
   lowPowerMode: boolean;
   batteryPercentage: boolean;
+  /**
+   * Smart Battery Profiles (#631): perfil selecionado manualmente
+   * (Normal/Performance/Extreme Saver/Sleep/Travel). Quando o trigger
+   * automático dispara (< threshold, sem carregar), a app sobrepõe-se a este
+   * valor e aplica o Extreme Saver por segurança. Normalizado na leitura do
+   * AsyncStorage (normalizeSmartBatteryProfile) — qualquer blob corrompido
+   * reverte para 'normal'.
+   */
+  smartBatteryProfile: SmartBatteryProfile;
+  /**
+   * Smart Battery Profiles (#631): quando true, a bateria abaixo do
+   * `smartBatteryThreshold` (e sem carregar) força o Extreme Saver
+   * automaticamente. Default false (o utilizador escolhe o perfil).
+   */
+  autoBatteryProfile: boolean;
+  /**
+   * Smart Battery Profiles (#631): percentagem (5–50%) abaixo da qual o
+   * trigger automático entra em ação. Clampado na leitura
+   * (clampSmartBatteryThreshold). Default 30.
+   */
+  smartBatteryThreshold: number;
   locationServices: boolean;
   wallpaperIndex: number;
   /**
@@ -364,6 +390,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   vpnEnabled: false,
   lowPowerMode: false,
   batteryPercentage: true,
+  smartBatteryProfile: 'normal',
+  autoBatteryProfile: false,
+  smartBatteryThreshold: 30,
   locationServices: true,
   wallpaperIndex: 0,
   reduceMotion: false,
@@ -479,6 +508,12 @@ export function SettingsProvider({
             // render pacotes inexistentes ou rebentar — normaliza-se na
             // leitura como os irmãos acima.
             focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
+            // smartBatteryProfile (#631) e smartBatteryThreshold (#631) descem
+            // até ao AsyncStorage não confiável; um id corrompido reverteria para
+            // um perfil que restringe a app sem o utilizador querer, por isso
+            // normaliza-se na leitura como os campos irmãos acima.
+            smartBatteryProfile: normalizeSmartBatteryProfile(parsed?.smartBatteryProfile),
+            smartBatteryThreshold: clampSmartBatteryThreshold(parsed?.smartBatteryThreshold),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a
