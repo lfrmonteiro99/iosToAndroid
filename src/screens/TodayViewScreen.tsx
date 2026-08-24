@@ -8,7 +8,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { GlassSurface } from '../components';
+import { GlassSurface, WidgetCard } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -28,7 +28,6 @@ import { GestureHaptics } from '../utils/gestureHaptics';
 
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
-import { Shape } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
 
@@ -123,41 +122,6 @@ const MONTH_NAMES = [
 
 function formatDate(date: Date): string {
   return `${DAY_NAMES[date.getDay()]}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()}`;
-}
-
-// ---------------------------------------------------------------------------
-// Widget base card
-// ---------------------------------------------------------------------------
-
-interface WidgetCardProps {
-  children: React.ReactNode;
-  style?: object;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-  testID?: string;
-}
-
-function WidgetCard({ children, style, onPress, accessibilityLabel, testID }: WidgetCardProps) {
-  if (onPress) {
-    return (
-      <Pressable
-        testID={testID}
-        style={({ pressed }) => [styles.widgetCard, style, pressed && { opacity: 0.7 }]}
-        onPress={onPress}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole="button"
-      >
-        <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={styles.widgetContent}>{children}</View>
-      </Pressable>
-    );
-  }
-  return (
-    <View testID={testID} style={[styles.widgetCard, style]}>
-      <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.widgetContent}>{children}</View>
-    </View>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -790,18 +754,6 @@ const styles = StyleSheet.create({
   },
   widgetCellLarge: {
     minHeight: 220,
-  },
-
-  // Widget card — flex: 1 lets it fill a taller grid cell (e.g. the 'large'
-  // size's extra minHeight) instead of leaving a blank gap under the content.
-  widgetCard: {
-    flex: 1,
-    borderRadius: Shape.widgetSmall.radius,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(30,30,35,0.6)',
-  },
-  widgetContent: {
-    padding: 16,
   },
 
   // Widget internals

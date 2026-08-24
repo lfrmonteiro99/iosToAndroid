@@ -47,6 +47,7 @@ import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
 import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouchSettingsScreen';
+import { BackTapSettingsScreen } from '../screens/settings/BackTapSettingsScreen';
 import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
@@ -145,6 +146,7 @@ export function TabNavigator() {
       <Stack.Screen name="Wallpaper" component={WallpaperScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="AssistiveTouchSettings" component={AssistiveTouchSettingsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="BackTapSettings" component={BackTapSettingsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: slideAnimation }} />
