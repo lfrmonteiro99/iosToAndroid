@@ -92,7 +92,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onAppAccess", "onForegroundAppChanged")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -1382,6 +1382,32 @@ class LauncherModule : Module() {
             SpeechRecognizer.isRecognitionAvailable(context)
         }
 
+        AsyncFunction("startTapDetection") {
+            // #636: start the foreground sensor service that detects double/triple
+            // back taps via accelerometer + gyroscope and emits `onBackTap`.
+            // Best-effort: on a device without the sensors or the foreground
+            // permission the service simply won't start, and callers should not
+            // reject the whole promise over it.
+            try {
+                TapSensorService.start(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopTapDetection") {
+            try {
+                TapSensorService.stop(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isTapDetectionRunning") {
+            // #636: report whether the back-tap sensor service is currently active,
+            // sourced from the static flag maintained by TapSensorService itself
+            // (set in onCreate/onDestroy).
+            TapSensorService.isRunning
+        }
+
         // ── App access (sensor usage) — issue #634 ────────────────────────
         //
         // A foreground service (AccessEventsService) polls the UsageStats event
@@ -1430,7 +1456,6 @@ class LauncherModule : Module() {
         AsyncFunction("isAccessTrackingServiceRunning") {
             AccessEventsService.instance != null
         }
-
         // ── Lifecycle ────────────────────────────────────────────────────
 
         OnCreate {
