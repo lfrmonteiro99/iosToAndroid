@@ -174,6 +174,25 @@ describe('CardEditScreen', () => {
     expect(json).not.toMatch(/cardNumber|"pan"|cvv/i);
   });
 
+  // Double-tap is a recurring defect class in this repo: `disabled={!canSave}`
+  // stays false after the first press (the form keeps its valid values while
+  // goBack() unwinds), so two quick taps on Done used to add the card twice.
+  it('adds only one card when Done is double-tapped', async () => {
+    const { getByLabelText, getByPlaceholderText } = render(<CardEditScreen />);
+
+    fillValidCard(getByPlaceholderText);
+    const done = getByLabelText('Done');
+    fireEvent.press(done);
+    fireEvent.press(done);
+
+    await waitFor(() => expect(SecureStore.setItemAsync).toHaveBeenCalled());
+
+    const calls = (SecureStore.setItemAsync as jest.Mock).mock.calls as [string, string][];
+    const [, lastJson] = calls[calls.length - 1];
+    expect(JSON.parse(lastJson)).toHaveLength(1);
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+
   it('navigates back on Cancel without saving', async () => {
     const { getByLabelText, getByPlaceholderText } = render(<CardEditScreen />);
 

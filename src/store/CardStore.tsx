@@ -38,6 +38,8 @@ export function CardProvider({ children }: { children: React.ReactNode }) {
   // other screens' tests can observe as an unexpected write). Real writes
   // start with the first addCard/deleteCard after hydration.
   const skipNextPersist = useRef(true);
+  // Monotonic tie-breaker for ids — see addCard.
+  const idCounter = useRef(0);
 
   useEffect(() => {
     // Payment card data — always expo-secure-store, never AsyncStorage
@@ -76,9 +78,19 @@ export function CardProvider({ children }: { children: React.ReactNode }) {
   }, [cards, isReady]);
 
   const addCard = useCallback((card: Omit<WalletCard, 'id' | 'createdAt'>) => {
+    // Whitelist, NOT a spread of `card`. This is what makes the #285 constraint
+    // structural instead of a promise the caller has to keep: any extra key an
+    // untyped caller hands us (cardNumber, pan, cvv, …) is dropped here and can
+    // never reach SecureStore, no matter how CardEditScreen evolves.
+    const { label, brand, last4, expiryMonth, expiryYear } = card;
+    // Date.now() alone collides for two cards added inside the same tick
+    // (double-tap, batched adds), which would duplicate React keys and make
+    // deleteCard(id) remove both rows. The counter breaks the tie.
+    idCounter.current += 1;
+    const id = `${Date.now()}-${idCounter.current}`;
     setCards((prev) => [
       ...prev,
-      { ...card, id: Date.now().toString(), createdAt: new Date().toISOString() },
+      { label, brand, last4, expiryMonth, expiryYear, id, createdAt: new Date().toISOString() },
     ]);
   }, []);
 

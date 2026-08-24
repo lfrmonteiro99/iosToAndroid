@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -57,6 +57,7 @@ export function CardEditScreen() {
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvv, setCvv] = useState('');
+  const submittedRef = useRef(false);
 
   const digits = useMemo(() => cardNumber.replace(/\D/g, ''), [cardNumber]);
   const brand = useMemo(() => detectCardBrand(digits), [digits]);
@@ -74,7 +75,11 @@ export function CardEditScreen() {
   const canSave = numberValid && expiryValid && cvvValid;
 
   function handleDone() {
-    if (!canSave) return;
+    // `disabled={!canSave}` does not protect against a double-tap: the form
+    // keeps its valid values while goBack() unwinds, so a second press would
+    // add the same card again. Latch on first submit.
+    if (!canSave || submittedRef.current) return;
+    submittedRef.current = true;
     const expiryYear = 2000 + parseInt(expiryYearDigits, 10);
     const trimmedLabel = label.trim();
     addCard({
