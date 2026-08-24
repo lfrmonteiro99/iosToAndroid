@@ -66,6 +66,49 @@ export const STABLE_KEY_TO_NAME: Record<string, string> = Object.fromEntries(
 export const OTHER_KEY = 'other';
 
 /**
+ * Normaliza o `categoryOverrides` lido do AsyncStorage para a forma canónica.
+ *
+ * O blob de settings persistido é tratado como não confiável (blob de uma
+ * build anterior, corrompido, truncado, ou escrito por uma versão que ainda
+ * não conhecia este campo). `buildCategorySections` faz logo
+ * `new Set(overrides.hidden)` — um `null`/`string`/`array`/objecto parcial
+ * rebenta com `TypeError`, e como a AppLibraryContent é também a última página
+ * da home, o launcher inteiro crasha (#688: ecrã cai no launcher nativo do
+ * Android).
+ *
+ * Regras: só aceita um objecto; cada sub-campo é normalizado para o seu tipo
+ * canónico (string[] / Record<string,string>), descartando entradas inválidas.
+ * Qualquer desvio devolve o DEFAULT — nunca `null`/parcial, para que o
+ * consumidor possa sempre ler `.hidden`/`.renamed`/`.order`/`.appOverrides`.
+ */
+export function normalizeCategoryOverrides(raw: unknown): CategoryOverrideSettings {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return DEFAULT_CATEGORY_OVERRIDES;
+  }
+  const r = raw as Record<string, unknown>;
+  const strArr = (v: unknown): string[] => {
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter((e): e is string => typeof e === 'string')
+      .filter((s, i, arr) => s !== '' && arr.indexOf(s) === i);
+  };
+  const strRecord = (v: unknown): Record<string, string> => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof k === 'string' && k !== '' && typeof val === 'string') out[k] = val;
+    }
+    return out;
+  };
+  return {
+    hidden: strArr(r.hidden),
+    renamed: strRecord(r.renamed),
+    order: strArr(r.order),
+    appOverrides: strRecord(r.appOverrides),
+  };
+}
+
+/**
  * Resolve a chave estável para o nome de exibição que `categorizeApp` devolve.
  * Categorias desconhecidas (versão futura) usam o próprio nome como chave,
  * garantindo que continuam a aparecer em vez de serem silenciosamente perdidas.

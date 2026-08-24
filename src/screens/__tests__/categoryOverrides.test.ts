@@ -6,6 +6,7 @@ import {
   displayNameForKey,
   recategorizeApp,
   keyForCategoryName,
+  normalizeCategoryOverrides,
 } from '../../utils/categoryOverrides';
 
 function app(overrides: Partial<InstalledApp>): InstalledApp {
@@ -219,5 +220,45 @@ describe('categoryOverrides — fronteiras e o inverso do fix', () => {
     ];
     const sections = buildCategorySections(apps, DEFAULT_CATEGORY_OVERRIDES, categorize);
     expect(sections.map((s) => s.key)).toEqual(['social']);
+  });
+});
+
+describe('normalizeCategoryOverrides', () => {
+  it('devolve DEFAULT para null/undefined/string/array', () => {
+    expect(normalizeCategoryOverrides(null)).toEqual(DEFAULT_CATEGORY_OVERRIDES);
+    expect(normalizeCategoryOverrides(undefined)).toEqual(DEFAULT_CATEGORY_OVERRIDES);
+    expect(normalizeCategoryOverrides('social')).toEqual(DEFAULT_CATEGORY_OVERRIDES);
+    expect(normalizeCategoryOverrides(['social'])).toEqual(DEFAULT_CATEGORY_OVERRIDES);
+  });
+
+  it('objecto parcial (só hidden) é completado com os restantes campos vazios', () => {
+    const out = normalizeCategoryOverrides({ hidden: ['social'] });
+    expect(out.hidden).toEqual(['social']);
+    expect(out.renamed).toEqual({});
+    expect(out.order).toEqual([]);
+    expect(out.appOverrides).toEqual({});
+  });
+
+  it('descarta entradas inválidas dentro dos campos (não-string, vazias, duplicadas)', () => {
+    const out = normalizeCategoryOverrides({
+      hidden: ['social', '', 42, 'social'],
+      renamed: { social: 'Pessoal', '': 'X', 'games': 7 },
+      order: ['entertainment', 99, 'entertainment'],
+      appOverrides: { 'com.a': 'games', 'com.b': null },
+    });
+    expect(out.hidden).toEqual(['social']);
+    expect(out.renamed).toEqual({ social: 'Pessoal' });
+    expect(out.order).toEqual(['entertainment']);
+    expect(out.appOverrides).toEqual({ 'com.a': 'games' });
+  });
+
+  it('objecto válido passa intacto (caso feliz)', () => {
+    const good = {
+      hidden: ['social'],
+      renamed: { social: 'Pessoal' },
+      order: ['social', 'games'],
+      appOverrides: { 'com.a': 'games' },
+    };
+    expect(normalizeCategoryOverrides(good)).toEqual(good);
   });
 });

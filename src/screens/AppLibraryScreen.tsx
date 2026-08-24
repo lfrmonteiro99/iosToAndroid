@@ -23,6 +23,7 @@ import {
   buildCategorySections,
   recategorizeApp,
   STABLE_KEY_TO_NAME,
+  DEFAULT_CATEGORY_OVERRIDES,
 } from '../utils/categoryOverrides';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
@@ -596,7 +597,15 @@ export function AppLibraryContent() {
     [allInstalledApps, settings.searchShowInLibrary],
   );
   const categories = useMemo(() => {
-    return buildCategorySections(visibleApps, settings.categoryOverrides, categorizeApp);
+    // Defesa em camada: settings.categoryOverrides é normalizado na leitura
+    // (SettingsStore), mas garantimos aqui que nunca passamos um objecto
+    // inválido a buildCategorySections — um null/partial rebentaria em
+    // `new Set(overrides.hidden)` e crasharia o launcher (#688).
+    const overrides =
+      settings.categoryOverrides && typeof settings.categoryOverrides === 'object'
+        ? settings.categoryOverrides
+        : DEFAULT_CATEGORY_OVERRIDES;
+    return buildCategorySections(visibleApps, overrides, categorizeApp);
   }, [visibleApps, settings.categoryOverrides]);
 
   // Badge counts — mesma fonte da home (LauncherHomeScreen.tsx:1113): SMS não
