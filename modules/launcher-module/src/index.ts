@@ -294,17 +294,10 @@ interface LauncherModuleType {
   canWriteSystemSettings(): Promise<boolean>;
   openWriteSettingsAccess(): Promise<boolean>;
   setRingtone(uri: string): Promise<boolean>;
-<<<<<<< Updated upstream
   // Speech recognition (Siri / voice-to-text)
   startSpeechRecognition(): Promise<boolean>;
   stopSpeechRecognition(): Promise<boolean>;
   isSpeechRecognitionAvailable(): Promise<boolean>;
-=======
-  // Speech recognition (mic → text). Events onSpeechResult / onSpeechPartial /
-  // onSpeechError are emitted from the native side (see addSpeechListeners).
-  startSpeechRecognition(): Promise<boolean>;
-  stopSpeechRecognition(): Promise<boolean>;
->>>>>>> Stashed changes
 }
 
 const isAndroid = Platform.OS === 'android';
@@ -369,10 +362,7 @@ const stub: LauncherModuleType = {
   setRingtone: async () => false,
   startSpeechRecognition: async () => false,
   stopSpeechRecognition: async () => false,
-<<<<<<< Updated upstream
   isSpeechRecognitionAvailable: async () => false,
-=======
->>>>>>> Stashed changes
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
   mediaPrev: async () => false,
@@ -690,13 +680,10 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.stopSpeechRecognition(); }
       catch (e) { console.error('LauncherModule.stopSpeechRecognition failed:', e); reportBridgeError('stopSpeechRecognition', e); return false; }
     },
-<<<<<<< Updated upstream
     isSpeechRecognitionAvailable: async () => {
       try { return await nativeModule.isSpeechRecognitionAvailable(); }
       catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
     },
-=======
->>>>>>> Stashed changes
   };
 }
 
@@ -782,7 +769,6 @@ export function addHomePressedListener(listener: () => void): () => void {
 }
 
 /**
-<<<<<<< Updated upstream
  * Subscribe to speech-to-text results as they are recognized.
  * The callback receives the recognized text (string). Partial results arrive
  * via onSpeechPartialResult; the final result via onSpeechResult.
@@ -846,27 +832,3 @@ export function addPackageChangedListener(
 ): () => void {
   const sub = addModuleListener<PackageChange>('onPackageChanged', listener);  return () => sub.remove();
 }
-=======
- * Subscribe to speech recognition events from the native SpeechRecognizer.
- * - addSpeechResultListener: final recognized text (string).
- * - addSpeechPartialListener: live partial text (string) while still listening.
- * - addSpeechErrorListener: error code string (e.g. "error_7").
- * Each returns an unsubscribe function — call it in the useEffect cleanup.
- * Used by SiriScreen to drive the iOS-style voice assistant UI (mask) while
- * the Android system voice engines run underneath.
- */
-export function addSpeechResultListener(listener: (text: string) => void): () => void {
-  const sub = addModuleListener('onSpeechResult', (p: { text: string }) => listener(p.text));
-  return () => sub.remove();
-}
-
-export function addSpeechPartialListener(listener: (text: string) => void): () => void {
-  const sub = addModuleListener('onSpeechPartial', (p: { text: string }) => listener(p.text));
-  return () => sub.remove();
-}
-
-export function addSpeechErrorListener(listener: (code: string) => void): () => void {
-  const sub = addModuleListener('onSpeechError', (p: { text: string }) => listener(p.text));
-  return () => sub.remove();
-}
->>>>>>> Stashed changes
