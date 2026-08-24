@@ -336,6 +336,8 @@ interface AppIconProps {
    * monochrome silhouette in, or undefined/null for the normal, untinted
    * icon. Only the icon is affected — `showLabel`'s text is untouched. */
   iconTint?: string | null;
+  /** Gloss sheen on built-in (virtual) icons — follows settings.iconGloss. */
+  gloss?: boolean;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -360,6 +362,7 @@ const AppIcon = React.memo(function AppIcon({
   iconRadius = ICON_RADIUS,
   showLabel = true,
   iconTint,
+  gloss = true,
 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   // Label block (margin + text line) measured at the 393dp reference so the
@@ -461,6 +464,7 @@ const AppIcon = React.memo(function AppIcon({
             size={iconSize}
             gradient={virtualCfg.gradient}
             bg={virtualCfg.bg}
+            gloss={gloss}
             iconSize={virtualCfg.iconSize ?? Math.round(iconSize * 0.57)}
           />
         ) : app.icon ? (
@@ -719,6 +723,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
   textScale?: number;
   iconTint?: string | null;
 }) {
+  const { settings } = useSettings();
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean) as InstalledApp[];
@@ -765,6 +770,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   cellWidth={70}
                   textScale={textScale}
                   iconTint={iconTint}
+                  gloss={settings.iconGloss}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -1868,6 +1874,7 @@ export function LauncherHomeScreen() {
                     showLabel={settings.showIconLabels}
                     textScale={textScale}
                     iconTint={iconTint}
+                    gloss={settings.iconGloss}
                     onPress={handleAppPress}
                     onLongPress={handleLongPress}
                     isJiggling={isJiggling}
@@ -1922,6 +1929,7 @@ export function LauncherHomeScreen() {
                 textScale={textScale}
                 showLabel={false}
                 iconTint={iconTint}
+                gloss={settings.iconGloss}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
