@@ -393,3 +393,95 @@ describe('SettingsProvider device sync gate (M10: no stale first render)', () =>
     errorSpy.mockRestore();
   });
 });
+
+describe('SettingsStore notification router (#630: firewall/router persistence)', () => {
+  it('defaults the router to off and the allow-list/rules to empty', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.notificationRouterEnabled).toBe(false);
+    expect(result.current.settings.reduceInterruptionsEnabled).toBe(false);
+    expect(result.current.settings.notificationRouterAllowList).toEqual([]);
+    expect(result.current.settings.notificationRouterRules).toEqual([]);
+    expect(DEFAULT_SETTINGS.notificationRouterEnabled).toBe(false);
+  });
+
+  it('update() enables the router without clobbering unrelated defaults', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('notificationRouterEnabled', true);
+    });
+
+    expect(result.current.settings.notificationRouterEnabled).toBe(true);
+    expect(result.current.settings.reduceInterruptionsEnabled).toBe(false);
+    expect(result.current.settings.notificationPreviews).toBe(DEFAULT_SETTINGS.notificationPreviews);
+  });
+
+  it('update() writes the Reduce Interruptions allow-list', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    const allowList = ['com.reddit.frontpage', 'com.google.android.gm'];
+    await act(async () => {
+      result.current.update('notificationRouterAllowList', allowList);
+    });
+
+    expect(result.current.settings.notificationRouterAllowList).toEqual(allowList);
+  });
+
+  it('persists a per-app router rule to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('notificationRouterRules', [
+        { packageName: 'com.reddit.frontpage', tier: 'immediate' },
+      ]);
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"notificationRouterRules"'),
+    );
+    expect(result.current.settings.notificationRouterRules).toEqual([
+      { packageName: 'com.reddit.frontpage', tier: 'immediate' },
+    ]);
+  });
+
+  it('hydrates persisted router settings from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      notificationRouterEnabled: true,
+      reduceInterruptionsEnabled: true,
+      notificationRouterAllowList: ['com.whatsapp'],
+    });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.notificationRouterEnabled).toBe(true);
+    expect(result.current.settings.reduceInterruptionsEnabled).toBe(true);
+    expect(result.current.settings.notificationRouterAllowList).toEqual(['com.whatsapp']);
+  });
+
+  it('normalizes a malformed allow-list blob to [] instead of throwing', async () => {
+    const saved = JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      // Non-array + non-string entries: must not crash hydration or poison .includes
+      notificationRouterAllowList: 'not-an-array' as unknown as string[],
+      notificationRouterRules: [{ packageName: 42, tier: 'immediate' }] as unknown as [],
+    });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.notificationRouterAllowList).toEqual([]);
+    expect(result.current.settings.notificationRouterRules).toEqual([]);
+  });
+});

@@ -35,6 +35,7 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import { type AppRule } from '../utils/notificationRouter';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -162,6 +163,31 @@ export interface SettingsState {
   automaticUpdates: boolean;
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
+  /**
+   * Master switch for the notification firewall/router (#630). When off, every
+   * notification routes `immediate` — identical to the pre-router behaviour, so
+   * enabling this is purely additive and never changes delivery on its own.
+   */
+  notificationRouterEnabled: boolean;
+  /**
+   * Reduce Interruptions (#630): when on, every non-exempt notification is held
+   * for the scheduled summary instead of delivered immediately. An app is exempt
+   * only if it is an active call, is on `notificationRouterAllowList`, or has an
+   * explicit per-app rule promoting it to `immediate`.
+   */
+  reduceInterruptionsEnabled: boolean;
+  /**
+   * Package names allowed to break through Reduce Interruptions. Mirrors the
+   * iOS "Allow Notifications" people/domain allow-list (Family/Boss/Banking/
+   * Security) and feeds `classifyNotification` directly.
+   */
+  notificationRouterAllowList: string[];
+  /**
+   * Per-app routing overrides consulted by `classifyNotification`. Empty by
+   * default; the engine also ships built-in sensible defaults (WhatsApp =
+   * immediate, Reddit = digest, ...) via `DEFAULT_APP_TIERS`.
+   */
+  notificationRouterRules: AppRule[];
   fontChoice: 'inter' | 'system';
   /**
    * Whether the squircle mask (#480) is applied to app icons before caching.
@@ -381,6 +407,10 @@ export const DEFAULT_SETTINGS: SettingsState = {
   automaticUpdates: true,
   updateAvailable: false,
   scheduledSummaryIdx: 0,
+  notificationRouterEnabled: false,
+  reduceInterruptionsEnabled: false,
+  notificationRouterAllowList: [],
+  notificationRouterRules: [],
   fontChoice: 'inter',
   iconTreatment: 'mask-adaptive-only',
   pressFeedback: 'scale-opacity',
@@ -503,6 +533,23 @@ export function SettingsProvider({
             // presente e válido vence sempre o campo legado.
             motionIntensity: normalizeMotionIntensity(parsed?.motionIntensity, parsed?.reduceMotion),
             scrollDeceleration: normalizeScrollDeceleration(parsed?.scrollDeceleration),
+            // notificationRouterAllowList / notificationRouterRules (#630) feed
+            // the pure classification engine, which calls `.includes` / `.find`
+            // on them. A non-array value from an old/blob blob would throw at
+            // runtime, so both are normalized to [] on read like the fields
+            // above. Entries are validated to strings so a stray number/object
+            // in the persisted list can't poison equality checks downstream.
+            notificationRouterAllowList: Array.isArray(parsed?.notificationRouterAllowList)
+              ? parsed.notificationRouterAllowList.filter((p: unknown) => typeof p === 'string')
+              : [],
+            notificationRouterRules: Array.isArray(parsed?.notificationRouterRules)
+              ? parsed.notificationRouterRules.filter(
+                  (r: unknown) =>
+                    r && typeof r === 'object' &&
+                    typeof (r as { packageName?: unknown }).packageName === 'string' &&
+                    typeof (r as { tier?: unknown }).tier === 'string',
+                )
+              : [],
           }));
         } catch { /* ignore */ }
       }
