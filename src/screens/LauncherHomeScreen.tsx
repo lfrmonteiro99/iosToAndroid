@@ -51,7 +51,7 @@ import {
 } from '../components';
 import type { BannerNotification } from '../components';
 import type { RootStackParamList } from '../navigation/types';
-import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
+import { WALLPAPERS, darkenHex, clampWallpaperIndex } from '../utils/wallpapers';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
@@ -1286,8 +1286,11 @@ export function LauncherHomeScreen() {
   }
 
   // Wallpaper gradient
-  const wallpaperColor =
-    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
+  // clampWallpaperIndex saneia settings.wallpaperIndex (lido de AsyncStorage,
+  // fonte não confiável — #674): um blob corrompido com índice não-numérico
+  // daria WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no render.
+  const wallpaperIndex = clampWallpaperIndex(settings.wallpaperIndex);
+  const wallpaperColor = WALLPAPERS[wallpaperIndex] as string;
   const wallpaperDark = darkenHex(wallpaperColor, 0.28);
 
   const WallpaperContent =
