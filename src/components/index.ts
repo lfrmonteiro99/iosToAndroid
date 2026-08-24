@@ -15,6 +15,8 @@ export { CupertinoProgressBar } from './CupertinoProgressBar';
 export { CupertinoPicker } from './CupertinoPicker';
 export { CupertinoSwipeableRow } from './CupertinoSwipeableRow';
 export { CupertinoEmptyState } from './CupertinoEmptyState';
+export { PassCodeVisual } from './PassCodeVisual';
+export type { PassCodeVisualProps } from './PassCodeVisual';
 export { ErrorBoundary } from './ErrorBoundary';
 export { AlertProvider, useAlert } from './AlertProvider';
 export { CupertinoSkeleton, SkeletonListRow, SkeletonCard } from './CupertinoSkeleton';

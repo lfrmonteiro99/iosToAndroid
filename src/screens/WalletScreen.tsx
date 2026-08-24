@@ -19,6 +19,7 @@ import {
   CupertinoTextField,
   CupertinoSegmentedControl,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
 const PASS_TYPE_VALUES: PassType[] = ['boarding', 'ticket', 'loyalty', 'other'];
 const PASS_TYPE_LABELS: Record<PassType, string> = {
@@ -173,7 +174,7 @@ function AddPassSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function WalletScreen() {
+export function WalletScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -221,11 +222,7 @@ export function WalletScreen() {
               <PassRow
                 key={pass.id}
                 pass={pass}
-                onPress={() => {
-                  // Editing is out of scope for #125 — tapping selects nothing
-                  // destructive. The long-press delete path lives on the tile
-                  // trailing action via the share sheet below.
-                }}
+                onPress={() => navigation.navigate('PassDetail', { passId: pass.id })}
               />
             ))}
           </CupertinoListSection>
