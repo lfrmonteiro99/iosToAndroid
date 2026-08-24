@@ -58,7 +58,7 @@ describe('AppLibraryContent — hide app (#606)', () => {
     // Ausente das listas browsable.
     expect(queryAllByText('Facebook')).toHaveLength(0);
 
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'face');
+    fireEvent.changeText(getByPlaceholderText('Search'), 'face');
     await waitFor(() => expect(getAllByText('Facebook').length).toBeGreaterThan(0));
 
     // A linha da procura é um pressable de lançamento — a app escondida continua
