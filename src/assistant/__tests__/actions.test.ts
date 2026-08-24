@@ -209,6 +209,22 @@ describe('runActions (sequential runner)', () => {
     expect(results[0].error).toMatch(/package/i);
   });
 
+  it('continues to a valid action after a preceding one fails validation (never reaches the context)', async () => {
+    const ctx = makeContext();
+    const actions: PrimitiveAction[] = [
+      { kind: 'openApp', packageName: '' }, // invalid: fails validateAction, never touches ctx
+      { kind: 'timer', seconds: 10 }, // must still run
+    ];
+
+    const results = await runActions(actions, ctx);
+
+    expect(results[0].ok).toBe(false);
+    expect(results[0].error).toMatch(/package/i);
+    expect(results[1].ok).toBe(true);
+    // Only the valid action reaches the context; the invalid one is skipped, not aborted.
+    expect(ctx.calls).toEqual([['startTimer', 10]]);
+  });
+
   it('records a failure when the context method rejects, but still runs the remaining actions', async () => {
     const ctx = makeContext({
       launchApp: () => false, // rejected launch
