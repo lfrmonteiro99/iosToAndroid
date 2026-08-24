@@ -13,6 +13,7 @@ import {
 import {
   type CategoryOverrideSettings,
   DEFAULT_CATEGORY_OVERRIDES,
+  normalizeCategoryOverrides,
 } from '../utils/categoryOverrides';
 import {
   type RequirePasscodeAfter,
@@ -422,6 +423,13 @@ export function SettingsProvider({
             // valores não-array) faria o filtro esconder páginas ao acaso ou
             // rebentar no `.includes`, por isso normaliza-se na leitura.
             focusPageVisibility: normalizeFocusPageVisibility(parsed?.focusPageVisibility),
+            // categoryOverrides (#516) é lido do mesmo blob não confiável do
+            // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
+            // buildCategorySections (new Set(overrides.hidden)) e, como a
+            // AppLibraryContent é também a última página da home, crashava o
+            // launcher inteiro (#688). Normaliza-se na leitura como os irmãos
+            // acima.
+            categoryOverrides: normalizeCategoryOverrides(parsed?.categoryOverrides),
           }));
         } catch { /* ignore */ }
       }

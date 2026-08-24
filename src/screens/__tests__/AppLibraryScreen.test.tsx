@@ -44,6 +44,47 @@ describe('AppLibraryScreen', () => {
   });
 });
 
+// ─── Regressão: settings.categoryOverrides corrompido não pode rebentar a App Library (#688) ───
+//
+// O SettingsStore funde o blob persistido do AsyncStorage por cima dos defaults
+// (...parsed). Se categoryOverrides vier nulo/parcial/corrompido (upgrade de uma
+// build anterior, blob truncado, etc.), settings.categoryOverrides fica inválido
+// e AppLibraryContent → buildCategorySections faz `new Set(overrides.hidden)`
+// sobre null/undefined → TypeError. Como a AppLibraryContent é também a última
+// página da home (LauncherHomeScreen), o launcher inteiro crasha e o utilizador
+// cai no launcher nativo do Android. Os irmãos iconShape/whitePointLevel/
+// focusPageVisibility já são normalizados na leitura; categoryOverrides tinha de
+// ser também. Aqui exercitamos o caminho real: SettingsProvider carrega o blob
+// corrompido e a AppLibraryContent tem de continuar a renderizar.
+
+describe('AppLibraryScreen — categoryOverrides corrompido no AsyncStorage (#688)', () => {
+  const CORRUPT_VALUES: Array<[string, unknown]> = [
+    ['null', null],
+    ['undefined', undefined],
+    ['string', 'social'],
+    ['array', ['social']],
+    ['partial sem appOverrides/renamed/order', { hidden: ['social'] }],
+  ];
+
+  it.each(CORRUPT_VALUES)(
+    'não crasha quando categoryOverrides persistido é %s',
+    async (_label, badValue) => {
+      const saved = JSON.stringify({ ...DEFAULT_SETTINGS, categoryOverrides: badValue });
+      (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+        key === '@iostoandroid/settings' ? Promise.resolve(saved) : Promise.resolve(null),
+      );
+      (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+      (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByPlaceholderText, findByText } = render(<AppLibraryScreen navigation={nav} />);
+      // Após o SettingsProvider aplicar o settings corrompido, a grelha continua
+      // a montar: o cabeçalho "Categories" e a barra de pesquisa aparecem.
+      await findByText('Categories');
+      expect(getByPlaceholderText('Search')).toBeTruthy();
+    },
+  );
+});
+
 // ─── Helpers para os testes dos toggles da App Library (#602) ──────────────
 //
 // A AppLibraryContent lê settings do SettingsProvider (AsyncStorage) e apps do
