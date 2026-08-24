@@ -640,7 +640,7 @@ class LauncherModule : Module() {
                 // constant is absent, so we guard the SDK level and fall back to the
                 // general privacy settings — a crash here would surface as a dead tile.
                 "privacy_dashboard" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Settings.ACTION_PRIVACY_DASHBOARD
+                    "android.settings.PRIVACY_DASHBOARD_SETTINGS"
                 } else {
                     Settings.ACTION_PRIVACY_SETTINGS
                 }
