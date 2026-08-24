@@ -21,45 +21,17 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
-
-// Explicit allow-list derived from SettingsStore.tsx, ThemeContext.tsx, and
-// each settings screen that writes its own AsyncStorage keys.
-// Intentionally excludes non-settings data: messages, notes, contacts, reminders,
-// home layout, Spotlight history, and any future non-settings keys.
-const EXPORTABLE_KEYS = [
-  // Main settings blob (SettingsStore)
-  '@iostoandroid/settings',
-  // ThemeContext — display mode, accent colour, high-contrast
-  '@iostoandroid/theme_preference',
-  '@iostoandroid/accent_color',
-  '@iostoandroid/high_contrast',
-  // AccessibilityScreen — text scale, bold, reduce motion
-  '@iostoandroid/a11y_textscale',
-  '@iostoandroid/a11y_bold',
-  '@iostoandroid/a11y_reduce_motion',
-  // DisplayBrightnessScreen — night shift preference
-  '@iostoandroid/night_shift',
-  // KeyboardScreen — keyboard preferences
-  '@iostoandroid/kbd_autocap',
-  '@iostoandroid/kbd_autocorrect',
-  '@iostoandroid/kbd_clicks',
-  '@iostoandroid/kbd_predictive',
-  // CellularScreen — cellular and data-roaming preferences
-  '@iostoandroid/cellular_data',
-  '@iostoandroid/data_roaming',
-  // DateTimeScreen — timezone preference
-  '@iostoandroid/timezone',
-  // LanguageRegionScreen — locale preferences
-  '@iostoandroid/language',
-  '@iostoandroid/region',
-  // SoundsHapticsScreen — ringtone and text-tone labels
-  '@iostoandroid/ringtone',
-  '@iostoandroid/text_tone',
-  // WallpaperScreen — custom wallpaper URI
-  '@iostoandroid/custom_wallpaper',
-] as const;
-
-const EXPORTABLE_SET = new Set<string>(EXPORTABLE_KEYS);
+import { createSnapshot, applySnapshot } from '../../services/BackupSnapshot';
+import { encryptSnapshot, decryptSnapshot } from '../../services/BackupEncryption';
+import { validateSnapshot } from '../../services/BackupValidation';
+import { uploadBackup, listBackups, downloadBackup, type CloudBackupEntry } from '../../services/CloudBackup';
+import {
+  getInitialState,
+  getAccessToken,
+  signIn as googleSignIn,
+  signOut as googleSignOut,
+  type GoogleAuthState,
+} from '../../services/GoogleAuth';
 
 export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
@@ -75,15 +47,126 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
   const [busy, setBusy] = useState(false);
   const alert = useAlert();
 
+  const [googleState, setGoogleState] = useState<GoogleAuthState>(() => getInitialState());
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const [cloudBackupBusy, setCloudBackupBusy] = useState(false);
+  const [cloudRestoreBusy, setCloudRestoreBusy] = useState(false);
+  const [passphraseMode, setPassphraseMode] = useState<'backup' | 'restore' | null>(null);
+  const [passphraseText, setPassphraseText] = useState('');
+  const [showRestoreListModal, setShowRestoreListModal] = useState(false);
+  const [cloudBackups, setCloudBackups] = useState<CloudBackupEntry[]>([]);
+  const [selectedRestoreFileId, setSelectedRestoreFileId] = useState<string | null>(null);
+
+  const handleGoogleConnect = useCallback(async () => {
+    try {
+      setGoogleBusy(true);
+      if (googleState.isSignedIn) {
+        await googleSignOut();
+        setGoogleState({ isSignedIn: false, email: null });
+      } else {
+        const result = await googleSignIn();
+        setGoogleState(result);
+      }
+    } catch (e) {
+      alert('Google Drive', String(e));
+    } finally {
+      setGoogleBusy(false);
+    }
+  }, [googleState.isSignedIn, alert]);
+
+  const handleBackUpNow = useCallback(() => {
+    setPassphraseText('');
+    setPassphraseMode('backup');
+  }, []);
+
+  const handleRestoreFromCloud = useCallback(async () => {
+    try {
+      setCloudRestoreBusy(true);
+      const token = await getAccessToken();
+      if (!token) {
+        alert('Google Drive', 'You need to connect Google Drive first.');
+        return;
+      }
+      const backups = await listBackups(token);
+      setCloudBackups(backups);
+      setShowRestoreListModal(true);
+    } catch (e) {
+      alert('Restore Failed', String(e));
+    } finally {
+      setCloudRestoreBusy(false);
+    }
+  }, [alert]);
+
+  const handleSelectCloudBackup = useCallback((fileId: string) => {
+    setSelectedRestoreFileId(fileId);
+    setShowRestoreListModal(false);
+    setPassphraseText('');
+    setPassphraseMode('restore');
+  }, []);
+
+  const handlePassphraseCancel = useCallback(() => {
+    setPassphraseMode(null);
+    setPassphraseText('');
+    setSelectedRestoreFileId(null);
+  }, []);
+
+  const handlePassphraseConfirm = useCallback(async () => {
+    const mode = passphraseMode;
+    const passphrase = passphraseText;
+    const fileId = selectedRestoreFileId;
+    setPassphraseMode(null);
+    setPassphraseText('');
+
+    if (mode === 'backup') {
+      try {
+        setCloudBackupBusy(true);
+        const token = await getAccessToken();
+        if (!token) {
+          alert('Google Drive', 'You need to connect Google Drive first.');
+          return;
+        }
+        const snapshot = await createSnapshot();
+        const encrypted = encryptSnapshot(snapshot, passphrase);
+        await uploadBackup(encrypted, token);
+        const now = new Date().toLocaleString();
+        setLastBackupTime(now);
+        alert('Backup Uploaded', 'Your settings were backed up to Google Drive.');
+      } catch (e) {
+        alert('Cloud Backup Failed', String(e));
+      } finally {
+        setCloudBackupBusy(false);
+      }
+      return;
+    }
+
+    if (mode === 'restore' && fileId) {
+      try {
+        setCloudRestoreBusy(true);
+        const token = await getAccessToken();
+        if (!token) {
+          alert('Google Drive', 'You need to connect Google Drive first.');
+          return;
+        }
+        const encrypted = await downloadBackup(fileId, token);
+        const snapshot = decryptSnapshot(encrypted, passphrase);
+        validateSnapshot(snapshot);
+        await applySnapshot(snapshot);
+        alert('Restored', 'Settings restored from Google Drive. Restart the app to apply all changes.');
+      } catch (e) {
+        alert('Error', `Invalid backup data: ${String(e)}`);
+      } finally {
+        setCloudRestoreBusy(false);
+        setSelectedRestoreFileId(null);
+      }
+    }
+  }, [passphraseMode, passphraseText, selectedRestoreFileId, alert]);
+
   const doExport = useCallback(async () => {
     try {
       setBusy(true);
-      const entries = await AsyncStorage.getMany([...EXPORTABLE_KEYS]);
-      const backup: Record<string, string> = {};
-      for (const [k, v] of Object.entries(entries)) {
-        if (v !== null) backup[k] = v;
-      }
-      const json = JSON.stringify(backup, null, 2);
+      const snapshot = await createSnapshot();
+      const json = JSON.stringify(snapshot, null, 2);
       await Clipboard.setStringAsync(json);
       const now = new Date().toLocaleString();
       setLastBackupTime(now);
@@ -107,16 +190,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     try {
       setImporting(true);
       const data = JSON.parse(importText.trim());
-      if (typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('Expected a JSON object');
-      }
-      const filtered: Record<string, string> = {};
-      for (const [k, v] of Object.entries(data)) {
-        if (EXPORTABLE_SET.has(k)) {
-          filtered[k] = String(v);
-        }
-      }
-      await AsyncStorage.setMany(filtered);
+      await applySnapshot(data);
       setShowImportModal(false);
       setImportText('');
       alert('Restored', 'Settings imported successfully. Restart the app to apply all changes.');
@@ -158,6 +232,25 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
         contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Google Drive — OAuth connection (epic #126) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>GOOGLE DRIVE</Text>
+          <CupertinoListSection>
+            <CupertinoListTile
+              title={googleState.isSignedIn ? `Connected: ${googleState.email}` : 'Connect Google Drive'}
+              subtitle={
+                googleState.isSignedIn
+                  ? 'Tap to disconnect'
+                  : 'Back up to your private Drive app folder'
+              }
+              onPress={handleGoogleConnect}
+              trailing={
+                googleBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Backup */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <Text style={[styles.sectionHeader, { color: colors.secondaryLabel }]}>BACKUP</Text>
@@ -167,6 +260,14 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
               subtitle="Copy app preferences to clipboard as JSON"
               onPress={handleExport}
               trailing={busy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined}
+            />
+            <CupertinoListTile
+              title="Back Up Now"
+              subtitle="Encrypt and upload settings to Google Drive"
+              onPress={googleState.isSignedIn ? handleBackUpNow : undefined}
+              trailing={
+                cloudBackupBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
             />
             {lastBackupTime && (
               <CupertinoListTile
@@ -191,6 +292,14 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
               title="Import Settings"
               subtitle="Paste a backup JSON to restore settings"
               onPress={() => setShowImportModal(true)}
+            />
+            <CupertinoListTile
+              title="Restore from Cloud"
+              subtitle="Pick a backup from Google Drive"
+              onPress={googleState.isSignedIn ? handleRestoreFromCloud : undefined}
+              trailing={
+                cloudRestoreBusy ? <ActivityIndicator size="small" color={colors.systemBlue} /> : undefined
+              }
             />
           </CupertinoListSection>
         </View>
@@ -267,6 +376,106 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
                 ) : (
                   <Text style={[styles.modalBtnText, { color: '#FFFFFF' }]}>Import</Text>
                 )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cloud Restore — pick a backup */}
+      <Modal
+        visible={showRestoreListModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRestoreListModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.systemBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.label }]}>Choose a Backup</Text>
+            {cloudBackups.length === 0 ? (
+              <Text style={[styles.modalSubtitle, { color: colors.secondaryLabel }]}>
+                No backups found in Google Drive.
+              </Text>
+            ) : (
+              cloudBackups.map((entry) => (
+                <Pressable
+                  key={entry.id}
+                  style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.separator, marginBottom: 8 }]}
+                  onPress={() => handleSelectCloudBackup(entry.id)}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.modalBtnText, { color: colors.label }]}>
+                    {new Date(entry.createdTime).toLocaleString()}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.separator }]}
+                onPress={() => setShowRestoreListModal(false)}
+                accessibilityLabel="Cancel"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.modalBtnText, { color: colors.label }]}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Passphrase Modal — shared by Back Up Now and Restore from Cloud */}
+      <Modal
+        visible={passphraseMode !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={handlePassphraseCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.systemBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.label }]}>
+              {passphraseMode === 'backup' ? 'Backup Passphrase' : 'Restore Passphrase'}
+            </Text>
+            <Text style={[styles.modalSubtitle, { color: colors.secondaryLabel }]}>
+              {passphraseMode === 'backup'
+                ? 'Choose a passphrase to encrypt this backup. You will need it to restore.'
+                : 'Enter the passphrase used to encrypt this backup.'}
+            </Text>
+            <TextInput
+              style={[
+                styles.textArea,
+                {
+                  backgroundColor: colors.systemGroupedBackground,
+                  color: colors.label,
+                  borderColor: colors.separator,
+                  minHeight: 46,
+                },
+              ]}
+              value={passphraseText}
+              onChangeText={setPassphraseText}
+              placeholder="Passphrase"
+              placeholderTextColor={colors.tertiaryLabel}
+              secureTextEntry
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnCancel, { borderColor: colors.separator }]}
+                onPress={handlePassphraseCancel}
+                accessibilityLabel="Cancel"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.modalBtnText, { color: colors.label }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnConfirm, { backgroundColor: colors.systemBlue }]}
+                onPress={handlePassphraseConfirm}
+                disabled={!passphraseText}
+                accessibilityLabel="Confirm"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFFFFF' }]}>Confirm</Text>
               </Pressable>
             </View>
           </View>

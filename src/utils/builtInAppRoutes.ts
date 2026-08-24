@@ -17,6 +17,7 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.contacts': 'Contacts',
   'com.iostoandroid.settings': 'Settings',
   'com.iostoandroid.weather': 'Weather',
+  'com.iostoandroid.health': 'Health',
   'com.iostoandroid.clock': 'Clock',
   'com.iostoandroid.camera': 'Camera',
   'com.iostoandroid.photos': 'Photos',
@@ -26,6 +27,7 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.reminders': 'Reminders',
   'com.iostoandroid.mail': 'Mail',
   'com.iostoandroid.browser': 'Browser',
+  'com.iostoandroid.wallet': 'Wallet',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).

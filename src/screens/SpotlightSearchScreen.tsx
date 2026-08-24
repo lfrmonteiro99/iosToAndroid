@@ -368,10 +368,11 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
       case 'app': {
         // #701: a app Android que duplica um built-in (Google Photos, Google
         // Clock, …) é listada aqui com o nome do nosso ecrã, por isso resolve-se
-        // primeiro a rota interna — como já fazia a grelha da home.
+        // o alias para a rota interna em vez de a lançar externamente.
         const internalRoute = resolveInternalRoute(item.app.packageName);
         if (internalRoute) {
-          navigation.navigate(internalRoute as never);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rotas de built-ins não têm params; os overloads de navigate exigem a spec
+          navigation.navigate(internalRoute as any);
         } else {
           launchApp(item.app.packageName);
         }
