@@ -74,8 +74,8 @@ describe('PrivacyMonitorScreen', () => {
     expect(await findByText('Microphone')).toBeTruthy();
     expect(await findByText('Location')).toBeTruthy();
     expect(await findByText('Network')).toBeTruthy();
-    // Total accesses header = 16 + 0 + 7 + 3
-    expect(await findByText('26 acessos aos sensores (30 dias)')).toBeTruthy();
+    // Total = 16 + 0 + 7 + 3 (sum of per-sensor totals = apps with permission)
+    expect(await findByText('26 apps com permissão de sensor')).toBeTruthy();
   });
 
   it('hides the per-app breakdown until the card is expanded', async () => {
@@ -91,9 +91,11 @@ describe('PrivacyMonitorScreen', () => {
     await waitFor(() => {
       expect(queryByText('Instagram')).toBeTruthy();
     });
-    // Instagram (12×) ranks above WhatsApp (4×)
-    expect(queryByText('12×')).toBeTruthy();
-    expect(queryByText('4×')).toBeTruthy();
+    // Breakdown lists each app by name; no "×" multiplier.
+    expect(queryByText('Instagram')).toBeTruthy();
+    expect(queryByText('WhatsApp')).toBeTruthy();
+    expect(queryByText('12×')).toBeNull();
+    expect(queryByText('4×')).toBeNull();
   });
 
   it('shows a no-accesses message for a sensor with no apps', async () => {
@@ -101,7 +103,7 @@ describe('PrivacyMonitorScreen', () => {
     await findByText('Microphone');
     fireEvent.press(await findByText('Microphone'));
     await waitFor(() => {
-      expect(queryByText('Nenhum acesso registado nos últimos 30 dias.')).toBeTruthy();
+      expect(queryByText('Nenhuma app com permissão registada.')).toBeTruthy();
     });
   });
 

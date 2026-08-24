@@ -1310,7 +1310,7 @@ class LauncherModule : Module() {
                                 "count" to 1,
                             )
                         }
-                    mapOf(
+                    return mapOf(
                         "sensor" to sensor,
                         "label" to label,
                         "icon" to icon,

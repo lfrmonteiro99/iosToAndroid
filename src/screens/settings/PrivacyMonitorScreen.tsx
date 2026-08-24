@@ -44,7 +44,7 @@ function PrivacySensorCard({
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
-        accessibilityLabel={`${view.label}: ${view.totalAccesses} acessos. ${expanded ? 'Recolher' : 'Expandir'} por app`}
+        accessibilityLabel={`${view.label}: ${view.appCount} ${view.appCount === 1 ? 'app' : 'apps'} com permissão. ${expanded ? 'Recolher' : 'Expandir'} por app`}
         style={({ pressed }) => [
           styles.cardHeader,
           pressed && { opacity: 0.6 },
@@ -59,8 +59,8 @@ function PrivacySensorCard({
           </Text>
           <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>
             {view.hasAccesses
-              ? `${view.totalAccesses} ${view.totalAccesses === 1 ? 'acesso' : 'acessos'} · ${view.appCount} ${view.appCount === 1 ? 'app' : 'apps'}`
-              : 'Sem acessos (30 dias)'}
+              ? `${view.appCount} ${view.appCount === 1 ? 'app' : 'apps'} com permissão`
+              : 'Sem apps com permissão'}
           </Text>
         </View>
         <Ionicons
@@ -83,9 +83,6 @@ function PrivacySensorCard({
                   >
                     {row.appName}
                   </Text>
-                  <Text style={[typography.subhead, { color: colors.secondaryLabel }]}>
-                    {row.count}×
-                  </Text>
                 </View>
                 <View style={[styles.barTrack, { backgroundColor: colors.systemGray5 }]}>
                   <View
@@ -93,14 +90,14 @@ function PrivacySensorCard({
                       styles.barFill,
                       { width: `${Math.round(row.ratio * 100)}%`, backgroundColor: view.bg },
                     ]}
-                    accessibilityLabel={`${row.appName}: ${row.count} acessos`}
+                    accessibilityLabel={`${row.appName}: app com permissão`}
                   />
                 </View>
               </View>
             ))
           ) : (
             <Text style={[typography.footnote, { color: colors.tertiaryLabel, paddingTop: spacing.sm }]}>
-              Nenhum acesso registado nos últimos 30 dias.
+              Nenhuma app com permissão registada.
             </Text>
           )}
         </View>
@@ -169,7 +166,7 @@ export function PrivacyMonitorScreen({ navigation }: { navigation: AppNavigation
             <Text style={[typography.body, { color: colors.secondaryLabel, marginTop: 4 }]}>
               {loading
                 ? 'A carregar…'
-                : `${total} ${total === 1 ? 'acesso' : 'acessos'} aos sensores (30 dias)`}
+                : `${total} ${total === 1 ? 'app' : 'apps'} com permissão de sensor`}
             </Text>
           </GlassSurface>
         </View>
