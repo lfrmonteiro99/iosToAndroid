@@ -71,6 +71,7 @@ export type RootStackParamList = {
   Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
+  ProtectedApps: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;
