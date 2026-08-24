@@ -189,6 +189,13 @@ interface AppsContextValue {
   launchApp: (packageName: string) => Promise<boolean>;
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
+  /**
+   * Reassigns every homeApps[].position sequentially (0, 1, 2, ...) in their
+   * current relative order, removing any holes left by removeFromHome or by
+   * dropping an icon on an empty cell (#762). No app is dropped — only
+   * positions shift.
+   */
+  compactHomeLayout: () => void;
   /** Hide the package from the home screen and the App Library's browsable lists (#606). */
   hideApp: (packageName: string) => void;
   /** Undo hideApp() for the package (#606). */
@@ -665,6 +672,19 @@ export function AppsProvider({
     });
   }, [persist, persistLibraryOnly]);
 
+  // #762: sorts by current position (stable — Array.prototype.sort is stable
+  // since ES2019, and ties can't happen because positions are unique) then
+  // renumbers 0..n-1. Relative order survives; only the holes disappear.
+  const compactHomeLayout = useCallback(() => {
+    setState(prev => {
+      const homeApps = [...prev.homeApps]
+        .sort((a, b) => a.position - b.position)
+        .map((a, i) => ({ ...a, position: i }));
+      persist(prev.dockApps, homeApps);
+      return { ...prev, homeApps };
+    });
+  }, [persist]);
+
   const hideApp = useCallback((packageName: string) => {
     setState(prev => {
       // Idempotent: a double long-press must not push the package twice, and
@@ -798,6 +818,7 @@ export function AppsProvider({
     launchApp,
     addToHome,
     removeFromHome,
+    compactHomeLayout,
     hideApp,
     unhideApp,
     addToDock,
@@ -814,7 +835,7 @@ export function AppsProvider({
     isRebuildingIconCache,
     iconCacheRebuildProgress,
     rebuildIconCache,
-  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, hideApp, unhideApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
+  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, compactHomeLayout, hideApp, unhideApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }

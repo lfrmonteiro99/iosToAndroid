@@ -92,7 +92,7 @@ export function LauncherSettingsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update, updateMany, reset: resetSettings } = useSettings();
-  const { dockApps, apps, hiddenApps, unhideApp } = useApps();
+  const { dockApps, apps, hiddenApps, unhideApp, compactHomeLayout } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
@@ -506,6 +506,17 @@ export function LauncherSettingsScreen() {
           />
         </View>
         <View style={styles.buttonRow}>
+          {/* #762: reassigns homeApps positions sequentially (0,1,2,...),
+              closing every hole left by removing/moving icons — no app is
+              lost, only positions shift. Non-destructive, so no `destructive`
+              styling unlike the reset buttons below. */}
+          <CupertinoButton
+            title="Compact Layout"
+            variant="tinted"
+            onPress={compactHomeLayout}
+          />
+        </View>
+        <View style={[styles.buttonRow, { marginTop: 8 }]}>
           <CupertinoButton
             title="Reset Home Layout"
             variant="tinted"
