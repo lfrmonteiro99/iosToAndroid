@@ -14,6 +14,7 @@ import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
@@ -1641,8 +1642,8 @@ class LauncherModule : Module() {
             // Este caminho ja devolve o bitmap mascarado pelo compositor do #484,
             // e o call site volta a passar tudo pelo applySquircleMask do #480.
             // Aplicar duas vezes e' idempotente NA FORMA: os dois usam o mesmo
-            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 4.7 e o
-            // n = 4.7 do applySquircleMask) e o mesmo gerador de pontos, portanto a
+            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 5.0 e o
+            // n = 5.0 do applySquircleMask) e o mesmo gerador de pontos, portanto a
             // segunda mascara recorta exactamente a mesma regiao. Se algum dia os
             // expoentes divergirem, isto passa a cortar duas formas diferentes —
             // e a razao pela qual ambos os sitios citam a constante.
@@ -1665,8 +1666,10 @@ class LauncherModule : Module() {
         val top = (srcH - side) / 2
         val square = Bitmap.createBitmap(src, left, top, side, side)
         if (square != src) src.recycle()
-        return square
-    }
+        // Circular/banner icons would show transparent corners after the
+        // squircle mask; backfill them with the icon's edge colour so the
+        // silhouette stays solid (#465/#480, now addressed).
+        return backfillTransparentCorners(square)
 
     /**
      * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
@@ -1709,12 +1712,56 @@ class LauncherModule : Module() {
         return applySquircleMask(src, exponent)
     }
 
-    private fun applySquircleMask(src: Bitmap, n: Double = 4.7): Bitmap {
+    private fun applySquircleMask(src: Bitmap, n: Double = 5.0): Bitmap {
         val size = src.width.coerceAtMost(src.height)
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
         Canvas(out).drawPath(buildSuperellipsePath(size, n), paint)
+        return out
+    }
+
+    /**
+     * Average the four edge-midpoint pixels of [src] — a cheap "dominant colour"
+     * for backfilling transparent mask corners on circular/banner icons so they
+     * don't show holes (the known-incomplete item of #465 / #480). Good enough
+     * because the mask only clips the four squircle corners, which sit on the
+     * icon's own edge colour.
+     */
+    private fun edgeMidpointColor(src: Bitmap): Int {
+        val w = src.width
+        val h = src.height
+        val cx = w / 2
+        val cy = h / 2
+        var r = 0
+        var g = 0
+        var b = 0
+        var n = 0
+        for ((x, y) in listOf(Pair(cx, 0), Pair(cx, h - 1), Pair(0, cy), Pair(w - 1, cy))) {
+            val c = src.getPixel(x, y)
+            if (Color.alpha(c) == 0) continue
+            r += Color.red(c); g += Color.green(c); b += Color.blue(c); n++
+        }
+        if (n == 0) return Color.BLACK
+        return Color.rgb(r / n, g / n, b / n)
+    }
+
+    /**
+     * Backfill transparent corners of [src] with the edge-midpoint colour so a
+     * circular/banner icon keeps a solid silhouette after masking. Returns the
+     * original bitmap when it already fills its bounds.
+     */
+    private fun backfillTransparentCorners(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        // Quick reject: if the centre pixel is opaque, the icon fills its box
+        // (square/adaptive) and masking can't expose a hole.
+        if (Color.alpha(src.getPixel(w / 2, h / 2)) != 0) return src
+        val fill = edgeMidpointColor(src)
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(fill)
+        Canvas(out).drawBitmap(src, 0f, 0f, null)
         return out
     }
 
@@ -1749,19 +1796,32 @@ class LauncherModule : Module() {
         // recortam nada: o fundo é desenhado inteiro e o resultado é o composite
         // do sistema sem silhueta imposta.
         val exponent = if (shouldMask) mask.exponent else null
-        canvas.save()
         if (exponent != null) {
+            // Clip por drawPath (Paths são anti-alias em drawPath, ao contrário
+            // de clipPath) — igual ao applySquircleMask dos ícones não-adaptivos,
+            // para a borda não serrilhar a grandes tamanhos (#480/AA).
             val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat(), exponent)
             val maskPath = Path().apply {
-                moveTo(maskPoints[0].first, maskPoints[0].second)
-                maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
-                close()
+                if (maskPoints.isNotEmpty()) {
+                    moveTo(maskPoints[0].first, maskPoints[0].second)
+                    maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
+                    close()
+                }
             }
-            canvas.clipPath(maskPath)
+            // Fundo desenhado num bitmap à parte e pintado através do maskPath
+            // com um shader + ANTI_ALIAS_FLAG, para a silhueta sair suave.
+            val bgBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            Canvas(bgBitmap).apply {
+                background.setBounds(0, 0, size, size)
+                background.draw(this)
+            }
+            Canvas(bitmap).drawPath(maskPath, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.shader = BitmapShader(bgBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            })
+        } else {
+            background.setBounds(0, 0, size, size)
+            background.draw(canvas)
         }
-        background.setBounds(0, 0, size, size)
-        background.draw(canvas)
-        canvas.restore()
 
         if (foreground != null) {
             val bounds = AdaptiveIconCompositor.foregroundBounds(size)
