@@ -122,6 +122,46 @@ describe('LauncherSettingsScreen grid density controls (#503)', () => {
     expect(persisted.iconSizeScale).toBe(1.2);
   });
 
+  // issue #621: no iOS, "Grande" é um preset que também esconde os nomes das
+  // apps (visual minimalista) — os dois bits já existiam separados (#503) mas
+  // sem o preset que os combina.
+  it('moving the App Icon Size slider to Large (max) also hides app name labels', async () => {
+    const store = setupMemoryAsyncStorage();
+    const { UNSAFE_getAllByType } = render(<LauncherSettingsScreen />);
+
+    let slider: ReturnType<typeof UNSAFE_getAllByType>[number];
+    await waitFor(() => {
+      [slider] = UNSAFE_getAllByType(CupertinoSlider);
+      expect(slider).toBeTruthy();
+    }, { timeout: 3000 });
+
+    slider!.props.onValueChange(1.2);
+
+    const persisted = await waitForPersisted(
+      store,
+      (s) => s.iconSizeScale === 1.2 && s.showIconLabels === false,
+    );
+    expect(persisted.iconSizeScale).toBe(1.2);
+    expect(persisted.showIconLabels).toBe(false);
+  });
+
+  it('moving the App Icon Size slider to a non-Large value does not force-hide labels', async () => {
+    const store = setupMemoryAsyncStorage();
+    const { UNSAFE_getAllByType } = render(<LauncherSettingsScreen />);
+
+    let slider: ReturnType<typeof UNSAFE_getAllByType>[number];
+    await waitFor(() => {
+      [slider] = UNSAFE_getAllByType(CupertinoSlider);
+      expect(slider).toBeTruthy();
+    }, { timeout: 3000 });
+
+    slider!.props.onValueChange(1.0);
+
+    const persisted = await waitForPersisted(store, (s) => s.iconSizeScale === 1.0);
+    expect(persisted.iconSizeScale).toBe(1.0);
+    expect(persisted.showIconLabels).toBe(true); // default preserved, unaffected
+  });
+
   it('toggling Show App Names persists showIconLabels', async () => {
     const store = setupMemoryAsyncStorage();
     const { getByText } = render(<LauncherSettingsScreen />);
