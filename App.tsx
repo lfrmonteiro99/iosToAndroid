@@ -136,6 +136,24 @@ function AppContent() {
   const focusModeRef = useRef(settings.focusMode);
   useEffect(() => { focusModeRef.current = settings.focusMode; }, [settings.focusMode]);
 
+  // Contexto de routing por-app das notificações (#630): allow-list imediata,
+  // política por app e Reduce Interruptions. Espelhado num ref para o listener
+  // (registado uma vez) ler o valor corrente sem closure obsoleta.
+  const routingRef = useRef({
+    focusMode: settings.focusMode,
+    allowListImmediate: settings.allowListImmediate,
+    perAppDelivery: settings.perAppDelivery,
+    reduceInterruptions: settings.reduceInterruptions,
+  });
+  useEffect(() => {
+    routingRef.current = {
+      focusMode: settings.focusMode,
+      allowListImmediate: settings.allowListImmediate,
+      perAppDelivery: settings.perAppDelivery,
+      reduceInterruptions: settings.reduceInterruptions,
+    };
+  }, [settings.focusMode, settings.allowListImmediate, settings.perAppDelivery, settings.reduceInterruptions]);
+
   // Pending auto-lock timer. We don't lock the instant the app goes to
   // background — a permission dialog, the system HOME intent fired by our
   // own AssistiveTouch/HomeIndicator, or any other transient focus loss all
@@ -302,7 +320,7 @@ function AppContent() {
         for (const n of initial) seenNotifIds.current.add(n.id);
 
         unsub = addNotificationListener((n) => {
-          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner);
+          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner, routingRef.current);
         });
       } catch { /* ignore */ }
     })();
