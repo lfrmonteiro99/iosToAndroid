@@ -435,7 +435,7 @@ export function AppsProvider({
           // (que o appsIndexReducer ordena em `.sort(byName)`) chega ao vivo
           // `allApps`, e como a AppLibraryContent é a última página do pager
           // da home, o throw derrubava o launcher → ecrã inicial do Android
-          // (#704). Replicamos a normalização da ponte para o cache.
+          // (#704 / #709). Replicamos a normalização da ponte para o cache.
           const seen = new Set<string>();
           const clean = parsed
             .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e))

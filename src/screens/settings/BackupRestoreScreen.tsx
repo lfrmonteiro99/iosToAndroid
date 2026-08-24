@@ -21,45 +21,7 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
-
-// Explicit allow-list derived from SettingsStore.tsx, ThemeContext.tsx, and
-// each settings screen that writes its own AsyncStorage keys.
-// Intentionally excludes non-settings data: messages, notes, contacts, reminders,
-// home layout, Spotlight history, and any future non-settings keys.
-const EXPORTABLE_KEYS = [
-  // Main settings blob (SettingsStore)
-  '@iostoandroid/settings',
-  // ThemeContext — display mode, accent colour, high-contrast
-  '@iostoandroid/theme_preference',
-  '@iostoandroid/accent_color',
-  '@iostoandroid/high_contrast',
-  // AccessibilityScreen — text scale, bold, reduce motion
-  '@iostoandroid/a11y_textscale',
-  '@iostoandroid/a11y_bold',
-  '@iostoandroid/a11y_reduce_motion',
-  // DisplayBrightnessScreen — night shift preference
-  '@iostoandroid/night_shift',
-  // KeyboardScreen — keyboard preferences
-  '@iostoandroid/kbd_autocap',
-  '@iostoandroid/kbd_autocorrect',
-  '@iostoandroid/kbd_clicks',
-  '@iostoandroid/kbd_predictive',
-  // CellularScreen — cellular and data-roaming preferences
-  '@iostoandroid/cellular_data',
-  '@iostoandroid/data_roaming',
-  // DateTimeScreen — timezone preference
-  '@iostoandroid/timezone',
-  // LanguageRegionScreen — locale preferences
-  '@iostoandroid/language',
-  '@iostoandroid/region',
-  // SoundsHapticsScreen — ringtone and text-tone labels
-  '@iostoandroid/ringtone',
-  '@iostoandroid/text_tone',
-  // WallpaperScreen — custom wallpaper URI
-  '@iostoandroid/custom_wallpaper',
-] as const;
-
-const EXPORTABLE_SET = new Set<string>(EXPORTABLE_KEYS);
+import { createSnapshot, applySnapshot } from '../../services/BackupSnapshot';
 
 export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
@@ -78,12 +40,8 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
   const doExport = useCallback(async () => {
     try {
       setBusy(true);
-      const entries = await AsyncStorage.getMany([...EXPORTABLE_KEYS]);
-      const backup: Record<string, string> = {};
-      for (const [k, v] of Object.entries(entries)) {
-        if (v !== null) backup[k] = v;
-      }
-      const json = JSON.stringify(backup, null, 2);
+      const snapshot = await createSnapshot();
+      const json = JSON.stringify(snapshot, null, 2);
       await Clipboard.setStringAsync(json);
       const now = new Date().toLocaleString();
       setLastBackupTime(now);
@@ -107,16 +65,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     try {
       setImporting(true);
       const data = JSON.parse(importText.trim());
-      if (typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('Expected a JSON object');
-      }
-      const filtered: Record<string, string> = {};
-      for (const [k, v] of Object.entries(data)) {
-        if (EXPORTABLE_SET.has(k)) {
-          filtered[k] = String(v);
-        }
-      }
-      await AsyncStorage.setMany(filtered);
+      await applySnapshot(data);
       setShowImportModal(false);
       setImportText('');
       alert('Restored', 'Settings imported successfully. Restart the app to apply all changes.');
