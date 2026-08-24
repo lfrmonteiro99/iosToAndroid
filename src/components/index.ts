@@ -1,3 +1,5 @@
+export { CupertinoBarChart } from './CupertinoBarChart';
+export type { BarChartDatum } from './CupertinoBarChart';
 export { CupertinoButton } from './CupertinoButton';
 export { CupertinoSwitch } from './CupertinoSwitch';
 export { CupertinoTextField } from './CupertinoTextField';

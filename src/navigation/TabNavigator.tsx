@@ -57,7 +57,9 @@ import { SiriScreen } from '../screens/SiriScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
 import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
+import { ProtectedAppsScreen } from '../screens/ProtectedAppsScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
+import { HealthScreen } from '../screens/HealthScreen';
 import { ClockScreen } from '../screens/ClockScreen';
 import { CameraScreen } from '../screens/CameraScreen';
 import { PhotosScreen } from '../screens/PhotosScreen';
@@ -108,6 +110,7 @@ export function TabNavigator() {
       <Stack.Screen name="ContactDetail" component={ContactDetailScreen} options={{ animation }} />
       <Stack.Screen name="ContactEdit" component={ContactEditScreen} options={{ animation }} />
       <Stack.Screen name="Weather" component={WeatherScreen} options={{ animation }} />
+      <Stack.Screen name="Health" component={HealthScreen} options={{ animation }} />
       <Stack.Screen name="Clock" component={ClockScreen} options={{ animation }} />
       <Stack.Screen name="Camera" component={CameraScreen} options={{ animation, gestureEnabled: false }} />
       <Stack.Screen name="Photos" component={PhotosScreen} options={{ animation }} />
@@ -165,6 +168,7 @@ export function TabNavigator() {
           #712. */}
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left', presentation: 'transparentModal' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="ProtectedApps" component={ProtectedAppsScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
   );
 }
