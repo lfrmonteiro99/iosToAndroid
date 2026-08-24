@@ -14,7 +14,13 @@ import type { InstalledApp } from './AppsStore';
  */
 
 function byName(a: InstalledApp, b: InstalledApp): number {
-  return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  // `name` pode estar ausente numa entrada do índice em cache (`apps_index`)
+  // lida DIRETAMENTE do AsyncStorage — à espera da ponte nativa, que contorna o
+  // `withCategory`/`dedupeByPackageName` que normalizam a saída nativa. Como a
+  // AppLibraryContent é a última página do pager da home, um throw aqui
+  // derrubava o launcher inteiro e o utilizador via o ecrã inicial do Android
+  // em vez da App Library (#704 / #709). Trata-se como string vazia.
+  return (a.name ?? '').toLowerCase().localeCompare((b.name ?? '').toLowerCase());
 }
 
 /** Insert `app`, or replace the existing entry with the same packageName. */

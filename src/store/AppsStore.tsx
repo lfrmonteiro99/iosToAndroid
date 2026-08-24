@@ -426,7 +426,29 @@ export function AppsProvider({
     if (cachedIndexRaw) {
       try {
         const parsed = JSON.parse(cachedIndexRaw);
-        if (Array.isArray(parsed)) cachedApps = parsed;
+        if (Array.isArray(parsed)) {
+          // O blob vem do AsyncStorage (não confiável: build anterior, cache
+          // truncado, entrada parcial). A ponte nativa normaliza a SAÍDA
+          // (`withCategory`/`dedupeByPackageName`), mas aqui lemos o cache
+          // PERSISTIDO, que contorna essa normalização. Sem isto, uma entrada
+          // sem `packageName` (chave de React / duplicados) ou sem `name`
+          // (que o appsIndexReducer ordena em `.sort(byName)`) chega ao vivo
+          // `allApps`, e como a AppLibraryContent é a última página do pager
+          // da home, o throw derrubava o launcher → ecrã inicial do Android
+          // (#704 / #709). Replicamos a normalização da ponte para o cache.
+          const seen = new Set<string>();
+          const clean = parsed
+            .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e))
+            .filter((e) => typeof e.packageName === 'string' && e.packageName !== '' && !seen.has(e.packageName) && (seen.add(e.packageName), true))
+            .filter((e) => typeof e.name === 'string')
+            .map((e) => ({
+              name: e.name as string,
+              packageName: e.packageName as string,
+              icon: typeof e.icon === 'string' ? e.icon : '',
+              isSystem: typeof e.isSystem === 'boolean' ? e.isSystem : false,
+            }));
+          cachedApps = clean.length > 0 ? clean : null;
+        }
       } catch (e) { logger.warn('AppsStore', 'failed to parse cached apps index', e); }
     }
 
