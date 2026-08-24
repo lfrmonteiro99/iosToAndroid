@@ -97,6 +97,33 @@ export function assignHomePositions(homeApps: HomeApp[], apps: InstalledApp[]): 
   return [...homeApps, ...additions];
 }
 
+/**
+ * Swaps the `position` of two homeApps entries (#761 — jiggle-mode drag to
+ * reorder). This is the classic iOS behaviour: dropping icon A onto icon B's
+ * cell trades their positions, it does not shift everything in between (that
+ * shift, and dropping on an EMPTY cell, is the next sub-issue's scope — #761
+ * explicitly excludes it).
+ *
+ * Returns the same array reference when there is nothing to do (same
+ * package, or either package has no recorded position — dragging something
+ * not yet in homeApps shouldn't happen via the grid, but failing closed here
+ * means a stray call is a no-op instead of corrupting positions), so a no-op
+ * swap does not trigger an extra persist()/re-render.
+ */
+export function swapHomePositions(homeApps: HomeApp[], packageA: string, packageB: string): HomeApp[] {
+  if (packageA === packageB) return homeApps;
+  const idxA = homeApps.findIndex(h => h.packageName === packageA);
+  const idxB = homeApps.findIndex(h => h.packageName === packageB);
+  if (idxA === -1 || idxB === -1) return homeApps;
+  const posA = homeApps[idxA].position;
+  const posB = homeApps[idxB].position;
+  if (posA === posB) return homeApps;
+  const next = [...homeApps];
+  next[idxA] = { ...next[idxA], position: posB };
+  next[idxB] = { ...next[idxB], position: posA };
+  return next;
+}
+
 // Dynamic import to avoid crashing the module on non-Android. Falls back to a
 // synchronous require when dynamic import() is unavailable (e.g. Jest's VM
 // without --experimental-vm-modules) so moduleNameMapper mocks still apply in tests.
@@ -205,6 +232,13 @@ interface AppsContextValue {
   launchApp: (packageName: string) => Promise<boolean>;
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
+  /**
+   * Swaps two homeApps entries' positions (#761 — jiggle-mode drag to
+   * reorder). Optional on the context value for the same reason as
+   * protectApp above: older hand-built test mocks cast to AppsContextValue
+   * without it keep type-checking; the real provider always populates it.
+   */
+  swapHomeApps?: (packageA: string, packageB: string) => void;
   /**
    * Reassigns every homeApps[].position sequentially (0, 1, 2, ...) in their
    * current relative order, removing any holes left by removeFromHome or by
@@ -754,6 +788,15 @@ export function AppsProvider({
     });
   }, [persist, persistLibraryOnly]);
 
+  const swapHomeApps = useCallback((packageA: string, packageB: string) => {
+    setState(prev => {
+      const homeApps = swapHomePositions(prev.homeApps, packageA, packageB);
+      if (homeApps === prev.homeApps) return prev;
+      persist(prev.dockApps, homeApps);
+      return { ...prev, homeApps };
+    });
+  }, [persist]);
+
   // #762: sorts by current position (stable — Array.prototype.sort is stable
   // since ES2019, and ties can't happen because positions are unique) then
   // renumbers 0..n-1. Relative order survives; only the holes disappear.
@@ -920,6 +963,7 @@ export function AppsProvider({
     launchApp,
     addToHome,
     removeFromHome,
+    swapHomeApps,
     compactHomeLayout,
     hideApp,
     unhideApp,
@@ -939,7 +983,7 @@ export function AppsProvider({
     isRebuildingIconCache,
     iconCacheRebuildProgress,
     rebuildIconCache,
-  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, compactHomeLayout, hideApp, unhideApp, protectApp, unprotectApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
+  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, swapHomeApps, compactHomeLayout, hideApp, unhideApp, protectApp, unprotectApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }

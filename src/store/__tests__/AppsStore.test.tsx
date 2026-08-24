@@ -622,6 +622,108 @@ describe('AppsStore — home grid holes (#762: removeFromHome no longer recompac
   });
 });
 
+// ─── #761: arrastar um ícone em jiggle-mode para outra célula troca posições ──
+describe('AppsStore — swapHomeApps (#761: jiggle-mode drag swaps two positions)', () => {
+  const apple = { name: 'Apple', packageName: 'com.example.apple', icon: '', isSystem: false };
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: '', isSystem: false };
+  const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: '', isSystem: false };
+
+  function seedLayout(homeApps: Array<{ packageName: string; position: number }>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === '@iostoandroid/apps_layout' ? JSON.stringify({ dockApps: [], homeApps }) : null),
+    );
+  }
+
+  it('swaps the two positions and leaves every other entry untouched', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.cherry');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 2 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 0 },
+    ]);
+  });
+
+  it('persists the swapped layout so it survives the next launch', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.banana');
+    });
+
+    const persistCall = (AsyncStorage.setItem as jest.Mock).mock.calls.find(
+      (call) => call[0] === '@iostoandroid/apps_layout',
+    );
+    expect(persistCall).toBeTruthy();
+    expect(JSON.parse(persistCall![1]).homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 1 },
+      { packageName: 'com.example.banana', position: 0 },
+    ]);
+  });
+
+  it('swapping a package with itself is a no-op (no persist, no position change)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.apple');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    expect(AsyncStorage.setItem).not.toHaveBeenCalledWith('@iostoandroid/apps_layout', expect.anything());
+  });
+
+  it('swapping against an unknown package is a no-op (dropping on something not in homeApps)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.nonexistent');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+  });
+});
+
 // ─── #760: homeApps.position é a fonte de verdade da ordem/pertença ────────
 //
 // addToHome/removeFromHome já escreviam `position`, mas nada mais o fazia:
