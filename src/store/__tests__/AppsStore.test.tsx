@@ -215,7 +215,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
 
     // #486/#482: a máscara (forma/expoente) viaja no 1º argumento, o tratamento no 2º.
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-all',
     );
   });
@@ -226,7 +226,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
   });
@@ -244,7 +244,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
     await act(async () => {});
     expect(LauncherModule.getInstalledApps).toHaveBeenLastCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-all',
     );
 
@@ -257,7 +257,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledTimes(1);
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'none',
     );
   });
@@ -287,12 +287,12 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     // devolver ícones com outra silhueta (#486 + #482).
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.a',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.b',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(result.current.isRebuildingIconCache).toBe(false);

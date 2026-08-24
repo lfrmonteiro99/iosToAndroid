@@ -93,6 +93,30 @@ export const BACK_TAP_ACTION_IDS: readonly BackTapAction[] = [
 
 const KNOWN_ACTIONS: ReadonlySet<string> = new Set<string>(BACK_TAP_ACTION_IDS);
 
+/**
+ * Etiqueta legível para cada acção, usada nos pickers de Back Tap (ecrã
+ * dedicado e secção inline em SettingsScreen). Mantida aqui para que a
+ * catalogação de acções viva num só sítio e seja testável em isolado, à
+ * semelhança de KNOWN_ACTIONS.
+ */
+const BACK_TAP_ACTION_LABELS: Record<BackTapAction, string> = {
+  none: 'None',
+  flash: 'Flashlight',
+  toggleWifi: 'Toggle Wi-Fi',
+  openApp: 'Open App',
+  openCamera: 'Camera',
+  shortcut: 'Shortcut',
+  screenshot: 'Screenshot',
+  startRecording: 'Start Recording',
+  sendMessage: 'Send Message',
+};
+
+/** Devolve a etiqueta legível de uma acção; 'none' por defeito se desconhecida. */
+export function labelForBackTapAction(action: BackTapAction | string | unknown): string {
+  if (isKnownAction(action)) return BACK_TAP_ACTION_LABELS[action];
+  return BACK_TAP_ACTION_LABELS.none;
+}
+
 const TARGETED_ACTIONS: ReadonlySet<BackTapAction> = new Set<TargetedBackTapAction>([
   'openApp',
   'shortcut',
