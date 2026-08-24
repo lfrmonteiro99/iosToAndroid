@@ -679,4 +679,82 @@ describe('postLiveActivity / cancelLiveActivity bridge (#626)', () => {
     expect(listener).toHaveBeenCalledWith('cancelLiveActivity', expect.any(Error));
     unsub();
   });
+
+  it('reports a native startTapDetection failure to onBridgeError instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const listener = jest.fn();
+    const unsub = mod.onBridgeError(listener);
+
+    await expect(mod.default.startTapDetection()).resolves.toBe(false);
+    expect(listener).toHaveBeenCalledWith('startTapDetection', expect.any(Error));
+    unsub();
+  });
+
+  it('reports a native stopTapDetection failure to onBridgeError instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const listener = jest.fn();
+    const unsub = mod.onBridgeError(listener);
+
+    await expect(mod.default.stopTapDetection()).resolves.toBe(false);
+    expect(listener).toHaveBeenCalledWith('stopTapDetection', expect.any(Error));
+    unsub();
+  });
+});
+
+// #636: the native TapSensorService emits `onBackTap` for double/triple back
+// taps; this is the bridge half that forwards that payload to a JS listener.
+describe('LauncherModule Back Tap listener (event-driven, #636)', () => {
+  it('addBackTapListener subscribes to onBackTap', () => {
+    const addListener = jest.fn((_event: string, _handler: (payload: unknown) => void) => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    mod.addBackTapListener(jest.fn());
+
+    expect(addListener).toHaveBeenCalledWith('onBackTap', expect.any(Function));
+  });
+
+  it('addBackTapListener forwards the typed payload (type, count, taps) to the caller', () => {
+    const addListener = jest.fn((_event: string, _handler: (payload: unknown) => void) => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    mod.addBackTapListener(handler);
+
+    const nativeHandler = addListener.mock.calls[0][1];
+    const payload = { type: 'double', count: 2, taps: [1000, 1200] };
+    nativeHandler(payload);
+
+    expect(handler).toHaveBeenCalledWith(payload);
+    expect(handler.mock.calls[0][0]).toMatchObject({ type: 'double', count: 2 });
+    expect(handler.mock.calls[0][0].taps).toEqual([1000, 1200]);
+  });
+
+  it('addBackTapListener unsubscribe calls the native subscription remove() exactly once (double-call safe)', () => {
+    const remove = jest.fn();
+    const addListener = jest.fn(() => ({ remove }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const unsubscribe = mod.addBackTapListener(jest.fn());
+    expect(remove).not.toHaveBeenCalled();
+
+    unsubscribe();
+    unsubscribe();
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it('addBackTapListener degrades to a no-op unsubscribe when the native module exposes no event emitter', () => {
+    mockNativeModule = makeNativeModule(false);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    const unsubscribe = mod.addBackTapListener(handler);
+
+    expect(() => unsubscribe()).not.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
 });

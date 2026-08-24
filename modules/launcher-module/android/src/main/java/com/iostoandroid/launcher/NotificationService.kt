@@ -60,15 +60,16 @@ class NotificationService : NotificationListenerService() {
         instance = this
     }
 
-    private fun emitToJS(eventName: String, sbn: StatusBarNotification) {
+    private fun emitToJS(eventName: String, data: NotificationData) {
         try {
-            val extras = sbn.notification.extras
             val bundle = Bundle().apply {
-                putString("id", sbn.key)
-                putString("packageName", sbn.packageName)
-                putString("title", extras.getCharSequence("android.title")?.toString() ?: "")
-                putString("text", extras.getCharSequence("android.text")?.toString() ?: "")
-                putDouble("postedAt", sbn.postTime.toDouble())
+                putString("id", data.id)
+                putString("key", data.key)
+                putString("packageName", data.packageName)
+                putString("title", data.title)
+                putString("text", data.text)
+                putDouble("time", data.time.toDouble())
+                putBoolean("isOngoing", data.isOngoing)
             }
             LauncherModule.emitEvent(eventName, bundle)
         } catch (e: Exception) {
@@ -104,21 +105,33 @@ class NotificationService : NotificationListenerService() {
             notifications.removeAt(notifications.size - 1)
         }
 
-        emitToJS("onNotificationPosted", sbn)
+        emitToJS("onNotificationPosted", data)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         val targetId = sbn.id.toString()
         val targetPkg = sbn.packageName
+        var removed: NotificationData? = null
         val iter = notifications.iterator()
         while (iter.hasNext()) {
             val existing = iter.next()
             if (existing.id == targetId && existing.packageName == targetPkg) {
+                removed = existing
                 notifications.remove(existing)
             }
         }
 
-        emitToJS("onNotificationRemoved", sbn)
+        val data = removed ?: NotificationData(
+            id = targetId,
+            key = sbn.key,
+            packageName = targetPkg,
+            title = "",
+            text = "",
+            time = sbn.postTime,
+            isOngoing = sbn.isOngoing
+        )
+
+        emitToJS("onNotificationRemoved", data)
     }
 
     override fun onDestroy() {

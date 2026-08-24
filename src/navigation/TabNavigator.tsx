@@ -47,6 +47,7 @@ import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
 import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouchSettingsScreen';
+import { BackTapSettingsScreen } from '../screens/settings/BackTapSettingsScreen';
 import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
@@ -58,6 +59,7 @@ import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
 import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
 import { ProtectedAppsScreen } from '../screens/ProtectedAppsScreen';
+import { PerformanceProfileScreen } from '../screens/settings/PerformanceProfileScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
 import { HealthScreen } from '../screens/HealthScreen';
 import { ClockScreen } from '../screens/ClockScreen';
@@ -144,6 +146,7 @@ export function TabNavigator() {
       <Stack.Screen name="Wallpaper" component={WallpaperScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="AssistiveTouchSettings" component={AssistiveTouchSettingsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="BackTapSettings" component={BackTapSettingsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: slideAnimation }} />
@@ -169,6 +172,7 @@ export function TabNavigator() {
       <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left', presentation: 'transparentModal' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="ProtectedApps" component={ProtectedAppsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="PerformanceProfile" component={PerformanceProfileScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
   );
 }
