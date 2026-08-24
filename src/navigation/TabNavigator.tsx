@@ -150,7 +150,12 @@ export function TabNavigator() {
       <Stack.Screen name="AppStoreDetail" component={AppStoreDetailScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
       <Stack.Screen name="Siri" component={SiriScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
-      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left' }} />
+      {/* Today View is a translucent overlay (translucent root + tap-to-dismiss
+          backdrop + swipe-to-dismiss), so it must float over the home, not
+          replace it. Registered as a transparentModal like its overlay siblings
+          (SpotlightSearch, Siri, ControlCenter, NotificationCenter, Multitask) —
+          #712. */}
+      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left', presentation: 'transparentModal' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
   );
