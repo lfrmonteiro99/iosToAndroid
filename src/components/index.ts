@@ -46,6 +46,16 @@ export { SmartStack, rotateForward, rotateBackward } from './SmartStack';
 export type { SmartStackProps, SmartStackItem } from './SmartStack';
 export { SiriWaveform } from './SiriWaveform';
 export type { SiriWaveformProps } from './SiriWaveform';
+export {
+  RideActivityCard,
+  MatchActivityCard,
+  TimerActivityCard,
+  TrackingActivityCard,
+  LiveActivityExampleDeck,
+  clamp01,
+  fractionOf,
+  formatRemainingMs,
+} from './LiveActivityCards';
 export { CupertinoContextMenu } from './CupertinoContextMenu';
 export type { ContextMenuItem, CupertinoContextMenuProps } from './CupertinoContextMenu';
 export type { GlassSurfaceProps } from './GlassSurface';
