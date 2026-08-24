@@ -454,7 +454,9 @@ const AppStrip = React.memo(function AppStrip({
 }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const stripIconSize = 62;
+  // iOS App Library: ícones de faixa horizontal alinhados aos ~60px da grelha
+  // densa (4 por linha). 62px exagerava e forçava scroll horizontal (#678).
+  const stripIconSize = 60;
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stripContent}>
