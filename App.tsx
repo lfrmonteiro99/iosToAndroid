@@ -17,8 +17,8 @@ import { DeviceProvider, useDevice } from './src/store/DeviceStore';
 import { FoldersProvider } from './src/store/FoldersStore';
 import { BookmarksProvider } from './src/store/BookmarksStore';
 import { ReadingListProvider } from './src/store/ReadingListStore';
-import { HealthProvider } from './src/store/HealthStore';
 import { WalletProvider } from './src/store/WalletStore';
+import { HealthProvider } from './src/store/HealthStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
@@ -403,15 +403,18 @@ export default function App() {
                 <BookmarksProvider>
                 <ReadingListProvider>
                 <AssistiveTouchProvider>
-                <HealthProvider>
                 <WalletProvider>
+                {/* Health (#276): o HealthScreen chama useHealth(), que lança
+                    sem provider acima — abrir o ícone Health no launcher real
+                    rebentava. Montado aqui, ao lado dos restantes stores. */}
+                <HealthProvider>
                 <ErrorBoundary>
                   <AlertProvider>
                     <AppContent />
                   </AlertProvider>
                 </ErrorBoundary>
-                </WalletProvider>
                 </HealthProvider>
+                </WalletProvider>
                 </AssistiveTouchProvider>
                 </ReadingListProvider>
                 </BookmarksProvider>

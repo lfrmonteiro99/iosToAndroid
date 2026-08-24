@@ -16,7 +16,16 @@ const base = {
   permissionGranted: null as boolean | null,
   requestActivityPermission: jest.fn(async () => false),
   isReady: true,
+  stepHistory: [] as { date: string; steps: number }[],
 };
+
+// A fixed fixture: 3 consecutive days in the same ISO week and month, so the
+// aggregations diverge — Daily => 3 buckets, Weekly => 1, Monthly => 1.
+const THREE_DAY_HISTORY = [
+  { date: '2026-08-03', steps: 100 }, // Monday
+  { date: '2026-08-04', steps: 200 }, // Tuesday
+  { date: '2026-08-05', steps: 300 }, // Wednesday
+];
 
 describe('HealthScreen', () => {
   beforeEach(() => {
@@ -90,6 +99,41 @@ describe('HealthScreen', () => {
     fireEvent.press(button);
     fireEvent.press(button);
     expect(requestActivityPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the Trends section, defaulting to Daily with one bar per day', () => {
+    useHealthMock.mockReturnValue({ ...base, stepHistory: THREE_DAY_HISTORY });
+    const { getByText, getAllByTestId } = render(<HealthScreen />);
+    expect(getByText('Trends')).toBeTruthy();
+    // Daily aggregation => 3 bars, one per day
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(3);
+  });
+
+  it('switches Trends between Daily/Weekly/Monthly via the segmented control', () => {
+    useHealthMock.mockReturnValue({ ...base, stepHistory: THREE_DAY_HISTORY });
+    const { getByText, getAllByTestId } = render(<HealthScreen />);
+
+    // Daily: 3 buckets
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(3);
+
+    // Weekly: all 3 days fall in one ISO week => 1 bucket
+    fireEvent.press(getByText('Weekly'));
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(1);
+
+    // Monthly: all 3 days fall in one month => 1 bucket
+    fireEvent.press(getByText('Monthly'));
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(1);
+
+    // Back to Daily
+    fireEvent.press(getByText('Daily'));
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(3);
+  });
+
+  it('shows the empty state in Trends when there is no step history', () => {
+    useHealthMock.mockReturnValue({ ...base, stepHistory: [] });
+    const { queryByTestId, getByText } = render(<HealthScreen />);
+    expect(queryByTestId('bar-0')).toBeNull();
+    expect(getByText('No data yet')).toBeTruthy();
   });
 });
 

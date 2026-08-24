@@ -10,6 +10,7 @@ import {
   mergeDailySteps,
   localDateKey,
   HEALTH_DAILY_STEPS_KEY,
+  DailySteps,
 } from '../HealthStore';
 
 // Exercises the REAL provider: a probe component renders the live context and a
@@ -80,93 +81,86 @@ describe('HealthStore', () => {
     expect(watchMock).toHaveBeenCalledTimes(1);
   });
 
-  // `steps` no callback do Pedometer é CUMULATIVO desde o início da subscrição
-  // (expo-sensors PedometerModule.kt:21-32 ancora em `values[0] - 1` e emite
-  // `values[0] - ancora`), não um delta por evento. Somar cada emissão inflaciona
-  // o total de forma quadrática em hardware real.
-  it('treats the watched steps as cumulative, not as a per-event delta', async () => {
-    renderStore();
+  // ── Cumulative sensor contract ────────────────────────────────────────────
+  //
+  // expo-sensors' PedometerModule.kt keeps `stepsAtTheBeginning` and emits
+  // `values[0] - stepsAtTheBeginning`, i.e. a total that GROWS with every
+  // event since the listener was attached — never a per-event delta. The
+  // sequences below are therefore monotonically increasing totals, and the
+  // expected result is the growth between them, not their sum.
+  const grantAndGetCallback = async () => {
     await waitFor(() => expect(box.latest?.isReady).toBe(true));
     await act(async () => {
       await box.latest!.requestActivityPermission();
     });
-    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    return watchMock.mock.calls[0][0] as (r: unknown) => void;
+  };
+
+  it('accumulates the GROWTH of the cumulative counter, not each raw sample', async () => {
+    renderStore();
+    const cb = await grantAndGetCallback();
     await act(async () => {
       cb({ steps: 1 });
-      cb({ steps: 2 });
-      cb({ steps: 3 });
+      cb({ steps: 11 });
+      cb({ steps: 26 });
     });
-    // Três passos reais dão 3, não 1+2+3=6.
-    expect(box.latest?.todaySteps).toBe(3);
+    // growth: 1 -> 11 (+10) -> 26 (+15) = 25. Summing the raw samples would be 38.
+    expect(box.latest?.todaySteps).toBe(25);
     const written = JSON.parse(setItemMock.mock.calls.at(-1)![1] as string);
-    expect(written).toEqual([{ date: localDateKey(), steps: 3 }]);
+    expect(written).toEqual([{ date: localDateKey(), steps: 25 }]);
   });
 
-  it('does not inflate the total on large cumulative readings', async () => {
+  it('the first sample only establishes the baseline and adds nothing', async () => {
     renderStore();
-    await waitFor(() => expect(box.latest?.isReady).toBe(true));
-    await act(async () => {
-      await box.latest!.requestActivityPermission();
-    });
-    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    const cb = await grantAndGetCallback();
     await act(async () => {
       cb({ steps: 500 });
-      cb({ steps: 1000 });
-      cb({ steps: 1500 });
     });
-    // Somar as emissões daria 3000 — mais do dobro dos passos reais.
-    expect(box.latest?.todaySteps).toBe(1500);
+    // The first event's value is the counter's starting point, not 500 steps
+    // taken since the app opened — adding it would invent half a thousand steps.
+    expect(box.latest?.todaySteps).toBe(0);
+    expect(setItemMock).not.toHaveBeenCalled();
   });
 
-  it('a repeated cumulative reading adds nothing (no new steps)', async () => {
+  it('a repeated identical sample adds nothing (duplicate sensor event)', async () => {
     renderStore();
-    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    const cb = await grantAndGetCallback();
     await act(async () => {
-      await box.latest!.requestActivityPermission();
-    });
-    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
-    await act(async () => {
-      cb({ steps: 10 });
-      cb({ steps: 10 });
+      cb({ steps: 1 });
+      cb({ steps: 11 });
+      cb({ steps: 11 });
     });
     expect(box.latest?.todaySteps).toBe(10);
   });
 
-  it('re-anchors when the cumulative counter restarts lower (reboot/re-subscribe)', async () => {
+  it('a counter restart re-baselines instead of double counting', async () => {
     renderStore();
-    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    const cb = await grantAndGetCallback();
     await act(async () => {
-      await box.latest!.requestActivityPermission();
+      cb({ steps: 100 });
+      cb({ steps: 120 });
+      // Listener re-attached / device reboot: the native counter starts over.
+      cb({ steps: 5 });
+      cb({ steps: 9 });
     });
-    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
-    await act(async () => {
-      cb({ steps: 50 });
-    });
-    expect(box.latest?.todaySteps).toBe(50);
-    await act(async () => {
-      cb({ steps: 5 }); // contador reiniciou: âncora nova, nada creditado
-    });
-    expect(box.latest?.todaySteps).toBe(50);
-    await act(async () => {
-      cb({ steps: 7 }); // +2 desde a nova âncora
-    });
-    expect(box.latest?.todaySteps).toBe(52);
+    // 100 (baseline) -> 120 (+20) -> 5 (restart, +0) -> 9 (+4) = 24.
+    expect(box.latest?.todaySteps).toBe(24);
   });
 
-  it('adds the session cumulative on top of the persisted total for today', async () => {
-    const today = localDateKey();
-    getItemMock.mockResolvedValue(JSON.stringify([{ date: today, steps: 42 }]));
+  it('garbage samples never disturb the baseline', async () => {
     renderStore();
-    await waitFor(() => expect(box.latest?.todaySteps).toBe(42));
+    const cb = await grantAndGetCallback();
     await act(async () => {
-      await box.latest!.requestActivityPermission();
+      cb({ steps: 10 });
+      cb({ steps: NaN });
+      cb({});
+      cb({ steps: -3 });
+      cb(null);
+      cb({ steps: 30 });
     });
-    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
-    await act(async () => {
-      cb({ steps: 1 });
-      cb({ steps: 2 });
-    });
-    expect(box.latest?.todaySteps).toBe(44);
+    // Only 10 -> 30 counts (+20); the invalid samples are dropped without
+    // moving the baseline, so the final growth is still measured from 10.
+    expect(box.latest?.todaySteps).toBe(20);
   });
 
   it('a second grant does not stack a second subscription (double tap)', async () => {
@@ -243,27 +237,16 @@ describe('HealthStore', () => {
     expect(box.latest?.todaySteps).toBe(0);
   });
 
-  it('ignores negative, non-finite and missing readings without corrupting the anchor', async () => {
+  it('a counter that never grows leaves todaySteps at 0 and writes nothing', async () => {
     renderStore();
-    await waitFor(() => expect(box.latest?.isReady).toBe(true));
-    await act(async () => {
-      await box.latest!.requestActivityPermission();
-    });
-    const cb = watchMock.mock.calls[0][0] as (r: unknown) => void;
+    const cb = await grantAndGetCallback();
     await act(async () => {
       cb({ steps: 0 });
-      cb({ steps: -5 });
-      cb({ steps: NaN });
-      cb({ steps: Infinity });
-      cb({});
+      cb({ steps: 0 });
+      cb({ steps: 0 });
     });
     expect(box.latest?.todaySteps).toBe(0);
-    // A leitura válida seguinte vale por si: as leituras lixo não deixaram uma
-    // âncora absurda (com -5 como âncora isto daria 9).
-    await act(async () => {
-      cb({ steps: 4 });
-    });
-    expect(box.latest?.todaySteps).toBe(4);
+    expect(setItemMock).not.toHaveBeenCalled();
   });
 
   it('does not update state after unmount (late sensor callback)', async () => {
@@ -300,5 +283,102 @@ describe('HealthStore', () => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => render(<Probe />)).toThrow(/HealthProvider/);
     spy.mockRestore();
+  });
+
+  it('exposes stepHistory hydrated from AsyncStorage on the context', async () => {
+    const stored: DailySteps[] = [
+      { date: '2026-08-01', steps: 100 },
+      { date: '2026-08-02', steps: 200 },
+    ];
+    getItemMock.mockResolvedValue(JSON.stringify(stored));
+    renderStore();
+    await waitFor(() => expect(box.latest?.stepHistory).toEqual(stored));
+  });
+
+  it('starts with an empty stepHistory when there is no persisted history', async () => {
+    getItemMock.mockResolvedValue(null);
+    renderStore();
+    await waitFor(() => expect(box.latest?.stepHistory).toEqual([]));
+  });
+
+  it('reflects a new day appended by the pedometer in stepHistory', async () => {
+    const today = localDateKey();
+    const prior: DailySteps[] = [{ date: '2020-01-01', steps: 5 }];
+    getItemMock.mockResolvedValue(JSON.stringify(prior));
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      cb({ steps: 1 });
+      cb({ steps: 11 });
+    });
+    // today's running total (growth 1 -> 11) is merged into history and exposed
+    await waitFor(() =>
+      expect(box.latest?.stepHistory).toEqual([
+        { date: '2020-01-01', steps: 5 },
+        { date: today, steps: 10 },
+      ]),
+    );
+  });
+
+  it('adds sensor growth ON TOP of the total restored from storage', async () => {
+    const today = localDateKey();
+    getItemMock.mockResolvedValue(JSON.stringify([{ date: today, steps: 42 }]));
+    renderStore();
+    await waitFor(() => expect(box.latest?.todaySteps).toBe(42));
+    await act(async () => {
+      await box.latest!.requestActivityPermission();
+    });
+    const cb = watchMock.mock.calls[0][0] as (r: { steps: number }) => void;
+    await act(async () => {
+      // A fresh subscription restarts the native counter at a low value; the
+      // day's restored total must not be replaced by it.
+      cb({ steps: 1 });
+      cb({ steps: 11 });
+    });
+    expect(box.latest?.todaySteps).toBe(52);
+    await waitFor(() => expect(box.latest?.stepHistory).toEqual([{ date: today, steps: 52 }]));
+  });
+
+  it('rolls the day over at midnight without restarting the sensor baseline', async () => {
+    // Fronteira: o contador nativo NÃO reinicia à meia-noite, só o total do dia.
+    jest.useFakeTimers({ now: new Date(2026, 7, 24, 23, 59, 0) });
+    try {
+      renderStore();
+      const cb = await grantAndGetCallback();
+      await act(async () => {
+        cb({ steps: 100 });
+        cb({ steps: 130 });
+      });
+      expect(box.latest?.todaySteps).toBe(30);
+
+      jest.setSystemTime(new Date(2026, 7, 25, 0, 1, 0));
+      await act(async () => {
+        cb({ steps: 145 });
+      });
+      // O dia novo começa em 0 + crescimento (145 - 130), não em 30 + 15.
+      expect(box.latest?.todaySteps).toBe(15);
+      await waitFor(() =>
+        expect(box.latest?.stepHistory).toEqual([
+          { date: '2026-08-24', steps: 30 },
+          { date: '2026-08-25', steps: 15 },
+        ]),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('becomes ready even when the sensor module throws synchronously', async () => {
+    availableMock.mockImplementation(() => {
+      throw new Error('ExponentPedometer native module is not available');
+    });
+    renderStore();
+    await waitFor(() => expect(box.latest?.isReady).toBe(true));
+    expect(box.latest?.isPedometerAvailable).toBe(false);
+    expect(box.latest?.stepHistory).toEqual([]);
   });
 });

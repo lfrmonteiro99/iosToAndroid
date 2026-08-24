@@ -20,6 +20,8 @@ export interface HealthContextValue {
   permissionGranted: boolean | null;
   requestActivityPermission: () => Promise<boolean>;
   isReady: boolean;
+  /** Full persisted day-by-day history, the same array written to AsyncStorage. */
+  stepHistory: DailySteps[];
 }
 
 export const HEALTH_DAILY_STEPS_KEY = '@iostoandroid/health_daily_steps';
@@ -67,12 +69,18 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [isReady, setIsReady] = useState(false);
 
+  const [stepHistory, setStepHistory] = useState<DailySteps[]>([]);
   const historyRef = useRef<DailySteps[]>([]);
   const dayRef = useRef<string>(localDateKey());
   const subscriptionRef = useRef<{ remove: () => void } | null>(null);
   const mountedRef = useRef(true);
-  // Última leitura CUMULATIVA vista nesta subscrição (ver startWatching).
-  const lastCumulativeRef = useRef(0);
+  // Today's running total, mirrored outside React state so the sensor callback
+  // computes the next total deterministically instead of doing it (and writing
+  // to storage) inside a setState updater, which React may invoke twice.
+  const todayStepsRef = useRef(0);
+  // Last value seen from the pedometer. `null` = no sample yet, so the next one
+  // only establishes the baseline. See startWatching for why.
+  const lastCumulativeRef = useRef<number | null>(null);
 
   // Hydrate the persisted history and probe the sensor once. `isReady` flips
   // even when the sensor is missing or the read fails, so the screen is never
@@ -82,29 +90,41 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     mountedRef.current = true;
     let cancelled = false;
 
+    const isAvailable = async (): Promise<boolean> => {
+      if (Platform.OS !== 'android') return false;
+      try {
+        // Not just `.catch`: on a build where expo-sensors is missing, the
+        // module proxy throws SYNCHRONOUSLY on the call, so there is no
+        // promise to attach a handler to.
+        return (await Pedometer.isAvailableAsync()) === true;
+      } catch (e) {
+        logger.warn('HealthStore', 'isAvailableAsync failed', e);
+        return false;
+      }
+    };
+
     const probe = async () => {
       const [raw, available] = await Promise.all([
         AsyncStorage.getItem(HEALTH_DAILY_STEPS_KEY).catch((e) => {
           logger.warn('HealthStore', 'daily steps read failed', e);
           return null;
         }),
-        Platform.OS === 'android'
-          ? Pedometer.isAvailableAsync().catch((e) => {
-              logger.warn('HealthStore', 'isAvailableAsync failed', e);
-              return false;
-            })
-          : Promise.resolve(false),
+        isAvailable(),
       ]);
       if (cancelled) return;
       const history = parseHistory(raw);
       historyRef.current = history;
+      setStepHistory(history);
       const today = localDateKey();
       dayRef.current = today;
       const stored = history.find((h) => h.date === today);
       // Restore today's running total so an app restart does not reset the day
       // back to zero. Other days stay in the array for the aggregation consumer.
-      if (stored) setTodaySteps(stored.steps);
-      setIsPedometerAvailable(available === true);
+      if (stored) {
+        todayStepsRef.current = stored.steps;
+        setTodaySteps(stored.steps);
+      }
+      setIsPedometerAvailable(available);
       setIsReady(true);
     };
 
@@ -121,6 +141,7 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const persist = useCallback((steps: number, date: string) => {
     const merged = mergeDailySteps(historyRef.current, { date, steps });
     historyRef.current = merged;
+    setStepHistory(merged);
     AsyncStorage.setItem(HEALTH_DAILY_STEPS_KEY, JSON.stringify(merged)).catch((e) => {
       logger.warn('HealthStore', 'daily steps write failed', e);
     });
@@ -130,41 +151,45 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     // Idempotent: a second grant (or a double tap on the button) must not
     // stack two subscriptions, which would double-count every step.
     if (subscriptionRef.current) return;
-    // Cada subscrição recomeça a contagem cumulativa do zero no lado nativo
-    // (o listener reseta `stepsAtTheBeginning`), logo a âncora recomeça também.
-    lastCumulativeRef.current = 0;
     try {
       subscriptionRef.current = Pedometer.watchStepCount((result) => {
         if (!mountedRef.current) return;
-        // `result.steps` é o total CUMULATIVO desde o início desta subscrição, e
-        // não os passos deste evento: expo-sensors (PedometerModule.kt:21-32)
-        // guarda `stepsAtTheBeginning = values[0] - 1` na primeira emissão e
-        // emite sempre `values[0] - stepsAtTheBeginning`. Somar cada emissão
-        // inflacionava o dia de forma quadrática em hardware real.
+        // `result.steps` is CUMULATIVE, not a delta: expo-sensors'
+        // PedometerModule.kt latches `stepsAtTheBeginning` on the first sensor
+        // event and then emits `values[0] - stepsAtTheBeginning`, a total that
+        // only grows while the listener lives. Treating each sample as a delta
+        // would add the whole running total on every event — 1, 11, 26 would
+        // read as 38 steps instead of 25, inflating the day without bound on
+        // real hardware.
         const cumulative =
           typeof result?.steps === 'number' && Number.isFinite(result.steps) && result.steps >= 0
             ? result.steps
             : null;
-        // Leitura impossível (ausente, NaN, negativa): descartada sem tocar na
-        // âncora, para não creditar um salto absurdo na leitura válida seguinte.
+        // A garbage sample is dropped WITHOUT touching the baseline, so the
+        // next valid sample is still measured from the last real reading.
         if (cumulative === null) return;
-        const last = lastCumulativeRef.current;
+
+        const previous = lastCumulativeRef.current;
         lastCumulativeRef.current = cumulative;
-        // Contador a descer = recomeço (reboot do sensor, nova subscrição):
-        // reancora e não credita nada, em vez de contar um delta negativo.
-        if (cumulative < last) return;
-        const delta = cumulative - last;
-        if (delta <= 0) return;
+        // First sample: it is the counter's starting point, not steps walked
+        // since the app opened. It sets the baseline and adds nothing.
+        if (previous === null) return;
+        // A value below the baseline means the native counter restarted (the
+        // listener was re-attached, or the device rebooted). Re-baseline —
+        // never subtract, which would eat steps already counted.
+        if (cumulative <= previous) return;
+
+        const delta = cumulative - previous;
         const today = localDateKey();
-        setTodaySteps((prev) => {
-          // Local date changed while the app stayed open: close the previous
-          // day at its total and start the new one from this delta.
-          const base = today === dayRef.current ? prev : 0;
-          dayRef.current = today;
-          const next = base + delta;
-          persist(next, today);
-          return next;
-        });
+        // Local date changed while the app stayed open: close the previous day
+        // at its total and start the new one from this delta. The sensor
+        // baseline is unaffected — the counter does not restart at midnight.
+        const base = today === dayRef.current ? todayStepsRef.current : 0;
+        dayRef.current = today;
+        const next = base + delta;
+        todayStepsRef.current = next;
+        setTodaySteps(next);
+        persist(next, today);
       });
     } catch (e) {
       logger.warn('HealthStore', 'watchStepCount failed', e);
@@ -206,8 +231,9 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       permissionGranted,
       requestActivityPermission,
       isReady,
+      stepHistory,
     }),
-    [todaySteps, isPedometerAvailable, permissionGranted, requestActivityPermission, isReady],
+    [todaySteps, isPedometerAvailable, permissionGranted, requestActivityPermission, isReady, stepHistory],
   );
 
   return <HealthContext.Provider value={value}>{children}</HealthContext.Provider>;

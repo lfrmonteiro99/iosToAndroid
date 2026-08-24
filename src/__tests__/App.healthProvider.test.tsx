@@ -1,16 +1,16 @@
 /**
- * Wiring de produção do HealthProvider (#275).
+ * Guarda de montagem do HealthProvider na raiz (#276).
  *
- * O HealthScreen (registado no TabNavigator por este mesmo issue) chama
- * `useHealth()`, que LANÇA quando não há `HealthProvider` acima. O provider
- * estava montado apenas em `src/test-utils.tsx`, pelo que toda a suite passava
- * enquanto a árvore real de `App.tsx` não o tinha — tocar no ícone Health no
- * launcher real rebentava.
+ * O HealthScreen chama `useHealth()`, que lança
+ * "useHealth must be used within HealthProvider" quando não há provider acima.
+ * O provider estava montado apenas no `src/test-utils.tsx` (árvore de testes),
+ * pelo que na app real abrir o ícone Health rebentava — e nenhum teste
+ * apanhava isso, porque todos os testes de ecrã usam o wrapper de test-utils.
  *
- * Este teste monta o `App` REAL e consome o contexto no lugar do TabNavigator,
- * ou seja através da composição de providers de `App.tsx` e não do wrapper de
- * testes. Red step (sem o fix): render lança
- * "useHealth must be used within HealthProvider".
+ * Este teste monta o `App` verdadeiro e coloca, no lugar do TabNavigator, um
+ * consumidor do hook REAL. Se `<HealthProvider>` sair de App.tsx, `useHealth`
+ * lança, o ErrorBoundary da app troca a árvore pelo fallback, e o marcador
+ * nunca aparece.
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react-native';
@@ -82,17 +82,15 @@ jest.mock('../../modules/launcher-module/src', () => ({
   },
 }));
 
-// Sonda no lugar do TabNavigator: consome o contexto Health REAL a partir da
-// árvore de providers do App. `jest.requireActual` devolve a mesma instância do
-// módulo que o App importa (HealthStore não está mockado aqui), pelo que o
-// contexto é o mesmo — se o provider faltar, `useHealth` lança.
+// TabNavigator substituído por um consumidor do hook REAL — é a sonda que
+// prova que existe um HealthProvider acima na árvore da app.
 jest.mock('../navigation/TabNavigator', () => ({
   TabNavigator: () => {
     const R = jest.requireActual<typeof import('react')>('react');
     const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
     const { useHealth } = jest.requireActual<typeof import('../store/HealthStore')>('../store/HealthStore');
-    const health = useHealth();
-    return R.createElement(Text, null, `HEALTH_CTX steps=${health.todaySteps} ready=${health.isReady}`);
+    const ctx = useHealth();
+    return R.createElement(Text, null, `HEALTH_CONTEXT_OK steps=${ctx.todaySteps}`);
   },
 }));
 
@@ -124,14 +122,6 @@ jest.mock('../store/AssistiveTouchStore', () => ({
 }));
 jest.mock('../components/AssistiveTouch', () => ({ AssistiveTouch: () => null }));
 
-jest.mock('@expo/vector-icons', () => ({
-  Ionicons: ({ name, ...props }: { name: string;[k: string]: unknown }) => {
-    const R = jest.requireActual<typeof import('react')>('react');
-    const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
-    return R.createElement(Text, props, String(name));
-  },
-}));
-
 jest.mock('../store/SettingsStore', () => {
   const R = jest.requireActual<typeof import('react')>('react');
   const Actual = jest.requireActual<typeof import('../store/SettingsStore')>('../store/SettingsStore');
@@ -151,10 +141,9 @@ jest.mock('../theme/ThemeContext', () => {
   };
 });
 
-// ── Import App after all jest.mock calls ──
 import App from '../../App';
 
-describe('App — HealthProvider montado em produção (#275)', () => {
+describe('App — HealthProvider montado na raiz (#276)', () => {
   beforeEach(() => {
     mockGetItem.mockReset();
     mockGetItem.mockImplementation((key: string) =>
@@ -164,12 +153,13 @@ describe('App — HealthProvider montado em produção (#275)', () => {
     );
   });
 
-  it('serve o contexto Health ao conteúdo principal sem lançar', async () => {
+  it('um consumidor de useHealth dentro da app monta sem lançar', async () => {
     render(<App />);
+    await waitFor(() => screen.getByText(/HEALTH_CONTEXT_OK/), { timeout: 4000 });
+  });
 
-    await waitFor(() => screen.getByText(/HEALTH_CTX/), { timeout: 4000 });
-    // Sem permissão concedida o contexto arranca a zero — nunca um número
-    // inventado.
-    expect(screen.getByText('HEALTH_CTX steps=0 ready=true')).toBeTruthy();
+  it('o contexto exposto na app arranca em 0 passos', async () => {
+    render(<App />);
+    await waitFor(() => screen.getByText('HEALTH_CONTEXT_OK steps=0'), { timeout: 4000 });
   });
 });

@@ -7,6 +7,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
 import { useHealth } from '../store/HealthStore';
 import {
+  aggregateDaily,
+  aggregateWeekly,
+  aggregateMonthly,
+} from '../utils/healthAggregation';
+import {
   CupertinoNavigationBar,
   CupertinoCard,
   CupertinoButton,
@@ -14,14 +19,21 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoEmptyState,
+  CupertinoBarChart,
   BackEdgeSwipe,
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+
+const TREND_GRANULARITIES = ['Daily', 'Weekly', 'Monthly'] as const;
+type Granularity = (typeof TREND_GRANULARITIES)[number];
 
 /**
  * Minimal Health slice (#271): today's step count from the device pedometer and
  * nothing else. No mock data — before permission is granted (or when the device
  * has no step-counter at all) the count reads `—`, never an invented number.
+ *
+ * The Trends section (#276) reads the same persisted history the store keeps and
+ * feeds it through the real aggregation helpers — bucketing is never re-implemented here.
  *
  * #275 adds a `Browse` tab listing health categories. Activity is the only one
  * with a real data source; the other four render an honest empty state instead
@@ -52,10 +64,18 @@ export function HealthScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<AppNavigationProp>();
-  const { todaySteps, isPedometerAvailable, permissionGranted, requestActivityPermission, isReady } = useHealth();
+  const {
+    todaySteps,
+    isPedometerAvailable,
+    permissionGranted,
+    requestActivityPermission,
+    isReady,
+    stepHistory,
+  } = useHealth();
 
-  const [segment, setSegment] = useState(0);
+  const [segment, setSegment] = useState(0); // 0 = Summary, 1 = Browse
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | null>(null);
+  const [granularity, setGranularity] = useState<Granularity>('Daily');
 
   const showSteps = permissionGranted === true;
   const needsPermission = isReady && isPedometerAvailable && permissionGranted !== true;
@@ -73,7 +93,19 @@ export function HealthScreen() {
     }
   }, [selectedCategory, navigation]);
 
-  const renderSummary = () => (
+  const chartData = (() => {
+    switch (granularity) {
+      case 'Weekly':
+        return aggregateWeekly(stepHistory).map((b) => ({ label: b.label, value: b.totalSteps }));
+      case 'Monthly':
+        return aggregateMonthly(stepHistory).map((b) => ({ label: b.label, value: b.totalSteps }));
+      case 'Daily':
+      default:
+        return aggregateDaily(stepHistory).map((b) => ({ label: b.label, value: b.totalSteps }));
+    }
+  })();
+
+  const renderStepCard = () => (
     <CupertinoCard title="Steps" subtitle="Today">
       <View style={styles.stepsRow}>
         <Ionicons name="footsteps" size={26} color="#FF2D55" />
@@ -97,6 +129,22 @@ export function HealthScreen() {
         </View>
       ) : null}
     </CupertinoCard>
+  );
+
+  const renderSummary = () => (
+    <>
+      {renderStepCard()}
+      <CupertinoCard title="Trends" subtitle="Step history">
+        <View style={{ marginBottom: spacing.sm }}>
+          <CupertinoSegmentedControl
+            values={[...TREND_GRANULARITIES]}
+            selectedIndex={TREND_GRANULARITIES.indexOf(granularity)}
+            onChange={(index: number) => setGranularity(TREND_GRANULARITIES[index])}
+          />
+        </View>
+        <CupertinoBarChart data={chartData} />
+      </CupertinoCard>
+    </>
   );
 
   const renderCategoryDetail = () => {
@@ -130,12 +178,7 @@ export function HealthScreen() {
     if (!cat) return null;
     const message = EMPTY_MESSAGES[selectedCategory as Exclude<CategoryKey, 'activity'>];
     return (
-      <CupertinoEmptyState
-        icon={cat.icon}
-        iconColor={cat.color}
-        title="No data yet"
-        message={message}
-      />
+      <CupertinoEmptyState icon={cat.icon} iconColor={cat.color} title="No data yet" message={message} />
     );
   };
 

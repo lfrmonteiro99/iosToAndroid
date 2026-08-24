@@ -37,9 +37,9 @@ function AllProviders({ children }: { children: React.ReactNode }) {
                   <LocationProvider>
                     <ReadingListProvider>
                       <HealthProvider>
-                        <WalletProvider>
-                          {children}
-                        </WalletProvider>
+                      <WalletProvider>
+                        {children}
+                      </WalletProvider>
                       </HealthProvider>
                     </ReadingListProvider>
                   </LocationProvider>
