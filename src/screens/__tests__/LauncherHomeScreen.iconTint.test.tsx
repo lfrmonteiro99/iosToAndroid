@@ -2,6 +2,7 @@ import React from 'react';
 import { render } from '../../test-utils';
 import * as AppsStore from '../../store/AppsStore';
 import * as SettingsStore from '../../store/SettingsStore';
+import * as FoldersStore from '../../store/FoldersStore';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
 
 // issue #620: «Tinted Icons» — when enabled, real app-icon Images on the
@@ -44,6 +45,19 @@ function mockApps(overrides: Record<string, unknown> = {}) {
 function flattenStyle(style: unknown): Record<string, unknown>[] {
   if (Array.isArray(style)) return style.flat(Infinity).filter(Boolean) as Record<string, unknown>[];
   return style ? [style as Record<string, unknown>] : [];
+}
+
+function mockFolders(folders: FoldersStore.AppFolder[]) {
+  jest.spyOn(FoldersStore, 'useFolders').mockReturnValue({
+    folders,
+    createFolder: jest.fn(),
+    renameFolder: jest.fn(),
+    addToFolder: jest.fn(),
+    removeFromFolder: jest.fn(),
+    deleteFolder: jest.fn(),
+    getFolderForApp: jest.fn(() => undefined),
+    isReady: true,
+  } as unknown as ReturnType<typeof FoldersStore.useFolders>);
 }
 
 describe('LauncherHomeScreen — Tinted Icons (#620)', () => {
@@ -117,5 +131,33 @@ describe('LauncherHomeScreen — Tinted Icons (#620)', () => {
     expect(typeof (untintedSize as { width: number }).width).toBe('number');
     expect(typeof (tintedSize as { width: number }).width).toBe('number');
     expect(Number.isNaN((tintedSize as { width: number }).width)).toBe(false);
+  });
+
+  it('applies no tintColor to a closed folder mini-icon when iconTintEnabled is false (default)', () => {
+    const folderedApp = realApp('Chess Deluxe', 'com.example.chess');
+    mockApps({ apps: [folderedApp], homeApps: [], nonDockApps: [], dockApps: [] });
+    mockFolders([{ id: 'games', name: 'Games', apps: ['com.example.chess'], color: '#8E8E93' }]);
+    withSettings({ iconTintEnabled: false, iconTintColor: '#FF3B30' });
+
+    const { getByTestId } = render(<LauncherHomeScreen />);
+    const miniIcon = getByTestId('folder-mini-icon-games-0');
+    const flat = flattenStyle(miniIcon.props.style);
+
+    expect(flat.some((s) => 'tintColor' in s)).toBe(false);
+    expect(miniIcon.props.tintColor).toBeUndefined();
+  });
+
+  it('applies iconTintColor to a closed folder mini-icon when iconTintEnabled is true (#620 gap: FolderIcon)', () => {
+    const folderedApp = realApp('Chess Deluxe', 'com.example.chess');
+    mockApps({ apps: [folderedApp], homeApps: [], nonDockApps: [], dockApps: [] });
+    mockFolders([{ id: 'games', name: 'Games', apps: ['com.example.chess'], color: '#8E8E93' }]);
+    withSettings({ iconTintEnabled: true, iconTintColor: '#FF3B30' });
+
+    const { getByTestId } = render(<LauncherHomeScreen />);
+    const miniIcon = getByTestId('folder-mini-icon-games-0');
+    const flat = flattenStyle(miniIcon.props.style);
+
+    expect(flat.find((s) => 'tintColor' in s)).toEqual({ tintColor: '#FF3B30' });
+    expect(miniIcon.props.tintColor).toBe('#FF3B30');
   });
 });

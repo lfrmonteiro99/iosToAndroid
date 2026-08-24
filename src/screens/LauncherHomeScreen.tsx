@@ -574,6 +574,7 @@ const FolderIcon = React.memo(function FolderIcon({
   iconSize = ICON_SIZE,
   iconRadius = ICON_RADIUS,
   showLabel = true,
+  iconTint,
 }: {
   folder: AppFolder;
   cellWidth: number;
@@ -584,6 +585,7 @@ const FolderIcon = React.memo(function FolderIcon({
   iconSize?: number;
   iconRadius?: number;
   showLabel?: boolean;
+  iconTint?: string | null;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -620,7 +622,13 @@ const FolderIcon = React.memo(function FolderIcon({
         <View style={styles.folderGrid}>
           {folderApps.map((app, i) =>
             app?.icon ? (
-              <Image key={i} source={{ uri: app.icon }} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }]} />
+              <Image
+                key={i}
+                testID={`folder-mini-icon-${folder.id}-${i}`}
+                source={{ uri: app.icon }}
+                style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }, iconTint ? { tintColor: iconTint } : null]}
+                tintColor={iconTint ?? undefined}
+              />
             ) : (
               <View key={i} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius, backgroundColor: 'rgba(255,255,255,0.3)' }]} />
             )
@@ -1769,6 +1777,7 @@ export function LauncherHomeScreen() {
                       showLabel={settings.showIconLabels}
                       apps={apps}
                       textScale={textScale}
+                      iconTint={iconTint}
                       onPress={handleOpenFolder}
                       onLongPress={handleFolderLongPress}
                     />
