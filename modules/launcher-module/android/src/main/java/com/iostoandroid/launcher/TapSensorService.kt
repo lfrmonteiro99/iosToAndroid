@@ -59,6 +59,7 @@ class TapSensorService : Service(), SensorEventListener {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         startForeground(NOTIFICATION_ID, buildNotification())
         registerSensors()
@@ -133,6 +134,7 @@ class TapSensorService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         try {
             sensorManager.unregisterListener(this)
         } catch (_: Exception) { /* best effort */ }
@@ -181,6 +183,12 @@ class TapSensorService : Service(), SensorEventListener {
     }
 
     companion object {
+        // Tracks whether the service is currently active. Set in onCreate /
+        // onDestroy so the RN bridge (isTapDetectionRunning) can report real
+        // state without re-querying the OS.
+        @Volatile var isRunning: Boolean = false
+            private set
+
         private const val CHANNEL_ID = "back_tap"
         private const val NOTIFICATION_ID = 6361
 

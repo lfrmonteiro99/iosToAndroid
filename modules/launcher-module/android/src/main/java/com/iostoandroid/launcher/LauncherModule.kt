@@ -92,7 +92,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onForegroundAppChanged")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -1401,6 +1401,61 @@ class LauncherModule : Module() {
             } catch (e: Exception) { false }
         }
 
+        AsyncFunction("isTapDetectionRunning") {
+            // #636: report whether the back-tap sensor service is currently active,
+            // sourced from the static flag maintained by TapSensorService itself
+            // (set in onCreate/onDestroy).
+            TapSensorService.isRunning
+        }
+
+        // ── App access (sensor usage) — issue #634 ────────────────────────
+        //
+        // A foreground service (AccessEventsService) polls the UsageStats event
+        // stream + AppOps "last access" timestamps every 15s and emits onAppAccess
+        // for genuinely NEW camera/mic/location use by a foreground app. These
+        // three methods are the RN surface for it. There is no universal broadcast
+        // for sensor access, so this is a heuristic over the usage-access data the
+        // app already requests for Screen Time — see AccessEventsService.kt for
+        // the per-OEM limitations.
+
+        AsyncFunction("getRecentAccessEvents") { limit: Int ->
+            try {
+                val svc = AccessEventsService.instance
+                val events = svc?.getRecentEvents(limit) ?: emptyList()
+                events.map { e ->
+                    mapOf(
+                        "packageName" to e.packageName,
+                        "appName" to e.appName,
+                        "accessType" to e.accessType,
+                        "timestamp" to e.timestamp,
+                    )
+                }
+            } catch (e: Exception) { emptyList<Map<String, Any>>() }
+        }
+
+        AsyncFunction("startAccessTrackingService") {
+            try {
+                val intent = Intent(context, AccessEventsService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.startService(intent)
+                }
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopAccessTrackingService") {
+            try {
+                context.stopService(Intent(context, AccessEventsService::class.java))
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isAccessTrackingServiceRunning") {
+            AccessEventsService.instance != null
+        }
         // ── Lifecycle ────────────────────────────────────────────────────
 
         OnCreate {

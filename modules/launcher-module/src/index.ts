@@ -1,5 +1,6 @@
 import { requireNativeModule } from 'expo';
 import { Platform } from 'react-native';
+import { aggregateAppAccessByType } from '../../../src/utils/appAccessAggregation';
 
 export interface InstalledApp {
   name: string;
@@ -164,6 +165,37 @@ export interface InstalledKeyboard {
   enabled: boolean;
 }
 
+// ── App access (sensor usage) — issue #634 ────────────────────────────────
+
+/**
+ * One observed sensor access, emitted by the native foreground service
+ * (`AccessEventsService`) / `LauncherModule.getRecentAccessEvents`. `appName`
+ * is best-effort and may be missing on the wire — the aggregator falls back to
+ * `packageName`. `accessType` is one of camera | microphone | location; the
+ * native side only reports types it has a real signal for (UsageStats window
+ * + AppOps noteOp for camera/mic, and a coarse/fine location op for location).
+ */
+export interface AccessEvent {
+  packageName: string;
+  appName?: string;
+  accessType: 'camera' | 'microphone' | 'location';
+  timestamp: number;
+}
+
+/**
+ * Aggregated view the UI consumes: `{ packageName: { accessType: { count,
+ * lastAccess, ... } } }`. Produced by `aggregateAppAccessByType` (see
+ * src/utils/appAccessAggregation.ts) over the raw {@link AccessEvent} stream.
+ */
+export interface AppAccessCount {
+  packageName: string;
+  appName: string;
+  count: number;
+  lastAccess: number;
+}
+export type AppAccessCounts = Record<'camera' | 'microphone' | 'location', AppAccessCount>;
+export type AppAccessCountMap = Record<string, AppAccessCounts>;
+
 /**
  * Máscara a aplicar aos ícones, decidida em JS (src/utils/iconShape.ts) e
  * aplicada nativamente. `exponent: null` significa "sem máscara" — o drawable
@@ -298,6 +330,14 @@ interface LauncherModuleType {
   startSpeechRecognition(): Promise<boolean>;
   stopSpeechRecognition(): Promise<boolean>;
   isSpeechRecognitionAvailable(): Promise<boolean>;
+  // App access (sensor usage, #634): a foreground service observes camera /
+  // microphone / location access over the trailing window; getRecentAccessEvents
+  // returns the raw stream, getAppAccessCounts returns it aggregated by package.
+  getRecentAccessEvents(limit: number): Promise<AccessEvent[]>;
+  getAppAccessCounts(windowHours: number): Promise<AppAccessCountMap>;
+  startAccessTrackingService(): Promise<boolean>;
+  stopAccessTrackingService(): Promise<boolean>;
+  isAccessTrackingServiceRunning(): Promise<boolean>;
   // Foreground monitor + Protected-Apps gate (#627 child issue). The native
   // AccessibilityService (ForegroundMonitorService) watches the foreground app
   // and, after setProtectedApps([...]) seeds its in-memory set, shows a
@@ -411,6 +451,11 @@ const stub: LauncherModuleType = {
   startSpeechRecognition: async () => false,
   stopSpeechRecognition: async () => false,
   isSpeechRecognitionAvailable: async () => false,
+  getRecentAccessEvents: async () => [],
+  getAppAccessCounts: async () => ({}),
+  startAccessTrackingService: async () => false,
+  stopAccessTrackingService: async () => false,
+  isAccessTrackingServiceRunning: async () => false,
   setProtectedApps: async () => false,
   isForegroundMonitorEnabled: async () => false,
   openAccessibilitySettings: async () => false,
@@ -775,6 +820,34 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.isSpeechRecognitionAvailable(); }
       catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
     },
+    getRecentAccessEvents: async (limit: number) => {
+      try {
+        const raw = await nativeModule.getRecentAccessEvents(limit);
+        return Array.isArray(raw) ? raw : [];
+      } catch (e) { console.error('LauncherModule.getRecentAccessEvents failed:', e); reportBridgeError('getRecentAccessEvents', e); return []; }
+    },
+    getAppAccessCounts: async (windowHours: number) => {
+      try {
+        // The aggregation is shared, pure, and unit-tested independently
+        // (src/utils/appAccessAggregation.test.ts). We feed it the raw native
+        // stream straight from the bridge — no reimplementation here — so this
+        // method can only fail to wire correctly, never to compute wrongly.
+        const raw = await nativeModule.getRecentAccessEvents(0) as AccessEvent[];
+        return aggregateAppAccessByType(Array.isArray(raw) ? raw : [], windowHours);
+      } catch (e) { console.error('LauncherModule.getAppAccessCounts failed:', e); reportBridgeError('getAppAccessCounts', e); return {}; }
+    },
+    startAccessTrackingService: async () => {
+      try { return await nativeModule.startAccessTrackingService(); }
+      catch (e) { console.error('LauncherModule.startAccessTrackingService failed:', e); reportBridgeError('startAccessTrackingService', e); return false; }
+    },
+    stopAccessTrackingService: async () => {
+      try { return await nativeModule.stopAccessTrackingService(); }
+      catch (e) { console.error('LauncherModule.stopAccessTrackingService failed:', e); reportBridgeError('stopAccessTrackingService', e); return false; }
+    },
+    isAccessTrackingServiceRunning: async () => {
+      try { return await nativeModule.isAccessTrackingServiceRunning(); }
+      catch (e) { console.error('LauncherModule.isAccessTrackingServiceRunning failed:', e); reportBridgeError('isAccessTrackingServiceRunning', e); return false; }
+    },
     // #627 child issue: push the protected set to the foreground monitor.
     // Accepts null/undefined from a careless caller → normalize to [] so the
     // service never receives a malformed payload; a null set is "nothing
@@ -1006,6 +1079,21 @@ export function addBackTapListener(
   listener: (event: BackTapEvent) => void,
 ): () => void {
   const sub = addModuleListener<BackTapEvent>('onBackTap', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to real-time app sensor-access events emitted by the native
+ * foreground service (`AccessEventsService`) per issue #634. Each event names
+ * the package and the sensor used (camera | microphone | location) and the
+ * access timestamp; the service coalesces bursts and only emits when a NEW
+ * access begins (see AccessEventsService.kt for the de-bounce rationale).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addAppAccessListener(
+  listener: (event: AccessEvent) => void,
+): () => void {
+  const sub = addModuleListener<AccessEvent>('onAppAccess', listener);
   return () => sub.remove();
 }
 
