@@ -21,10 +21,35 @@ import {
 } from '../utils/passcodePolicy';
 import { clampWallpaperIndex } from '../utils/wallpapers';
 import { clampWhitePointLevel } from '../utils/whitePoint';
+import { DEFAULT_ICON_TINT_COLOR, normalizeIconTintColor } from '../utils/iconTint';
 import {
   normalizeFocusPageVisibility,
   type FocusPageVisibility,
 } from '../utils/focusPageVisibility';
+import {
+  type MotionIntensity,
+  type ScrollDeceleration,
+  DEFAULT_MOTION_INTENSITY,
+  DEFAULT_SCROLL_DECELERATION,
+  normalizeMotionIntensity,
+  normalizeScrollDeceleration,
+} from '../utils/motionIntensity';
+import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import { normalizeContextRules, type ContextRule } from '../utils/contextTriggerEngine';
+import {
+  type BackTapConfig,
+  DEFAULT_BACK_TAP,
+  normalizeBackTap,
+} from '../utils/backTap';
+import {
+  normalizeAllowList,
+  normalizePerAppDelivery,
+  type PerAppDelivery,
+} from '../utils/notificationAppRules';
+import {
+  normalizePerformanceProfile,
+  type PerformanceProfile,
+} from '../utils/performanceProfile';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -79,6 +104,15 @@ export interface SettingsState {
    * `focusScheduleEnabled` está true. Default '17:00'.
    */
   focusScheduleEnd: string;
+  /**
+   * Context Engine (#628, filho do épico de Perfis Contextuais): regras de
+   * contexto compostas (Wi-Fi/Bluetooth/localização/hora com AND/OR) que
+   * ativam um FocusMode automaticamente. Aditivo ao Focus Schedule acima —
+   * os dois mecanismos coexistem, cada um dono da sua própria lógica de
+   * ativação/desativação (ver useContextEngine.ts vs useFocusSchedule.ts).
+   * Default `[]` — sem regras, a engine nunca actua.
+   */
+  contextRules: ContextRule[];
   screenTimeEnabled: boolean;
   dailyLimit: number;
   downtime: boolean;
@@ -105,7 +139,29 @@ export interface SettingsState {
   batteryPercentage: boolean;
   locationServices: boolean;
   wallpaperIndex: number;
+  /**
+   * §3.3 (issue #493): substituído como fonte de verdade por `motionIntensity`.
+   * Mantido apenas como campo derivado (`motionIntensity !== 'full'`), exposto
+   * em runtime pelo SettingsProvider para não quebrar os ~20 consumidores
+   * actuais de useGestureReduceMotion(). Escrever directamente aqui via
+   * `update('reduceMotion', ...)` não tem efeito — a próxima leitura do
+   * contexto sobrepõe sempre o valor derivado.
+   */
   reduceMotion: boolean;
+  /**
+   * Intensidade do movimento (§3.3, issue #493): 'full' = molas com
+   * velocidade, 'reduced' = withTiming 180ms (o que reduceMotion fazia até
+   * aqui), 'off' = salto directo sem transição. Cortar animação nunca corta
+   * háptica (§3.2 regra 4) — verificado em NotificationBanner, AssistiveTouch
+   * e CupertinoSwipeableRow.
+   */
+  motionIntensity: MotionIntensity;
+  /**
+   * Desaceleração do scroll (§3.1, issue #493): 'normal' = 0.998 (o literal
+   * já usado nas listas com paginação/inércia), 'fast' = 0.99 (mais travado).
+   * Ver src/utils/motionIntensity.ts:scrollDecelerationValue.
+   */
+  scrollDeceleration: ScrollDeceleration;
   reduceTransparency: boolean;
   /** iOS «Reduce White Point»: dims the brightest colours via a dark overlay over the root container. */
   reduceWhitePoint: boolean;
@@ -130,6 +186,26 @@ export interface SettingsState {
   automaticUpdates: boolean;
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
+  /**
+   * iOS «Notifications -> Allow in Focus» por app (issue #630): apps nesta
+   * lista notificam sempre de imediato, mesmo com um modo de Focus activo.
+   * Lista de package names; vazia = nenhuma app prioritária.
+   */
+  allowListImmediate: string[];
+  /**
+   * Política de entrega por app (issue #630): packageName -> 'immediate' |
+   * 'scheduled' | 'digest' | 'blocked'. Ausência de uma app = 'immediate'.
+   * 'scheduled'/'digest' embalam para o Scheduled Summary; 'blocked' nunca
+   * entrega.
+   */
+  perAppDelivery: PerAppDelivery;
+  /**
+   * iOS «Reduce Interruptions» (issue #630): quando true, embala para o
+   * Scheduled Summary todas as notificações que NÃO estejam na allow-list
+   * imediata — equivalente a dar a todas as apps a política 'scheduled',
+   * excepto as que estão na allow-list.
+   */
+  reduceInterruptions: boolean;
   fontChoice: 'inter' | 'system';
   /**
    * Whether the squircle mask (#480) is applied to app icons before caching.
@@ -147,6 +223,19 @@ export interface SettingsState {
   iconSizeScale: number;
   /** Whether app names render under grid icons (issue #503). */
   showIconLabels: boolean;
+  /**
+   * iOS «Home Screen → Edit → Customize → Tint (Tinted)» (issue #620): when
+   * true, every real app icon on the home grid, dock, and folder overlay
+   * renders as a monochrome silhouette in `iconTintColor` instead of its
+   * normal artwork. Default false (unmasked icons, the pre-#620 behaviour).
+   */
+  iconTintEnabled: boolean;
+  /**
+   * The tint colour applied when `iconTintEnabled` is true. 6-digit hex.
+   * Default is the app's default accent (blue) — see
+   * `utils/iconTint.DEFAULT_ICON_TINT_COLOR`.
+   */
+  iconTintColor: string;
   /**
    * Whether the home-screen page dots (iOS «Home Screen & Dock → Show Page
    * Dots») render when there is more than one page. Independent of
@@ -260,7 +349,14 @@ export interface SettingsState {
    */
   darkModeDarkUntil: string;
   /**
-   * Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
+   /**
+    * Power/performance profile (#631 child): 'normal' | 'performance' | 'saver'
+    * | 'sleep' | 'travel'. Espelha os modos de energia do Android num picker do
+    * iOS. Seleccionar um perfil aplica o respectivo patch de triggers (via
+    * `updateMany`) e grava a escolha aqui. Default 'normal' (baseline).
+    */
+   performanceProfile: PerformanceProfile;
+   /** Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
    * O native devolve o tipo real (`device.type`), mas o utilizador pode
    * sobrepô-lo no "i" de cada dispositivo emparelhado (Coluna / Auscultadores /
    * Rádio do Carro / Outro) — isto calibra o ícone e a intenção de uso. É um
@@ -268,6 +364,14 @@ export interface SettingsState {
    * Chaveado por `device.address` (estável), nunca pelo nome exibido.
    */
   bluetoothDeviceTypes: Record<string, 'speaker' | 'headphones' | 'car' | 'other'>;
+  /**
+   * Back Tap (#625): associa double/triple tap a uma acção (flash, toggleWifi,
+   * openApp, shortcut, screenshot). O detector físico de toques nas costas do
+   * dispositivo é um detalhe de UI nativa; aqui vive o mapeamento persistido,
+   * normalizado na leitura para que um blob corrompido (acção desconhecida,
+   * openApp sem packageName) não dispare um intent partido.
+   */
+  backTap: BackTapConfig;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -296,6 +400,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   focusDockOverride: {},
   focusScheduleStart: '09:00',
   focusScheduleEnd: '17:00',
+  contextRules: [],
   screenTimeEnabled: false,
   dailyLimit: 60,
   downtime: false,
@@ -322,6 +427,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   locationServices: true,
   wallpaperIndex: 0,
   reduceMotion: false,
+  motionIntensity: DEFAULT_MOTION_INTENSITY,
+  scrollDeceleration: DEFAULT_SCROLL_DECELERATION,
   reduceTransparency: false,
   reduceWhitePoint: false,
   whitePointLevel: 1.0,
@@ -334,6 +441,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   automaticUpdates: true,
   updateAvailable: false,
   scheduledSummaryIdx: 0,
+  allowListImmediate: [],
+  perAppDelivery: {},
+  reduceInterruptions: false,
   fontChoice: 'inter',
   iconTreatment: 'mask-adaptive-only',
   pressFeedback: 'scale-opacity',
@@ -341,6 +451,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   gridRows: 6,
   iconSizeScale: 1.0,
   showIconLabels: true,
+  iconTintEnabled: false,
+  iconTintColor: DEFAULT_ICON_TINT_COLOR,
   showPageDots: true,
   appLaunchAnimation: true,
   appLaunchDurationMs: 280,
@@ -360,6 +472,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkModeLightUntil: '07:00',
   darkModeDarkUntil: '19:00',
   bluetoothDeviceTypes: {},
+  backTap: DEFAULT_BACK_TAP,
+  performanceProfile: 'normal',
 };
 
 interface SettingsContextValue {
@@ -424,6 +538,18 @@ export function SettingsProvider({
             // valores não-array) faria o filtro esconder páginas ao acaso ou
             // rebentar no `.includes`, por isso normaliza-se na leitura.
             focusPageVisibility: normalizeFocusPageVisibility(parsed?.focusPageVisibility),
+            // focusDockOverride (#619, filho de #617) troca os ícones do dock
+            // por modo de Focus; um blob corrompido (não-array, entradas não
+            // string) faria o `.map`/`.slice(0, 4)` do LauncherHomeScreen
+            // render pacotes inexistentes ou rebentar — normaliza-se na
+            // leitura como os irmãos acima.
+            focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
+            // contextRules (#628): blob de regras compostas vindo do AsyncStorage
+            // não é confiável — uma regra malformada (targetMode inválido,
+            // condições sem forma reconhecível) faria pickActiveRule devolver
+            // um destino inventado ou o `.includes`/`.every` das condições
+            // rebentar. Normaliza-se na leitura como os irmãos acima.
+            contextRules: normalizeContextRules(parsed?.contextRules),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a
@@ -431,12 +557,41 @@ export function SettingsProvider({
             // launcher inteiro (#688). Normaliza-se na leitura como os irmãos
             // acima.
             categoryOverrides: normalizeCategoryOverrides(parsed?.categoryOverrides),
+            // backTap (#625) é lido do mesmo blob não confiável do AsyncStorage;
+            // um mapeamento corrompido (acção desconhecida, openApp sem
+            // packageName, enabled não-booleano) rebentaria o detector de
+            // gestos ou dispararia um intent partido — normaliza-se na leitura.
+            backTap: normalizeBackTap(parsed?.backTap),
             // wallpaperIndex (#674) indexa WALLPAPERS no render da home; um
             // valor corrompido (string, NaN, fora de gama) daria
             // WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no
             // render → ecrã branco. Saneia-se na leitura, à semelhança dos
             // campos acima.
             wallpaperIndex: clampWallpaperIndex(parsed?.wallpaperIndex),
+            // performanceProfile (#631 child): o picker só conhece cinco modos;
+            // um blob corrompido (string à-toa, null, maiúsculas) ativaria um
+            // perfil desconhecido e dispararia triggers errados. Normaliza-se
+            // na leitura para 'normal' (baseline), como os campos acima.
+            performanceProfile: normalizePerformanceProfile(parsed?.performanceProfile),
+            // iconTintColor (#620) feeds Image's tintColor style directly; a
+            // corrupted/non-hex value from an old blob would silently no-op
+            // or paint icons black depending on the platform, so it is
+            // normalized on read like the fields above.
+            iconTintColor: normalizeIconTintColor(parsed?.iconTintColor),
+            // motionIntensity (#493) substitui reduceMotion como fonte de
+            // verdade; um blob pré-#493 só tem `reduceMotion: true|false`, por
+            // isso migra-se para 'reduced'|'full'. Um motionIntensity já
+            // presente e válido vence sempre o campo legado.
+            motionIntensity: normalizeMotionIntensity(parsed?.motionIntensity, parsed?.reduceMotion),
+            scrollDeceleration: normalizeScrollDeceleration(parsed?.scrollDeceleration),
+            // allowListImmediate / perAppDelivery (#630) vêm do mesmo blob não
+            // confiável do AsyncStorage. Uniões/corrupção (valores não-array,
+            // chaves vazias, políticas desconhecidas) fariam routeNotification
+            // ler configurações inválidas e entregar/bloquear apps erradas, por
+            // isso normalizam-se na leitura como o resto dos campos acima.
+            allowListImmediate: normalizeAllowList(parsed?.allowListImmediate),
+            perAppDelivery: normalizePerAppDelivery(parsed?.perAppDelivery),
+            reduceInterruptions: Boolean(parsed?.reduceInterruptions),
           }));
         } catch { /* ignore */ }
       }
@@ -557,9 +712,26 @@ export function SettingsProvider({
   /** activeFocusMode: null when focus is off, otherwise the current mode string. */
   const activeFocusMode = settings.focusMode === 'off' ? null : settings.focusMode;
 
+  // reduceMotion (#493): derivado de motionIntensity a cada exposição, nunca
+  // lido directamente do state — só assim update('motionIntensity', ...)
+  // propaga instantaneamente para os consumidores legados do booleano.
+  const exposedSettings = useMemo(
+    () => ({ ...settings, reduceMotion: settings.motionIntensity !== 'full' }),
+    [settings],
+  );
+
   const value = useMemo(
-    () => ({ settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode }),
-    [settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
+    () => ({
+      settings: exposedSettings,
+      update,
+      updateMany,
+      reset,
+      syncFromDevice,
+      isReady,
+      activeFocusMode,
+      setFocusMode,
+    }),
+    [exposedSettings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
   );
 
   if (gateFirstRender && !firstSyncDone) return null;

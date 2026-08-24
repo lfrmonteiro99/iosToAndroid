@@ -30,6 +30,7 @@ function mockApps(apps: AppsStore.InstalledApp[]) {
     launchApp: mockLaunchApp,
     addToHome: jest.fn(),
     removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
     addToDock: jest.fn(),
     removeFromDock: jest.fn(),
     removeFromRecents: jest.fn(),
@@ -230,6 +231,16 @@ describe('AppStoreDetailScreen', () => {
     expect(isVirtualBuiltIn('com.iostoandroid.mail')).toBe(true);
     expect(isVirtualBuiltIn('com.spotify.music')).toBe(false);
     expect(isVirtualBuiltIn('')).toBe(false);
+  });
+
+  it('an installed virtual built-in (Clock) shows Open, which navigates to the internal screen instead of the native launcher bridge (#706)', () => {
+    mockApps([{ name: 'Clock', packageName: 'com.iostoandroid.clock', icon: '', isSystem: false }]);
+    const { getByLabelText } = render(
+      <AppStoreDetailScreen navigation={nav} route={routeFor('com.iostoandroid.clock', 'Clock')} />,
+    );
+    fireEvent.press(getByLabelText('Open Clock'));
+    expect(mockNavigate).toHaveBeenCalledWith('Clock');
+    expect(mockLaunchApp).not.toHaveBeenCalled();
   });
 
   it('the Back button calls navigation.goBack', () => {

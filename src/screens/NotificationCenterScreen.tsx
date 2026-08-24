@@ -16,12 +16,14 @@ import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
 import { useApps } from '../store/AppsStore';
+import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { Glass } from '../theme/CupertinoTheme';
 import { CupertinoSwipeableRow } from '../components/CupertinoSwipeableRow';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import { GlassSurface, useAlert } from '../components';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 
 const getLauncher = async () => {
   try {
@@ -34,6 +36,35 @@ const getLauncher = async () => {
       return require('../../modules/launcher-module/src').default;
     } catch {
       return null; // Expected: module unavailable on non-Android
+    }
+  }
+};
+
+// Live notification events (onNotificationPosted / onNotificationRemoved) are
+// exported as NAMED exports of the module — they are not methods on the default
+// bridged object. This resolves the full module namespace so the screen can
+// keep its history view in sync while it is open. Resolved inside the effect
+// (not a module-level promise) to avoid a load-order race with the mount.
+const getLauncherListeners = async (): Promise<{
+  addNotificationListener?: (l: (n: DeviceNotification) => void) => () => void;
+  addNotificationRemovedListener?: (l: (key: string) => void) => () => void;
+}> => {
+  try {
+    const mod = await import('../../modules/launcher-module/src');
+    return {
+      addNotificationListener: mod.addNotificationListener,
+      addNotificationRemovedListener: mod.addNotificationRemovedListener,
+    };
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      const mod = require('../../modules/launcher-module/src');
+      return {
+        addNotificationListener: mod.addNotificationListener,
+        addNotificationRemovedListener: mod.addNotificationRemovedListener,
+      };
+    } catch {
+      return {};
     }
   }
 };
@@ -87,6 +118,7 @@ export function NotificationCenterScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { apps, launchApp } = useApps();
+  const { settings } = useSettings();
   const alert = useAlert();
 
   const [notifications, setNotifications] = useState<DeviceNotification[]>([]);
@@ -100,6 +132,8 @@ export function NotificationCenterScreen() {
 
   useEffect(() => {
     let mounted = true;
+    let unsubPosted: (() => void) | undefined;
+    let unsubRemoved: (() => void) | undefined;
     (async () => {
       const mod = await getLauncher();
       if (!mod || !mounted) return;
@@ -110,8 +144,33 @@ export function NotificationCenterScreen() {
         const notifs = await mod.getNotifications();
         if (mounted) setNotifications(notifs);
       }
+
+      // #646: keep the history view live. getNotifications() above is only the
+      // initial snapshot — without these subscriptions the center stays frozen
+      // while the OS shade updates. New arrivals are prepended (deduped by key);
+      // removals drop the matching key.
+      const listeners = await getLauncherListeners();
+      if (mounted && listeners.addNotificationListener) {
+        unsubPosted = listeners.addNotificationListener((n) => {
+          if (!mounted) return;
+          setNotifications(prev => {
+            if (prev.some(p => p.key === n.key)) return prev;
+            return [n, ...prev];
+          });
+        });
+      }
+      if (mounted && listeners.addNotificationRemovedListener) {
+        unsubRemoved = listeners.addNotificationRemovedListener((key) => {
+          if (!mounted) return;
+          setNotifications(prev => prev.filter(p => p.key !== key));
+        });
+      }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+      if (unsubPosted) unsubPosted();
+      if (unsubRemoved) unsubRemoved();
+    };
   }, []);
 
   const handleEnableAccess = useCallback(async () => {
@@ -285,7 +344,7 @@ export function NotificationCenterScreen() {
             style={styles.scroll}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
             showsVerticalScrollIndicator={false}
-            decelerationRate={0.998}
+            decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
           >
             {groups.length === 0 ? (
               <View style={styles.emptyState}>

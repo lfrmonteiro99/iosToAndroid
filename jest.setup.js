@@ -110,6 +110,16 @@ jest.mock('expo-location', () => ({
   Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
 }));
 
+// #271 Health: the step-counter sensor does not exist in the JS test
+// environment. Default to "available" so the store's happy path is reachable;
+// individual tests override with mockResolvedValue(false).
+jest.mock('expo-sensors', () => ({
+  Pedometer: {
+    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+    watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
+  },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
@@ -330,6 +340,10 @@ jest.mock('./modules/launcher-module/src', () => ({
   addSpeechResultListener: jest.fn(() => jest.fn()),
   addSpeechPartialResultListener: jest.fn(() => jest.fn()),
   addSpeechErrorListener: jest.fn(() => jest.fn()),
+  // NotificationCenterScreen subscribes to live posted/removed events (#646).
+  // Return a no-op unsubscribe; individual tests override with mockReturnValue.
+  addNotificationListener: jest.fn(() => jest.fn()),
+  addNotificationRemovedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
@@ -376,8 +390,15 @@ jest.mock('./modules/launcher-module/src', () => ({
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #627 child issue: push the protected set to the foreground monitor.
+    setProtectedApps: jest.fn(() => Promise.resolve(true)),
+    isForegroundMonitorEnabled: jest.fn(() => Promise.resolve(false)),
+    openAccessibilitySettings: jest.fn(() => Promise.resolve(true)),
     // #608 Tap to Wake
     wakeScreen: jest.fn(() => Promise.resolve()),
+    // #626 Live Activities
+    postLiveActivity: jest.fn(() => Promise.resolve(true)),
+    cancelLiveActivity: jest.fn(() => Promise.resolve(true)),
   },
 }));
 

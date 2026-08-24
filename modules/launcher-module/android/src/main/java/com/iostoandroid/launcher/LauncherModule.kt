@@ -60,6 +60,18 @@ class LauncherModule : Module() {
         @Volatile private var instance: LauncherModule? = null
         @Volatile var activeRecognizer: SpeechRecognizer? = null
 
+        // Live Activities (#626): one shared low-importance channel for every
+        // ongoing notification posted via postLiveActivity.
+        private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
+
+        /**
+         * Protected-app set pushed from JS (AppsStore) so the foreground monitor
+         * can gate apps launched OUTSIDE the launcher (recent apps / share sheet /
+         * deep link) — the JS gate in launchApp only covers in-launcher opens.
+         * Read by ForegroundMonitorService on every foreground transition.
+         */
+        @Volatile var protectedApps: Set<String> = emptySet()
+
         /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
          * by plugins/withLauncherIntent.js) to forward events to JavaScript.
@@ -80,7 +92,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -890,6 +902,49 @@ class LauncherModule : Module() {
             true
         }
 
+        // ── Live Activities (#626) ──────────────────────────────────────
+        // Android has no single equivalent of iOS Live Activities; the closest
+        // native primitive is an ongoing (non-swipeable), low-priority
+        // notification whose content is replaced in place. postLiveActivity is
+        // an upsert: calling it again with the same id updates the existing
+        // notification (NotificationManagerCompat.notify keyed by a stable id
+        // derived from it) instead of creating a duplicate.
+
+        AsyncFunction("postLiveActivity") { id: String, title: String, text: String, percent: Int, indeterminate: Boolean ->
+            postOrUpdateLiveActivity(id, title, text, percent, indeterminate)
+        }
+
+        AsyncFunction("cancelLiveActivity") { id: String ->
+            cancelLiveActivity(id)
+        }
+
+        // ── Foreground monitor + Protected-Apps gate (#627 child issue) ──
+
+        AsyncFunction("setProtectedApps") { packageNames: List<String>? ->
+            // A null payload (careless caller / older JS) means "nothing
+            // protected", not a crash — normalize to an immutable empty set.
+            LauncherModule.protectedApps = (packageNames ?: emptyList()).toSet()
+            true
+        }
+
+        AsyncFunction("isForegroundMonitorEnabled") {
+            // The AccessibilityService exposes its own enabled state to the
+            // system; querying Settings is the canonical way to read it
+            // (#627 — we cannot enable it programmatically).
+            val svc = Context.ACCESSIBILITY_SERVICE
+            val am = context.getSystemService(svc) as? android.view.accessibility.AccessibilityManager
+            am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                ?.any { it.resolveInfo.serviceInfo.packageName == context.packageName && it.resolveInfo.serviceInfo.name == ForegroundMonitorService::class.java.name }
+                ?: false
+        }
+
+        AsyncFunction("openAccessibilitySettings") {
+            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        }
+
         // ── SMS Send ─────────────────────────────────────────────────────
 
         AsyncFunction("sendSms") { address: String, body: String ->
@@ -1327,6 +1382,80 @@ class LauncherModule : Module() {
             SpeechRecognizer.isRecognitionAvailable(context)
         }
 
+        AsyncFunction("startTapDetection") {
+            // #636: start the foreground sensor service that detects double/triple
+            // back taps via accelerometer + gyroscope and emits `onBackTap`.
+            // Best-effort: on a device without the sensors or the foreground
+            // permission the service simply won't start, and callers should not
+            // reject the whole promise over it.
+            try {
+                TapSensorService.start(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopTapDetection") {
+            try {
+                TapSensorService.stop(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isTapDetectionRunning") {
+            // #636: report whether the back-tap sensor service is currently active,
+            // sourced from the static flag maintained by TapSensorService itself
+            // (set in onCreate/onDestroy).
+            TapSensorService.isRunning
+        }
+
+        // ── App access (sensor usage) — issue #634 ────────────────────────
+        //
+        // A foreground service (AccessEventsService) polls the UsageStats event
+        // stream + AppOps "last access" timestamps every 15s and emits onAppAccess
+        // for genuinely NEW camera/mic/location use by a foreground app. These
+        // three methods are the RN surface for it. There is no universal broadcast
+        // for sensor access, so this is a heuristic over the usage-access data the
+        // app already requests for Screen Time — see AccessEventsService.kt for
+        // the per-OEM limitations.
+
+        AsyncFunction("getRecentAccessEvents") { limit: Int ->
+            try {
+                val svc = AccessEventsService.instance
+                val events = svc?.getRecentEvents(limit) ?: emptyList()
+                events.map { e ->
+                    mapOf(
+                        "packageName" to e.packageName,
+                        "appName" to e.appName,
+                        "accessType" to e.accessType,
+                        "timestamp" to e.timestamp,
+                    )
+                }
+            } catch (e: Exception) { emptyList<Map<String, Any>>() }
+        }
+
+        AsyncFunction("startAccessTrackingService") {
+            try {
+                val intent = Intent(context, AccessEventsService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.startService(intent)
+                }
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopAccessTrackingService") {
+            try {
+                context.stopService(Intent(context, AccessEventsService::class.java))
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isAccessTrackingServiceRunning") {
+            AccessEventsService.instance != null
+        }
         // ── Lifecycle ────────────────────────────────────────────────────
 
         OnCreate {
@@ -1354,6 +1483,49 @@ class LauncherModule : Module() {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    // Live Activities (#626). id.hashCode() collisions are astronomically
+    // unlikely for the small number of concurrent live activities a real
+    // caller would ever run, and even a collision only means two activities
+    // share one notification slot — not a crash.
+    private fun liveActivityNotificationId(id: String): Int = id.hashCode()
+
+    private fun ensureLiveActivityChannel() {
+        val manager = androidx.core.app.NotificationManagerCompat.from(context)
+        if (manager.getNotificationChannel(LIVE_ACTIVITY_CHANNEL_ID) != null) return
+        val channel = androidx.core.app.NotificationChannelCompat.Builder(
+            LIVE_ACTIVITY_CHANNEL_ID,
+            android.app.NotificationManager.IMPORTANCE_LOW
+        ).setName("Live Activities").build()
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun postOrUpdateLiveActivity(
+        id: String,
+        title: String,
+        text: String,
+        percent: Int,
+        indeterminate: Boolean,
+    ): Boolean {
+        if (id.isBlank()) return false
+        ensureLiveActivityChannel()
+        val notification = androidx.core.app.NotificationCompat.Builder(context, LIVE_ACTIVITY_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(100, percent.coerceIn(0, 100), indeterminate)
+            .build()
+        androidx.core.app.NotificationManagerCompat.from(context).notify(liveActivityNotificationId(id), notification)
+        return true
+    }
+
+    private fun cancelLiveActivity(id: String): Boolean {
+        if (id.isBlank()) return false
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(liveActivityNotificationId(id))
+        return true
+    }
 
     private fun hasPermission(permission: String): Boolean {
         return androidx.core.content.ContextCompat.checkSelfPermission(
