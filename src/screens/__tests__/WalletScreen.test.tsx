@@ -2,14 +2,22 @@ import React from 'react';
 import { render, fireEvent, waitFor, act } from '../../test-utils';
 import { WalletScreen } from '../WalletScreen';
 import { WalletProvider, useWallet } from '../../store/WalletStore';
+import type { AppNavigationProp } from '../../navigation/types';
 
 // WalletScreen renders through AllProviders (test-utils), which now includes
 // WalletProvider, so useWallet() resolves. The store's isReady gate resolves
 // asynchronously, so every render waits for it before asserting content.
 
+function makeNavigation() {
+  return {
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+  } as unknown as AppNavigationProp;
+}
+
 describe('WalletScreen', () => {
   it('shows the empty state when there are no passes and isReady is true', async () => {
-    const { getByText } = render(<WalletScreen />);
+    const { getByText } = render(<WalletScreen navigation={makeNavigation()} />);
     await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
     // The "Add Pass" affordance must be reachable from the empty state.
     expect(getByText('Add Pass')).toBeTruthy();
@@ -19,12 +27,14 @@ describe('WalletScreen', () => {
     // Render without awaiting readiness and confirm the empty-state copy is
     // absent until isReady flips — guards against regressing the gate that
     // the baseline SettingsStore bug depends on.
-    const { queryByText } = render(<WalletScreen />);
+    const { queryByText } = render(<WalletScreen navigation={makeNavigation()} />);
     expect(queryByText('No Passes')).toBeNull();
   });
 
   it('adds a pass via the in-screen add flow and it appears in the list immediately', async () => {
-    const { getByText, getByLabelText, getByPlaceholderText } = render(<WalletScreen />);
+    const { getByText, getByLabelText, getByPlaceholderText } = render(
+      <WalletScreen navigation={makeNavigation()} />
+    );
     await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
 
     // Open the add sheet.
@@ -44,7 +54,9 @@ describe('WalletScreen', () => {
   });
 
   it('does not save when required fields are blank (Add disabled until Title + Code)', async () => {
-    const { getByLabelText, getByPlaceholderText, getByText, queryByText } = render(<WalletScreen />);
+    const { getByLabelText, getByPlaceholderText, getByText, queryByText } = render(
+      <WalletScreen navigation={makeNavigation()} />
+    );
     await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
 
     fireEvent.press(getByLabelText('Add pass'));
@@ -68,7 +80,7 @@ describe('WalletScreen', () => {
     const { getByText, queryByText, unmount } = render(
       <WalletProvider>
         <Probe />
-        <WalletScreen />
+        <WalletScreen navigation={makeNavigation()} />
       </WalletProvider>,
     );
     await waitFor(() => expect(api).not.toBeNull());
@@ -101,7 +113,7 @@ describe('WalletScreen', () => {
     const { getByText, getByLabelText, getByPlaceholderText } = render(
       <WalletProvider>
         <Probe />
-        <WalletScreen />
+        <WalletScreen navigation={makeNavigation()} />
       </WalletProvider>,
     );
     await waitFor(() => expect(api).not.toBeNull());
@@ -117,6 +129,30 @@ describe('WalletScreen', () => {
 
     await waitFor(() => expect(api!.passes[0].type).toBe('loyalty'));
     expect(api!.passes[0].title).toBe('Café Card');
+  });
+
+  it('navigates to PassDetail with the tapped pass id when a row is pressed', async () => {
+    let api: ReturnType<typeof useWallet> | null = null;
+    function Probe() {
+      api = useWallet();
+      return null;
+    }
+    const navigation = makeNavigation();
+    const { getByText } = render(
+      <WalletProvider>
+        <Probe />
+        <WalletScreen navigation={navigation} />
+      </WalletProvider>,
+    );
+    await waitFor(() => expect(api).not.toBeNull());
+    await act(async () => {
+      api!.addPass({ type: 'boarding', title: 'TAP LIS-OPO', code: 'ABC123', color: '#007AFF' });
+    });
+
+    await waitFor(() => expect(getByText('TAP LIS-OPO')).toBeTruthy());
+    fireEvent.press(getByText('TAP LIS-OPO'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PassDetail', { passId: api!.passes[0].id });
   });
 });
 
