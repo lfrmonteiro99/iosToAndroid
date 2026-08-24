@@ -27,11 +27,13 @@ jest.mock('expo-clipboard', () => ({
 const mockSignIn = jest.fn();
 const mockSignOut = jest.fn();
 const mockGetInitialState = jest.fn();
+const mockGetAccessToken = jest.fn();
 
 jest.mock('../../../services/GoogleAuth', () => ({
   getInitialState: (...args: unknown[]) => mockGetInitialState(...args),
   signIn: (...args: unknown[]) => mockSignIn(...args),
   signOut: (...args: unknown[]) => mockSignOut(...args),
+  getAccessToken: (...args: unknown[]) => mockGetAccessToken(...args),
 }));
 
 // ALL_DATA contains both settings and non-settings keys.
@@ -74,6 +76,8 @@ describe('BackupRestoreScreen', () => {
     mockGetInitialState.mockReturnValue({ isSignedIn: false, email: null });
     mockSignIn.mockResolvedValue({ isSignedIn: true, email: 'user@gmail.com' });
     mockSignOut.mockResolvedValue(undefined);
+    mockGetAccessToken.mockResolvedValue('fake-access-token');
+    global.fetch = jest.fn();
   });
 
   it('renders without crashing', () => {
@@ -230,6 +234,8 @@ describe('BackupRestoreScreen — Google Drive section', () => {
     mockGetInitialState.mockReturnValue({ isSignedIn: false, email: null });
     mockSignIn.mockResolvedValue({ isSignedIn: true, email: 'user@gmail.com' });
     mockSignOut.mockResolvedValue(undefined);
+    mockGetAccessToken.mockResolvedValue('fake-access-token');
+    global.fetch = jest.fn();
   });
 
   it('shows the "Connect Google Drive" action when signed out', () => {
@@ -274,5 +280,144 @@ describe('BackupRestoreScreen — Google Drive section', () => {
     expect(getByText('Export Settings')).toBeTruthy();
     expect(getByText('Import Settings')).toBeTruthy();
     expect(getByText('Reset All Settings')).toBeTruthy();
+  });
+});
+
+describe('BackupRestoreScreen — Cloud Backup', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetMany.mockImplementation((keys: string[]) => {
+      const result: Record<string, string | null> = {};
+      for (const k of keys) {
+        result[k] = ALL_DATA[k] ?? null;
+      }
+      return Promise.resolve(result);
+    });
+    mockGetInitialState.mockReturnValue({ isSignedIn: true, email: 'user@gmail.com' });
+    mockGetAccessToken.mockResolvedValue('fake-access-token');
+    global.fetch = jest.fn();
+  });
+
+  // Red step for the gating rule: "Back Up Now" must do nothing while signed out —
+  // no passphrase prompt, no token lookup, no network call.
+  it('"Back Up Now" is disabled when signed out — no prompt, no network call', () => {
+    mockGetInitialState.mockReturnValue({ isSignedIn: false, email: null });
+    const { getByText, queryByPlaceholderText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Back Up Now'));
+
+    expect(queryByPlaceholderText('Passphrase')).toBeNull();
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('"Back Up Now" prompts for a passphrase before any network call', () => {
+    const { getByText, getByPlaceholderText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Back Up Now'));
+
+    expect(getByPlaceholderText('Passphrase')).toBeTruthy();
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('backs up via createSnapshot -> encryptSnapshot -> uploadBackup once the passphrase is confirmed', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    const { getByText, getByPlaceholderText, queryByText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Back Up Now'));
+    fireEvent.changeText(getByPlaceholderText('Passphrase'), 'correct horse battery staple');
+    fireEvent.press(getByText('Confirm'));
+
+    await waitFor(() => expect(queryByText('Backup Uploaded')).toBeTruthy());
+
+    // DeviceProvider (mounted globally by test-utils) also calls fetch for the
+    // weather widget, so isolate the Drive upload call among all fetch calls.
+    const uploadCall = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+      String(url).includes('www.googleapis.com/upload/drive/v3/files'),
+    );
+    expect(uploadCall).toBeTruthy();
+    const [url, options] = uploadCall as [string, { headers: Record<string, string>; body: string }];
+    expect(url).toContain('www.googleapis.com/upload/drive/v3/files');
+    expect(options.headers.Authorization).toBe('Bearer fake-access-token');
+    // The passphrase itself must never reach the network request.
+    expect(String(options.body)).not.toContain('correct horse battery staple');
+  });
+
+  it('shows an error and does not call uploadBackup when not signed in to Google at confirm time', async () => {
+    mockGetAccessToken.mockResolvedValue(null);
+    const { getByText, getByPlaceholderText, queryByText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Back Up Now'));
+    fireEvent.changeText(getByPlaceholderText('Passphrase'), 'a passphrase');
+    fireEvent.press(getByText('Confirm'));
+
+    await waitFor(() => expect(queryByText('Google Drive')).toBeTruthy());
+    const uploadCall = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+      String(url).includes('googleapis.com'),
+    );
+    expect(uploadCall).toBeUndefined();
+  });
+
+  it('lists cloud backups with their timestamps when "Restore from Cloud" is tapped', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        files: [{ id: 'file-1', name: 'iostoandroid-backup.json', createdTime: '2026-08-20T10:00:00.000Z' }],
+      }),
+    });
+    const { getByText, queryByText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Restore from Cloud'));
+
+    const expectedLabel = new Date('2026-08-20T10:00:00.000Z').toLocaleString();
+    await waitFor(() => expect(queryByText(expectedLabel)).toBeTruthy());
+  });
+
+  // Red step for the AsyncStorage-safety guarantee: a wrong passphrase must
+  // surface the existing "Invalid backup data" alert and leave AsyncStorage
+  // completely untouched — applySnapshot (and therefore setMany) must never run.
+  it('wrong passphrase on cloud restore shows the invalid alert and does NOT call setMany', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          files: [{ id: 'file-1', name: 'iostoandroid-backup.json', createdTime: '2026-08-20T10:00:00.000Z' }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          version: 1,
+          salt: 'c2FsdC1iYXNlNjQtMTZieXRlcyEh',
+          iv: 'aXYtYmFzZTY0LTE2Ynl0ZXMhISEh',
+          ciphertext: 'Y2lwaGVydGV4dC1iYXNlNjQ=',
+        }),
+      });
+    const { getByText, getByPlaceholderText, queryByText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Restore from Cloud'));
+    const expectedLabel = new Date('2026-08-20T10:00:00.000Z').toLocaleString();
+    await waitFor(() => expect(getByText(expectedLabel)).toBeTruthy());
+    fireEvent.press(getByText(expectedLabel));
+
+    fireEvent.changeText(getByPlaceholderText('Passphrase'), 'wrong passphrase');
+    fireEvent.press(getByText('Confirm'));
+
+    await waitFor(() => expect(queryByText(/Invalid backup data/)).toBeTruthy());
+    expect(mockSetMany).not.toHaveBeenCalled();
+  });
+
+  it('a Drive network failure while listing backups shows an alert and does not open the picker', async () => {
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('Network request failed'));
+    const { getByText, queryByText } = renderScreen(mockNavigation);
+
+    fireEvent.press(getByText('Restore from Cloud'));
+
+    await waitFor(() => expect(queryByText('Restore Failed')).toBeTruthy());
+    expect(mockSetMany).not.toHaveBeenCalled();
   });
 });
