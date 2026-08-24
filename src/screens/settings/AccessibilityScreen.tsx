@@ -304,6 +304,12 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               subtitle={assistive.enabled ? 'On' : 'Off'}
               onPress={() => navigation.navigate('AssistiveTouchSettings')}
             />
+            <CupertinoListTile
+              title="Back Tap"
+              subtitle={settings.backTap.enabled ? 'On' : 'Off'}
+              onPress={() => navigation.navigate('BackTapSettings')}
+              isLast
+            />
           </CupertinoListSection>
         </View>
 

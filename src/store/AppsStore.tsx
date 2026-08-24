@@ -433,6 +433,27 @@ export function AppsProvider({
     AsyncStorage.setItem(PROTECTED_APPS_KEY, JSON.stringify(pkgs));
   }, []);
 
+  // #627 child issue: keep the native foreground monitor (ForegroundMonitorService)
+  // in sync with the protected set. Whenever the set changes we push it down so
+  // the AccessibilityService can gate the app even when launched from outside the
+  // launcher (recent apps / share sheet / deep link) — the JS gate in launchApp
+  // only covers in-launcher opens. Fail-open here: if the module/binding is
+  // unavailable we log and move on; not being able to seed the service must not
+  // break the launcher's own launch path.
+  const pushProtectedToMonitor = useCallback(async (pkgs: string[]) => {
+    try {
+      const mod = await getLauncherModule();
+      await mod?.setProtectedApps?.(pkgs);
+    } catch (e) {
+      logger.warn('AppsStore', 'could not push protected apps to monitor', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Seed the monitor whenever the protected set settles or changes.
+    pushProtectedToMonitor(state.protectedApps);
+  }, [state.protectedApps, pushProtectedToMonitor]);
+
   const addToRecents = useCallback(async (packageName: string) => {
     setRecentApps(prev => {
       const filtered = prev.filter(p => p.packageName !== packageName);

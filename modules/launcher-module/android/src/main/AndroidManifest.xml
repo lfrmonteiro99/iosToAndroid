@@ -20,6 +20,9 @@
         tools:ignore="ProtectedPermissions" />
     <!-- #608 Tap to Wake: needed to wake the (app-dimmed) screen via PowerManager.ACQUIRE_CAUSES_WAKEUP -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- #636 Back Tap: foreground sensor service needs a foreground notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
     <application>
         <service
@@ -30,5 +33,45 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- #636 Back Tap: detects double/triple taps on the device back via
+             accelerometer + gyroscope. Runs as a foreground service so the
+             detector survives the launcher being backgrounded. -->
+        <service
+            android:name=".TapSensorService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!-- #634: foreground service that polls UsageStats + AppOps for camera /
+             mic / location access. Its own low-importance notification is shown via
+             AccessEventsService.buildNotification(); it must NOT be typed as a
+             dataSync/location/etc. foregroundServiceType because none of those
+             exact types match "observe all three sensors" and a wrong type would
+             require a matching permission on API 34+. Leaving it untyped keeps the
+             API contract valid for a passive observer. -->
+        <service
+            android:name=".AccessEventsService"
+            android:exported="false"
+            android:stopWithTask="false" />
+
+        <!-- #627 child issue: foreground monitor + Protected-Apps gate. -->
+        <service
+            android:name=".ForegroundMonitorService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/foreground_monitor_config" />
+        </service>
+
+        <!-- #627 child issue: transparent host for the Protected-Apps BiometricPrompt. -->
+        <activity
+            android:name=".ForegroundGuardActivity"
+            android:theme="@style/Theme.TransparentGuard"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="false" />
     </application>
 </manifest>

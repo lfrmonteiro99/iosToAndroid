@@ -8,27 +8,36 @@ import type { HealthContextValue } from '../HealthStore';
 // reports without ever touching `requireNativeModule` / a real device. The
 // store statically imports `isAvailable` / `getTodayStepsFromHealthConnect` /
 // `applyHealthConnectSteps` from this module; the factory below stands them in.
-// The fns are stashed on `hcMock` (assigned inside the factory, never read as
-// an outer const at factory-eval time) so the tests can drive them.
-let hcMock: {
-  isAvailable: jest.Mock<Promise<boolean>, []>;
-  getTodayStepsFromHealthConnect: jest.Mock<Promise<number | null>, []>;
-  applyHealthConnectSteps: jest.Mock<
-    { date: string; steps: number }[],
-    [{ date: string; steps: number }[], string, number]
-  >;
-};
+// The fns are returned as named exports (the factory is fully self-contained —
+// Jest forbids referencing out-of-scope variables inside a factory), and the
+// tests reach them via `hcMock()` which returns the mocked module.
 jest.mock('../../../modules/health-connect-module/src', () => {
-  hcMock = {
-    isAvailable: jest.fn(async () => true),
-    getTodayStepsFromHealthConnect: jest.fn(async () => 5000),
-    applyHealthConnectSteps: jest.fn((history: { date: string; steps: number }[], today: string, steps: number) => [
+  const isAvailable = jest.fn(async () => true);
+  const getTodayStepsFromHealthConnect = jest.fn(async () => 5000);
+  const applyHealthConnectSteps = jest.fn(
+    (history: { date: string; steps: number }[], today: string, steps: number) => [
       ...history.filter((e) => e.date !== today),
       { date: today, steps },
-    ]),
+    ],
+  );
+  return {
+    __esModule: true,
+    isAvailable,
+    getTodayStepsFromHealthConnect,
+    applyHealthConnectSteps,
+    default: { isAvailable, getTodayStepsFromHealthConnect, applyHealthConnectSteps },
   };
-  return { __esModule: true, ...hcMock, default: hcMock };
 });
+
+const hcMock = () =>
+  jest.requireMock('../../../modules/health-connect-module/src') as {
+    isAvailable: jest.Mock<Promise<boolean>, []>;
+    getTodayStepsFromHealthConnect: jest.Mock<Promise<number | null>, []>;
+    applyHealthConnectSteps: jest.Mock<
+      { date: string; steps: number }[],
+      [{ date: string; steps: number }[], string, number]
+    >;
+  };
 
 // Capture the live context value on every render so async updates are readable.
 // eslint-disable-next-line prefer-const -- binding is stable; we mutate `.current`.
@@ -42,9 +51,9 @@ const todayKey = () => new Date().toISOString().slice(0, 10);
 
 beforeEach(() => {
   jest.clearAllMocks();
-  hcMock.isAvailable.mockResolvedValue(true);
-  hcMock.getTodayStepsFromHealthConnect.mockResolvedValue(5000);
-  hcMock.applyHealthConnectSteps.mockImplementation(
+  hcMock().isAvailable.mockResolvedValue(true);
+  hcMock().getTodayStepsFromHealthConnect.mockResolvedValue(5000);
+  hcMock().applyHealthConnectSteps.mockImplementation(
     (history: { date: string; steps: number }[], today: string, steps: number) => [
       ...history.filter((e) => e.date !== today),
       { date: today, steps },
@@ -85,7 +94,7 @@ describe('HealthStore — Health Connect availability + sync', () => {
   });
 
   it('returns false (no throw) from syncFromHealthConnect when Health Connect is absent', async () => {
-    hcMock.isAvailable.mockResolvedValue(false);
+    hcMock().isAvailable.mockResolvedValue(false);
     render(
       <HealthProvider>
         <Capture />
@@ -102,7 +111,7 @@ describe('HealthStore — Health Connect availability + sync', () => {
   });
 
   it('returns false (no throw) when the native read resolves null (permission denied / no data)', async () => {
-    hcMock.getTodayStepsFromHealthConnect.mockResolvedValue(null);
+    hcMock().getTodayStepsFromHealthConnect.mockResolvedValue(null);
     render(
       <HealthProvider>
         <Capture />
@@ -141,7 +150,7 @@ describe('HealthStore — Health Connect availability + sync', () => {
     // The persisted history must carry the replaced entry, not a sum/duplicate.
     const today = ctxRef.current!.stepHistory.find((e) => e.date === todayKey());
     expect(today?.steps).toBe(5000);
-    expect(hcMock.applyHealthConnectSteps).toHaveBeenCalledTimes(1);
+    expect(hcMock().applyHealthConnectSteps).toHaveBeenCalledTimes(1);
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
       HEALTH_DAILY_STEPS_KEY,
       JSON.stringify([{ date: todayKey(), steps: 5000 }]),
