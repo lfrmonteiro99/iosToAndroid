@@ -35,7 +35,7 @@ import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
 import { addHomePressedListener, LauncherModuleType } from '../../modules/launcher-module/src';
-import { useApps, InstalledApp } from '../store/AppsStore';
+import { useApps, InstalledApp, HomeApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -545,9 +545,49 @@ function PageDots({ total, current, show }: PageDotsProps) {
 // Grid item type
 // ---------------------------------------------------------------------------
 
-type GridItem =
+export type GridItem =
   | { type: 'app'; app: InstalledApp }
-  | { type: 'folder'; folder: AppFolder };
+  | { type: 'folder'; folder: AppFolder }
+  | { type: 'empty'; key: string };
+
+/**
+ * Lays out the real (non-dock, non-folder, non-built-in-duplicate) home apps
+ * by their `homeApps[].position` (#762), instead of just their order in
+ * `eligibleApps`. A position nobody claims renders as an `'empty'` slot
+ * rather than being skipped — skipping it is what let the next app "pull up"
+ * into the hole. Apps with no `homeApps` entry yet (never explicitly placed —
+ * e.g. every app before this feature existed) are appended right after the
+ * highest known position, in their existing order, so today's behaviour for
+ * an untouched layout is unchanged.
+ *
+ * The returned array never has trailing empty slots past the last real app —
+ * only interior gaps — so a hole can never manifest as a whole extra blank
+ * page at the end of the pager (#762 AC).
+ */
+export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: HomeApp[]): GridItem[] {
+  const positioned = new Map<number, InstalledApp>();
+  const unpositioned: InstalledApp[] = [];
+  for (const app of eligibleApps) {
+    const entry = homeApps.find(h => h.packageName === app.packageName);
+    if (entry && !positioned.has(entry.position)) {
+      positioned.set(entry.position, app);
+    } else {
+      unpositioned.push(app);
+    }
+  }
+  let nextPos = positioned.size > 0 ? Math.max(...positioned.keys()) + 1 : 0;
+  for (const app of unpositioned) {
+    positioned.set(nextPos, app);
+    nextPos += 1;
+  }
+  const maxPos = positioned.size > 0 ? Math.max(...positioned.keys()) : -1;
+  const items: GridItem[] = [];
+  for (let i = 0; i <= maxPos; i++) {
+    const app = positioned.get(i);
+    items.push(app ? { type: 'app', app } : { type: 'empty', key: `empty-${i}` });
+  }
+  return items;
+}
 
 // ---------------------------------------------------------------------------
 // FolderIcon
@@ -783,6 +823,7 @@ export function LauncherHomeScreen() {
 
   const {
     apps,
+    homeApps,
     nonDockApps,
     dockApps,
     isLoading,
@@ -1241,16 +1282,17 @@ export function LauncherHomeScreen() {
       items.push({ type: 'folder', folder });
     }
 
-    // Add real installed apps (not in dock, not in folders, and not an Android
+    // Real installed apps (not in dock, not in folders, and not an Android
     // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438)
-    for (const app of nonDockApps) {
-      if (BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName)) continue;
-      if (!appsInFolders.has(app.packageName)) {
-        items.push({ type: 'app', app });
-      }
-    }
+    // are laid out by homeApps[].position, gaps included (#762) — dock,
+    // folders and the virtual built-ins above are untouched by this and stay
+    // contiguous.
+    const eligibleApps = nonDockApps.filter(
+      app => !BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName) && !appsInFolders.has(app.packageName),
+    );
+    items.push(...layoutHomeAppsWithGaps(eligibleApps, homeApps));
     return items;
-  }, [nonDockApps, dockApps, folders]);
+  }, [nonDockApps, dockApps, folders, homeApps]);
 
   // Paginate grid items — memoizado (#518): sem isto, este array era
   // recriado em TODO o render (incluindo o causado por um simples avanço de
@@ -1708,6 +1750,21 @@ export function LauncherHomeScreen() {
               onLayout={pageIndex === 0 ? markGridVisible : undefined}
             >
               {pageItems.map((item) => {
+                if (item.type === 'empty') {
+                  // #762: a position with no app renders a blank cell instead
+                  // of letting the next app slide up into it — no Pressable,
+                  // no accessibility role, nothing tappable here.
+                  return (
+                    <View
+                      key={item.key}
+                      testID={`grid-empty-slot-${item.key}`}
+                      style={{
+                        width: gridGeometry.cellWidth,
+                        height: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+                      }}
+                    />
+                  );
+                }
                 if (item.type === 'folder') {
                   return (
                     <FolderIcon

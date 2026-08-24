@@ -474,6 +474,72 @@ describe('AppsStore — new apps destination (#601: newAppsToHome)', () => {
   });
 });
 
+describe('AppsStore — home grid holes (#762: removeFromHome no longer recompacts positions)', () => {
+  const STORAGE_KEY = '@iostoandroid/apps_layout';
+  const apple = { name: 'Apple', packageName: 'com.example.apple', icon: 'file:///icons/a_1.png', isSystem: false };
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: 'file:///icons/b_1.png', isSystem: false };
+  const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: 'file:///icons/c_1.png', isSystem: false };
+
+  function seedLayout(homeApps: Array<{ packageName: string; position: number }>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === STORAGE_KEY ? JSON.stringify({ dockApps: [], homeApps }) : null),
+    );
+  }
+
+  it('removing an app from the middle of homeApps leaves the others positions untouched (hole preserved)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+
+    await act(async () => {
+      result.current.removeFromHome('com.example.banana');
+    });
+
+    // banana disappears; apple keeps 0 and — crucially — cherry KEEPS 2,
+    // it is not renumbered down to 1. A recompacting implementation would
+    // produce position 1 for cherry here.
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+  });
+
+  it('compactHomeLayout reassigns sequential positions (0,1,2,...) without dropping or reordering apps', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 3 },
+      { packageName: 'com.example.cherry', position: 5 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.compactHomeLayout();
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+  });
+});
+
 describe('AppsStore — hide app (#606: App Library only, sem desinstalar)', () => {
   const banana = { name: 'Banana', packageName: 'com.example.banana', icon: 'file:///icons/b_1.png', isSystem: false };
   const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: 'file:///icons/c_1.png', isSystem: false };
