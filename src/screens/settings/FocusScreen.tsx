@@ -12,6 +12,7 @@ import {
   toggleHiddenPage,
   homePageCount,
 } from '../../utils/focusPageVisibility';
+import { dockOverrideForMode, toggleDockOverrideApp } from '../../utils/focusDockOverride';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -59,7 +60,7 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update } = useSettings();
-  const { nonDockApps } = useApps();
+  const { apps, nonDockApps } = useApps();
   const { folders } = useFolders();
   const alert = useAlert();
 
@@ -114,6 +115,36 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
       onPress: () => handleToggleHiddenPage(pagePickerMode, index),
     }));
   }, [pagePickerMode, pageCount, settings.focusPageVisibility, handleToggleHiddenPage]);
+
+  // Dock Apps per mode (#619, filho de #617): cada modo (exceto Off) pode
+  // substituir os 4 ícones do dock. "Default" na linha-resumo cobre os dois
+  // casos que significam "sem override" — dockOverrideForMode já trata chave
+  // ausente e lista vazia da mesma forma.
+  const [dockPickerMode, setDockPickerMode] = useState<FocusMode | null>(null);
+
+  const dockSummary = useCallback(
+    (mode: FocusMode) => {
+      const override = dockOverrideForMode(settings.focusDockOverride, mode);
+      return override ? `${override.length} app${override.length === 1 ? '' : 's'}` : 'Default';
+    },
+    [settings.focusDockOverride],
+  );
+
+  const handleToggleDockApp = useCallback(
+    (mode: FocusMode, packageName: string) => {
+      update('focusDockOverride', toggleDockOverrideApp(settings.focusDockOverride, mode, packageName));
+    },
+    [settings.focusDockOverride, update],
+  );
+
+  const dockPickerOptions = useMemo(() => {
+    if (!dockPickerMode) return [];
+    const current = settings.focusDockOverride[dockPickerMode] ?? [];
+    return apps.map((app) => ({
+      label: `${current.includes(app.packageName) ? '✓ ' : ''}${app.name}`,
+      onPress: () => handleToggleDockApp(dockPickerMode, app.packageName),
+    }));
+  }, [dockPickerMode, apps, settings.focusDockOverride, handleToggleDockApp]);
 
   const handleSelectMode = useCallback((mode: FocusModeOption) => {
     const wasActive = settings.focusMode !== 'off';
@@ -217,6 +248,27 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           </CupertinoListSection>
         </View>
 
+        {/* Dock Apps per mode (#619) */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Dock Apps"
+            footer="While a Focus mode is on, the dock can show a different set of apps (up to 4). Off always shows your normal dock."
+          >
+            {FOCUS_MODES.filter((mode) => mode.key !== 'off').map((mode) => (
+              <CupertinoListTile
+                key={`dock-apps-${mode.key}`}
+                title={`${mode.label} — Dock Apps`}
+                trailing={
+                  <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                    {dockSummary(mode.key)}
+                  </Text>
+                }
+                onPress={() => setDockPickerMode(mode.key)}
+              />
+            ))}
+          </CupertinoListSection>
+        </View>
+
         {/* Focus Schedule section */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection header="Focus Schedule">
@@ -284,6 +336,19 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
         title="Hidden Pages"
         message="Pages hidden while this Focus mode is on."
         options={pagePickerOptions}
+        cancelLabel="Done"
+      />
+
+      {/* Multiselect das apps do dock por modo (#619). Mesmo padrão do
+          multiselect de páginas acima: cada toque alterna um app (✓
+          adiciona/remove), até MAX_DOCK_APPS — o 5º toque é ignorado por
+          toggleDockOverrideApp, tal como o dock normal (AppsStore#addToDock). */}
+      <CupertinoActionSheet
+        visible={dockPickerMode !== null}
+        onClose={() => setDockPickerMode(null)}
+        title="Dock Apps"
+        message="Pick up to 4 apps for this mode's dock. Leave none selected to keep the normal dock."
+        options={dockPickerOptions}
         cancelLabel="Done"
       />
     </View>
