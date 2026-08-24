@@ -66,6 +66,9 @@ export const gestureConfig = {
   // Today View (right-swipe reveal from the first home page — #455)
   todayViewCommitDp: 64,
 
+  // Smart Stack (vertical swipe-to-rotate on a stacked widget — #655)
+  smartStackCommitDp: 40,
+
   // Swipe row actions
   swipeActionRevealDp: 10,
   swipeActionFirstExposedDp: 64,

@@ -40,6 +40,10 @@ export { EdgePanelOverlay } from './EdgePanelOverlay';
 export { AppLaunchOverlay, interpolateLaunchFrame } from './AppLaunchOverlay';
 export type { LaunchBounds } from './AppLaunchOverlay';
 export { GlassSurface } from './GlassSurface';
+export { WidgetCard } from './WidgetCard';
+export type { WidgetCardProps } from './WidgetCard';
+export { SmartStack, rotateForward, rotateBackward } from './SmartStack';
+export type { SmartStackProps, SmartStackItem } from './SmartStack';
 export { SiriWaveform } from './SiriWaveform';
 export type { SiriWaveformProps } from './SiriWaveform';
 export {
@@ -52,4 +56,6 @@ export {
   fractionOf,
   formatRemainingMs,
 } from './LiveActivityCards';
+export { CupertinoContextMenu } from './CupertinoContextMenu';
+export type { ContextMenuItem, CupertinoContextMenuProps } from './CupertinoContextMenu';
 export type { GlassSurfaceProps } from './GlassSurface';

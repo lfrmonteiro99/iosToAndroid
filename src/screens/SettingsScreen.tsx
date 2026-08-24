@@ -81,6 +81,7 @@ export function SettingsScreen() {
       section: 'extra',
       items: [
         { key: 'battery', title: 'Battery', icon: 'battery-half', iconBg: '#34C759', type: 'navigate', route: 'Battery' },
+        { key: 'performanceProfile', title: 'Performance Profile', icon: 'speedometer', iconBg: colors.accent, type: 'navigate', route: 'PerformanceProfile' },
         { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, type: 'navigate', route: 'Privacy' },
       ],
     },
