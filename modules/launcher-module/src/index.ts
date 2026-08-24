@@ -298,6 +298,18 @@ interface LauncherModuleType {
   startSpeechRecognition(): Promise<boolean>;
   stopSpeechRecognition(): Promise<boolean>;
   isSpeechRecognitionAvailable(): Promise<boolean>;
+  // Foreground monitor + Protected-Apps gate (#627 child issue). The native
+  // AccessibilityService (ForegroundMonitorService) watches the foreground app
+  // and, after setProtectedApps([...]) seeds its in-memory set, shows a
+  // BiometricPrompt before releasing a protected package. The launcher pushes
+  // its AppsStore set down here whenever it changes.
+  setProtectedApps(packageNames: string[]): Promise<boolean>;
+  // True when the AccessibilityService is enabled in system settings (the user
+  // must toggle it there — we cannot do it for them). Used to warn the user
+  // that the global gate is inactive.
+  isForegroundMonitorEnabled(): Promise<boolean>;
+  // Opens the Accessibility settings screen so the user can enable the service.
+  openAccessibilitySettings(): Promise<boolean>;
   // Live Activities (Android equivalent of iOS Live Activities, #626): an
   // ongoing notification whose title/text/progress updates in place.
   // `progress`/`maxProgress` are normalized client-side (clampLiveActivityProgress)
@@ -394,6 +406,9 @@ const stub: LauncherModuleType = {
   startSpeechRecognition: async () => false,
   stopSpeechRecognition: async () => false,
   isSpeechRecognitionAvailable: async () => false,
+  setProtectedApps: async () => false,
+  isForegroundMonitorEnabled: async () => false,
+  openAccessibilitySettings: async () => false,
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
   mediaPrev: async () => false,
@@ -752,6 +767,23 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.isSpeechRecognitionAvailable(); }
       catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
     },
+    // #627 child issue: push the protected set to the foreground monitor.
+    // Accepts null/undefined from a careless caller → normalize to [] so the
+    // service never receives a malformed payload; a null set is "nothing
+    // protected", not a rejected promise.
+    setProtectedApps: async (packageNames: string[]) => {
+      const list = Array.isArray(packageNames) ? packageNames : [];
+      try { return await nativeModule.setProtectedApps(list); }
+      catch (e) { console.error('LauncherModule.setProtectedApps failed:', e); reportBridgeError('setProtectedApps', e); return false; }
+    },
+    isForegroundMonitorEnabled: async () => {
+      try { return await nativeModule.isForegroundMonitorEnabled(); }
+      catch (e) { console.error('LauncherModule.isForegroundMonitorEnabled failed:', e); reportBridgeError('isForegroundMonitorEnabled', e); return false; }
+    },
+    openAccessibilitySettings: async () => {
+      try { return await nativeModule.openAccessibilitySettings(); }
+      catch (e) { console.error('LauncherModule.openAccessibilitySettings failed:', e); reportBridgeError('openAccessibilitySettings', e); return false; }
+    },
     postLiveActivity: async (id: string, title: string, text: string, progress: number, maxProgress: number) => {
       try {
         const { percent, indeterminate } = clampLiveActivityProgress(progress, maxProgress);
@@ -930,4 +962,20 @@ export function addPackageChangedListener(
   listener: (change: PackageChange) => void,
 ): () => void {
   const sub = addModuleListener<PackageChange>('onPackageChanged', listener);  return () => sub.remove();
+}
+
+/**
+ * Subscribe to foreground-app changes reported by ForegroundMonitorService
+ * (#627 child issue). The callback receives the package name that just moved
+ * to the foreground, or '' for HOME / no app. The launcher uses this to keep
+ * its own UI in sync and to know when the native BiometricPrompt gate fired.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addForegroundAppListener(
+  listener: (packageName: string) => void,
+): () => void {
+  const sub = addModuleListener<{ packageName: string }>('onForegroundAppChanged', (n: { packageName: string }) => {
+    listener(n.packageName);
+  });
+  return () => sub.remove();
 }

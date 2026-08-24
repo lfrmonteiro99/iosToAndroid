@@ -390,6 +390,10 @@ jest.mock('./modules/launcher-module/src', () => ({
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #627 child issue: push the protected set to the foreground monitor.
+    setProtectedApps: jest.fn(() => Promise.resolve(true)),
+    isForegroundMonitorEnabled: jest.fn(() => Promise.resolve(false)),
+    openAccessibilitySettings: jest.fn(() => Promise.resolve(true)),
     // #608 Tap to Wake
     wakeScreen: jest.fn(() => Promise.resolve()),
     // #626 Live Activities
