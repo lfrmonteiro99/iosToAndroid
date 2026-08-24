@@ -35,7 +35,21 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
-import { type AppRule } from '../utils/notificationRouter';
+import { normalizeContextRules, type ContextRule } from '../utils/contextTriggerEngine';
+import {
+  type BackTapConfig,
+  DEFAULT_BACK_TAP,
+  normalizeBackTap,
+} from '../utils/backTap';
+import {
+  normalizeAllowList,
+  normalizePerAppDelivery,
+  type PerAppDelivery,
+} from '../utils/notificationAppRules';
+import {
+  normalizePerformanceProfile,
+  type PerformanceProfile,
+} from '../utils/performanceProfile';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -90,6 +104,15 @@ export interface SettingsState {
    * `focusScheduleEnabled` está true. Default '17:00'.
    */
   focusScheduleEnd: string;
+  /**
+   * Context Engine (#628, filho do épico de Perfis Contextuais): regras de
+   * contexto compostas (Wi-Fi/Bluetooth/localização/hora com AND/OR) que
+   * ativam um FocusMode automaticamente. Aditivo ao Focus Schedule acima —
+   * os dois mecanismos coexistem, cada um dono da sua própria lógica de
+   * ativação/desativação (ver useContextEngine.ts vs useFocusSchedule.ts).
+   * Default `[]` — sem regras, a engine nunca actua.
+   */
+  contextRules: ContextRule[];
   screenTimeEnabled: boolean;
   dailyLimit: number;
   downtime: boolean;
@@ -164,30 +187,26 @@ export interface SettingsState {
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
   /**
-   * Master switch for the notification firewall/router (#630). When off, every
-   * notification routes `immediate` — identical to the pre-router behaviour, so
-   * enabling this is purely additive and never changes delivery on its own.
+   * iOS «Notifications -> Allow in Focus» por app (issue #630): apps nesta
+   * lista notificam sempre de imediato, mesmo com um modo de Focus activo.
+   * Lista de package names; vazia = nenhuma app prioritária.
    */
-  notificationRouterEnabled: boolean;
+  allowListImmediate: string[];
   /**
-   * Reduce Interruptions (#630): when on, every non-exempt notification is held
-   * for the scheduled summary instead of delivered immediately. An app is exempt
-   * only if it is an active call, is on `notificationRouterAllowList`, or has an
-   * explicit per-app rule promoting it to `immediate`.
+   * Política de entrega por app (issue #630): packageName -> 'immediate' |
+   * 'scheduled' | 'digest' | 'blocked'. Ausência de uma app cai nos defaults
+   * embutidos (`DEFAULT_APP_DELIVERY`, ex. Reddit = digest) e, na ausência
+   * desses, em 'immediate'. 'scheduled'/'digest' embalam para o Scheduled
+   * Summary; 'blocked' nunca entrega.
    */
-  reduceInterruptionsEnabled: boolean;
+  perAppDelivery: PerAppDelivery;
   /**
-   * Package names allowed to break through Reduce Interruptions. Mirrors the
-   * iOS "Allow Notifications" people/domain allow-list (Family/Boss/Banking/
-   * Security) and feeds `classifyNotification` directly.
+   * iOS «Reduce Interruptions» (issue #630): quando true, embala para o
+   * Scheduled Summary todas as notificações que NÃO estejam na allow-list
+   * imediata — equivalente a dar a todas as apps a política 'scheduled',
+   * excepto as que estão na allow-list.
    */
-  notificationRouterAllowList: string[];
-  /**
-   * Per-app routing overrides consulted by `classifyNotification`. Empty by
-   * default; the engine also ships built-in sensible defaults (WhatsApp =
-   * immediate, Reddit = digest, ...) via `DEFAULT_APP_TIERS`.
-   */
-  notificationRouterRules: AppRule[];
+  reduceInterruptions: boolean;
   fontChoice: 'inter' | 'system';
   /**
    * Whether the squircle mask (#480) is applied to app icons before caching.
@@ -331,7 +350,14 @@ export interface SettingsState {
    */
   darkModeDarkUntil: string;
   /**
-   * Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
+   /**
+    * Power/performance profile (#631 child): 'normal' | 'performance' | 'saver'
+    * | 'sleep' | 'travel'. Espelha os modos de energia do Android num picker do
+    * iOS. Seleccionar um perfil aplica o respectivo patch de triggers (via
+    * `updateMany`) e grava a escolha aqui. Default 'normal' (baseline).
+    */
+   performanceProfile: PerformanceProfile;
+   /** Override local do tipo de dispositivo Bluetooth, por endereço (issue #615).
    * O native devolve o tipo real (`device.type`), mas o utilizador pode
    * sobrepô-lo no "i" de cada dispositivo emparelhado (Coluna / Auscultadores /
    * Rádio do Carro / Outro) — isto calibra o ícone e a intenção de uso. É um
@@ -339,6 +365,14 @@ export interface SettingsState {
    * Chaveado por `device.address` (estável), nunca pelo nome exibido.
    */
   bluetoothDeviceTypes: Record<string, 'speaker' | 'headphones' | 'car' | 'other'>;
+  /**
+   * Back Tap (#625): associa double/triple tap a uma acção (flash, toggleWifi,
+   * openApp, shortcut, screenshot). O detector físico de toques nas costas do
+   * dispositivo é um detalhe de UI nativa; aqui vive o mapeamento persistido,
+   * normalizado na leitura para que um blob corrompido (acção desconhecida,
+   * openApp sem packageName) não dispare um intent partido.
+   */
+  backTap: BackTapConfig;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -367,6 +401,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   focusDockOverride: {},
   focusScheduleStart: '09:00',
   focusScheduleEnd: '17:00',
+  contextRules: [],
   screenTimeEnabled: false,
   dailyLimit: 60,
   downtime: false,
@@ -407,10 +442,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   automaticUpdates: true,
   updateAvailable: false,
   scheduledSummaryIdx: 0,
-  notificationRouterEnabled: false,
-  reduceInterruptionsEnabled: false,
-  notificationRouterAllowList: [],
-  notificationRouterRules: [],
+  allowListImmediate: [],
+  perAppDelivery: {},
+  reduceInterruptions: false,
   fontChoice: 'inter',
   iconTreatment: 'mask-adaptive-only',
   pressFeedback: 'scale-opacity',
@@ -439,6 +473,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkModeLightUntil: '07:00',
   darkModeDarkUntil: '19:00',
   bluetoothDeviceTypes: {},
+  backTap: DEFAULT_BACK_TAP,
+  performanceProfile: 'normal',
 };
 
 interface SettingsContextValue {
@@ -509,6 +545,12 @@ export function SettingsProvider({
             // render pacotes inexistentes ou rebentar — normaliza-se na
             // leitura como os irmãos acima.
             focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
+            // contextRules (#628): blob de regras compostas vindo do AsyncStorage
+            // não é confiável — uma regra malformada (targetMode inválido,
+            // condições sem forma reconhecível) faria pickActiveRule devolver
+            // um destino inventado ou o `.includes`/`.every` das condições
+            // rebentar. Normaliza-se na leitura como os irmãos acima.
+            contextRules: normalizeContextRules(parsed?.contextRules),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a
@@ -516,12 +558,22 @@ export function SettingsProvider({
             // launcher inteiro (#688). Normaliza-se na leitura como os irmãos
             // acima.
             categoryOverrides: normalizeCategoryOverrides(parsed?.categoryOverrides),
+            // backTap (#625) é lido do mesmo blob não confiável do AsyncStorage;
+            // um mapeamento corrompido (acção desconhecida, openApp sem
+            // packageName, enabled não-booleano) rebentaria o detector de
+            // gestos ou dispararia um intent partido — normaliza-se na leitura.
+            backTap: normalizeBackTap(parsed?.backTap),
             // wallpaperIndex (#674) indexa WALLPAPERS no render da home; um
             // valor corrompido (string, NaN, fora de gama) daria
             // WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no
             // render → ecrã branco. Saneia-se na leitura, à semelhança dos
             // campos acima.
             wallpaperIndex: clampWallpaperIndex(parsed?.wallpaperIndex),
+            // performanceProfile (#631 child): o picker só conhece cinco modos;
+            // um blob corrompido (string à-toa, null, maiúsculas) ativaria um
+            // perfil desconhecido e dispararia triggers errados. Normaliza-se
+            // na leitura para 'normal' (baseline), como os campos acima.
+            performanceProfile: normalizePerformanceProfile(parsed?.performanceProfile),
             // iconTintColor (#620) feeds Image's tintColor style directly; a
             // corrupted/non-hex value from an old blob would silently no-op
             // or paint icons black depending on the platform, so it is
@@ -533,23 +585,14 @@ export function SettingsProvider({
             // presente e válido vence sempre o campo legado.
             motionIntensity: normalizeMotionIntensity(parsed?.motionIntensity, parsed?.reduceMotion),
             scrollDeceleration: normalizeScrollDeceleration(parsed?.scrollDeceleration),
-            // notificationRouterAllowList / notificationRouterRules (#630) feed
-            // the pure classification engine, which calls `.includes` / `.find`
-            // on them. A non-array value from an old/blob blob would throw at
-            // runtime, so both are normalized to [] on read like the fields
-            // above. Entries are validated to strings so a stray number/object
-            // in the persisted list can't poison equality checks downstream.
-            notificationRouterAllowList: Array.isArray(parsed?.notificationRouterAllowList)
-              ? parsed.notificationRouterAllowList.filter((p: unknown) => typeof p === 'string')
-              : [],
-            notificationRouterRules: Array.isArray(parsed?.notificationRouterRules)
-              ? parsed.notificationRouterRules.filter(
-                  (r: unknown) =>
-                    r && typeof r === 'object' &&
-                    typeof (r as { packageName?: unknown }).packageName === 'string' &&
-                    typeof (r as { tier?: unknown }).tier === 'string',
-                )
-              : [],
+            // allowListImmediate / perAppDelivery (#630) vêm do mesmo blob não
+            // confiável do AsyncStorage. Uniões/corrupção (valores não-array,
+            // chaves vazias, políticas desconhecidas) fariam routeNotification
+            // ler configurações inválidas e entregar/bloquear apps erradas, por
+            // isso normalizam-se na leitura como o resto dos campos acima.
+            allowListImmediate: normalizeAllowList(parsed?.allowListImmediate),
+            perAppDelivery: normalizePerAppDelivery(parsed?.perAppDelivery),
+            reduceInterruptions: Boolean(parsed?.reduceInterruptions),
           }));
         } catch { /* ignore */ }
       }

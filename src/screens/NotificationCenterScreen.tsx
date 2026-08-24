@@ -40,6 +40,35 @@ const getLauncher = async () => {
   }
 };
 
+// Live notification events (onNotificationPosted / onNotificationRemoved) are
+// exported as NAMED exports of the module — they are not methods on the default
+// bridged object. This resolves the full module namespace so the screen can
+// keep its history view in sync while it is open. Resolved inside the effect
+// (not a module-level promise) to avoid a load-order race with the mount.
+const getLauncherListeners = async (): Promise<{
+  addNotificationListener?: (l: (n: DeviceNotification) => void) => () => void;
+  addNotificationRemovedListener?: (l: (key: string) => void) => () => void;
+}> => {
+  try {
+    const mod = await import('../../modules/launcher-module/src');
+    return {
+      addNotificationListener: mod.addNotificationListener,
+      addNotificationRemovedListener: mod.addNotificationRemovedListener,
+    };
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      const mod = require('../../modules/launcher-module/src');
+      return {
+        addNotificationListener: mod.addNotificationListener,
+        addNotificationRemovedListener: mod.addNotificationRemovedListener,
+      };
+    } catch {
+      return {};
+    }
+  }
+};
+
 interface DeviceNotification {
   id: string;
   key: string;
@@ -103,6 +132,8 @@ export function NotificationCenterScreen() {
 
   useEffect(() => {
     let mounted = true;
+    let unsubPosted: (() => void) | undefined;
+    let unsubRemoved: (() => void) | undefined;
     (async () => {
       const mod = await getLauncher();
       if (!mod || !mounted) return;
@@ -113,8 +144,33 @@ export function NotificationCenterScreen() {
         const notifs = await mod.getNotifications();
         if (mounted) setNotifications(notifs);
       }
+
+      // #646: keep the history view live. getNotifications() above is only the
+      // initial snapshot — without these subscriptions the center stays frozen
+      // while the OS shade updates. New arrivals are prepended (deduped by key);
+      // removals drop the matching key.
+      const listeners = await getLauncherListeners();
+      if (mounted && listeners.addNotificationListener) {
+        unsubPosted = listeners.addNotificationListener((n) => {
+          if (!mounted) return;
+          setNotifications(prev => {
+            if (prev.some(p => p.key === n.key)) return prev;
+            return [n, ...prev];
+          });
+        });
+      }
+      if (mounted && listeners.addNotificationRemovedListener) {
+        unsubRemoved = listeners.addNotificationRemovedListener((key) => {
+          if (!mounted) return;
+          setNotifications(prev => prev.filter(p => p.key !== key));
+        });
+      }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+      if (unsubPosted) unsubPosted();
+      if (unsubRemoved) unsubRemoved();
+    };
   }, []);
 
   const handleEnableAccess = useCallback(async () => {
