@@ -111,13 +111,25 @@ class NotificationService : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         val targetId = sbn.id.toString()
         val targetPkg = sbn.packageName
+        var removed: NotificationData? = null
         val iter = notifications.iterator()
         while (iter.hasNext()) {
             val existing = iter.next()
             if (existing.id == targetId && existing.packageName == targetPkg) {
+                removed = existing
                 notifications.remove(existing)
             }
         }
+
+        val data = removed ?: NotificationData(
+            id = targetId,
+            key = sbn.key,
+            packageName = targetPkg,
+            title = "",
+            text = "",
+            time = sbn.postTime,
+            isOngoing = sbn.isOngoing
+        )
 
         emitToJS("onNotificationRemoved", data)
     }
