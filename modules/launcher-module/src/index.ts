@@ -393,6 +393,11 @@ interface LauncherModuleType {
     maxProgress: number,
   ): Promise<boolean>;
   cancelLiveActivity(id: string): Promise<boolean>;
+  // Back Tap (#636): foreground sensor service detecting double/triple taps on
+  // the device back via accelerometer + gyroscope; emits `onBackTap`.
+  startTapDetection(): Promise<boolean>;
+  stopTapDetection(): Promise<boolean>;
+  isTapDetectionRunning(): Promise<boolean>;
 }
 
 export interface LiveActivityProgress {
@@ -497,6 +502,9 @@ const stub: LauncherModuleType = {
   getTodayScreenTime: async () => ({ totalMinutes: 0, topApps: [] }),
   postLiveActivity: async () => false,
   cancelLiveActivity: async () => false,
+  startTapDetection: async () => false,
+  stopTapDetection: async () => false,
+  isTapDetectionRunning: async () => false,
 };
 
 /**
@@ -903,6 +911,18 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.cancelLiveActivity(id); }
       catch (e) { console.error('LauncherModule.cancelLiveActivity failed:', e); reportBridgeError('cancelLiveActivity', e); return false; }
     },
+    startTapDetection: async () => {
+      try { return await nativeModule.startTapDetection(); }
+      catch (e) { console.error('LauncherModule.startTapDetection failed:', e); reportBridgeError('startTapDetection', e); return false; }
+    },
+    stopTapDetection: async () => {
+      try { return await nativeModule.stopTapDetection(); }
+      catch (e) { console.error('LauncherModule.stopTapDetection failed:', e); reportBridgeError('stopTapDetection', e); return false; }
+    },
+    isTapDetectionRunning: async () => {
+      try { return await nativeModule.isTapDetectionRunning(); }
+      catch (e) { console.error('LauncherModule.isTapDetectionRunning failed:', e); reportBridgeError('isTapDetectionRunning', e); return false; }
+    },
   };
 }
 
@@ -1060,6 +1080,18 @@ export interface PackageChange {
 }
 
 /**
+ * Emitted by the native back-tap sensor service (#636) when the user double- or
+ * triple-taps the back of the device (iOS 14+ Back Tap equivalent).
+ * `taps` are the raw impulse timestamps (ms) that formed the gesture; `count`
+ * is 2 or 3. Surfaced to JS via the `addBackTapListener` subscription.
+ */
+export interface BackTapEvent {
+  type: 'double' | 'triple';
+  count: number;
+  taps: number[];
+}
+
+/**
  * Subscribe to apps being installed, uninstalled or updated on the device.
  * Backed by a dynamically registered BroadcastReceiver on the Kotlin side
  * (PackageChangeReceiver) — implicit package broadcasts are not delivered to
@@ -1071,6 +1103,19 @@ export function addPackageChangedListener(
   listener: (change: PackageChange) => void,
 ): () => void {
   const sub = addModuleListener<PackageChange>('onPackageChanged', listener);  return () => sub.remove();
+}
+
+/**
+ * Subscribe to double/triple "back tap" gestures detected by the native
+ * TapSensorService (#636). The callback receives a [BackTapEvent] describing
+ * the gesture (`type` is 'double' | 'triple', `count` is 2 or 3).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addBackTapListener(
+  listener: (event: BackTapEvent) => void,
+): () => void {
+  const sub = addModuleListener<BackTapEvent>('onBackTap', listener);
+  return () => sub.remove();
 }
 
 /**

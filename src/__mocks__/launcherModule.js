@@ -58,5 +58,9 @@ module.exports = {
     // #626 Live Activities
     postLiveActivity: jest.fn(() => Promise.resolve(true)),
     cancelLiveActivity: jest.fn(() => Promise.resolve(true)),
+    // #636 Back Tap
+    startTapDetection: jest.fn(() => Promise.resolve(true)),
+    stopTapDetection: jest.fn(() => Promise.resolve(true)),
+    isTapDetectionRunning: jest.fn(() => Promise.resolve(false)),
   },
 };

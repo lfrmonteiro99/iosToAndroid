@@ -85,7 +85,7 @@ class AccessEventsService : Service() {
 
     // Per-instance ring buffer of raw access events for getRecentAccessEvents().
     private val recent = ConcurrentLinkedQueue<AccessEvent>()
-    private const val MAX_RECENT = 500
+    private val MAX_RECENT = 500
 
     // packageName\u0000type -> last timestamp we already emitted, so we only
     // forward NEW accesses.
