@@ -19,6 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SystemAppIcon } from '../components/SystemAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -454,21 +455,14 @@ const AppIcon = React.memo(function AppIcon({
     >
       <Animated.View style={animatedStyle}>
         {virtualCfg ? (
-          virtualCfg.gradient ? (
-            <LinearGradient
-              testID={`app-icon-box-${app.packageName}`}
-              colors={virtualCfg.gradient}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[styles.appIconPlaceholder, iconBoxSize]}
-            >
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </LinearGradient>
-          ) : (
-            <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize, { backgroundColor: virtualCfg.bg }]}>
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </View>
-          )
+          <SystemAppIcon
+            testID={`app-icon-box-${app.packageName}`}
+            icon={virtualCfg.icon}
+            size={iconSize}
+            gradient={virtualCfg.gradient}
+            bg={virtualCfg.bg}
+            iconSize={virtualCfg.iconSize ?? Math.round(iconSize * 0.57)}
+          />
         ) : app.icon ? (
           <Image
             testID={`app-icon-box-${app.packageName}`}
