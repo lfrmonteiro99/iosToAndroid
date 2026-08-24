@@ -19,16 +19,16 @@ import Animated, {
 import { useTheme } from '../theme/ThemeContext';
 import { useGestureReduceMotion } from '../utils/useGestureReduceMotion';
 import { hapticSelection } from '../utils/haptics';
-import { contextMenuPresent } from '../theme/springPresets';
+import { contextMenuPresentIOS } from '../theme/springPresets';
 
-export interface ContextMenuItem {
+export interface IOContextMenuItem {
   label: string;
   onPress: () => void;
   destructive?: boolean;
 }
 
 export interface IOContextMenuProps {
-  items: ContextMenuItem[];
+  items: IOContextMenuItem[];
   children: React.ReactNode;
   /** Minimum long-press duration before the menu opens (ms). Defaults to 450. */
   longPressDuration?: number;
@@ -79,7 +79,7 @@ export function IOContextMenu({ items, children, longPressDuration = 450 }: IOCo
     if (visible) {
       scale.value = reduceMotion
         ? withTiming(1, { duration: 150 })
-        : withSpring(1, contextMenuPresent);
+        : withSpring(1, contextMenuPresentIOS);
       opacity.value = withTiming(1, { duration: 160 });
     } else {
       scale.value = withTiming(0.85, { duration: 120 });

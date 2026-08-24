@@ -14,6 +14,7 @@ import { ContactsProvider } from './src/store/ContactsStore';
 import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
 import { DeviceProvider, useDevice } from './src/store/DeviceStore';
+import { LocationProvider } from './src/store/LocationStore';
 import { FoldersProvider } from './src/store/FoldersStore';
 import { BookmarksProvider } from './src/store/BookmarksStore';
 import { ReadingListProvider } from './src/store/ReadingListStore';
@@ -38,6 +39,7 @@ import LauncherModule, { addNotificationListener, onBridgeError } from './module
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
 import { markProcessStartFromAge } from './src/utils/perfMetrics';
 import { useFocusSchedule } from './src/hooks/useFocusSchedule';
+import { useContextEngine } from './src/hooks/useContextEngine';
 
 // Cold start (#517): a marca de origem é a idade do processo lida do lado
 // nativo, não o instante em que este módulo é avaliado — assim o número inclui
@@ -61,6 +63,11 @@ function AppContent() {
   // do intervalo definido em Settings. Montado aqui — um único ponto de verdade
   // para toda a app, independente de qual ecrã está montado.
   useFocusSchedule();
+
+  // Context Engine (#628): regras Wi-Fi/Bluetooth/localização/hora compostas
+  // (AND/OR) que ativam um Focus mode automaticamente. Aditivo ao Focus
+  // Schedule acima — mesmo ponto único de montagem, coexiste sem o substituir.
+  useContextEngine();
 
   // Inter / Inter Display (#474, sub-issue de #464 — substituto sancionado da
   // SF Pro, cuja licença restringe o uso a mocks para SO Apple). Uma falha no
@@ -128,6 +135,24 @@ function AppContent() {
   // callback (registered once) always reads the current value without stale closure.
   const focusModeRef = useRef(settings.focusMode);
   useEffect(() => { focusModeRef.current = settings.focusMode; }, [settings.focusMode]);
+
+  // Contexto de routing por-app das notificações (#630): allow-list imediata,
+  // política por app e Reduce Interruptions. Espelhado num ref para o listener
+  // (registado uma vez) ler o valor corrente sem closure obsoleta.
+  const routingRef = useRef({
+    focusMode: settings.focusMode,
+    allowListImmediate: settings.allowListImmediate,
+    perAppDelivery: settings.perAppDelivery,
+    reduceInterruptions: settings.reduceInterruptions,
+  });
+  useEffect(() => {
+    routingRef.current = {
+      focusMode: settings.focusMode,
+      allowListImmediate: settings.allowListImmediate,
+      perAppDelivery: settings.perAppDelivery,
+      reduceInterruptions: settings.reduceInterruptions,
+    };
+  }, [settings.focusMode, settings.allowListImmediate, settings.perAppDelivery, settings.reduceInterruptions]);
 
   // Pending auto-lock timer. We don't lock the instant the app goes to
   // background — a permission dialog, the system HOME intent fired by our
@@ -295,7 +320,7 @@ function AppContent() {
         for (const n of initial) seenNotifIds.current.add(n.id);
 
         unsub = addNotificationListener((n) => {
-          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner);
+          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner, routingRef.current);
         });
       } catch { /* ignore */ }
     })();
@@ -399,6 +424,7 @@ export default function App() {
               <ProfileProvider>
                 <AppsProviderWithIconTreatment>
                 <DeviceProvider>
+                <LocationProvider>
                 <FoldersProvider>
                 <BookmarksProvider>
                 <ReadingListProvider>
@@ -419,6 +445,7 @@ export default function App() {
                 </ReadingListProvider>
                 </BookmarksProvider>
                 </FoldersProvider>
+                </LocationProvider>
                 </DeviceProvider>
                 </AppsProviderWithIconTreatment>
               </ProfileProvider>
