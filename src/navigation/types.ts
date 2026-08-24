@@ -30,6 +30,7 @@ export type RootStackParamList = {
   Reminders: undefined;
   Browser: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
+  Wallet: undefined;
 
   // Settings
   Settings: undefined;
