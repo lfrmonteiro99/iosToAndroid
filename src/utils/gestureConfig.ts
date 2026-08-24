@@ -24,9 +24,19 @@ export const gestureConfig = {
   homeHybridVelocity: 0.75,
 
   // Switcher (hold)
+  // #686: switcherProgressMax was 0.58, capping the hold zone at the
+  // lower-middle of the upward drag. A natural iOS swipe-up-and-hold (drag
+  // most of the way up, then pause) sits at progress ~0.8+, which the
+  // commitForSwitcher predicate rejected — so HomeIndicator.onEnd fell
+  // through to commitForHome and fired goHome(), dumping the user onto the
+  // Android launcher instead of the app switcher. The hold must be
+  // recognized for the full upward travel, so the upper bound is removed
+  // (max === 1.0). The lower bound (switcherProgressMin) still guards
+  // against an accidental home tap that drifts upward without a real drag,
+  // and switcherHoldVelocityMax still rejects a flick that never pauses.
   switcherHoldMinMs: 140,
   switcherProgressMin: 0.28,
-  switcherProgressMax: 0.58,
+  switcherProgressMax: 1.0,
   switcherHoldVelocityMax: 0.35,
 
   // Quick switch (horizontal on home bar)
