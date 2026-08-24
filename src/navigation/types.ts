@@ -19,6 +19,7 @@ export type RootStackParamList = {
   ContactDetail: { contactId: string };
   ContactEdit: { contactId?: string };
   Weather: undefined;
+  Health: undefined;
   Clock: undefined;
   Camera: undefined;
   Photos: undefined;
@@ -30,6 +31,10 @@ export type RootStackParamList = {
   Reminders: undefined;
   Browser: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
+  Wallet: undefined;
+  PassDetail: { passId: string };
+  PassEdit: { passId?: string; prefillCode?: string };
+  PassScan: undefined;
 
   // Settings
   Settings: undefined;
@@ -67,6 +72,7 @@ export type RootStackParamList = {
   Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
+  ProtectedApps: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;

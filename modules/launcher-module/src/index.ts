@@ -298,6 +298,37 @@ interface LauncherModuleType {
   startSpeechRecognition(): Promise<boolean>;
   stopSpeechRecognition(): Promise<boolean>;
   isSpeechRecognitionAvailable(): Promise<boolean>;
+  // Live Activities (Android equivalent of iOS Live Activities, #626): an
+  // ongoing notification whose title/text/progress updates in place.
+  // `progress`/`maxProgress` are normalized client-side (clampLiveActivityProgress)
+  // before reaching native — see createBridgedModule().
+  postLiveActivity(
+    id: string,
+    title: string,
+    text: string,
+    progress: number,
+    maxProgress: number,
+  ): Promise<boolean>;
+  cancelLiveActivity(id: string): Promise<boolean>;
+}
+
+export interface LiveActivityProgress {
+  percent: number;
+  indeterminate: boolean;
+}
+
+/**
+ * Normalizes a progress/maxProgress pair for a live-activity notification.
+ * `maxProgress <= 0` (or either value non-finite) means "no known total" —
+ * the Android progress bar should be indeterminate rather than showing a
+ * bogus percentage from a division by zero.
+ */
+export function clampLiveActivityProgress(progress: number, maxProgress: number): LiveActivityProgress {
+  if (!Number.isFinite(progress) || !Number.isFinite(maxProgress) || maxProgress <= 0) {
+    return { percent: 0, indeterminate: true };
+  }
+  const ratio = Math.min(1, Math.max(0, progress / maxProgress));
+  return { percent: Math.round(ratio * 100), indeterminate: false };
 }
 
 const isAndroid = Platform.OS === 'android';
@@ -372,6 +403,8 @@ const stub: LauncherModuleType = {
   openUsageAccessSettings: async () => false,
   getScreenTimeStats: async () => [],
   getTodayScreenTime: async () => ({ totalMinutes: 0, topApps: [] }),
+  postLiveActivity: async () => false,
+  cancelLiveActivity: async () => false,
 };
 
 /**
@@ -718,6 +751,16 @@ function createBridgedModule(): LauncherModuleType {
     isSpeechRecognitionAvailable: async () => {
       try { return await nativeModule.isSpeechRecognitionAvailable(); }
       catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
+    },
+    postLiveActivity: async (id: string, title: string, text: string, progress: number, maxProgress: number) => {
+      try {
+        const { percent, indeterminate } = clampLiveActivityProgress(progress, maxProgress);
+        return await nativeModule.postLiveActivity(id, title, text, percent, indeterminate);
+      } catch (e) { console.error('LauncherModule.postLiveActivity failed:', e); reportBridgeError('postLiveActivity', e); return false; }
+    },
+    cancelLiveActivity: async (id: string) => {
+      try { return await nativeModule.cancelLiveActivity(id); }
+      catch (e) { console.error('LauncherModule.cancelLiveActivity failed:', e); reportBridgeError('cancelLiveActivity', e); return false; }
     },
   };
 }
