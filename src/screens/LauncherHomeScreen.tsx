@@ -165,6 +165,7 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.mail': 'Mail',
   'com.iostoandroid.browser': 'Browser',
   'com.iostoandroid.health': 'Health',
+  'com.iostoandroid.wallet': 'Wallet',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -220,6 +221,7 @@ export const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
   'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
   'com.iostoandroid.health': { icon: 'heart', bg: '#FF2D55', gradient: ['#FF6482', '#FF2D55'], iconSize: 32 },
+  'com.iostoandroid.wallet': { icon: 'wallet', bg: '#5856D6', gradient: ['#7D7AFF', '#5856D6'], iconSize: 32 },
 };
 
 // ---------------------------------------------------------------------------

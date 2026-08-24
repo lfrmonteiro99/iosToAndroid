@@ -208,6 +208,7 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.reminders': { name: 'Reminders', packageName: 'com.iostoandroid.reminders', icon: '', isSystem: false },
   'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
   'com.iostoandroid.health': { name: 'Health', packageName: 'com.iostoandroid.health', icon: '', isSystem: false },
+  'com.iostoandroid.wallet': { name: 'Wallet', packageName: 'com.iostoandroid.wallet', icon: '', isSystem: false },
 };
 
 // Single source of truth for this app's own virtual built-ins. Every entry in
