@@ -545,20 +545,31 @@ describe('BackupRestoreScreen — Auto Backup', () => {
     );
   });
 
-  it('surfaces the "Time for your backup" prompt on a due foreground transition', async () => {
-    // Pre-seed: Auto Backup enabled, daily, lastBackupAt far in the past.
-    store.set(
-      AUTO_BACKUP_STORAGE_KEY,
-      JSON.stringify({ enabled: true, frequency: 'daily', lastBackupAt: '2000-01-01T00:00:00.000Z' }),
-    );
+  // TESTE A — isola a transição foreground (background->active) do efeito de mount.
+  // Defeito original (reviewer, #787): o teste antigo semeava OVERDUE e fazia
+  // fireAppState('active'), mas o mount JÁ mostrava o diálogo para OVERDUE — logo
+  // remover por completo o listener AppState (linhas 117-125) DEIXAVA esse teste
+  // passar, não isolando a regressão a foreground. Aqui despachamos o diálogo de
+  // mount com 'Not Now' ANTES do fireAppState('active'); se o listener for
+  // apagado, o diálogo não reaparece e o teste falha com
+  // "Unable to find an element with text: Time for your backup".
+  it('re-surfaces the "Time for your backup" prompt on a due foreground transition (not just on mount)', async () => {
+    store.set(AUTO_BACKUP_STORAGE_KEY, OVERDUE);
 
-    const { getByText } = render(<BackupRestoreScreen navigation={mockNavigation as never} />);
+    const { getByText, queryByText } = renderScreen();
+    // Mount-time due-check surfaces the prompt for an overdue backup...
+    await waitFor(() => expect(getByText('Time for your backup')).toBeTruthy());
+    // ...dismiss it, so the mount effect is no longer what is keeping it up.
+    fireEvent.press(getByText('Not Now'));
+    await waitFor(() => expect(queryByText('Time for your backup')).toBeNull());
 
+    // SÓ ENTÃO: a transição background -> active tem de REAPRESENTAR o diálogo,
+    // provando que é o listener AppState (e não só o mount) que o invoca.
     await act(async () => {
       fireAppState('active');
     });
 
-    await waitFor(() => expect(getByText('Time for your backup')).toBeTruthy());
+    expect(getByText('Time for your backup')).toBeTruthy();
   });
 
   // Regression for the reviewer-blocked round: the screen only ever mounts
@@ -591,16 +602,19 @@ describe('BackupRestoreScreen — Auto Backup', () => {
     expect(queryByText('Time for your backup')).toBeNull();
   });
 
-  it('does NOT prompt on a non-active transition (e.g. background) when not due', async () => {
-    // lastBackupAt is "now" (well within the daily interval) so the mount-time
-    // due-check itself finds nothing due; this isolates the assertion that
-    // follows to the 'background' branch of the AppState listener specifically.
-    store.set(
-      AUTO_BACKUP_STORAGE_KEY,
-      JSON.stringify({ enabled: true, frequency: 'daily', lastBackupAt: new Date().toISOString() }),
-    );
+  // TESTE B — isola a guarda active-only `if (next !== 'active') return;` (linha 119).
+  // Defeito original (reviewer, #787): o teste antigo semeava lastBackupAt: now
+  // (não em dívida), logo o diálogo nunca aparecia e a guarda NUNCA era
+  // exercitada — passava mesmo que a guarda fosse apagada. Aqui semeamos OVERDUE,
+  // despachamos o diálogo com 'Not Now', e depois de fireAppState('background') o
+  // diálogo NÃO deve reaparecer. Sem a guarda, isBackupDue voltaria a dar true no
+  // ramo 'background' e o diálogo reapareceria (teste falha).
+  it('does NOT prompt on a non-active transition (e.g. background) even when overdue', async () => {
+    store.set(AUTO_BACKUP_STORAGE_KEY, OVERDUE);
 
-    const { queryByText } = render(<BackupRestoreScreen navigation={mockNavigation as never} />);
+    const { getByText, queryByText } = renderScreen();
+    await waitFor(() => expect(getByText('Time for your backup')).toBeTruthy());
+    fireEvent.press(getByText('Not Now'));
     await waitFor(() => expect(queryByText('Time for your backup')).toBeNull());
 
     await act(async () => {
