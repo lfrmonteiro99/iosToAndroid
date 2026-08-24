@@ -39,6 +39,38 @@ export interface RecentApp {
   launchedAt: number; // epoch ms
 }
 
+/**
+ * Normaliza o blob persistido de apps recentes (@iostoandroid/recent_apps).
+ *
+ * O blob era aceite desde que fosse um array, sem validar as ENTRADAS. Uma
+ * entrada corrompida (`null`, string, objecto sem `packageName`/`launchedAt`,
+ * array aninhado) chegava intacta aos consumidores, e a App Library — que é a
+ * última página do pager da home — faz `r.packageName` e ordena por
+ * `b.launchedAt - a.launchedAt` no render: uma entrada `null` rebentava com
+ * TypeError e o throw derrubava o launcher inteiro, mostrando o ecrã inicial do
+ * Android (#689). Como o blob é persistido, o crash repetia-se em cada arranque.
+ *
+ * Regras: só objectos com `packageName` string não-vazia e `launchedAt` numérico
+ * finito sobrevivem; o resto é descartado silenciosamente (é lixo de uma build
+ * anterior, não informação recuperável). Duplicados por packageName são
+ * colapsados na primeira ocorrência, como faz `addToRecents`.
+ */
+export function normalizeRecentApps(raw: unknown): RecentApp[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: RecentApp[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const { packageName, launchedAt } = entry as { packageName?: unknown; launchedAt?: unknown };
+    if (typeof packageName !== 'string' || packageName === '') continue;
+    if (typeof launchedAt !== 'number' || !Number.isFinite(launchedAt)) continue;
+    if (seen.has(packageName)) continue;
+    seen.add(packageName);
+    out.push({ packageName, launchedAt });
+  }
+  return out.slice(0, MAX_RECENTS);
+}
+
 // Dynamic import to avoid crashing the module on non-Android. Falls back to a
 // synchronous require when dynamic import() is unavailable (e.g. Jest's VM
 // without --experimental-vm-modules) so moduleNameMapper mocks still apply in tests.
@@ -250,15 +282,29 @@ export function AppsProvider({
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
             if (parsed.length > 0 && typeof parsed[0] === 'string') {
-              // Legacy format: migrate string[] to RecentApp[]
-              const migrated: RecentApp[] = (parsed as string[]).map((pkg, i) => ({
-                packageName: pkg,
-                launchedAt: Date.now() - i * 60000,
-              }));
+              // Legacy format: migrate string[] to RecentApp[]. Só as entradas
+              // que são de facto strings não-vazias — um array misto
+              // (legacy parcialmente reescrito) produzia `packageName:
+              // undefined` e voltava a alimentar o crash da App Library (#689).
+              const migrated: RecentApp[] = (parsed as unknown[])
+                .filter((pkg): pkg is string => typeof pkg === 'string' && pkg !== '')
+                .map((pkg, i) => ({
+                  packageName: pkg,
+                  launchedAt: Date.now() - i * 60000,
+                }));
               setRecentApps(migrated);
               AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(migrated));
             } else {
-              setRecentApps(parsed as RecentApp[]);
+              // Blob no formato actual: valida entrada a entrada. Uma entrada
+              // corrompida derrubava o launcher inteiro no render da App
+              // Library (#689).
+              const normalized = normalizeRecentApps(parsed);
+              setRecentApps(normalized);
+              if (normalized.length !== parsed.length) {
+                // Reescreve o blob saneado para que o arranque seguinte não
+                // volte a pagar a filtragem nem herde o lixo.
+                AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(normalized));
+              }
             }
           }
         } catch (e) { logger.warn('AppsStore', 'failed to parse recent apps', e); }
