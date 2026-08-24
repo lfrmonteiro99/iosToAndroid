@@ -53,6 +53,7 @@ export type RootStackParamList = {
   Wallpaper: undefined;
   Accessibility: undefined;
   AssistiveTouchSettings: undefined;
+  BackTapSettings: undefined;
   Battery: undefined;
   Privacy: undefined;
   Storage: undefined;
@@ -73,6 +74,7 @@ export type RootStackParamList = {
   TodayView: undefined;
   LauncherSettings: undefined;
   ProtectedApps: undefined;
+  PerformanceProfile: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;

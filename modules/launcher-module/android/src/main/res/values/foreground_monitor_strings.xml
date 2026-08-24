@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- #627 child issue: shown in the system Accessibility settings list so the
+         user understands what the foreground-monitor service does before enabling it. -->
+    <string name="foreground_monitor_description">Lets iosToAndroid detect which app is in the foreground and ask for Face ID / fingerprint before opening apps you marked as Protected.</string>
+</resources>
