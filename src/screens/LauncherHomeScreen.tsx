@@ -329,6 +329,10 @@ interface AppIconProps {
   /** Whether the app name renders under the icon (issue #503). #501: the dock
    * reuses AppIcon but has no name label under the icon. */
   showLabel?: boolean;
+  /** Tinted Icons (#620): hex colour to render the icon artwork as a
+   * monochrome silhouette in, or undefined/null for the normal, untinted
+   * icon. Only the icon is affected — `showLabel`'s text is untouched. */
+  iconTint?: string | null;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -352,6 +356,7 @@ const AppIcon = React.memo(function AppIcon({
   iconSize = ICON_SIZE,
   iconRadius = ICON_RADIUS,
   showLabel = true,
+  iconTint,
 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   // Label block (margin + text line) measured at the 393dp reference so the
@@ -466,7 +471,8 @@ const AppIcon = React.memo(function AppIcon({
           <Image
             testID={`app-icon-box-${app.packageName}`}
             source={{ uri: app.icon }}
-            style={[styles.appIconImage, iconBoxSize]}
+            style={[styles.appIconImage, iconBoxSize, iconTint ? { tintColor: iconTint } : null]}
+            tintColor={iconTint ?? undefined}
             resizeMode="contain"
           />
         ) : (
@@ -635,6 +641,7 @@ const FolderIcon = React.memo(function FolderIcon({
   iconSize = ICON_SIZE,
   iconRadius = ICON_RADIUS,
   showLabel = true,
+  iconTint,
 }: {
   folder: AppFolder;
   cellWidth: number;
@@ -645,6 +652,7 @@ const FolderIcon = React.memo(function FolderIcon({
   iconSize?: number;
   iconRadius?: number;
   showLabel?: boolean;
+  iconTint?: string | null;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -681,7 +689,13 @@ const FolderIcon = React.memo(function FolderIcon({
         <View style={styles.folderGrid}>
           {folderApps.map((app, i) =>
             app?.icon ? (
-              <Image key={i} source={{ uri: app.icon }} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }]} />
+              <Image
+                key={i}
+                testID={`folder-mini-icon-${folder.id}-${i}`}
+                source={{ uri: app.icon }}
+                style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }, iconTint ? { tintColor: iconTint } : null]}
+                tintColor={iconTint ?? undefined}
+              />
             ) : (
               <View key={i} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius, backgroundColor: 'rgba(255,255,255,0.3)' }]} />
             )
@@ -699,7 +713,7 @@ const FolderIcon = React.memo(function FolderIcon({
 // FolderOverlay
 // ---------------------------------------------------------------------------
 
-function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1 }: {
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1, iconTint }: {
   folder: AppFolder;
   apps: InstalledApp[];
   onClose: () => void;
@@ -707,6 +721,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
   onLongPressApp: (app: InstalledApp) => void;
   onRename: (newName: string) => void;
   textScale?: number;
+  iconTint?: string | null;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -753,6 +768,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   app={app}
                   cellWidth={70}
                   textScale={textScale}
+                  iconTint={iconTint}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -887,6 +903,11 @@ export function LauncherHomeScreen() {
     [settings.gridColumns, settings.iconSizeScale],
   );
   const appsPerPage = gridGeometry.cols * settings.gridRows;
+
+  // Tinted Icons (#620): resolved once per render, shared by every AppIcon
+  // call site below (grid, dock, folder overlay) so a single setting change
+  // stays a single source of truth instead of three copies of the ternary.
+  const iconTint = settings.iconTintEnabled ? settings.iconTintColor : undefined;
 
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
@@ -1835,6 +1856,7 @@ export function LauncherHomeScreen() {
                       showLabel={settings.showIconLabels}
                       apps={apps}
                       textScale={textScale}
+                      iconTint={iconTint}
                       onPress={handleOpenFolder}
                       onLongPress={handleFolderLongPress}
                     />
@@ -1849,6 +1871,7 @@ export function LauncherHomeScreen() {
                     iconRadius={gridGeometry.iconRadius}
                     showLabel={settings.showIconLabels}
                     textScale={textScale}
+                    iconTint={iconTint}
                     onPress={handleAppPress}
                     onLongPress={handleLongPress}
                     isJiggling={isJiggling}
@@ -1902,6 +1925,7 @@ export function LauncherHomeScreen() {
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
                 showLabel={false}
+                iconTint={iconTint}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
@@ -1925,6 +1949,7 @@ export function LauncherHomeScreen() {
           folder={openFolder}
           apps={apps}
           textScale={textScale}
+          iconTint={iconTint}
           onClose={() => setOpenFolder(null)}
           onLaunchApp={(app) => {
             setOpenFolder(null);

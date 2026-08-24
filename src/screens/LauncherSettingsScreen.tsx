@@ -36,6 +36,17 @@ import {
   REQUIRE_PASSCODE_OPTIONS,
   normalizeRequirePasscodeAfter,
 } from '../utils/passcodePolicy';
+import { AccentColors, type AccentColorKey } from '../theme/CupertinoTheme';
+
+// Tinted Icons colour swatches (issue #620): reuses the app's named accent
+// palette instead of a bespoke colour list, so «Tinted Icons» and «Display &
+// Brightness → Tint» always offer the same six options.
+const ICON_TINT_KEYS = Object.keys(AccentColors) as AccentColorKey[];
+
+/** 'blue' → 'Blue'. Mirrors DisplayBrightnessScreen's accentLabel. */
+function iconTintLabel(key: AccentColorKey) {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 /**
  * #517: os números de arranque têm de ser legíveis em runtime, e não podem
@@ -99,6 +110,7 @@ export function LauncherSettingsScreen() {
   const [showPinModal, setShowPinModal] = useState(false);
   const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
   const [showRequirePasscodePicker, setShowRequirePasscodePicker] = useState(false);
+  const [showIconTintPicker, setShowIconTintPicker] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -315,7 +327,6 @@ export function LauncherSettingsScreen() {
             </Text>
           }
           showChevron={false}
-          isLast
         />
         <View style={styles.sliderRow}>
           <CupertinoSlider
@@ -325,6 +336,34 @@ export function LauncherSettingsScreen() {
             maximumValue={ICON_SIZE_SCALE_LARGE}
           />
         </View>
+        <CupertinoListTile
+          title="Tinted Icons"
+          leading={{ name: 'color-palette', color: '#fff', backgroundColor: '#FF2D55' }}
+          showChevron={false}
+          isLast={!settings.iconTintEnabled}
+          trailing={
+            <CupertinoSwitch
+              value={settings.iconTintEnabled}
+              onValueChange={(v) => update('iconTintEnabled', v)}
+            />
+          }
+        />
+        {settings.iconTintEnabled && (
+          <CupertinoListTile
+            title="Tint Color"
+            leading={{ name: 'color-fill', color: '#fff', backgroundColor: settings.iconTintColor }}
+            isLast
+            trailing={
+              <View style={styles.tintTrailing}>
+                <View
+                  testID="icon-tint-swatch"
+                  style={[styles.tintSwatch, { backgroundColor: settings.iconTintColor }]}
+                />
+              </View>
+            }
+            onPress={() => setShowIconTintPicker(true)}
+          />
+        )}
       </CupertinoListSection>
 
       {/* ── Home Screen ────────────────────────────────────────── */}
@@ -657,6 +696,21 @@ export function LauncherSettingsScreen() {
         cancelLabel="Cancel"
       />
 
+      {/* ── Tinted Icons colour (#620) ──────────────────────────── */}
+      <CupertinoActionSheet
+        visible={showIconTintPicker}
+        onClose={() => setShowIconTintPicker(false)}
+        title="Tint Color"
+        options={ICON_TINT_KEYS.map((key) => ({
+          label: iconTintLabel(key),
+          onPress: () => {
+            update('iconTintColor', AccentColors[key].light);
+            setShowIconTintPicker(false);
+          },
+        }))}
+        cancelLabel="Cancel"
+      />
+
       {/* ── Diagnostics (#517) ─────────────────────────────────── */}
       <CupertinoListSection header="Diagnostics">
         <CupertinoListTile
@@ -740,6 +794,16 @@ const styles = StyleSheet.create({
   sliderRow: {
     paddingHorizontal: 16,
     paddingBottom: 12,
+  },
+  tintTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tintSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   gridControlRow: {
     paddingHorizontal: 16,
