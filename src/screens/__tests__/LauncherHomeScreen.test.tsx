@@ -1,7 +1,7 @@
 import React from 'react';
 import { View as RNView, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { render, fireEvent, within, waitFor } from '../../test-utils';
+import { render, fireEvent, within, waitFor, act } from '../../test-utils';
 import {
   LauncherHomeScreen,
   NonAndroidFallback,
@@ -13,6 +13,7 @@ import {
 } from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
+import { useSettings } from '../../store/SettingsStore';
 import { Shape } from '../../theme/CupertinoTheme';
 
 function flattenStyle(style: unknown): Record<string, unknown>[] {
@@ -592,6 +593,34 @@ describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
     const paginationScrollView = getByTestId('launcher-pager');
     expect(paginationScrollView.props.decelerationRate).toBe(0.998);
   });
+
+  // #493: scrollDeceleration exposes the 0.998 literal above as a setting.
+  // 'fast' maps to 0.99 — see src/utils/motionIntensity.ts:scrollDecelerationValue.
+  // Drives the update directly via useSettings() rather than seeding
+  // AsyncStorage — the async hydration path is already covered by
+  // SettingsStore.motionIntensity.test.tsx, and depending on it here made
+  // this assertion flaky under full-suite load (passed in isolation, missed
+  // its waitFor window when 44 sibling tests ran first in the same file).
+  it('sets decelerationRate to 0.99 when scrollDeceleration is "fast"', async () => {
+    mockLoadedApps();
+
+    function SetScrollDeceleration() {
+      const { update } = useSettings();
+      React.useEffect(() => { update('scrollDeceleration', 'fast'); }, [update]);
+      return null;
+    }
+
+    const { getByTestId } = render(
+      <>
+        <SetScrollDeceleration />
+        <LauncherHomeScreen />
+      </>,
+    );
+
+    await waitFor(() =>
+      expect(getByTestId('launcher-pager').props.decelerationRate).toBe(0.99),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -855,6 +884,173 @@ describe('LauncherHomeScreen — Focus page visibility (#618)', () => {
     await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
       timeout: 3000,
     });
+    root.unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Focus dock override — swap the dock per Focus mode (#619, filho de #617)
+// ---------------------------------------------------------------------------
+// `settings.focusDockOverride[focusMode]` pode substituir os pacotes do dock
+// enquanto esse modo está activo. Os testes montam o LauncherHomeScreen real,
+// com `dockApps` (dock normal) e `nonDockApps` (candidatos ao override)
+// distintos, e afirmam sobre `app-icon-box-<pkg>` dentro do testID
+// `launcher-dock` — nunca sobre a árvore inteira, porque as apps do override
+// também aparecem na grelha normal (o override só troca o dock, não a home).
+describe('LauncherHomeScreen — Focus dock override (#619)', () => {
+  function dockApp(pkg: string, name: string): AppsStore.InstalledApp {
+    return { name, packageName: pkg, icon: `file:///${pkg}.png`, isSystem: false };
+  }
+
+  const NORMAL_DOCK = [dockApp('com.phone', 'Phone'), dockApp('com.messages', 'Messages')];
+  const WORK_APPS = [dockApp('com.slack', 'Slack'), dockApp('com.gmail', 'Gmail')];
+
+  function mockDockApps(dockApps: AppsStore.InstalledApp[], nonDockApps: AppsStore.InstalledApp[]) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [...dockApps, ...nonDockApps],
+      homeApps: [],
+      dockApps,
+      nonDockApps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  function seedSettings(partial: Record<string, unknown>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      key === '@iostoandroid/settings'
+        ? Promise.resolve(JSON.stringify(partial))
+        : Promise.resolve(null),
+    );
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // As settings resolvem via AsyncStorage.getItem (uma promise); o
+  // `act(async () => { await Promise.resolve(); })` a seguir ao render força
+  // um tick de microtasks real antes do primeiro `waitFor`, evitando que a sua
+  // primeira ronda de polling corra antes de setSettings aplicar o valor
+  // seedado — sem isto, sob a carga de correr o ficheiro inteiro (~50 testes
+  // antes deste bloco), o `waitFor` chegava a esgotar o timeout apesar do
+  // estado ficar correto poucos milissegundos depois do mount (confirmado com
+  // instrumentação: o valor seedado já estava presente em ~300ms).
+  async function flushSettingsLoad() {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  it('swaps the dock icons for the active focus mode override', async () => {
+    seedSettings({ focusMode: 'work', focusDockOverride: { work: ['com.slack', 'com.gmail'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.slack')).toBeTruthy();
+      expect(within(dock).getByTestId('app-icon-box-com.gmail')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.phone')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('keeps the normal dock when the override for the active mode is an empty array', async () => {
+    // AC: "Vazio = manter dock normal".
+    seedSettings({ focusMode: 'work', focusDockOverride: { work: [] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).getByTestId('app-icon-box-com.messages')).toBeTruthy();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('restores the normal dock when focus mode is off, even with an override stored', async () => {
+    // AC: "'off' restaura dock normal" — o inverso do fix.
+    seedSettings({ focusMode: 'off', focusDockOverride: { work: ['com.slack', 'com.gmail'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.slack')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('ignores a dock override configured for a DIFFERENT mode than the active one', async () => {
+    seedSettings({ focusMode: 'sleep', focusDockOverride: { work: ['com.slack', 'com.gmail'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.slack')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('drops override package names that no longer resolve to an installed app', async () => {
+    seedSettings({ focusMode: 'work', focusDockOverride: { work: ['com.slack', 'com.uninstalled'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.slack')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.uninstalled')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('survives a corrupted focusDockOverride blob in AsyncStorage', async () => {
+    // Inválido e hostil: valor não-array e entradas que não são string.
+    seedSettings({
+      focusMode: 'work',
+      focusDockOverride: { work: 'not-an-array', sleep: [1, null, 'com.slack'] },
+    });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      // 'work' não é array -> normalizado para [] -> mantém o dock normal.
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).getByTestId('app-icon-box-com.messages')).toBeTruthy();
+    }, { timeout: 3000 });
     root.unmount();
   });
 });

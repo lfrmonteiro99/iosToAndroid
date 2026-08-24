@@ -19,6 +19,7 @@ export interface WalletPass {
 interface WalletContextValue {
   passes: WalletPass[];
   addPass: (pass: Omit<WalletPass, 'id' | 'createdAt'>) => void;
+  updatePass: (id: string, patch: Partial<Omit<WalletPass, 'id' | 'createdAt'>>) => void;
   deletePass: (id: string) => void;
   getPass: (id: string) => WalletPass | undefined;
   isReady: boolean;
@@ -62,6 +63,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
+  const updatePass = useCallback((id: string, patch: Partial<Omit<WalletPass, 'id' | 'createdAt'>>) => {
+    setPasses((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
+
   const deletePass = useCallback((id: string) => {
     setPasses((prev) => prev.filter((p) => p.id !== id));
   }, []);
@@ -69,8 +74,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const getPass = useCallback((id: string) => passes.find((p) => p.id === id), [passes]);
 
   const value = useMemo(() => ({
-    passes, addPass, deletePass, getPass, isReady,
-  }), [passes, addPass, deletePass, getPass, isReady]);
+    passes, addPass, updatePass, deletePass, getPass, isReady,
+  }), [passes, addPass, updatePass, deletePass, getPass, isReady]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

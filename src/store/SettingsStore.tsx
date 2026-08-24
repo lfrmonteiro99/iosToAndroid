@@ -25,6 +25,15 @@ import {
   normalizeFocusPageVisibility,
   type FocusPageVisibility,
 } from '../utils/focusPageVisibility';
+import {
+  type MotionIntensity,
+  type ScrollDeceleration,
+  DEFAULT_MOTION_INTENSITY,
+  DEFAULT_SCROLL_DECELERATION,
+  normalizeMotionIntensity,
+  normalizeScrollDeceleration,
+} from '../utils/motionIntensity';
+import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -105,7 +114,29 @@ export interface SettingsState {
   batteryPercentage: boolean;
   locationServices: boolean;
   wallpaperIndex: number;
+  /**
+   * §3.3 (issue #493): substituído como fonte de verdade por `motionIntensity`.
+   * Mantido apenas como campo derivado (`motionIntensity !== 'full'`), exposto
+   * em runtime pelo SettingsProvider para não quebrar os ~20 consumidores
+   * actuais de useGestureReduceMotion(). Escrever directamente aqui via
+   * `update('reduceMotion', ...)` não tem efeito — a próxima leitura do
+   * contexto sobrepõe sempre o valor derivado.
+   */
   reduceMotion: boolean;
+  /**
+   * Intensidade do movimento (§3.3, issue #493): 'full' = molas com
+   * velocidade, 'reduced' = withTiming 180ms (o que reduceMotion fazia até
+   * aqui), 'off' = salto directo sem transição. Cortar animação nunca corta
+   * háptica (§3.2 regra 4) — verificado em NotificationBanner, AssistiveTouch
+   * e CupertinoSwipeableRow.
+   */
+  motionIntensity: MotionIntensity;
+  /**
+   * Desaceleração do scroll (§3.1, issue #493): 'normal' = 0.998 (o literal
+   * já usado nas listas com paginação/inércia), 'fast' = 0.99 (mais travado).
+   * Ver src/utils/motionIntensity.ts:scrollDecelerationValue.
+   */
+  scrollDeceleration: ScrollDeceleration;
   reduceTransparency: boolean;
   /** iOS «Reduce White Point»: dims the brightest colours via a dark overlay over the root container. */
   reduceWhitePoint: boolean;
@@ -322,6 +353,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   locationServices: true,
   wallpaperIndex: 0,
   reduceMotion: false,
+  motionIntensity: DEFAULT_MOTION_INTENSITY,
+  scrollDeceleration: DEFAULT_SCROLL_DECELERATION,
   reduceTransparency: false,
   reduceWhitePoint: false,
   whitePointLevel: 1.0,
@@ -424,6 +457,12 @@ export function SettingsProvider({
             // valores não-array) faria o filtro esconder páginas ao acaso ou
             // rebentar no `.includes`, por isso normaliza-se na leitura.
             focusPageVisibility: normalizeFocusPageVisibility(parsed?.focusPageVisibility),
+            // focusDockOverride (#619, filho de #617) troca os ícones do dock
+            // por modo de Focus; um blob corrompido (não-array, entradas não
+            // string) faria o `.map`/`.slice(0, 4)` do LauncherHomeScreen
+            // render pacotes inexistentes ou rebentar — normaliza-se na
+            // leitura como os irmãos acima.
+            focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a
@@ -437,6 +476,12 @@ export function SettingsProvider({
             // render → ecrã branco. Saneia-se na leitura, à semelhança dos
             // campos acima.
             wallpaperIndex: clampWallpaperIndex(parsed?.wallpaperIndex),
+            // motionIntensity (#493) substitui reduceMotion como fonte de
+            // verdade; um blob pré-#493 só tem `reduceMotion: true|false`, por
+            // isso migra-se para 'reduced'|'full'. Um motionIntensity já
+            // presente e válido vence sempre o campo legado.
+            motionIntensity: normalizeMotionIntensity(parsed?.motionIntensity, parsed?.reduceMotion),
+            scrollDeceleration: normalizeScrollDeceleration(parsed?.scrollDeceleration),
           }));
         } catch { /* ignore */ }
       }
@@ -557,9 +602,26 @@ export function SettingsProvider({
   /** activeFocusMode: null when focus is off, otherwise the current mode string. */
   const activeFocusMode = settings.focusMode === 'off' ? null : settings.focusMode;
 
+  // reduceMotion (#493): derivado de motionIntensity a cada exposição, nunca
+  // lido directamente do state — só assim update('motionIntensity', ...)
+  // propaga instantaneamente para os consumidores legados do booleano.
+  const exposedSettings = useMemo(
+    () => ({ ...settings, reduceMotion: settings.motionIntensity !== 'full' }),
+    [settings],
+  );
+
   const value = useMemo(
-    () => ({ settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode }),
-    [settings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
+    () => ({
+      settings: exposedSettings,
+      update,
+      updateMany,
+      reset,
+      syncFromDevice,
+      isReady,
+      activeFocusMode,
+      setFocusMode,
+    }),
+    [exposedSettings, update, updateMany, reset, syncFromDevice, isReady, activeFocusMode, setFocusMode],
   );
 
   if (gateFirstRender && !firstSyncDone) return null;

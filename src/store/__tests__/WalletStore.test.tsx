@@ -96,6 +96,64 @@ describe('WalletStore', () => {
     );
   });
 
+  it('updatePass() merges partial updates into an existing pass', async () => {
+    const { result } = renderHook(() => useWallet(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.addPass({ type: 'ticket', title: 'Original', subtitle: 'Old', code: 'ORIG', color: '#000' });
+    });
+    const id = result.current.passes[0].id;
+    const createdAt = result.current.passes[0].createdAt;
+
+    await act(async () => {
+      result.current.updatePass(id, { title: 'Renamed', color: '#FF9500' });
+    });
+
+    expect(result.current.passes).toHaveLength(1);
+    const updated = result.current.passes[0];
+    expect(updated.title).toBe('Renamed');
+    expect(updated.color).toBe('#FF9500');
+    // Fields not passed to updatePass are untouched.
+    expect(updated.subtitle).toBe('Old');
+    expect(updated.code).toBe('ORIG');
+    expect(updated.id).toBe(id);
+    expect(updated.createdAt).toBe(createdAt);
+  });
+
+  it('updatePass() on a missing id is a no-op (does not throw, does not add a pass)', async () => {
+    const { result } = renderHook(() => useWallet(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      expect(() => result.current.updatePass('nope', { title: 'X' })).not.toThrow();
+    });
+    expect(result.current.passes).toHaveLength(0);
+  });
+
+  it('updatePass() only affects the targeted pass, leaving others untouched', async () => {
+    // addPass() ids are Date.now().toString() — two calls in the same
+    // millisecond would otherwise collide, so pin distinct timestamps.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(2000);
+    const { result } = renderHook(() => useWallet(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.addPass({ type: 'ticket', title: 'First', code: 'A', color: '#000' });
+    });
+    await act(async () => {
+      result.current.addPass({ type: 'other', title: 'Second', code: 'B', color: '#111' });
+    });
+    nowSpy.mockRestore();
+    const secondId = result.current.passes[1].id;
+
+    await act(async () => {
+      result.current.updatePass(secondId, { title: 'Second Renamed' });
+    });
+
+    expect(result.current.passes.map((p) => p.title)).toEqual(['First', 'Second Renamed']);
+  });
+
   it('deletePass() on a missing id is a no-op (does not throw)', async () => {
     const { result } = renderHook(() => useWallet(), { wrapper });
     await act(async () => {});
@@ -117,6 +175,71 @@ describe('WalletStore', () => {
 
     expect(result.current.getPass(id)?.title).toBe('Lookup');
     expect(result.current.getPass('missing')).toBeUndefined();
+  });
+
+  describe('updatePass', () => {
+    it('updates the given field and keeps the rest of the pass unchanged', async () => {
+      const { result } = renderHook(() => useWallet(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.addPass({
+          type: 'boarding',
+          title: 'Original',
+          subtitle: 'Flight 123',
+          code: 'ABC123',
+          color: '#007AFF',
+        });
+      });
+      const original = result.current.passes[0];
+
+      await act(async () => {
+        result.current.updatePass(original.id, { title: 'Novo' });
+      });
+
+      const updated = result.current.getPass(original.id);
+      expect(updated?.title).toBe('Novo');
+      expect(updated?.subtitle).toBe(original.subtitle);
+      expect(updated?.code).toBe(original.code);
+      expect(updated?.color).toBe(original.color);
+      expect(updated?.type).toBe(original.type);
+      expect(updated?.createdAt).toBe(original.createdAt);
+      expect(updated?.id).toBe(original.id);
+    });
+
+    it('on a missing id is a no-op (does not alter passes)', async () => {
+      const { result } = renderHook(() => useWallet(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.addPass({ type: 'ticket', title: 'Kept', code: 'X', color: '#000' });
+      });
+
+      await act(async () => {
+        expect(() => result.current.updatePass('nope', { title: 'x' })).not.toThrow();
+      });
+
+      expect(result.current.passes).toHaveLength(1);
+      expect(result.current.passes[0].title).toBe('Kept');
+    });
+
+    it('with an empty patch does not alter the pass', async () => {
+      const { result } = renderHook(() => useWallet(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.addPass({
+          type: 'loyalty', title: 'Untouched', subtitle: 'Sub', code: 'C', color: '#111',
+        });
+      });
+      const original = result.current.passes[0];
+
+      await act(async () => {
+        result.current.updatePass(original.id, {});
+      });
+
+      expect(result.current.getPass(original.id)).toEqual(original);
+    });
   });
 
   it('hydrates passes from AsyncStorage on mount', async () => {
