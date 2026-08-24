@@ -96,6 +96,64 @@ describe('WalletStore', () => {
     );
   });
 
+  it('updatePass() merges partial updates into an existing pass', async () => {
+    const { result } = renderHook(() => useWallet(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.addPass({ type: 'ticket', title: 'Original', subtitle: 'Old', code: 'ORIG', color: '#000' });
+    });
+    const id = result.current.passes[0].id;
+    const createdAt = result.current.passes[0].createdAt;
+
+    await act(async () => {
+      result.current.updatePass(id, { title: 'Renamed', color: '#FF9500' });
+    });
+
+    expect(result.current.passes).toHaveLength(1);
+    const updated = result.current.passes[0];
+    expect(updated.title).toBe('Renamed');
+    expect(updated.color).toBe('#FF9500');
+    // Fields not passed to updatePass are untouched.
+    expect(updated.subtitle).toBe('Old');
+    expect(updated.code).toBe('ORIG');
+    expect(updated.id).toBe(id);
+    expect(updated.createdAt).toBe(createdAt);
+  });
+
+  it('updatePass() on a missing id is a no-op (does not throw, does not add a pass)', async () => {
+    const { result } = renderHook(() => useWallet(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      expect(() => result.current.updatePass('nope', { title: 'X' })).not.toThrow();
+    });
+    expect(result.current.passes).toHaveLength(0);
+  });
+
+  it('updatePass() only affects the targeted pass, leaving others untouched', async () => {
+    // addPass() ids are Date.now().toString() — two calls in the same
+    // millisecond would otherwise collide, so pin distinct timestamps.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(2000);
+    const { result } = renderHook(() => useWallet(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.addPass({ type: 'ticket', title: 'First', code: 'A', color: '#000' });
+    });
+    await act(async () => {
+      result.current.addPass({ type: 'other', title: 'Second', code: 'B', color: '#111' });
+    });
+    nowSpy.mockRestore();
+    const secondId = result.current.passes[1].id;
+
+    await act(async () => {
+      result.current.updatePass(secondId, { title: 'Second Renamed' });
+    });
+
+    expect(result.current.passes.map((p) => p.title)).toEqual(['First', 'Second Renamed']);
+  });
+
   it('deletePass() on a missing id is a no-op (does not throw)', async () => {
     const { result } = renderHook(() => useWallet(), { wrapper });
     await act(async () => {});
