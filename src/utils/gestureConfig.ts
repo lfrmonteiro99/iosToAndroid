@@ -118,10 +118,12 @@ export function springForAppLaunchDuration(
 }
 
 export function dpPerMsToPtPerSec(v: number): number {
+  'worklet';
   return v * 1000;
 }
 
 export function ptPerSecToDpPerMs(v: number): number {
+  'worklet';
   return v / 1000;
 }
 
