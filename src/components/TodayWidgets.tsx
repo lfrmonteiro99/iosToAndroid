@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GlassSurface } from './GlassSurface';
+import { WidgetCard } from './WidgetCard';
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
@@ -80,39 +80,6 @@ export function useWidgetConfig() {
 }
 
 // ---------------------------------------------------------------------------
-// Widget base card
-// ---------------------------------------------------------------------------
-
-interface WidgetCardProps {
-  children: React.ReactNode;
-  style?: object;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-}
-
-function WidgetCard({ children, style, onPress, accessibilityLabel }: WidgetCardProps) {
-  if (onPress) {
-    return (
-      <Pressable
-        style={({ pressed }) => [styles.widgetCard, style, pressed && { opacity: 0.7 }]}
-        onPress={onPress}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole="button"
-      >
-        <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={styles.widgetContent}>{children}</View>
-      </Pressable>
-    );
-  }
-  return (
-    <View style={[styles.widgetCard, style]}>
-      <GlassSurface intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.widgetContent}>{children}</View>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Progress bar (minimal, no external dep)
 // ---------------------------------------------------------------------------
 
@@ -137,7 +104,7 @@ export function BatteryWidget({ level, isCharging, onPress }: { level: number; i
   const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
 
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}>
+    <WidgetCard testID="widget-card-battery" onPress={onPress} accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={28} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Battery</Text>
@@ -171,7 +138,7 @@ export function StorageWidget({
   const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : theme.colors.accent;
 
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
+    <WidgetCard testID="widget-card-storage" onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
       <View style={styles.widgetRow}>
         <Ionicons name="server-outline" size={22} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Storage</Text>
@@ -197,7 +164,7 @@ export function WeatherWidget({ temp, condition, icon, city }: { temp: number; c
 
   if (isUnavailable) {
     return (
-      <WidgetCard>
+      <WidgetCard testID="widget-card-weather">
         <View style={styles.widgetRow}>
           <Ionicons name="cloud-offline-outline" size={22} color="rgba(255,255,255,0.4)" />
           <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
@@ -210,7 +177,7 @@ export function WeatherWidget({ temp, condition, icon, city }: { temp: number; c
   }
 
   return (
-    <WidgetCard>
+    <WidgetCard testID="widget-card-weather">
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color="#FFD60A" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
@@ -248,7 +215,7 @@ function formatEventTime(ts: number, allDay: boolean): string {
 export function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
   const { textScale } = useTheme();
   return (
-    <WidgetCard>
+    <WidgetCard testID="widget-card-upNext">
       <View style={styles.widgetRow}>
         <Ionicons name="calendar-outline" size={22} color="#FF9F0A" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Up Next</Text>
@@ -280,7 +247,7 @@ export function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
 export function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; onPress?: () => void }) {
   const { textScale } = useTheme();
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={`Messages: ${unreadCount > 0 ? `${unreadCount} unread` : 'No unread messages'}`}>
+    <WidgetCard testID="widget-card-messages" onPress={onPress} accessibilityLabel={`Messages: ${unreadCount > 0 ? `${unreadCount} unread` : 'No unread messages'}`}>
       <View style={styles.widgetRow}>
         <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Messages</Text>
@@ -325,7 +292,7 @@ export function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
   }, []);
 
   return (
-    <WidgetCard onPress={onPress} accessibilityLabel={totalMinutes !== null ? `Screen Time: ${formatScreenTime(totalMinutes)} today` : 'Screen Time'}>
+    <WidgetCard testID="widget-card-screenTime" onPress={onPress} accessibilityLabel={totalMinutes !== null ? `Screen Time: ${formatScreenTime(totalMinutes)} today` : 'Screen Time'}>
       <View style={styles.widgetRow}>
         <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
@@ -425,16 +392,8 @@ export function useWidgetMap(): Record<WidgetType, React.ReactNode> {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  // Widget card
-  widgetCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 14,
-    backgroundColor: 'rgba(30,30,35,0.6)',
-  },
-  widgetContent: {
-    padding: 16,
-  },
+  // Widget card chrome (radius/padding/glass) lives in the shared
+  // components/WidgetCard; these widget styles only cover internals.
 
   // Widget internals
   widgetRow: {

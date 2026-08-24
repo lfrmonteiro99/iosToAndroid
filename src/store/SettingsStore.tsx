@@ -35,6 +35,17 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import { normalizeContextRules, type ContextRule } from '../utils/contextTriggerEngine';
+import {
+  type BackTapConfig,
+  DEFAULT_BACK_TAP,
+  normalizeBackTap,
+} from '../utils/backTap';
+import {
+  normalizeAllowList,
+  normalizePerAppDelivery,
+  type PerAppDelivery,
+} from '../utils/notificationAppRules';
 import {
   normalizePerformanceProfile,
   type PerformanceProfile,
@@ -93,6 +104,15 @@ export interface SettingsState {
    * `focusScheduleEnabled` está true. Default '17:00'.
    */
   focusScheduleEnd: string;
+  /**
+   * Context Engine (#628, filho do épico de Perfis Contextuais): regras de
+   * contexto compostas (Wi-Fi/Bluetooth/localização/hora com AND/OR) que
+   * ativam um FocusMode automaticamente. Aditivo ao Focus Schedule acima —
+   * os dois mecanismos coexistem, cada um dono da sua própria lógica de
+   * ativação/desativação (ver useContextEngine.ts vs useFocusSchedule.ts).
+   * Default `[]` — sem regras, a engine nunca actua.
+   */
+  contextRules: ContextRule[];
   screenTimeEnabled: boolean;
   dailyLimit: number;
   downtime: boolean;
@@ -166,6 +186,26 @@ export interface SettingsState {
   automaticUpdates: boolean;
   updateAvailable: boolean;
   scheduledSummaryIdx: number;
+  /**
+   * iOS «Notifications -> Allow in Focus» por app (issue #630): apps nesta
+   * lista notificam sempre de imediato, mesmo com um modo de Focus activo.
+   * Lista de package names; vazia = nenhuma app prioritária.
+   */
+  allowListImmediate: string[];
+  /**
+   * Política de entrega por app (issue #630): packageName -> 'immediate' |
+   * 'scheduled' | 'digest' | 'blocked'. Ausência de uma app = 'immediate'.
+   * 'scheduled'/'digest' embalam para o Scheduled Summary; 'blocked' nunca
+   * entrega.
+   */
+  perAppDelivery: PerAppDelivery;
+  /**
+   * iOS «Reduce Interruptions» (issue #630): quando true, embala para o
+   * Scheduled Summary todas as notificações que NÃO estejam na allow-list
+   * imediata — equivalente a dar a todas as apps a política 'scheduled',
+   * excepto as que estão na allow-list.
+   */
+  reduceInterruptions: boolean;
   fontChoice: 'inter' | 'system';
   /**
    * Whether the squircle mask (#480) is applied to app icons before caching.
@@ -324,6 +364,14 @@ export interface SettingsState {
    * Chaveado por `device.address` (estável), nunca pelo nome exibido.
    */
   bluetoothDeviceTypes: Record<string, 'speaker' | 'headphones' | 'car' | 'other'>;
+  /**
+   * Back Tap (#625): associa double/triple tap a uma acção (flash, toggleWifi,
+   * openApp, shortcut, screenshot). O detector físico de toques nas costas do
+   * dispositivo é um detalhe de UI nativa; aqui vive o mapeamento persistido,
+   * normalizado na leitura para que um blob corrompido (acção desconhecida,
+   * openApp sem packageName) não dispare um intent partido.
+   */
+  backTap: BackTapConfig;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -352,6 +400,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   focusDockOverride: {},
   focusScheduleStart: '09:00',
   focusScheduleEnd: '17:00',
+  contextRules: [],
   screenTimeEnabled: false,
   dailyLimit: 60,
   downtime: false,
@@ -392,6 +441,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   automaticUpdates: true,
   updateAvailable: false,
   scheduledSummaryIdx: 0,
+  allowListImmediate: [],
+  perAppDelivery: {},
+  reduceInterruptions: false,
   fontChoice: 'inter',
   iconTreatment: 'mask-adaptive-only',
   pressFeedback: 'scale-opacity',
@@ -420,6 +472,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkModeLightUntil: '07:00',
   darkModeDarkUntil: '19:00',
   bluetoothDeviceTypes: {},
+  backTap: DEFAULT_BACK_TAP,
   performanceProfile: 'normal',
 };
 
@@ -491,6 +544,12 @@ export function SettingsProvider({
             // render pacotes inexistentes ou rebentar — normaliza-se na
             // leitura como os irmãos acima.
             focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
+            // contextRules (#628): blob de regras compostas vindo do AsyncStorage
+            // não é confiável — uma regra malformada (targetMode inválido,
+            // condições sem forma reconhecível) faria pickActiveRule devolver
+            // um destino inventado ou o `.includes`/`.every` das condições
+            // rebentar. Normaliza-se na leitura como os irmãos acima.
+            contextRules: normalizeContextRules(parsed?.contextRules),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a
@@ -498,6 +557,11 @@ export function SettingsProvider({
             // launcher inteiro (#688). Normaliza-se na leitura como os irmãos
             // acima.
             categoryOverrides: normalizeCategoryOverrides(parsed?.categoryOverrides),
+            // backTap (#625) é lido do mesmo blob não confiável do AsyncStorage;
+            // um mapeamento corrompido (acção desconhecida, openApp sem
+            // packageName, enabled não-booleano) rebentaria o detector de
+            // gestos ou dispararia um intent partido — normaliza-se na leitura.
+            backTap: normalizeBackTap(parsed?.backTap),
             // wallpaperIndex (#674) indexa WALLPAPERS no render da home; um
             // valor corrompido (string, NaN, fora de gama) daria
             // WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no
@@ -520,6 +584,14 @@ export function SettingsProvider({
             // presente e válido vence sempre o campo legado.
             motionIntensity: normalizeMotionIntensity(parsed?.motionIntensity, parsed?.reduceMotion),
             scrollDeceleration: normalizeScrollDeceleration(parsed?.scrollDeceleration),
+            // allowListImmediate / perAppDelivery (#630) vêm do mesmo blob não
+            // confiável do AsyncStorage. Uniões/corrupção (valores não-array,
+            // chaves vazias, políticas desconhecidas) fariam routeNotification
+            // ler configurações inválidas e entregar/bloquear apps erradas, por
+            // isso normalizam-se na leitura como o resto dos campos acima.
+            allowListImmediate: normalizeAllowList(parsed?.allowListImmediate),
+            perAppDelivery: normalizePerAppDelivery(parsed?.perAppDelivery),
+            reduceInterruptions: Boolean(parsed?.reduceInterruptions),
           }));
         } catch { /* ignore */ }
       }

@@ -27,6 +27,7 @@ import { GestureHaptics } from '../utils/gestureHaptics';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
+import { Shape } from '../theme/CupertinoTheme';
 import {
   ALL_WIDGET_TYPES,
   WIDGET_LABELS,
@@ -35,6 +36,21 @@ import {
   useWidgetMap,
   type WidgetType,
 } from '../components/TodayWidgets';
+
+// iOS-style Today View grid: 2 columns. 'small' widgets take one column
+// (side-by-side pairs); 'medium'/'large' widgets span both columns, with
+// 'large' getting extra vertical room for denser content (e.g. event lists).
+// Mirrors the Home screen widget area sizing (#654/#655).
+type WidgetSize = 'small' | 'medium' | 'large';
+
+const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
+  battery: 'small',
+  storage: 'small',
+  weather: 'medium',
+  upNext: 'large',
+  messages: 'small',
+  screenTime: 'small',
+};
 
 // ---------------------------------------------------------------------------
 // Date formatting
@@ -295,7 +311,7 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
             {/* Date header */}
             <Text style={[styles.dateText, { fontSize: 28 * textScale }]}>{today}</Text>
 
-            {/* Widgets — rendered in configured order */}
+            {/* Widgets — 2-column grid; small widgets pair up, medium/large span full width */}
             {editMode ? (
               <EditWidgetsPanel
                 enabled={enabled}
@@ -303,7 +319,23 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
               />
             ) : (
               <>
-                {loaded && enabled.map((type) => widgetMap[type])}
+                {loaded && (
+                  <View style={styles.widgetGrid}>
+                    {enabled.map((type) => (
+                      <View
+                        key={type}
+                        testID={`widget-cell-${type}`}
+                        style={[
+                          styles.widgetCell,
+                          WIDGET_SIZES[type] === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
+                          WIDGET_SIZES[type] === 'large' && styles.widgetCellLarge,
+                        ]}
+                      >
+                        {widgetMap[type]}
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 {/* Edit button */}
                 <Pressable
@@ -348,6 +380,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.5,
     marginBottom: 20,
+  },
+
+  // 2-column widget grid
+  widgetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  widgetCell: {
+    marginBottom: 14,
+  },
+  // 'small' = one column (~half width, pairs up); 'medium'/'large' = full width
+  widgetCellSmall: {
+    width: '48%',
+  },
+  widgetCellFull: {
+    width: '100%',
+  },
+  widgetCellLarge: {
+    minHeight: 220,
   },
 
   // Edit button (bottom of widget list)
