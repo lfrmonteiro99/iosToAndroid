@@ -19,7 +19,7 @@ export interface WalletPass {
 interface WalletContextValue {
   passes: WalletPass[];
   addPass: (pass: Omit<WalletPass, 'id' | 'createdAt'>) => void;
-  updatePass: (id: string, updates: Partial<Omit<WalletPass, 'id' | 'createdAt'>>) => void;
+  updatePass: (id: string, patch: Partial<Omit<WalletPass, 'id' | 'createdAt'>>) => void;
   deletePass: (id: string) => void;
   getPass: (id: string) => WalletPass | undefined;
   isReady: boolean;
@@ -63,8 +63,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
-  const updatePass = useCallback((id: string, updates: Partial<Omit<WalletPass, 'id' | 'createdAt'>>) => {
-    setPasses((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  const updatePass = useCallback((id: string, patch: Partial<Omit<WalletPass, 'id' | 'createdAt'>>) => {
+    setPasses((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   }, []);
 
   const deletePass = useCallback((id: string) => {
