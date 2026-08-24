@@ -198,9 +198,18 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem('@iostoandroid/onboarding_done').then(val => {
-      setShowOnboarding(val !== 'true');
-    });
+    AsyncStorage.getItem('@iostoandroid/onboarding_done')
+      .then(val => {
+        setShowOnboarding(val !== 'true');
+      })
+      .catch(() => {
+        // Leitura falhou (BD corrompido, erro de permissão, escrita concorrente
+        // no arranque). Sem este .catch, showOnboarding ficaria null para sempre
+        // e AppContent devolveria null em App.tsx:296 — ecrã em branco que
+        // bloqueia o launcher E a App Library. Em caso de erro, mostramos o
+        // launcher (first-run/returning user continuam inalterados).
+        setShowOnboarding(false);
+      });
   }, []);
 
   useEffect(() => {
