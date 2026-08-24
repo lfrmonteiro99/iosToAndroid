@@ -33,7 +33,7 @@ interface PassEditScreenProps {
 }
 
 export function PassEditScreen({ navigation, route }: PassEditScreenProps) {
-  const { passId } = route.params ?? {};
+  const { passId, prefillCode } = route.params ?? {};
   const isEditMode = Boolean(passId);
 
   const { theme, typography, spacing } = useTheme();
@@ -45,10 +45,14 @@ export function PassEditScreen({ navigation, route }: PassEditScreenProps) {
 
   const [title, setTitle] = useState(existing?.title ?? '');
   const [subtitle, setSubtitle] = useState(existing?.subtitle ?? '');
-  const [code, setCode] = useState(existing?.code ?? '');
-  const [typeIndex, setTypeIndex] = useState(
-    existing ? Math.max(0, PASS_TYPE_VALUES.indexOf(existing.type)) : 0,
-  );
+  // A scanned code (PassScanScreen) only pre-fills the field — the user still
+  // has to review/edit the title and tap Done before anything is persisted.
+  const [code, setCode] = useState(existing?.code ?? prefillCode ?? '');
+  const [typeIndex, setTypeIndex] = useState(() => {
+    if (existing) return Math.max(0, PASS_TYPE_VALUES.indexOf(existing.type));
+    if (prefillCode) return Math.max(0, PASS_TYPE_VALUES.indexOf('other'));
+    return 0;
+  });
   const [color, setColor] = useState(existing?.color ?? PASS_COLORS[0]);
 
   const type = PASS_TYPE_VALUES[typeIndex];

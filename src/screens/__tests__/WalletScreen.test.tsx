@@ -10,9 +10,10 @@ import type { AppNavigationProp } from '../../navigation/types';
 //
 // Issue #281 replaced the issue-#280 inline add-sheet flow with navigation to
 // a dedicated PassEditScreen for creating passes. Issue #746 added
-// PassDetailScreen (view/delete) reached by tapping an existing row. WalletScreen
-// now requires a `navigation` prop and only dispatches navigate() calls; it owns
-// no form state of its own.
+// PassDetailScreen (view/delete) reached by tapping an existing row. Issue
+// #284 added a "Scan" nav-bar action that opens PassScanScreen. WalletScreen
+// now requires a `navigation` prop and only dispatches navigate() calls; it
+// owns no form state of its own.
 
 function makeNavigation() {
   return {
@@ -42,6 +43,16 @@ describe('WalletScreen', () => {
 
     expect(navigation.navigate).toHaveBeenCalledTimes(1);
     expect(navigation.navigate).toHaveBeenCalledWith('PassEdit', {});
+  });
+
+  it('navigates to PassScan when the "Scan" nav-bar action is tapped', async () => {
+    const navigation = makeNavigation();
+    const { getByLabelText, getByText } = render(<WalletScreen navigation={navigation} />);
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Scan pass'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PassScan');
   });
 
   it('navigates to PassEdit from the empty-state "Add Pass" action too', async () => {
