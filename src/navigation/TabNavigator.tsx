@@ -69,6 +69,7 @@ import { FindMyLocationHistoryScreen } from '../screens/FindMyLocationHistoryScr
 import { RemindersScreen } from '../screens/RemindersScreen';
 import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
+import { WalletScreen } from '../screens/WalletScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -115,6 +116,7 @@ export function TabNavigator() {
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
+      <Stack.Screen name="Wallet" component={WalletScreen} options={{ animation }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />
