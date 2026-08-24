@@ -42,4 +42,6 @@ export type { LaunchBounds } from './AppLaunchOverlay';
 export { GlassSurface } from './GlassSurface';
 export { SiriWaveform } from './SiriWaveform';
 export type { SiriWaveformProps } from './SiriWaveform';
+export { CupertinoContextMenu } from './CupertinoContextMenu';
+export type { ContextMenuItem, CupertinoContextMenuProps } from './CupertinoContextMenu';
 export type { GlassSurfaceProps } from './GlassSurface';
