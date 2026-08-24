@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- #627 child issue: the Protected-Apps guard activity must be invisible —
-         only the biometric sheet it hosts is meant to be seen. -->
-    <style name="Theme.TransparentGuard" parent="android:Theme.Material.NoDisplay">
+    <!-- #627 child issue (retrabalho PR #805): a guard activity precisa de ser
+         invisível — só o BiometricPrompt que hospeda é que se vê — mas NÃO pode
+         usar um parent *.NoDisplay: esse tema obriga a Activity a chamar
+         finish()/startActivity() antes do fim de onResume(), e o
+         BiometricPrompt só anexa um DialogFragment (não faz nenhum dos dois),
+         pelo que a Activity crashava antes do prompt aparecer. Um tema
+         translúcido normal (com janela real, só sem conteúdo visível) evita o
+         crash e continua invisível. -->
+    <style name="Theme.TransparentGuard" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
     </style>
 </resources>
