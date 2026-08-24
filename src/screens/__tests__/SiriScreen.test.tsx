@@ -1,5 +1,4 @@
 import React from 'react';
-<<<<<<< Updated upstream
 import { render, fireEvent, waitFor, act } from '../../test-utils';
 import { SiriScreen } from '../SiriScreen';
 import type { AppNavigationProp } from '../../navigation/types';
@@ -33,21 +32,6 @@ const mockCreateQuickAlarm = jest.fn<Promise<Alarm>, [number, number, string?]>(
 jest.mock('../../utils/alarmScheduling', () => ({
   createQuickAlarm: (...args: [number, number, string?]) => mockCreateQuickAlarm(...args),
 }));
-=======
-import { render, fireEvent, waitFor } from '../../test-utils';
-import * as Speech from 'expo-speech';
-import * as LauncherModuleNS from '../../../modules/launcher-module/src';
-import { SiriScreen } from '../SiriScreen';
-import type { AppNavigationProp } from '../navigation/types';
->>>>>>> Stashed changes
-
-const navMock = { navigate: jest.fn(), goBack: jest.fn() } as unknown as AppNavigationProp;
-
-// expo-speech is native; mock it so we can assert the assistant speaks.
-jest.mock('expo-speech', () => ({
-  speak: jest.fn(),
-  stop: jest.fn(),
-}));
 
 // Speech listeners are captured so the test can simulate a recognized
 // utterance coming back from the native SpeechRecognizer.
@@ -73,7 +57,12 @@ jest.mock('../../../modules/launcher-module/src', () => {
   };
 });
 
-<<<<<<< Updated upstream
+const mockLaunchApp = (
+  jest.requireMock('../../../modules/launcher-module/src').default.launchApp as jest.Mock
+);
+
+const launcher = jest.requireMock('../../../modules/launcher-module/src');
+
 /** The clock time the assistant speaks for a given hour/minute in this locale. */
 function spokenTime(hour: number, minute: number): string {
   const d = new Date();
@@ -98,22 +87,17 @@ beforeEach(() => {
   (Speech.speak as jest.Mock).mockClear();
   (Speech.stop as jest.Mock).mockClear();
   mockCreateQuickAlarm.mockClear();
-=======
-beforeEach(() => {
-  jest.clearAllMocks();
-  (Speech.speak as jest.Mock).mockClear();
->>>>>>> Stashed changes
 });
 
 describe('SiriScreen', () => {
   it('renders the greeting', () => {
-    const { getByText } = render(<SiriScreen navigation={navMock} />);
+    const { getByText } = render(<SiriScreen navigation={makeNav()} />);
     expect(getByText('What can I help you with?')).toBeTruthy();
   });
 
   it('text "what time is it" responds and speaks', async () => {
     const { getByText, getByPlaceholderText } = render(
-      <SiriScreen navigation={navMock} />,
+      <SiriScreen navigation={makeNav()} />,
     );
     const input = getByPlaceholderText('Type a request');
     fireEvent.changeText(input, 'what time is it');
@@ -126,7 +110,7 @@ describe('SiriScreen', () => {
   });
 
   it('spoken command (native result) routes through the same parser', async () => {
-    const { getByText } = render(<SiriScreen navigation={navMock} />);
+    const { getByText } = render(<SiriScreen navigation={makeNav()} />);
 
     // Simulate the native SpeechRecognizer returning "what time is it".
     listeners.onSpeechResult('what time is it');
@@ -139,26 +123,31 @@ describe('SiriScreen', () => {
 
   it('hold-to-talk starts native recognition and shows listening state', async () => {
     const { getByLabelText, getByText } = render(
-      <SiriScreen navigation={navMock} />,
+      <SiriScreen navigation={makeNav()} />,
     );
     const mic = getByLabelText('Hold to talk');
     fireEvent(mic, 'pressIn');
 
     await waitFor(() =>
-      expect(LauncherModuleNS.default.startSpeechRecognition).toHaveBeenCalled(),
+      expect(launcher.default.startSpeechRecognition).toHaveBeenCalled(),
     );
     expect(getByText('Listening…')).toBeTruthy();
   });
 
   it('unrecognized command speaks the not-supported reply', async () => {
     const { getByText, getByPlaceholderText } = render(
-      <SiriScreen navigation={navMock} />,
+      <SiriScreen navigation={makeNav()} />,
     );
     const input = getByPlaceholderText('Type a request');
     fireEvent.changeText(input, 'make me a sandwich');
     fireEvent(input, 'submitEditing');
 
-<<<<<<< Updated upstream
+    await waitFor(() => {
+      expect(getByText(/not supported yet|didn't catch/i)).toBeTruthy();
+    });
+    expect(Speech.speak).toHaveBeenCalled();
+  });
+
   it('does not navigate to Conversation for an unknown message recipient', () => {
     const { getByText, nav } = submit('Send a message to Nobody');
     expect(getByText(/Couldn't find/i)).toBeTruthy();
@@ -281,10 +270,6 @@ describe('SiriScreen', () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
     expect(() => submit('Open Calculator')).not.toThrow();
     expect(mockLaunchApp).toHaveBeenCalledWith('com.iostoandroid.calculator');
-=======
-    await waitFor(() => expect(getByText("That's not supported yet.")).toBeTruthy());
-    expect(Speech.speak).toHaveBeenCalledWith("That's not supported yet.", expect.any(Object));
->>>>>>> Stashed changes
   });
 
   // ── Speech (issue #256) ──────────────────────────────────────────────────

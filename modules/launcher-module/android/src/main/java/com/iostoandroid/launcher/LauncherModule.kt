@@ -99,12 +99,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-<<<<<<< Updated upstream
         Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError")
-=======
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed",
-            "onSpeechResult", "onSpeechPartial", "onSpeechError")
->>>>>>> Stashed changes
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -314,7 +309,6 @@ class LauncherModule : Module() {
             true
         }
 
-<<<<<<< Updated upstream
         // ── Performance (§7, #517) ───────────────────────────────────────
 
         /**
@@ -335,7 +329,6 @@ class LauncherModule : Module() {
             }
         }
 
-=======
         // ── Speech recognition (mic → text), native Android SpeechRecognizer ──
         // The Siri screen uses this as the voice-input half of its assistant;
         // the text-to-speech (voice output) half is handled in JS via expo-speech.
@@ -390,8 +383,6 @@ class LauncherModule : Module() {
             true
         }
 
-
->>>>>>> Stashed changes
         // ── Wi-Fi ────────────────────────────────────────────────────────
 
         AsyncFunction("getWifiInfo") {
