@@ -171,7 +171,11 @@ describe('Issue #494: Android Ripple Removal', () => {
     });
 
     it('TodayViewScreen widget card should have opacity feedback', () => {
-      const filePath = path.join(__dirname, '../screens/TodayViewScreen.tsx');
+      // #654 moved the widget card (WidgetCard/BatteryWidget/etc.) out of
+      // TodayViewScreen.tsx into components/TodayWidgets.tsx so LauncherHomeScreen
+      // can render the exact same widgets — the pressed-state feedback itself
+      // didn't move screens, just files.
+      const filePath = path.join(__dirname, '../components/TodayWidgets.tsx');
       const content = fs.readFileSync(filePath, 'utf8');
 
       // Widget card pressable should have style feedback

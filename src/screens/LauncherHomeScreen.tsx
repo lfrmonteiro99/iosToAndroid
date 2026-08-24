@@ -49,6 +49,8 @@ import {
   NotificationBanner,
   GlassSurface,
   useAlert,
+  useWidgetConfig,
+  useWidgetMap,
 } from '../components';
 import type { BannerNotification } from '../components';
 import type { RootStackParamList } from '../navigation/types';
@@ -104,6 +106,10 @@ const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each s
 export const DOCK_VERTICAL_PADDING = 18;
 // §2: "Dock: inset lateral" = 10.
 export const DOCK_HORIZONTAL_INSET = 10;
+// Home screen widget stack (#654): two cards per row, same 16px side padding
+// convention as the dock above, with a 12px gap between the pair.
+const HOME_WIDGET_GAP = 12;
+export const HOME_WIDGET_ITEM_WIDTH = (SCREEN_WIDTH - 32 - HOME_WIDGET_GAP) / 2;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -887,6 +893,13 @@ export function LauncherHomeScreen() {
   const { theme: launcherTheme, isDark, textScale } = useTheme();
   const colors = launcherTheme.colors;
   const alert = useAlert();
+
+  // Home screen widgets (#654): top of the first page, iOS-style — the same
+  // widgetMap/config the Today View sheet reads/writes, so a widget looks and
+  // behaves identically whether it's reached by swiping right into Today View
+  // or seen directly on the home page.
+  const { enabled: homeWidgetsEnabled, loaded: homeWidgetsLoaded } = useWidgetConfig();
+  const homeWidgetMap = useWidgetMap();
 
   // Tap to Wake (#608): the HOME-press effect below is registered with deps
   // [openFolder, currentPage] (it must not re-subscribe on every render), so
@@ -1819,6 +1832,15 @@ export function LauncherHomeScreen() {
             key={pageIndex}
             style={[styles.page, { paddingHorizontal: gridGeometry.horizontalPadding }, pageIndex === 0 ? firstPageOverscrollStyle : null]}
           >
+            {pageIndex === 0 && homeWidgetsLoaded && homeWidgetsEnabled.length > 0 && (
+              <View testID="launcher-home-widgets" style={styles.homeWidgetRow}>
+                {homeWidgetsEnabled.map((type) => (
+                  <View key={type} testID={`launcher-home-widget-${type}`} style={styles.homeWidgetItem}>
+                    {homeWidgetMap[type]}
+                  </View>
+                ))}
+              </View>
+            )}
             <View
               testID={`launcher-page-grid-${pageIndex}`}
               style={styles.pageGrid}
@@ -2118,6 +2140,17 @@ const styles = StyleSheet.create({
   pageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+
+  // Home screen widgets (#654)
+  homeWidgetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: HOME_WIDGET_GAP,
+    marginBottom: 16,
+  },
+  homeWidgetItem: {
+    width: HOME_WIDGET_ITEM_WIDTH,
   },
 
   // App icons
