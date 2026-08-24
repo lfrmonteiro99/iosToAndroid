@@ -35,6 +35,7 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import { normalizeContextRules, type ContextRule } from '../utils/contextTriggerEngine';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -89,6 +90,15 @@ export interface SettingsState {
    * `focusScheduleEnabled` está true. Default '17:00'.
    */
   focusScheduleEnd: string;
+  /**
+   * Context Engine (#628, filho do épico de Perfis Contextuais): regras de
+   * contexto compostas (Wi-Fi/Bluetooth/localização/hora com AND/OR) que
+   * ativam um FocusMode automaticamente. Aditivo ao Focus Schedule acima —
+   * os dois mecanismos coexistem, cada um dono da sua própria lógica de
+   * ativação/desativação (ver useContextEngine.ts vs useFocusSchedule.ts).
+   * Default `[]` — sem regras, a engine nunca actua.
+   */
+  contextRules: ContextRule[];
   screenTimeEnabled: boolean;
   dailyLimit: number;
   downtime: boolean;
@@ -341,6 +351,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   focusDockOverride: {},
   focusScheduleStart: '09:00',
   focusScheduleEnd: '17:00',
+  contextRules: [],
   screenTimeEnabled: false,
   dailyLimit: 60,
   downtime: false,
@@ -479,6 +490,12 @@ export function SettingsProvider({
             // render pacotes inexistentes ou rebentar — normaliza-se na
             // leitura como os irmãos acima.
             focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
+            // contextRules (#628): blob de regras compostas vindo do AsyncStorage
+            // não é confiável — uma regra malformada (targetMode inválido,
+            // condições sem forma reconhecível) faria pickActiveRule devolver
+            // um destino inventado ou o `.includes`/`.every` das condições
+            // rebentar. Normaliza-se na leitura como os irmãos acima.
+            contextRules: normalizeContextRules(parsed?.contextRules),
             // categoryOverrides (#516) é lido do mesmo blob não confiável do
             // AsyncStorage. Um valor nulo/parcial/corrompido rebentaria
             // buildCategorySections (new Set(overrides.hidden)) e, como a

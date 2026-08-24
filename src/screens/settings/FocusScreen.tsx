@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import { useApps } from '../../store/AppsStore';
 import { useFolders } from '../../store/FoldersStore';
+import { useDevice } from '../../store/DeviceStore';
+import { useLocation } from '../../store/LocationStore';
 import { computeLauncherGridGeometry } from '../../utils/launcherGridGeometry';
 import {
   hiddenPageIndicesForMode,
@@ -13,6 +15,7 @@ import {
   homePageCount,
 } from '../../utils/focusPageVisibility';
 import { dockOverrideForMode, toggleDockOverrideApp } from '../../utils/focusDockOverride';
+import type { ContextRule, ContextCondition, ContextTargetMode } from '../../utils/contextTriggerEngine';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -43,6 +46,22 @@ const FOCUS_MODES: FocusModeOption[] = [
 
 /** Ícones virtuais que o launcher injecta sempre na grelha (ver LauncherHomeScreen.gridItems). */
 const BUILT_IN_APP_COUNT = Object.keys(BUILT_IN_APPS).length;
+
+/**
+ * Context Engine (#628) — raio por omissão (metros) para uma regra de
+ * localização criada a partir da posição actual. iOS usa raios variáveis por
+ * geofence; sem uma UI de mapa nesta primeira versão, um raio fixo razoável
+ * (equivalente a "estou neste edifício/quarteirão") evita pedir ao
+ * utilizador um número que não tem como calibrar visualmente.
+ */
+const LOCATION_TRIGGER_RADIUS_METERS = 150;
+
+function makeContextRuleId(): string {
+  return `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Passo actual do assistente "Add Automation" (#628). null = fechado. */
+type AddRuleStep = 'type' | 'wifiValue' | 'bluetoothValue' | 'mode' | null;
 
 /** Gera as opções de hora 'HH:MM' de 30 em 30 min (00:00 … 23:30). */
 function buildHalfHourOptions(): string[] {
@@ -165,6 +184,136 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
       alert('Focus Mode Disabled', 'Focus mode disabled. Notifications restored.');
     }
   }, [settings.focusMode, update, alert]);
+
+  // ── Automation / Context Engine (#628) ────────────────────────────────────
+  //
+  // Assistente "Add Automation": Wi-Fi/Bluetooth/Location → Focus mode. Cada
+  // regra criada por este assistente tem sempre uma única condição
+  // (combinator 'AND' trivial) — a engine (contextTriggerEngine.ts) já
+  // suporta múltiplas condições com AND/OR, mas construir aqui um editor de
+  // regras compostas é âmbito à parte, fora do que cabe nesta issue; a regra
+  // de negócio real (o motor) está completa e testada, este ecrã é o
+  // primeiro fluxo de autoria mínimo sobre ela.
+  const device = useDevice();
+  const location = useLocation();
+  const [addRuleStep, setAddRuleStep] = useState<AddRuleStep>(null);
+  const pendingConditionRef = useRef<ContextCondition | null>(null);
+  const pendingNameRef = useRef('');
+
+  const finishAddRule = useCallback(
+    (mode: ContextTargetMode) => {
+      const condition = pendingConditionRef.current;
+      setAddRuleStep(null);
+      if (!condition) return;
+      const newRule: ContextRule = {
+        id: makeContextRuleId(),
+        name: pendingNameRef.current,
+        enabled: true,
+        combinator: 'AND',
+        conditions: [condition],
+        targetMode: mode,
+      };
+      update('contextRules', [...settings.contextRules, newRule]);
+      pendingConditionRef.current = null;
+    },
+    [settings.contextRules, update],
+  );
+
+  const modePickerOptions = useMemo(
+    () =>
+      FOCUS_MODES.filter((m) => m.key !== 'off').map((mode) => ({
+        label: mode.label,
+        onPress: () => finishAddRule(mode.key as ContextTargetMode),
+      })),
+    [finishAddRule],
+  );
+
+  const wifiValueOptions = useMemo(() => {
+    if (addRuleStep !== 'wifiValue') return [];
+    const ssids = new Set<string>();
+    if (device.wifi.ssid) ssids.add(device.wifi.ssid);
+    for (const net of device.wifi.networks) ssids.add(net.ssid);
+    return Array.from(ssids).map((ssid) => ({
+      label: ssid,
+      onPress: () => {
+        pendingConditionRef.current = { type: 'wifi', ssid };
+        pendingNameRef.current = `Wi-Fi: ${ssid}`;
+        setAddRuleStep('mode');
+      },
+    }));
+  }, [addRuleStep, device.wifi.ssid, device.wifi.networks]);
+
+  const bluetoothValueOptions = useMemo(() => {
+    if (addRuleStep !== 'bluetoothValue') return [];
+    return device.bluetooth.pairedDevices.map((d) => ({
+      label: d.name || d.address,
+      onPress: () => {
+        pendingConditionRef.current = { type: 'bluetooth', address: d.address };
+        pendingNameRef.current = `Bluetooth: ${d.name || d.address}`;
+        setAddRuleStep('mode');
+      },
+    }));
+  }, [addRuleStep, device.bluetooth.pairedDevices]);
+
+  const handlePickTriggerType = useCallback(
+    (type: 'wifi' | 'bluetooth' | 'location') => {
+      if (type === 'wifi') {
+        setAddRuleStep('wifiValue');
+        return;
+      }
+      if (type === 'bluetooth') {
+        setAddRuleStep('bluetoothValue');
+        return;
+      }
+      // Location: sem lista de valores para escolher — captura a posição
+      // actual diretamente, tal como as automações reais de "chegar a um
+      // sítio" fazem ao serem criadas no local.
+      location.refreshLocation().then(() => {
+        const current = location.currentLocation;
+        if (!current) {
+          alert('Location Unavailable', 'Could not read the current location. Check Location permission and try again.');
+          return;
+        }
+        pendingConditionRef.current = {
+          type: 'location',
+          latitude: current.latitude,
+          longitude: current.longitude,
+          radiusMeters: LOCATION_TRIGGER_RADIUS_METERS,
+        };
+        pendingNameRef.current = `Location (${LOCATION_TRIGGER_RADIUS_METERS}m radius)`;
+        setAddRuleStep('mode');
+      }).catch(() => {
+        alert('Location Unavailable', 'Could not read the current location. Check Location permission and try again.');
+      });
+    },
+    [location, alert],
+  );
+
+  const triggerTypeOptions = useMemo(
+    () => [
+      { label: 'Wi-Fi Network', onPress: () => handlePickTriggerType('wifi') },
+      { label: 'Bluetooth Device', onPress: () => handlePickTriggerType('bluetooth') },
+      { label: 'Current Location', onPress: () => handlePickTriggerType('location') },
+    ],
+    [handlePickTriggerType],
+  );
+
+  const handleToggleRule = useCallback(
+    (ruleId: string, enabled: boolean) => {
+      update(
+        'contextRules',
+        settings.contextRules.map((r) => (r.id === ruleId ? { ...r, enabled } : r)),
+      );
+    },
+    [settings.contextRules, update],
+  );
+
+  const handleDeleteRule = useCallback(
+    (ruleId: string) => {
+      update('contextRules', settings.contextRules.filter((r) => r.id !== ruleId));
+    },
+    [settings.contextRules, update],
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -309,6 +458,47 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
           </CupertinoListSection>
         </View>
 
+        {/* Automation / Context Engine (#628): regras Wi-Fi/Bluetooth/
+            localização que ativam um Focus mode automaticamente, aditivas ao
+            Focus Schedule acima. */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Automation"
+            footer="Automatically turn on a Focus mode when a Wi-Fi network, Bluetooth device, or location matches."
+          >
+            {settings.contextRules.map((rule) => (
+              <CupertinoListTile
+                key={rule.id}
+                title={rule.name || 'Automation'}
+                subtitle={`→ ${FOCUS_MODES.find((m) => m.key === rule.targetMode)?.label ?? rule.targetMode}`}
+                trailing={
+                  <View style={styles.ruleTrailing}>
+                    <CupertinoSwitch
+                      value={rule.enabled}
+                      onValueChange={(v) => handleToggleRule(rule.id, v)}
+                    />
+                    <Text
+                      style={[typography.footnote, { color: colors.systemRed, marginLeft: 12 }]}
+                      onPress={() => handleDeleteRule(rule.id)}
+                      accessibilityLabel={`Delete automation: ${rule.name}`}
+                      accessibilityRole="button"
+                    >
+                      Delete
+                    </Text>
+                  </View>
+                }
+                showChevron={false}
+              />
+            ))}
+            <CupertinoListTile
+              title="Add Automation"
+              leading={{ name: 'add-circle', color: '#FFFFFF', backgroundColor: colors.systemGreen ?? '#34C759' }}
+              onPress={() => setAddRuleStep('type')}
+              showChevron={false}
+            />
+          </CupertinoListSection>
+        </View>
+
         <CupertinoActionSheet
           visible={pickerTarget !== null}
           onClose={() => setPickerTarget(null)}
@@ -351,12 +541,50 @@ export function FocusScreen({ navigation }: { navigation: AppNavigationProp }) {
         options={dockPickerOptions}
         cancelLabel="Done"
       />
+
+      {/* Assistente "Add Automation" (#628): 3 passos encadeados — tipo de
+          gatilho, valor do gatilho (Wi-Fi/Bluetooth; Location salta este
+          passo, ver handlePickTriggerType), modo de destino. */}
+      <CupertinoActionSheet
+        visible={addRuleStep === 'type'}
+        onClose={() => setAddRuleStep(null)}
+        title="Add Automation"
+        message="Choose what should trigger this automation."
+        options={triggerTypeOptions}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={addRuleStep === 'wifiValue'}
+        onClose={() => setAddRuleStep(null)}
+        title="Wi-Fi Network"
+        options={wifiValueOptions}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={addRuleStep === 'bluetoothValue'}
+        onClose={() => setAddRuleStep(null)}
+        title="Bluetooth Device"
+        options={bluetoothValueOptions}
+        cancelLabel="Cancel"
+      />
+      <CupertinoActionSheet
+        visible={addRuleStep === 'mode'}
+        onClose={() => setAddRuleStep(null)}
+        title="Turn On"
+        message="Which Focus mode should this automation activate?"
+        options={modePickerOptions}
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  ruleTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
