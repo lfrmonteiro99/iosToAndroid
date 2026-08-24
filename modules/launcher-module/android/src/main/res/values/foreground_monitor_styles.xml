@@ -8,7 +8,7 @@
          pelo que a Activity crashava antes do prompt aparecer. Um tema
          translúcido normal (com janela real, só sem conteúdo visível) evita o
          crash e continua invisível. -->
-    <style name="Theme.TransparentGuard" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.TransparentGuard" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
