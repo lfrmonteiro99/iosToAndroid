@@ -16,6 +16,7 @@ function mockApps(overrides: Record<string, unknown> = {}) {
     recentPackages: [],
     recentApps: [],
     isLoading: false,
+    compactHomeLayout: jest.fn(),
     refreshApps: jest.fn(() => Promise.resolve()),
     launchApp: jest.fn(() => Promise.resolve(true)),
     addToHome: jest.fn(),
