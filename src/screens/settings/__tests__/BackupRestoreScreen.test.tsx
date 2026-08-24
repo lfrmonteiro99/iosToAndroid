@@ -232,15 +232,32 @@ describe('BackupRestoreScreen — Auto Backup', () => {
       JSON.stringify({ enabled: true, frequency: 'daily', lastBackupAt: '2000-01-01T00:00:00.000Z' }),
     );
 
-    const { getByText, queryByText } = render(<BackupRestoreScreen navigation={mockNavigation as never} />);
-
-    // Not shown until a foreground transition is observed.
-    expect(queryByText('Time for your backup')).toBeNull();
+    const { getByText } = render(<BackupRestoreScreen navigation={mockNavigation as never} />);
 
     await act(async () => {
       fireAppState('active');
     });
 
+    await waitFor(() => expect(getByText('Time for your backup')).toBeTruthy());
+  });
+
+  // Regression for the reviewer-blocked round: the screen only ever mounts
+  // while the app is already in the foreground (there is no route to it while
+  // backgrounded) — a normal in-app navigation to Settings never fires a
+  // synthetic AppState 'change' event first. Gating the mount-time due-check
+  // on a "last seen AppState" ref (which starts unset) silently swallowed
+  // this exact case: the reminder never appeared until some later, unrelated
+  // foreground transition happened to fire.
+  it('surfaces the prompt on mount when overdue, with NO AppState event fired at all', async () => {
+    store.set(
+      AUTO_BACKUP_STORAGE_KEY,
+      JSON.stringify({ enabled: true, frequency: 'daily', lastBackupAt: '2000-01-01T00:00:00.000Z' }),
+    );
+
+    const { getByText } = render(<BackupRestoreScreen navigation={mockNavigation as never} />);
+
+    // No fireAppState(...) call anywhere in this test — mounting alone must
+    // be enough to surface the reminder.
     await waitFor(() => expect(getByText('Time for your backup')).toBeTruthy());
   });
 
@@ -254,13 +271,17 @@ describe('BackupRestoreScreen — Auto Backup', () => {
     expect(queryByText('Time for your backup')).toBeNull();
   });
 
-  it('does NOT prompt on a non-active transition (e.g. background)', async () => {
+  it('does NOT prompt on a non-active transition (e.g. background) when not due', async () => {
+    // lastBackupAt is "now" (well within the daily interval) so the mount-time
+    // due-check itself finds nothing due; this isolates the assertion that
+    // follows to the 'background' branch of the AppState listener specifically.
     store.set(
       AUTO_BACKUP_STORAGE_KEY,
-      JSON.stringify({ enabled: true, frequency: 'daily', lastBackupAt: '2000-01-01T00:00:00.000Z' }),
+      JSON.stringify({ enabled: true, frequency: 'daily', lastBackupAt: new Date().toISOString() }),
     );
 
     const { queryByText } = render(<BackupRestoreScreen navigation={mockNavigation as never} />);
+    await waitFor(() => expect(queryByText('Time for your backup')).toBeNull());
 
     await act(async () => {
       fireAppState('background');

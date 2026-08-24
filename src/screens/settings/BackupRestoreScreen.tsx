@@ -75,12 +75,14 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
   // settles after the user has toggled, we must NOT clobber their choice.
   const userTouched = useRef(false);
 
-  // Last known AppState, updated by the foreground listener. Lets the mount-time
-  // prefs load decide whether to surface the reminder without depending on
-  // AppState.currentState (which is null under jest/no-native).
-  const lastAppState = useRef<AppStateStatus>('unknown');
-
-  // Load persisted Auto Backup prefs on mount.
+  // Load persisted Auto Backup prefs on mount. There is no code path that
+  // renders this screen while the app is backgrounded, so mounting IS a
+  // foreground transition — check due-ness unconditionally here rather than
+  // gating on AppState.currentState/a "last seen state" ref. That ref starts
+  // out unset (there is no synthetic 'change' event on mount, in production
+  // or under jest/no-native), so gating on it silently swallowed the very
+  // first due-check: a user opening this screen with a backup already overdue
+  // never saw the reminder until some *later* explicit foreground transition.
   useEffect(() => {
     let cancelled = false;
     loadAutoBackupPrefs().then((prefs) => {
@@ -88,10 +90,7 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
       setAutoEnabled(prefs.enabled);
       setAutoFrequency(prefs.frequency);
       setAutoLastBackupAt(prefs.lastBackupAt);
-      // If a backup is already due when the prefs finish loading and the app is
-      // in the foreground, surface the reminder now (the AppState listener may
-      // have fired earlier with stale default prefs).
-      if (lastAppState.current === 'active' && isBackupDue(prefs, new Date())) {
+      if (isBackupDue(prefs, new Date())) {
         setShowBackupPrompt(true);
       }
     });
@@ -100,13 +99,13 @@ export function BackupRestoreScreen({ navigation }: { navigation: AppNavigationP
     };
   }, []);
 
-  // Foreground-triggered reminder (issue #283): on app becoming active, if a
-  // backup is due and Auto Backup is on, surface a one-tap prompt. The prompt
-  // only ever runs the existing MANUAL backup flow (doExport) — it never
-  // uploads unattended, so the passphrase constraint (#270) holds.
+  // Foreground-triggered reminder (issue #283): on the app coming BACK to the
+  // foreground after being backgrounded, if a backup is due and Auto Backup is
+  // on, surface a one-tap prompt. The prompt only ever runs the existing
+  // MANUAL backup flow (doExport) — it never uploads unattended, so the
+  // passphrase constraint (#270) holds.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next: AppStateStatus) => {
-      lastAppState.current = next;
       if (next !== 'active') return;
       if (isBackupDue(prefsRef.current, new Date())) {
         setShowBackupPrompt(true);
