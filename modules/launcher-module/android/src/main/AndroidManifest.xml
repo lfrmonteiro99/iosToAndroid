@@ -42,5 +42,26 @@
             android:name=".AccessEventsService"
             android:exported="false"
             android:stopWithTask="false" />
+
+        <!-- #627 child issue: foreground monitor + Protected-Apps gate. -->
+        <service
+            android:name=".ForegroundMonitorService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/foreground_monitor_config" />
+        </service>
+
+        <!-- #627 child issue: transparent host for the Protected-Apps BiometricPrompt. -->
+        <activity
+            android:name=".ForegroundGuardActivity"
+            android:theme="@style/Theme.TransparentGuard"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="false" />
     </application>
 </manifest>

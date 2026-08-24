@@ -65,6 +65,14 @@ class LauncherModule : Module() {
         private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
 
         /**
+         * Protected-app set pushed from JS (AppsStore) so the foreground monitor
+         * can gate apps launched OUTSIDE the launcher (recent apps / share sheet /
+         * deep link) — the JS gate in launchApp only covers in-launcher opens.
+         * Read by ForegroundMonitorService on every foreground transition.
+         */
+        @Volatile var protectedApps: Set<String> = emptySet()
+
+        /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
          * by plugins/withLauncherIntent.js) to forward events to JavaScript.
          * Uses Expo's built-in event emitter — declared via Events(...) in the definition.
@@ -84,7 +92,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onAppAccess")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onAppAccess", "onForegroundAppChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -908,6 +916,33 @@ class LauncherModule : Module() {
 
         AsyncFunction("cancelLiveActivity") { id: String ->
             cancelLiveActivity(id)
+        }
+
+        // ── Foreground monitor + Protected-Apps gate (#627 child issue) ──
+
+        AsyncFunction("setProtectedApps") { packageNames: List<String>? ->
+            // A null payload (careless caller / older JS) means "nothing
+            // protected", not a crash — normalize to an immutable empty set.
+            LauncherModule.protectedApps = (packageNames ?: emptyList()).toSet()
+            true
+        }
+
+        AsyncFunction("isForegroundMonitorEnabled") {
+            // The AccessibilityService exposes its own enabled state to the
+            // system; querying Settings is the canonical way to read it
+            // (#627 — we cannot enable it programmatically).
+            val svc = Context.ACCESSIBILITY_SERVICE
+            val am = context.getSystemService(svc) as? android.view.accessibility.AccessibilityManager
+            am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                ?.any { it.resolveInfo.serviceInfo.packageName == context.packageName && it.resolveInfo.serviceInfo.name == ForegroundMonitorService::class.java.name }
+                ?: false
+        }
+
+        AsyncFunction("openAccessibilitySettings") {
+            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
         }
 
         // ── SMS Send ─────────────────────────────────────────────────────
