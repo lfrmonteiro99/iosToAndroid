@@ -423,6 +423,29 @@ function dedupeByPackageName<T extends { packageName?: string }>(items: T[]): T[
   });
 }
 
+/**
+ * True when a rejected bridge call is the Android 12+ BLUETOOTH_CONNECT
+ * SecurityException (issue #675). The native rejection arrives over RN as an
+ * Error whose message embeds the Java cause, e.g.
+ *   "Call to function 'LauncherModule.getBluetoothInfo' has been rejected.
+ *    → Caused by: java.lang.SecurityException: Need android.permission.BLUETOOTH_CONNECT ..."
+ * We match on the runtime permission name rather than the exact method, so the
+ * same guard covers getBluetoothInfo / getDiscoveredBluetoothDevices / etc. if
+ * any of them ever rejects with the same permission error. A genuine failure
+ * (no adapter, a different exception) is NOT a permission error and must still
+ * be reported.
+ */
+export function isBluetoothPermissionSecurityException(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return /BLUETOOTH_CONNECT/.test(message) && /SecurityException/.test(message);
+}
+
 function createBridgedModule(): LauncherModuleType {
   if (!nativeModule) return stub;
 
@@ -500,7 +523,19 @@ function createBridgedModule(): LauncherModuleType {
     },
     getBluetoothInfo: async () => {
       try { return await nativeModule.getBluetoothInfo(); }
-      catch (e) { console.error('LauncherModule.getBluetoothInfo failed:', e); reportBridgeError('getBluetoothInfo', e); return null; }
+      catch (e) {
+        // #675: on Android 12+ (API 31) reading the adapter name/address without
+        // the BLUETOOTH_CONNECT runtime permission throws a SecurityException
+        // over the bridge. That is an expected, recoverable state (the UI already
+        // falls back to "Unknown"/"" when the call returns null) — surfacing it as
+        // a reportBridgeError would paint a LogBox toast on every launch. Swallow
+        // that one permission error silently; any other failure is still reported.
+        if (!isBluetoothPermissionSecurityException(e)) {
+          console.error('LauncherModule.getBluetoothInfo failed:', e);
+          reportBridgeError('getBluetoothInfo', e);
+        }
+        return null;
+      }
     },
     setBluetoothEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setBluetoothEnabled(enabled); }
