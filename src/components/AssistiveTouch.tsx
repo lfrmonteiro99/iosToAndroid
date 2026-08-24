@@ -49,6 +49,38 @@ export const MENU_GEOMETRY = {
   maxItems: 6,
 } as const;
 
+// ─── Home-commit decision (shared by the `home` action) ──────────────────────
+// Kept as a small pure unit so the in-app-vs-native ordering can be tested
+// without mounting Reanimated/RN or invoking the broken dynamic import in the
+// test environment. See issue #707 (and #697 for the HomeIndicator twin).
+//
+// FIX (issue #707): the in-app HomeMain is tried FIRST. Native goHome()
+// (ACTION_MAIN + CATEGORY_HOME) is only the last-resort escape hatch when
+// in-app navigation is unavailable. The old code tried goHome() first and only
+// fell back to HomeMain, so on a device where this app is NOT the device's
+// default launcher, goHome() surfaced the system launcher's home screen
+// instead of the iOS-style grid — exactly the "Android home screen instead of
+// the Calendar UI" frame QA captured on the Calendar screen.
+export async function commitHomeNavigation(args: {
+  navigate: (route: string) => void;
+  goHome: () => Promise<boolean>;
+}): Promise<void> {
+  // Stay inside the app: the user expects the iOS-style grid, not the device's
+  // system launcher. goHome() is only a last-resort escape hatch.
+  try {
+    args.navigate('HomeMain');
+    return;
+  } catch {
+    /* fall through to native goHome */
+  }
+  try {
+    const ok = await args.goHome();
+    if (ok) return;
+  } catch {
+    /* best effort */
+  }
+}
+
 // ─── Menu item catalog ──────────────────────────────────────────────────────
 
 interface MenuItemDef {
@@ -242,14 +274,18 @@ export function AssistiveTouch({ navigationRef }: AssistiveTouchProps) {
           openMenu();
           break;
         case 'home':
-          if (Platform.OS === 'android') {
-            try {
-              const mod = (await import('../../modules/launcher-module/src')).default;
-              const ok = await mod.goHome();
-              if (ok) return;
-            } catch { /* fall through */ }
-          }
-          navigate('HomeMain');
+          await commitHomeNavigation({
+            navigate,
+            goHome: async () => {
+              if (Platform.OS !== 'android') return false;
+              try {
+                const mod = (await import('../../modules/launcher-module/src')).default;
+                return await mod.goHome();
+              } catch {
+                return false;
+              }
+            },
+          });
           break;
         case 'multitask':        navigate('Multitask'); break;
         case 'notifications':    navigate('NotificationCenter'); break;
