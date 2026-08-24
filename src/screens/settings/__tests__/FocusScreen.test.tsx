@@ -7,6 +7,47 @@ import * as AppsStore from '../../../store/AppsStore';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
 
+// DeviceStore/LocationStore mocked por inteiro (mesmo padrão de
+// BluetoothScreen.test.tsx e useContextEngine.test.tsx) para controlar o
+// snapshot Wi-Fi/Bluetooth/localização sem depender do bridge nativo real.
+const mockUseDevice = jest.fn();
+jest.mock('../../../store/DeviceStore', () => ({
+  useDevice: () => mockUseDevice(),
+  DeviceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DeviceContext: null,
+}));
+
+const mockUseLocation = jest.fn();
+jest.mock('../../../store/LocationStore', () => ({
+  useLocation: () => mockUseLocation(),
+  LocationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  LocationContext: null,
+}));
+
+function baseDeviceValue() {
+  return {
+    wifi: { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '', networks: [] },
+    bluetooth: { enabled: false, name: '', address: '', pairedDevices: [] },
+  };
+}
+
+function baseLocationValue() {
+  return {
+    currentLocation: null,
+    history: [],
+    permissionStatus: 'granted',
+    isReady: true,
+    requestPermission: jest.fn(),
+    refreshLocation: jest.fn(() => Promise.resolve()),
+    clearHistory: jest.fn(),
+  };
+}
+
+beforeEach(() => {
+  mockUseDevice.mockReturnValue(baseDeviceValue());
+  mockUseLocation.mockReturnValue(baseLocationValue());
+});
+
 describe('FocusScreen', () => {
   it('renders all focus mode options', () => {
     const { getByText } = render(<FocusScreen navigation={mockNavigation as never} />);
@@ -435,5 +476,179 @@ describe('FocusScreen — Priority Apps (#630)', () => {
     fireEvent.press(getByText('✓ Slack'));
 
     await waitFor(() => expect(getAllByText('None').length).toBeGreaterThan(0));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Context Engine — trigger de horário + combinador AND/OR (#642, filho #628)
+// ---------------------------------------------------------------------------
+// A engine pura (contextTriggerEngine.ts) já suporta múltiplas condições com
+// AND/OR e o tipo `time`; o que faltava era o assistente "Add Automation"
+// deste ecrã os expor. Estes testes montam o FocusScreen real e percorrem o
+// wizard tal como um utilizador tocaria nos ecrãs, e a asserção final lê o
+// blob persistido no AsyncStorage (mesmo padrão do Hidden Pages/Dock Apps
+// acima) — não reimplementam a lógica de combinação.
+describe('FocusScreen — Automation: horário + AND/OR (#642)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    mockUseDevice.mockReturnValue({
+      wifi: { enabled: true, ssid: 'Home-5G', rssi: -40, linkSpeed: 100, ip: '', networks: [{ ssid: 'Home-5G' }] },
+      bluetooth: { enabled: true, name: 'Phone', address: '11:22:33', pairedDevices: [{ name: 'Car Kit', address: 'AA:BB:CC' }] },
+    });
+    mockUseLocation.mockReturnValue(baseLocationValue());
+  });
+
+  function lastPersistedRules() {
+    const write = (AsyncStorage.setItem as jest.Mock).mock.calls
+      .filter(([key]) => key === '@iostoandroid/settings')
+      .pop();
+    expect(write).toBeTruthy();
+    return JSON.parse(write![1] as string).contextRules;
+  }
+
+  // 'Work'/'Personal'/etc. também aparecem na lista "Focus Modes" no topo do
+  // ecrã, por isso getByText (que exige exatamente 1 nó) é ambíguo depois de
+  // abrir o sheet "Turn On" — escolhe sempre a última ocorrência (a opção do
+  // sheet, que fica mais abaixo na árvore por ser montada depois).
+  function pressModeOption(getAllByText: (text: string) => unknown[], label: string) {
+    const matches = getAllByText(label);
+    fireEvent.press(matches[matches.length - 1] as never);
+  }
+
+  it('offers a Time / Schedule trigger option alongside Wi-Fi/Bluetooth/Location', () => {
+    const { getByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Add Automation'));
+    expect(getByText('Time / Schedule')).toBeTruthy();
+  });
+
+  it('creates a single-condition Time rule (start/end + target mode), combinator defaults to AND', async () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Add Automation'));
+    fireEvent.press(getByText('Time / Schedule'));
+    await waitFor(() => expect(getByText('12:30')).toBeTruthy());
+    fireEvent.press(getByText('12:30')); // start
+    await waitFor(() => expect(getByText('20:00')).toBeTruthy());
+    fireEvent.press(getByText('20:00')); // end
+    await waitFor(() => expect(getByText('Continue')).toBeTruthy());
+    fireEvent.press(getByText('Continue'));
+    await waitFor(() => expect(getByText('Which Focus mode should this automation activate?')).toBeTruthy());
+    pressModeOption(getAllByText, 'Work');
+
+    await waitFor(() => {
+      const rules = lastPersistedRules();
+      expect(rules).toHaveLength(1);
+      expect(rules[0].combinator).toBe('AND');
+      expect(rules[0].targetMode).toBe('work');
+      expect(rules[0].conditions).toEqual([
+        { type: 'time', start: '12:30', end: '20:00', weekdays: [] },
+      ]);
+    });
+  });
+
+  it('combines a Wi-Fi condition and a Bluetooth condition with AND when the user picks "Require ALL"', async () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Add Automation'));
+    fireEvent.press(getByText('Wi-Fi Network'));
+    await waitFor(() => expect(getByText('Home-5G')).toBeTruthy());
+    fireEvent.press(getByText('Home-5G'));
+
+    await waitFor(() => expect(getByText('Require ALL conditions (AND)')).toBeTruthy());
+    fireEvent.press(getByText('Require ALL conditions (AND)'));
+
+    await waitFor(() => expect(getByText('Bluetooth Device')).toBeTruthy());
+    fireEvent.press(getByText('Bluetooth Device'));
+    await waitFor(() => expect(getByText('Car Kit')).toBeTruthy());
+    fireEvent.press(getByText('Car Kit'));
+
+    await waitFor(() => expect(getByText('Continue')).toBeTruthy());
+    fireEvent.press(getByText('Continue'));
+    await waitFor(() => expect(getByText('Which Focus mode should this automation activate?')).toBeTruthy());
+    pressModeOption(getAllByText, 'Personal');
+
+    await waitFor(() => {
+      const rules = lastPersistedRules();
+      expect(rules).toHaveLength(1);
+      expect(rules[0].combinator).toBe('AND');
+      expect(rules[0].targetMode).toBe('personal');
+      expect(rules[0].conditions).toEqual([
+        { type: 'wifi', ssid: 'Home-5G' },
+        { type: 'bluetooth', address: 'AA:BB:CC' },
+      ]);
+    });
+  });
+
+  it('combines a Wi-Fi condition and a Bluetooth condition with OR when the user picks "Match ANY"', async () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Add Automation'));
+    fireEvent.press(getByText('Wi-Fi Network'));
+    await waitFor(() => expect(getByText('Home-5G')).toBeTruthy());
+    fireEvent.press(getByText('Home-5G'));
+
+    await waitFor(() => expect(getByText('Match ANY condition (OR)')).toBeTruthy());
+    fireEvent.press(getByText('Match ANY condition (OR)'));
+
+    await waitFor(() => expect(getByText('Bluetooth Device')).toBeTruthy());
+    fireEvent.press(getByText('Bluetooth Device'));
+    await waitFor(() => expect(getByText('Car Kit')).toBeTruthy());
+    fireEvent.press(getByText('Car Kit'));
+
+    await waitFor(() => expect(getByText('Continue')).toBeTruthy());
+    fireEvent.press(getByText('Continue'));
+    await waitFor(() => expect(getByText('Which Focus mode should this automation activate?')).toBeTruthy());
+    pressModeOption(getAllByText, 'Work');
+
+    await waitFor(() => {
+      const rules = lastPersistedRules();
+      expect(rules).toHaveLength(1);
+      expect(rules[0].combinator).toBe('OR');
+    });
+  });
+
+  it('still creates a single-condition rule when the user picks Continue right away (no regression)', async () => {
+    const { getByText, getAllByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Add Automation'));
+    fireEvent.press(getByText('Wi-Fi Network'));
+    await waitFor(() => expect(getByText('Home-5G')).toBeTruthy());
+    fireEvent.press(getByText('Home-5G'));
+
+    await waitFor(() => expect(getByText('Continue')).toBeTruthy());
+    fireEvent.press(getByText('Continue'));
+    await waitFor(() => expect(getByText('Which Focus mode should this automation activate?')).toBeTruthy());
+    pressModeOption(getAllByText, 'Work');
+
+    await waitFor(() => {
+      const rules = lastPersistedRules();
+      expect(rules).toHaveLength(1);
+      expect(rules[0].combinator).toBe('AND');
+      expect(rules[0].conditions).toEqual([{ type: 'wifi', ssid: 'Home-5G' }]);
+    });
+  });
+
+  it('cancelling the "add another condition?" step discards the whole automation (no partial rule persisted)', async () => {
+    const { getByText, queryByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Add Automation'));
+    fireEvent.press(getByText('Wi-Fi Network'));
+    await waitFor(() => expect(getByText('Home-5G')).toBeTruthy());
+    fireEvent.press(getByText('Home-5G'));
+
+    // O passo "Add Another Condition?" está aberto — fecha-o pelo Cancel em
+    // vez de escolher AND/OR/Continue.
+    await waitFor(() => expect(getByText('Require ALL conditions (AND)')).toBeTruthy());
+    fireEvent.press(getByText('Cancel'));
+
+    // A secção "Automation" continua sem nenhuma regra criada (header em
+    // maiúsculas — CupertinoListSection aplica toUpperCase() ao header).
+    expect(queryByText('AUTOMATION')).toBeTruthy();
+    const writes = (AsyncStorage.setItem as jest.Mock).mock.calls.filter(
+      ([key]) => key === '@iostoandroid/settings',
+    );
+    const anyPersistedRule = writes.some((w) => JSON.parse(w[1] as string).contextRules?.length > 0);
+    expect(anyPersistedRule).toBe(false);
   });
 });
