@@ -20,6 +20,9 @@
         tools:ignore="ProtectedPermissions" />
     <!-- #608 Tap to Wake: needed to wake the (app-dimmed) screen via PowerManager.ACQUIRE_CAUSES_WAKEUP -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- #627 child issue: AccessibilityService observes the foreground app globally. -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        tools:ignore="ProtectedPermissions" />
 
     <application>
         <service
@@ -30,5 +33,26 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- #627 child issue: foreground monitor + Protected-Apps gate. -->
+        <service
+            android:name=".ForegroundMonitorService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/foreground_monitor_config" />
+        </service>
+
+        <!-- #627 child issue: transparent host for the Protected-Apps BiometricPrompt. -->
+        <activity
+            android:name=".ForegroundGuardActivity"
+            android:theme="@style/Theme.TransparentGuard"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="false" />
     </application>
 </manifest>
