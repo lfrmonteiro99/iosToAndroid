@@ -154,6 +154,17 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
             </Pressable>
           </View>
           <CupertinoListSection>
+            <CupertinoListTile
+              title="Privacy Monitor"
+              subtitle="Acessos por app nos últimos 30 dias"
+              leading={{
+                name: 'eye',
+                color: '#FFFFFF',
+                backgroundColor: colors.accent,
+              }}
+              showChevron
+              onPress={() => navigation.navigate('PrivacyMonitor')}
+            />
             {PERMISSION_CATEGORIES.map((item) => {
               // Location row is gated by the Location Services toggle above
               const locationDisabled = item.key === 'location' && !settings.locationServices;

@@ -44,6 +44,7 @@ import { LanguageRegionScreen } from '../screens/settings/LanguageRegionScreen';
 import { VpnScreen } from '../screens/settings/VpnScreen';
 import { BatteryScreen } from '../screens/settings/BatteryScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
+import { PrivacyMonitorScreen } from '../screens/settings/PrivacyMonitorScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
 import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouchSettingsScreen';
@@ -146,6 +147,7 @@ export function TabNavigator() {
       <Stack.Screen name="AssistiveTouchSettings" component={AssistiveTouchSettingsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="PrivacyMonitor" component={PrivacyMonitorScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SoftwareUpdate" component={SoftwareUpdateScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="DateTime" component={DateTimeScreen} options={{ animation: slideAnimation }} />

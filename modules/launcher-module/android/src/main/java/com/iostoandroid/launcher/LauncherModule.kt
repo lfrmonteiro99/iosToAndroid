@@ -1211,6 +1211,115 @@ class LauncherModule : Module() {
             perms
         }
 
+        // ── Privacy Monitor (#624) ─────────────────────────────────────────
+        // Aggregate per-app access counts for each privacy sensor using AppOps
+        // historical ops (OPSTR_CAMERA / OPSTR_RECORD_AUDIO / OPSTR_FINE_LOCATION
+        // / OPSTR_DATA_USAGE). These are the same ops Android surfaces in the
+        // system "Privacy Dashboard", so the numbers match what the OS shows.
+        // The result is grouped by packageName and ranked so JS can render one
+        // card per sensor with a top-apps bar breakdown.
+        AsyncFunction("getPrivacyReport") {
+            try {
+                val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                val pm = context.packageManager
+                val endTime = System.currentTimeMillis()
+                // Trailing 30-day window — matches the OS Privacy Dashboard range.
+                val startTime = endTime - 30L * 24 * 60 * 60 * 1000
+
+                fun appLabel(pkg: String): String {
+                    return try {
+                        val ai = pm.getApplicationInfo(pkg, 0)
+                        pm.getApplicationLabel(ai).toString()
+                    } catch (e: Exception) { pkg }
+                }
+
+                fun sensorReport(opStr: String, sensor: String, label: String, icon: String, bg: String): Map<String, Any> {
+                    val ops = try {
+                        appOps.getHistoricalOpsFromUid(
+                            android.os.Process.myUid(),
+                            listOf(opStr),
+                            startTime,
+                            endTime,
+                        ).getOps()
+                    } catch (e: Exception) { emptyList<android.app.AppOpsManager.HistoricalOp>() }
+
+                    val byApp = mutableMapOf<String, Int>()
+                    for (op in ops) {
+                        for (i in 0 until op.uidCount()) {
+                            val uid = op.getUid(i)
+                            val pkg = try { pm.getNameForUid(uid) } catch (e: Exception) { null }
+                            val pkgName = pkg ?: continue
+                            val accessCount = op.getUidOps(i).getOpCount()
+                            if (accessCount > 0) {
+                                byApp[pkgName] = byApp.getOrDefault(pkgName, 0) + accessCount
+                            }
+                        }
+                    }
+
+                    val ranked = byApp.entries
+                        .sortedByDescending { it.value }
+                        .map { (pkg, count) ->
+                            mapOf(
+                                "packageName" to pkg,
+                                "appName" to appLabel(pkg),
+                                "count" to count,
+                            )
+                        }
+                    val total = byApp.values.sum()
+                    mapOf(
+                        "sensor" to sensor,
+                        "label" to label,
+                        "icon" to icon,
+                        "bg" to bg,
+                        "totalAccesses" to total,
+                        "appCount" to byApp.size,
+                        "topApps" to ranked,
+                    )
+                }
+
+                val sensors = listOf(
+                    sensorReport(
+                        android.app.AppOpsManager.OPSTR_CAMERA,
+                        "camera",
+                        "Camera",
+                        "camera",
+                        "#1C1C1E",
+                    ),
+                    sensorReport(
+                        android.app.AppOpsManager.OPSTR_RECORD_AUDIO,
+                        "microphone",
+                        "Microphone",
+                        "mic",
+                        "#FF2D55",
+                    ),
+                    sensorReport(
+                        android.app.AppOpsManager.OPSTR_FINE_LOCATION,
+                        "location",
+                        "Location",
+                        "location",
+                        "#007AFF",
+                    ),
+                    sensorReport(
+                        android.app.AppOpsManager.OPSTR_DATA_USAGE,
+                        "network",
+                        "Network",
+                        "globe",
+                        "#34C759",
+                    ),
+                )
+
+                mapOf(
+                    "generatedAt" to endTime,
+                    "sensors" to sensors,
+                )
+            } catch (e: Exception) {
+                mapOf(
+                    "generatedAt" to System.currentTimeMillis(),
+                    "sensors" to emptyList<Map<String, Any>>(),
+                )
+            }
+        }
+
         // ── Keyboards ────────────────────────────────────────────────────
 
         AsyncFunction("getInstalledKeyboards") {
