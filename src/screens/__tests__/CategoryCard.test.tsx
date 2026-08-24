@@ -93,4 +93,19 @@ describe('CategoryCard — quadrant layout', () => {
     fireEvent.press(getByText('Social'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  // Regression for issue #679: a category with exactly 1-3 apps left a 4th empty
+  // 2x2 grid cell (white hole, bottom-right). The grid must collapse to a single
+  // row (no empty trailing cell) when there are 3 or fewer icons.
+  it.each([1, 2, 3])('lays out %i app(s) in a single row (no empty 2x2 cell)', (count) => {
+    const { getByTestId } = renderCard(count);
+    expect(getByTestId('category-icon-grid')).toHaveStyle({ flexWrap: 'nowrap' });
+  });
+
+  // 4 apps should still render as a 2x2 grid (wrap), not collapse to a row —
+  // the inverse of the fix above, to guard against over-correcting.
+  it('keeps the 2x2 grid (flexWrap wrap) for exactly 4 apps', () => {
+    const { getByTestId } = renderCard(4);
+    expect(getByTestId('category-icon-grid')).toHaveStyle({ flexWrap: 'wrap' });
+  });
 });
