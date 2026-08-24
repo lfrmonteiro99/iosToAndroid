@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { render, fireEvent, waitFor } from '../../../test-utils';
 import { FocusScreen } from '../FocusScreen';
 import { notificationCallbackForFocus } from '../../../utils/notificationFocusFilter';
+import * as AppsStore from '../../../store/AppsStore';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() };
 
@@ -226,6 +227,129 @@ describe('FocusScreen — Hidden Pages (#618)', () => {
         .filter(([key]) => key === '@iostoandroid/settings')
         .pop();
       expect(JSON.parse(write![1] as string).focusPageVisibility.sleep).toBeUndefined();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dock Apps per Focus mode (#619, filho de #617)
+// ---------------------------------------------------------------------------
+// Monta o FocusScreen real: abre o picker de um modo, escolhe apps e verifica
+// que a escolha vai para o AsyncStorage (persiste entre arranques) e que o
+// resumo da linha muda. O modo 'off' não tem linha — nunca tem override.
+describe('FocusScreen — Dock Apps (#619)', () => {
+  function app(pkg: string, name: string): AppsStore.InstalledApp {
+    return { name, packageName: pkg, icon: `file:///${pkg}.png`, isSystem: false };
+  }
+
+  const APPS = [app('com.slack', 'Slack'), app('com.gmail', 'Gmail'), app('com.notion', 'Notion')];
+
+  function mockApps() {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: APPS,
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: APPS,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    mockApps();
+  });
+
+  it('renders one Dock Apps row per mode, and none for Off', () => {
+    const { getByText, queryByText } = render(
+      <FocusScreen navigation={mockNavigation as never} />,
+    );
+    expect(getByText('Work — Dock Apps')).toBeTruthy();
+    expect(getByText('Sleep — Dock Apps')).toBeTruthy();
+    expect(getByText('Do Not Disturb — Dock Apps')).toBeTruthy();
+    expect(getByText('Personal — Dock Apps')).toBeTruthy();
+    expect(queryByText('Off — Dock Apps')).toBeNull();
+  });
+
+  it('shows "Default" until an app is picked, then the count', async () => {
+    const { getByText, getAllByText } = render(
+      <FocusScreen navigation={mockNavigation as never} />,
+    );
+    expect(getAllByText('Default').length).toBeGreaterThan(0);
+
+    fireEvent.press(getByText('Work — Dock Apps'));
+    fireEvent.press(getByText('Slack'));
+
+    await waitFor(() => expect(getByText('1 app')).toBeTruthy());
+  });
+
+  it('persists focusDockOverride to AsyncStorage (survives a restart)', async () => {
+    const { getByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Work — Dock Apps'));
+    fireEvent.press(getByText('Slack'));
+    // O action sheet fecha após cada opção (mesmo padrão do Hidden Pages
+    // acima) — reabre antes da segunda escolha.
+    fireEvent.press(getByText('Work — Dock Apps'));
+    fireEvent.press(getByText('Gmail'));
+
+    await waitFor(() => {
+      const write = (AsyncStorage.setItem as jest.Mock).mock.calls
+        .filter(([key]) => key === '@iostoandroid/settings')
+        .pop();
+      expect(write).toBeTruthy();
+      expect(JSON.parse(write![1] as string).focusDockOverride).toEqual({
+        work: ['com.slack', 'com.gmail'],
+      });
+    });
+  });
+
+  it('un-picks an app when tapped twice (double tap is a no-op)', async () => {
+    const { getByText, getAllByText } = render(
+      <FocusScreen navigation={mockNavigation as never} />,
+    );
+
+    fireEvent.press(getByText('Work — Dock Apps'));
+    fireEvent.press(getByText('Slack'));
+    await waitFor(() => expect(getByText('1 app')).toBeTruthy());
+
+    fireEvent.press(getByText('Work — Dock Apps'));
+    fireEvent.press(getByText('✓ Slack'));
+
+    await waitFor(() => expect(getAllByText('Default').length).toBeGreaterThan(0));
+  });
+
+  it('keeps each mode independent — picking for Work leaves Sleep untouched', async () => {
+    const { getByText } = render(<FocusScreen navigation={mockNavigation as never} />);
+
+    fireEvent.press(getByText('Work — Dock Apps'));
+    fireEvent.press(getByText('Slack'));
+
+    await waitFor(() => {
+      const write = (AsyncStorage.setItem as jest.Mock).mock.calls
+        .filter(([key]) => key === '@iostoandroid/settings')
+        .pop();
+      expect(JSON.parse(write![1] as string).focusDockOverride.sleep).toBeUndefined();
     });
   });
 });
