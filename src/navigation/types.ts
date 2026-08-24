@@ -19,6 +19,7 @@ export type RootStackParamList = {
   ContactDetail: { contactId: string };
   ContactEdit: { contactId?: string };
   Weather: undefined;
+  Health: undefined;
   Clock: undefined;
   Camera: undefined;
   Photos: undefined;

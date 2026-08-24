@@ -22,6 +22,18 @@ jest.mock('expo-haptics', () => ({
 
 jest.mock('expo-blur', () => ({ BlurView: 'BlurView' }));
 
+// expo-sensors: the Pedometer has no JS-side implementation under jest-expo.
+// `watchStepCount` returns a subscription handle and tests reach for the
+// registered callback via `Pedometer.watchStepCount.mock.calls[0][0]` to inject
+// real step deltas.
+jest.mock('expo-sensors', () => ({
+  Pedometer: {
+    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+    watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
+    getStepCountAsync: jest.fn(() => Promise.resolve({ steps: 0 })),
+  },
+}));
+
 jest.mock('expo-navigation-bar', () => ({
   setBackgroundColorAsync: jest.fn(() => Promise.resolve()),
   setVisibilityAsync: jest.fn(() => Promise.resolve()),
