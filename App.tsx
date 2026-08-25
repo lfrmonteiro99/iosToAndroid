@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import type { RootStackParamList } from './src/navigation/types';
+import { installCrashHandler, hydrateDiagnostics } from './src/utils/crashLog';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
@@ -221,6 +222,14 @@ function AppContent() {
     });
     return unsub;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Diagnostics first, before anything that can fail: the handler has to be in
+  // place to catch a crash during the rest of the startup, and hydrate() is what
+  // carries the breadcrumbs of the run that crashed into this one.
+  useEffect(() => {
+    installCrashHandler();
+    hydrateDiagnostics().catch(() => {});
+  }, []);
 
   // Immersive mode — hide system bars globally so all screens benefit
   useEffect(() => {

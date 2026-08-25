@@ -220,8 +220,18 @@ class LauncherModule : Module() {
             // Shape regex first, then whitelist via PackageManager: malformed names
             // never reach the resolver, and non-installed / non-launchable packages
             // resolve to null. See PackageNameValidator for the pure-JVM logic.
-            val intent = PackageNameValidator.resolveIfValidShape(packageName) {
-                context.packageManager.getLaunchIntentForPackage(it)
+            // Guarded too: getLaunchIntentForPackage goes out to the package
+            // manager, and a package in a bad state there (mid-update, a
+            // cross-profile entry, a dead provider) throws rather than
+            // returning null. Unguarded, that surfaced as a rejected promise
+            // from a function whose whole contract is a boolean.
+            val intent = try {
+                PackageNameValidator.resolveIfValidShape(packageName) {
+                    context.packageManager.getLaunchIntentForPackage(it)
+                }
+            } catch (e: Exception) {
+                Log.w("LauncherModule", "could not resolve a launch intent for $packageName", e)
+                null
             }
             if (intent == null) {
                 return@AsyncFunction false  // malformed, not installed, or not launchable

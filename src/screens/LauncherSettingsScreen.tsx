@@ -23,6 +23,7 @@ import {
   useAlert,
 } from '../components';
 import { logger } from '../utils/logger';
+import { readDiagnostics, clearDiagnostics, type Diagnostics } from '../utils/crashLog';
 import { maxColumnsFor, maxIconScaleFor } from '../utils/launcherGridGeometry';
 import {
   PERF_BUDGETS,
@@ -113,6 +114,18 @@ export function LauncherSettingsScreen() {
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
+  const [errorLogOpen, setErrorLogOpen] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<Diagnostics>({ breadcrumbs: [] });
+  // Read once on mount, not on open: the row's subtitle has to say whether
+  // there is anything to read before you tap it.
+  useEffect(() => {
+    let alive = true;
+    readDiagnostics()
+      .then((d) => { if (alive) setDiagnostics(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const [showPinModal, setShowPinModal] = useState(false);
   const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
   const [showRequirePasscodePicker, setShowRequirePasscodePicker] = useState(false);
@@ -832,7 +845,6 @@ export function LauncherSettingsScreen() {
           title="Warm Start"
           leading={{ name: 'flash', color: '#fff', backgroundColor: '#34C759' }}
           showChevron={false}
-          isLast
           trailing={
             <Text
               accessibilityLabel={`Warm start: ${formatPerfValue(perf.warmStartMs, 'warmStartMs')}`}
@@ -850,7 +862,81 @@ export function LauncherSettingsScreen() {
             </Text>
           }
         />
+        {/*
+          The error log. A release build used to discard every caught error
+          (logger was a no-op outside __DEV__) and wrote nothing at all when the
+          process died, so a device report of "opening a third-party app kills
+          the launcher" could not be investigated — the only evidence was a
+          screenshot of Android's "keeps stopping" dialog.
+
+          The count is on the row so it is obvious there is something to read
+          without opening it. See utils/crashLog.ts for why the breadcrumbs and
+          the fatal record survive different kinds of crash.
+        */}
+        <CupertinoListTile
+          title="Error Log"
+          subtitle={
+            diagnostics.lastFatal
+              ? 'A crash was recorded'
+              : diagnostics.breadcrumbs.length > 0
+              ? `${diagnostics.breadcrumbs.length} entries`
+              : 'Nothing recorded'
+          }
+          leading={{
+            name: 'bug',
+            color: '#fff',
+            backgroundColor: diagnostics.lastFatal ? colors.systemRed : '#8E8E93',
+          }}
+          showChevron
+          isLast
+          onPress={() => setErrorLogOpen((open) => !open)}
+        />
       </CupertinoListSection>
+
+      {errorLogOpen && (
+        <View
+          testID="error-log-body"
+          style={[styles.errorLog, { backgroundColor: colors.secondarySystemBackground }]}
+        >
+          {diagnostics.lastFatal && (
+            <Text selectable style={[typography.footnote, { color: colors.systemRed, marginBottom: 12 }]}>
+              {diagnostics.lastFatal.at} {diagnostics.lastFatal.message}
+              {diagnostics.lastFatal.stack ? `\n${diagnostics.lastFatal.stack}` : ''}
+            </Text>
+          )}
+          {diagnostics.breadcrumbs.length === 0 && !diagnostics.lastFatal ? (
+            <Text style={[typography.footnote, { color: colors.secondaryLabel }]}>
+              Nothing recorded yet.
+            </Text>
+          ) : (
+            // Newest first: after a crash the last few lines are the ones that
+            // matter, and this list is read on a phone.
+            [...diagnostics.breadcrumbs].reverse().map((b, i) => (
+              <Text
+                key={`${b.at}-${i}`}
+                selectable
+                style={[
+                  typography.footnote,
+                  { color: b.level === 'error' || b.level === 'fatal' ? colors.systemRed : colors.secondaryLabel },
+                ]}
+              >
+                {b.at.slice(11, 23)} [{b.tag}] {b.message}
+                {b.detail ? ` — ${b.detail}` : ''}
+              </Text>
+            ))
+          )}
+          <CupertinoButton
+            title="Clear Log"
+            variant="tinted"
+            onPress={() => {
+              clearDiagnostics()
+                .catch(() => {})
+                .finally(() => setDiagnostics({ breadcrumbs: [] }));
+            }}
+            style={{ marginTop: 16 }}
+          />
+        </View>
+      )}
 
       {/* ── About ──────────────────────────────────────────────── */}
       <CupertinoListSection header="About">
@@ -898,6 +984,13 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
+  },
+  errorLog: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 10,
+    padding: 12,
+    gap: 2,
   },
   gridControlRow: {
     paddingHorizontal: 16,
