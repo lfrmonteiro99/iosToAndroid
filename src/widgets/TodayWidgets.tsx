@@ -42,11 +42,11 @@ export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = 
   screenTime: 'hourglass-outline',
 };
 
-// iOS-style Today View grid sizing: 2 columns. 'small' widgets take one column
+// iOS-style Today View grid: 2 columns. 'small' widgets take one column
 // (side-by-side pairs); 'medium'/'large' widgets span both columns, with
-// 'large' getting extra vertical room. Shared between TodayViewScreen and the
-// Smart Stack eligibility logic so the stack only ever groups widgets that
-// occupy a half-width cell.
+// 'large' getting extra vertical room for denser content. Shared between
+// TodayViewScreen and the Smart Stack eligibility logic so the stack only
+// ever groups widgets that occupy a half-width cell.
 export type WidgetSize = 'small' | 'medium' | 'large';
 
 export const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
@@ -101,8 +101,9 @@ export async function loadSmartStackConfig(): Promise<WidgetType[]> {
     const raw = await AsyncStorage.getItem(SMART_STACK_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as WidgetType[];
-      // Keep only known, eligible (small) widget types.
-      return parsed.filter((t) => SMART_STACK_ELIGIBLE.includes(t)) as WidgetType[];
+      // Keep only known, eligible (small) widget types, in a valid count.
+      const valid = (parsed.filter((t) => SMART_STACK_ELIGIBLE.includes(t)) as WidgetType[]);
+      return valid;
     }
   } catch {
     // fall through

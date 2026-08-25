@@ -9,7 +9,7 @@ import {
   saveSmartStackConfig,
   useSmartStackConfig,
   type WidgetType,
-} from '../TodayWidgets';
+} from '../../widgets/TodayWidgets';
 
 const asMock = AsyncStorage.getItem as jest.Mock;
 const setMock = AsyncStorage.setItem as jest.Mock;

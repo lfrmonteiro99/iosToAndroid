@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
 
-  // Edit button (iOS pencil)
+  // Edit button (iOS pencil, simplified to a glyph)
   editBtn: {
     alignSelf: 'center',
     marginTop: 4,

@@ -10,7 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
-import { useWallet } from '../store/WalletStore';
+import { useWallet, PassType } from '../store/WalletStore';
+import { useCard, WalletCard } from '../store/CardStore';
+import { BRAND_LABELS } from './CardEditScreen';
 import {
   CupertinoNavigationBar,
   CupertinoEmptyState,
@@ -19,7 +21,10 @@ import {
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 
-const PASS_TYPE_LABELS: Record<string, string> = {
+// Exported so CardDetailScreen can render the same brand-equivalent label for
+// a pass without duplicating the mapping (#286 — see WalletCard/CardStore
+// mismatch note in CardDetailScreen.tsx).
+export const PASS_TYPE_LABELS: Record<PassType, string> = {
   boarding: 'Boarding',
   ticket: 'Ticket',
   loyalty: 'Loyalty',
@@ -52,6 +57,31 @@ function PassRow({
   );
 }
 
+const BRAND_ICON_COLOR: Record<WalletCard['brand'], string> = {
+  visa: '#1A1F71',
+  mastercard: '#EB001B',
+  amex: '#2E77BC',
+  other: '#8E8E93',
+};
+
+function CardRow({ card }: { card: WalletCard }) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+  return (
+    <CupertinoListTile
+      title={card.label}
+      subtitle={BRAND_LABELS[card.brand]}
+      showChevron={false}
+      leading={{ name: 'card', color: '#FFFFFF', backgroundColor: BRAND_ICON_COLOR[card.brand] }}
+      trailing={
+        <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+          {`•••• ${card.last4}`}
+        </Text>
+      }
+    />
+  );
+}
+
 interface WalletScreenProps {
   navigation: AppNavigationProp;
 }
@@ -60,7 +90,10 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { passes, isReady } = useWallet();
+  const { passes, isReady: walletReady } = useWallet();
+  const { cards, isReady: cardsReady } = useCard();
+
+  const isReady = walletReady && cardsReady;
 
   const handleAddPressed = useCallback(() => {
     navigation.navigate('PassEdit', {});
@@ -75,6 +108,25 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
       navigation.navigate('PassDetail', { passId });
     },
     [navigation],
+  );
+
+  const handleAddCardPressed = useCallback(() => navigation.navigate('CardEdit'), [navigation]);
+
+  // Rendered in BOTH branches below: with zero passes and zero cards the screen
+  // falls into the empty state, and without this row there is no touch path to
+  // CardEdit at all — adding a first card would be impossible on a fresh install.
+  const addCardRow = (
+    <Pressable
+      onPress={handleAddCardPressed}
+      accessibilityRole="button"
+      accessibilityLabel="Add card"
+      style={[styles.addRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+    >
+      <Ionicons name="add" size={20} color={colors.systemBlue} />
+      <Text style={[typography.body, { color: colors.systemBlue, marginLeft: 12 }]}>
+        Add Card
+      </Text>
+    </Pressable>
   );
 
   return (
@@ -106,28 +158,37 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
 
       {!isReady ? (
         <View style={styles.body} />
-      ) : passes.length === 0 ? (
-        <CupertinoEmptyState
-          icon="wallet-outline"
-          title="No Passes"
-          message="Add a boarding pass, ticket or loyalty card to get started."
-          actionLabel="Add Pass"
-          onAction={handleAddPressed}
-        />
+      ) : passes.length === 0 && cards.length === 0 ? (
+        <View style={styles.body}>
+          <CupertinoEmptyState
+            icon="wallet-outline"
+            title="No Passes"
+            message="Add a boarding pass, ticket or loyalty card to get started."
+            actionLabel="Add Pass"
+            onAction={handleAddPressed}
+          />
+          <View
+            style={{ paddingHorizontal: spacing.md, paddingBottom: insets.bottom + 24 }}
+          >
+            {addCardRow}
+          </View>
+        </View>
       ) : (
         <ScrollView
           style={styles.body}
           contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: insets.bottom + 24 }}
         >
-          <CupertinoListSection header="Passes">
-            {passes.map((pass) => (
-              <PassRow
-                key={pass.id}
-                pass={pass}
-                onPress={() => handlePassPressed(pass.id)}
-              />
-            ))}
-          </CupertinoListSection>
+          {passes.length > 0 && (
+            <CupertinoListSection header="Passes">
+              {passes.map((pass) => (
+                <PassRow
+                  key={pass.id}
+                  pass={pass}
+                  onPress={() => handlePassPressed(pass.id)}
+                />
+              ))}
+            </CupertinoListSection>
+          )}
 
           <Pressable
             onPress={handleAddPressed}
@@ -140,6 +201,16 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
               Add Pass
             </Text>
           </Pressable>
+
+          {cards.length > 0 && (
+            <CupertinoListSection header="Cards">
+              {cards.map((card) => (
+                <CardRow key={card.id} card={card} />
+              ))}
+            </CupertinoListSection>
+          )}
+
+          {addCardRow}
         </ScrollView>
       )}
     </View>

@@ -67,7 +67,7 @@ describe('AppsStore — reacts to package install/uninstall broadcasts', () => {
     // is passed, as in this wrapper).
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.banana',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(LauncherModule.getInstalledApps).not.toHaveBeenCalled();

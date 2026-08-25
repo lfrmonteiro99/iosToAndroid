@@ -246,7 +246,7 @@ describe('WallpaperScreen icon treatment (#486)', () => {
     // o tratamento actual — o rebuild não pode devolver ícones com outra silhueta.
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.a',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
   });

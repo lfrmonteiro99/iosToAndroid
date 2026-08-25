@@ -165,6 +165,35 @@ export interface InstalledKeyboard {
   enabled: boolean;
 }
 
+// ── Privacy Monitor (#624) ──────────────────────────────────────────────
+// Per-sensor breakdown of which installed apps declare the matching
+// permission (camera / microphone / location / internet). The native side
+// enumerates installed packages and reads each manifest's declared
+// permissions via PackageManager.GET_PERMISSIONS — a public API. JS renders
+// one card per sensor and, when expanded, a ranked bar list of apps.
+export type PrivacySensorKey = 'camera' | 'microphone' | 'location' | 'network';
+
+export interface PrivacySensorUsage {
+  packageName: string;
+  appName: string;
+  count: number;
+}
+
+export interface PrivacySensorSummary {
+  sensor: PrivacySensorKey;
+  label: string;
+  icon: string;
+  bg: string;
+  totalAccesses: number;
+  appCount: number;
+  topApps: PrivacySensorUsage[];
+}
+
+export interface PrivacyReport {
+  generatedAt: number;
+  sensors: PrivacySensorSummary[];
+}
+
 // ── App access (sensor usage) — issue #634 ────────────────────────────────
 
 /**
@@ -319,6 +348,8 @@ interface LauncherModuleType {
   // Permissions
   requestAllPermissions(): Promise<boolean>;
   checkPermissions(): Promise<Record<string, boolean>>;
+  // Privacy Monitor (#624): per-sensor access counts grouped per app.
+  getPrivacyReport(): Promise<PrivacyReport>;
   // Keyboards
   getInstalledKeyboards(): Promise<InstalledKeyboard[]>;
   // Ringtone
@@ -443,6 +474,7 @@ const stub: LauncherModuleType = {
   sendSms: async () => false,
   requestAllPermissions: async () => false,
   checkPermissions: async () => ({}),
+  getPrivacyReport: async () => ({ generatedAt: 0, sensors: [] }),
   getInstalledKeyboards: async () => [],
   getRingtone: async () => '',
   canWriteSystemSettings: async () => false,
@@ -751,6 +783,10 @@ function createBridgedModule(): LauncherModuleType {
     checkPermissions: async () => {
       try { return await nativeModule.checkPermissions(); }
       catch (e) { console.error('LauncherModule.checkPermissions failed:', e); reportBridgeError('checkPermissions', e); return {}; }
+    },
+    getPrivacyReport: async () => {
+      try { return await nativeModule.getPrivacyReport(); }
+      catch (e) { console.error('LauncherModule.getPrivacyReport failed:', e); reportBridgeError('getPrivacyReport', e); return { generatedAt: 0, sensors: [] }; }
     },
     getCalendarEvents: async (daysAhead: number) => {
       try { return await nativeModule.getCalendarEvents(daysAhead); }

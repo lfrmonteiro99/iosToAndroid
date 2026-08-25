@@ -44,6 +44,7 @@ import { LanguageRegionScreen } from '../screens/settings/LanguageRegionScreen';
 import { VpnScreen } from '../screens/settings/VpnScreen';
 import { BatteryScreen } from '../screens/settings/BatteryScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
+import { PrivacyMonitorScreen } from '../screens/settings/PrivacyMonitorScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
 import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouchSettingsScreen';
@@ -71,9 +72,12 @@ import { MapsScreen } from '../screens/MapsScreen';
 import { FindMyScreen } from '../screens/FindMyScreen';
 import { FindMyLocationHistoryScreen } from '../screens/FindMyLocationHistoryScreen';
 import { RemindersScreen } from '../screens/RemindersScreen';
+import { ShortcutsScreen } from '../screens/ShortcutsScreen';
 import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
 import { WalletScreen } from '../screens/WalletScreen';
+import { CardDetailScreen } from '../screens/CardDetailScreen';
+import { CardEditScreen } from '../screens/CardEditScreen';
 import { PassDetailScreen } from '../screens/PassDetailScreen';
 import { PassEditScreen } from '../screens/PassEditScreen';
 import { PassScanScreen } from '../screens/PassScanScreen';
@@ -122,9 +126,12 @@ export function TabNavigator() {
       <Stack.Screen name="FindMy" component={FindMyScreen} options={{ animation }} />
       <Stack.Screen name="FindMyLocationHistory" component={FindMyLocationHistoryScreen} options={{ animation }} />
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
+      <Stack.Screen name="Shortcuts" component={ShortcutsScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
       <Stack.Screen name="Wallet" component={WalletScreen} options={{ animation }} />
+      <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ animation }} />
+      <Stack.Screen name="CardEdit" component={CardEditScreen} options={{ animation }} />
       <Stack.Screen name="PassDetail" component={PassDetailScreen} options={{ animation }} />
       <Stack.Screen name="PassEdit" component={PassEditScreen} options={{ animation }} />
       <Stack.Screen name="PassScan" component={PassScanScreen} options={{ animation, gestureEnabled: false }} />
@@ -149,6 +156,7 @@ export function TabNavigator() {
       <Stack.Screen name="BackTapSettings" component={BackTapSettingsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="PrivacyMonitor" component={PrivacyMonitorScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SoftwareUpdate" component={SoftwareUpdateScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="DateTime" component={DateTimeScreen} options={{ animation: slideAnimation }} />

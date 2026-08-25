@@ -1,27 +1,27 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../utils/logger';
+import type { Shortcut, ShortcutAction } from '../utils/shortcutsDispatch';
+
+/**
+ * ShortcutsStore (#782, parte de #629): lista de atalhos do utilizador,
+ * persistida em AsyncStorage. Segue o mesmo padrão de `BookmarksStore.tsx`
+ * (Context + Provider + hook, sanitização na leitura).
+ *
+ * O modelo de dados (Shortcut/ShortcutAction) é canónico em
+ * `src/utils/shortcutsDispatch.ts` — o store importa e re-exporta os tipos
+ * para que ecrã, dispatcher e store partilhem a mesma definição em vez de a
+ * duplicar.
+ */
 
 const STORAGE_KEY = '@iostoandroid/shortcuts';
-
-export type ShortcutActionType = 'launchApp' | 'setFocusMode';
-
-export interface ShortcutAction {
-  type: ShortcutActionType;
-  payload: Record<string, unknown>;
-}
-
-export interface Shortcut {
-  id: string;
-  name: string;
-  icon: string;
-  actions: ShortcutAction[];
-}
 
 interface ShortcutsContextValue {
   shortcuts: Shortcut[];
   createShortcut: (name: string, icon: string, actions: ShortcutAction[]) => void;
   updateShortcut: (id: string, updates: Partial<Pick<Shortcut, 'name' | 'icon' | 'actions'>>) => void;
+  /** Append one primitive to the actions[] of the shortcut being edited (#783). */
+  addAction: (shortcutId: string, action: ShortcutAction) => void;
   deleteShortcut: (id: string) => void;
   isReady: boolean;
 }
@@ -96,9 +96,23 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
     setShortcuts((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
+  // Append one primitive to the actions[] of the shortcut being edited
+  // (#783). A missing id is a no-op, not a crash — and it must NOT fabricate a
+  // new shortcut or mutate other entries. We append only; the dispatcher decides
+  // what each primitive *does* at run time (#781), so the store stays a dumb
+  // append-only list of typed actions.
+  const addAction = useCallback((shortcutId: string, action: ShortcutAction) => {
+    if (!shortcutId) return;
+    setShortcuts((prev) =>
+      prev.map((s) =>
+        s.id === shortcutId ? { ...s, actions: [...s.actions, action] } : s,
+      ),
+    );
+  }, []);
+
   const value = useMemo(
-    () => ({ shortcuts, createShortcut, updateShortcut, deleteShortcut, isReady }),
-    [shortcuts, createShortcut, updateShortcut, deleteShortcut, isReady],
+    () => ({ shortcuts, createShortcut, updateShortcut, addAction, deleteShortcut, isReady }),
+    [shortcuts, createShortcut, updateShortcut, addAction, deleteShortcut, isReady],
   );
 
   return <ShortcutsContext.Provider value={value}>{children}</ShortcutsContext.Provider>;
@@ -109,3 +123,7 @@ export function useShortcuts() {
   if (!ctx) throw new Error('useShortcuts must be used within ShortcutsProvider');
   return ctx;
 }
+
+// Re-export the canonical data model so consumers can import it from either
+// the store or the dispatcher without drifting into two definitions.
+export type { Shortcut, ShortcutAction } from '../utils/shortcutsDispatch';

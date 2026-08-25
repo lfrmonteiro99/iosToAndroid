@@ -38,14 +38,19 @@ import {
   SMART_STACK_MIN,
   SMART_STACK_ELIGIBLE,
   type WidgetType,
-} from '../components/TodayWidgets';
+} from '../widgets/TodayWidgets';
+import {
+  computeWidgetGrid,
+} from '../widgets/widgetGrid';
 import { SmartStack, type SmartStackItem } from '../components/SmartStack';
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
 // (side-by-side pairs); 'medium'/'large' widgets span both columns, with
 // 'large' getting extra vertical room for denser content (e.g. event lists).
-// Mirrors the Home screen widget area sizing (#654/#655). Sizing map owned by
-// TodayWidgets so the Smart Stack eligibility logic shares the exact same source.
+// Sizes and packing live in the framework-free src/widgets/widgetGrid.ts so
+// they stay unit-testable in isolation (#809). WIDGET_SIZES itself stays in
+// TodayWidgets so the Smart Stack eligibility logic reads the exact same
+// source as the grid (#810).
 
 // ---------------------------------------------------------------------------
 // Date formatting
@@ -357,17 +362,17 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
 
                 {loaded && (
                   <View style={styles.widgetGrid}>
-                    {gridEnabled.map((type) => (
+                    {computeWidgetGrid(gridEnabled).map((cell) => (
                       <View
-                        key={type}
-                        testID={`widget-cell-${type}`}
+                        key={cell.type}
+                        testID={`widget-cell-${cell.type}`}
                         style={[
                           styles.widgetCell,
-                          WIDGET_SIZES[type] === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
-                          WIDGET_SIZES[type] === 'large' && styles.widgetCellLarge,
+                          cell.size === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
+                          cell.size === 'large' && styles.widgetCellLarge,
                         ]}
                       >
-                        {widgetMap[type]}
+                        {widgetMap[cell.type]}
                       </View>
                     ))}
                   </View>

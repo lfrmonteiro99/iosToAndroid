@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { GlassSurface } from './GlassSurface';
+import { GlassSurface } from '../components/GlassSurface';
 import { Shape } from '../theme/CupertinoTheme';
 
 export interface WidgetCardProps {
