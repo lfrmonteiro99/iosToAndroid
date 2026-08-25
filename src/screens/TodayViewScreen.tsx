@@ -27,30 +27,25 @@ import { GestureHaptics } from '../utils/gestureHaptics';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact } from '../utils/haptics';
-import { Shape } from '../theme/CupertinoTheme';
 import {
   ALL_WIDGET_TYPES,
   WIDGET_LABELS,
   WIDGET_ICONS,
+  WIDGET_SIZES,
   useWidgetConfig,
   useWidgetMap,
+  useSmartStackConfig,
+  SMART_STACK_MIN,
+  SMART_STACK_ELIGIBLE,
   type WidgetType,
 } from '../components/TodayWidgets';
+import { SmartStack, type SmartStackItem } from '../components/SmartStack';
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
 // (side-by-side pairs); 'medium'/'large' widgets span both columns, with
 // 'large' getting extra vertical room for denser content (e.g. event lists).
-// Mirrors the Home screen widget area sizing (#654/#655).
-type WidgetSize = 'small' | 'medium' | 'large';
-
-const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
-  battery: 'small',
-  storage: 'small',
-  weather: 'medium',
-  upNext: 'large',
-  messages: 'small',
-  screenTime: 'small',
-};
+// Mirrors the Home screen widget area sizing (#654/#655). Sizing map owned by
+// TodayWidgets so the Smart Stack eligibility logic shares the exact same source.
 
 // ---------------------------------------------------------------------------
 // Date formatting
@@ -218,6 +213,11 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
   const { enabled, setEnabled, loaded } = useWidgetConfig();
   const [editMode, setEditMode] = useState(false);
 
+  // Smart Stack: 2..4 small widgets grouped into one auto-rotating cell above
+  // the 2-column grid. Reuses the exact same widget instances (widgetMap) and
+  // the same grid sizing as the rest of the Today View (#810).
+  const { stack: stackConfig, loaded: stackLoaded } = useSmartStackConfig();
+
   const handleSaveEdit = useCallback(
     (next: WidgetType[]) => {
       setEnabled(next);
@@ -229,6 +229,27 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
   // Map of widget type -> rendered JSX — shared with LauncherHomeScreen (#654)
   // so both surfaces render the same widget instances off the same config.
   const widgetMap = useWidgetMap();
+
+  // Smart Stack items: the small widgets the user grouped, rendered from the
+  // SAME widgetMap instances so the stacked Battery/Weather/... are identical
+  // to their grid counterparts. Only eligible (small) widgets are stacked.
+  const stackItems = useMemo<SmartStackItem[]>(
+    () => stackConfig.filter((t) => SMART_STACK_ELIGIBLE.includes(t)).map((t) => ({ key: t, node: widgetMap[t] })),
+    [stackConfig, widgetMap],
+  );
+  // Each stacked widget keeps its own accessibility label (iOS announces every
+  // card in the stack independently, even the peeking layers).
+  const stackLabels = useMemo<Record<string, string>>(
+    () => Object.fromEntries(stackConfig.map((t) => [t, `${WIDGET_LABELS[t]} widget`])),
+    [stackConfig],
+  );
+
+  // The grid below shows every enabled widget EXCEPT the ones lifted into the
+  // stack — in iOS the stacked widgets appear only in the stack, never twice.
+  const gridEnabled = useMemo(
+    () => enabled.filter((t) => !stackConfig.includes(t)),
+    [enabled, stackConfig],
+  );
 
   // Swipe-left gesture to dismiss
   const translateX = useSharedValue(0);
@@ -319,9 +340,24 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
               />
             ) : (
               <>
+                {loaded && stackLoaded && stackItems.length >= SMART_STACK_MIN && (
+                  <View
+                    testID="today-smart-stack-cell"
+                    style={[styles.widgetCell, styles.widgetCellSmall, styles.widgetCellStack]}
+                  >
+                    <SmartStack
+                      testID="today-smart-stack"
+                      items={stackItems}
+                      autoRotateIntervalMs={5000}
+                      accessibilityLabels={stackLabels}
+                      onEditStack={() => setEditMode(true)}
+                    />
+                  </View>
+                )}
+
                 {loaded && (
                   <View style={styles.widgetGrid}>
-                    {enabled.map((type) => (
+                    {gridEnabled.map((type) => (
                       <View
                         key={type}
                         testID={`widget-cell-${type}`}
@@ -394,6 +430,9 @@ const styles = StyleSheet.create({
   // 'small' = one column (~half width, pairs up); 'medium'/'large' = full width
   widgetCellSmall: {
     width: '48%',
+  },
+  widgetCellStack: {
+    marginBottom: 14,
   },
   widgetCellFull: {
     width: '100%',
