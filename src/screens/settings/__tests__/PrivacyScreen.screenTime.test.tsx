@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '../../../test-utils';
+import { render, waitFor, within } from '../../../test-utils';
 import { Platform } from 'react-native';
 import { PrivacyScreen } from '../PrivacyScreen';
 
@@ -50,18 +50,23 @@ describe('PrivacyScreen — Screen Time card (#624-S3)', () => {
       { appName: 'X', totalTimeMs: 120000, packageName: 'com.x', date: '2026-08-24' },
     ]);
 
-    const { getByText, queryByText } = render(<PrivacyScreen navigation={mockNavigation as never} />);
+    const { getByTestId } = render(<PrivacyScreen navigation={mockNavigation as never} />);
 
     await waitFor(() => {
       expect(launcherMock.getScreenTimeStats).toHaveBeenCalled();
     });
-    expect(getByText('Screen Time')).toBeTruthy();
-    expect(getByText(/usage time/i)).toBeTruthy();
+    // Scoped to the Screen Time card: the App Privacy Report section further
+    // down legitimately talks about camera/mic/location *access*, because it
+    // opens the native Android Privacy Dashboard. This assertion is about the
+    // Screen Time card only.
+    const card = within(getByTestId('screen-time-card'));
+    expect(card.getByText('Screen Time')).toBeTruthy();
+    expect(card.getByText(/usage time/i)).toBeTruthy();
     // Never say "access"/"acesso" as visible copy — this is aggregate
     // time-on-screen, not a sensor/permission access log. (Internal RN a11y
     // props like accessibilityLabel are not user-visible text and are exempt.)
-    expect(queryByText(/access/i)).toBeNull();
-    expect(queryByText(/acesso/i)).toBeNull();
+    expect(card.queryByText(/access/i)).toBeNull();
+    expect(card.queryByText(/acesso/i)).toBeNull();
   });
 
   it('sorts apps by totalTimeMs descending', async () => {

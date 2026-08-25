@@ -7,6 +7,39 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   <FoldersProvider>{children}</FoldersProvider>
 );
 
+// STATEFUL AsyncStorage, seeded per test.
+//
+// The global mock in jest.setup.js is stateless: setItem is a no-op and getItem
+// answers whatever was last stubbed. Both hydration tests below broke on that,
+// and for two different reasons once FoldersStore started calling
+// migrateAsyncStorageKey(@folders -> @iostoandroid/folders) BEFORE reading its
+// own key:
+//
+//   'hydrates folders'  used mockResolvedValueOnce, and the single queued value
+//                       was consumed by the migration's read of the LEGACY key,
+//                       so the store's own read got null.
+//   'migrates legacy'   used a key-aware but static mockImplementation, so the
+//                       new key still answered null after the migration wrote to
+//                       it — the write went nowhere.
+//
+// Modelling the store as a real map fixes both honestly: the migration's write is
+// observable by the read that follows it, which is the actual behaviour under test.
+function seedAsyncStorage(initial: Record<string, string> = {}) {
+  const store = new Map<string, string>(Object.entries(initial));
+  (AsyncStorage.getItem as jest.Mock).mockImplementation((k: string) =>
+    Promise.resolve(store.has(k) ? store.get(k)! : null),
+  );
+  (AsyncStorage.setItem as jest.Mock).mockImplementation((k: string, v: string) => {
+    store.set(k, v);
+    return Promise.resolve();
+  });
+  (AsyncStorage.removeItem as jest.Mock).mockImplementation((k: string) => {
+    store.delete(k);
+    return Promise.resolve();
+  });
+  return store;
+}
+
 let dateNowCounter = 1000000;
 
 beforeEach(() => {
@@ -180,7 +213,7 @@ describe('FoldersStore', () => {
     const saved = JSON.stringify([
       { id: 'saved-1', name: 'Saved Folder', apps: ['com.saved.app'], color: '#007AFF' },
     ]);
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+    seedAsyncStorage({ '@iostoandroid/folders': saved });
 
     const { result } = renderHook(() => useFolders(), { wrapper });
     await act(async () => {});
@@ -194,12 +227,8 @@ describe('FoldersStore', () => {
     const legacy = JSON.stringify([
       { id: 'legacy-1', name: 'Legacy Folder', apps: ['com.legacy.app'], color: '#34C759' },
     ]);
-    // Simulate: legacy key has data, new key is empty
-    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
-      if (key === '@folders') return Promise.resolve(legacy);
-      if (key === '@iostoandroid/folders') return Promise.resolve(null);
-      return Promise.resolve(null);
-    });
+    // Legacy key has data, new key is absent — the migration must move it.
+    seedAsyncStorage({ '@folders': legacy });
 
     const { result } = renderHook(() => useFolders(), { wrapper });
     await act(async () => {});

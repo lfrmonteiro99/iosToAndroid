@@ -7,7 +7,6 @@ import { CupertinoNavigationBar, CupertinoCard, useAlert } from '../../component
 import { GlassSurface } from '../../components/GlassSurface';
 import {
   toPrivacySensorViews,
-  totalAccessCount,
   type PrivacySensorView,
 } from '../../utils/privacyMonitor';
 import LauncherModule from '../../../modules/launcher-module/src';
@@ -16,9 +15,13 @@ import type { AppNavigationProp } from '../../navigation/types';
 
 // #624 — Privacy Monitor dashboard. One card per privacy sensor (📷/🎤/📍/🌐)
 // showing the apps that declare that permission in their manifest; tapping a
-// card expands the per-app list (count is always 1 - this is set-membership,
+// card expands the per-app list (count is always 1 — this is set-membership,
 // not usage tallies). Reuses CupertinoCard + GlassSurface so it matches the
 // rest of the settings chrome.
+// No bar/length is shown per app: with count fixed at 1, any per-app ratio
+// would be a constant 100% and convey no information. The `ratio` field still
+// exists in privacyMonitor.ts for unit tests, but the UI does not consume it
+// (#635-SI4).
 const SENSOR_ORDER: PrivacyReport['sensors'][number]['sensor'][] = [
   'camera',
   'microphone',
@@ -81,19 +84,17 @@ function PrivacySensorCard({
                   <Text
                     style={[typography.subhead, { color: colors.label, flex: 1 }]}
                     numberOfLines={1}
+                    accessibilityLabel={row.appName}
                   >
                     {row.appName}
                   </Text>
                 </View>
-                <View style={[styles.barTrack, { backgroundColor: colors.systemGray5 }]}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${Math.round(row.ratio * 100)}%`, backgroundColor: view.bg },
-                    ]}
-                    accessibilityLabel={`${row.appName}: app com permissão`}
-                  />
-                </View>
+                <Text
+                  style={[typography.footnote, { color: colors.tertiaryLabel }]}
+                  numberOfLines={1}
+                >
+                  {row.packageName}
+                </Text>
               </View>
             ))
           ) : (
@@ -137,7 +138,15 @@ export function PrivacyMonitorScreen({ navigation }: { navigation: AppNavigation
   const ordered = [...views].sort(
     (a, b) => SENSOR_ORDER.indexOf(a.sensor) - SENSOR_ORDER.indexOf(b.sensor),
   );
-  const total = totalAccessCount(report);
+  // The header labels the count as "apps com permissão de sensor". Summing the
+  // per-sensor totals double-counts any app that appears under more than one
+  // sensor (most declare several, e.g. INTERNET), so the number could exceed
+  // the number of installed apps. Count DISTINCT package names instead (#840).
+  const total = report
+    ? new Set(
+        report.sensors.flatMap((s) => (s.topApps ?? []).map((a) => a.packageName)),
+      ).size
+    : 0;
 
   const toggle = (sensor: string) =>
     setExpanded((prev) => ({ ...prev, [sensor]: !prev[sensor] }));
@@ -235,17 +244,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
-  },
-  barTrack: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 4,
-    minWidth: 4,
   },
   loading: {
     paddingTop: 48,

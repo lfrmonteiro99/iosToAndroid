@@ -33,6 +33,14 @@ jest.mock('expo-navigation-bar', () => ({
 
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 
+// expo-linking's real createURL() reads the manifest via expo-constants to
+// resolve the URI scheme, and throws when Constants.expoConfig is empty (as
+// it is under jest-expo's mock) — see Schemes.js's resolveScheme(). Mocked
+// like the other native-backed expo-* modules above (#785).
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path) => `iostoandroid://${path ?? ''}`),
+}));
+
 jest.mock('expo-brightness', () => ({
   getBrightnessAsync: jest.fn(() => Promise.resolve(0.5)),
   setBrightnessAsync: jest.fn(() => Promise.resolve()),
@@ -123,6 +131,15 @@ jest.mock('expo-sensors', () => ({
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
+}));
+
+// Default secure-store mock (CardStore, LockScreen, LauncherSettingsScreen).
+// Individual test files may still override with their own jest.mock('expo-secure-store', ...)
+// when they need a stateful in-memory implementation.
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => Promise.resolve(null)),
+  setItemAsync: jest.fn(() => Promise.resolve()),
+  deleteItemAsync: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () => ({

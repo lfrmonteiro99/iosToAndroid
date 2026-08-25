@@ -37,6 +37,8 @@ import {
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import { hapticImpact, hapticNotification, hapticSelection } from '../utils/haptics';
+import { useTimer } from '../hooks/useTimer';
+import { pauseTimer, resumeTimer, setTimerDuration, startTimer, stopTimer } from '../store/timerStore';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -900,33 +902,16 @@ function StopwatchTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Timer Tab (unchanged)
+// Timer Tab
+//
+// The countdown itself lives in `src/store/timerStore.ts` (#784) so it survives
+// unmounting this screen and can be driven by `startTimer`/`stopTimer` from
+// outside React. This component is presentation only.
 // ---------------------------------------------------------------------------
 function TimerTab() {
   const { theme } = useTheme();
   const { colors } = theme;
-  const [duration, setDuration] = useState(300); // 5 min default
-  const [remaining, setRemaining] = useState(300);
-  const [running, setRunning] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (running && remaining > 0) {
-      intervalRef.current = setInterval(() => {
-        setRemaining((r) => {
-          if (r <= 1) {
-            setRunning(false);
-            hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
-            return 0;
-          }
-          return r - 1;
-        });
-      }, 1000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [running, remaining]);
+  const { duration, remaining, running } = useTimer();
 
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
@@ -945,7 +930,7 @@ function TimerTab() {
             <Pressable
               key={p}
               style={[styles.presetBtn, p === duration && { backgroundColor: colors.systemOrange }]}
-              onPress={() => { setDuration(p); setRemaining(p); }}
+              onPress={() => { setTimerDuration(p); }}
               accessibilityLabel={`Set timer to ${p >= 60 ? `${p / 60} minutes` : `${p} seconds`}`}
               accessibilityRole="button"
             >
@@ -960,7 +945,7 @@ function TimerTab() {
       <View style={styles.buttonRow}>
         <Pressable
           style={[styles.roundBtn, { backgroundColor: colors.systemGray5 }]}
-          onPress={() => { setRunning(false); setRemaining(duration); }}
+          onPress={() => { stopTimer(); }}
           accessibilityLabel="Cancel timer"
           accessibilityRole="button"
         >
@@ -970,8 +955,13 @@ function TimerTab() {
           style={[styles.roundBtn, { backgroundColor: running ? 'rgba(255,59,48,0.2)' : 'rgba(52,199,89,0.2)' }]}
           onPress={() => {
             hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            if (remaining === 0) { setRemaining(duration); }
-            setRunning((r) => !r);
+            if (running) {
+              pauseTimer();
+            } else if (remaining === 0) {
+              startTimer(duration);
+            } else {
+              resumeTimer();
+            }
           }}
           accessibilityLabel={running ? 'Pause timer' : remaining === 0 ? 'Restart timer' : 'Start timer'}
           accessibilityRole="button"

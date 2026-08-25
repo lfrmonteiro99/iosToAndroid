@@ -1,0 +1,22 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- androidx.health.connect:connect-client declares minSdk 26; this app ships
+         minSdk 24, so the manifest merger fails :app:processReleaseMainManifest with
+         "uses-sdk:minSdkVersion 24 cannot be smaller than version 26 declared in
+         library [androidx.health.connect:connect-client]".
+
+         Overriding rather than raising the app's minSdk to 26, which would drop
+         Android 7.x (API 24/25) devices — a product decision this build failure
+         should not force. The override is safe because nothing here is reachable
+         below API 26: HealthConnectModule.isSdkAvailable() returns false when
+         Build.VERSION.SDK_INT < Build.VERSION_CODES.O, and both AsyncFunctions
+         bail out on that before touching HealthConnectClient. On API 24/25 the
+         module reports "unavailable" and the app reads no health data at all,
+         which is the documented contract of this availability-gated bridge.
+
+         Scoped to this module's manifest on purpose: this is the module that pulls
+         connect-client in, so the override travels with the dependency instead of
+         loosening the check for the whole app. -->
+    <uses-sdk tools:overrideLibrary="androidx.health.connect.client" />
+</manifest>
