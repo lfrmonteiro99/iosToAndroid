@@ -5,16 +5,6 @@ import * as SettingsStore from '../../store/SettingsStore';
 import * as FoldersStore from '../../store/FoldersStore';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
 
-// COMPACT WIDTH: jest-expo's default window is 750x1334 — pixel numbers for an
-// iPhone 8, whose real width is 375pt. useRegularWidth compares against a 700pt
-// breakpoint, so under jest the screen takes the TABLET branch and renders
-// ResponsiveNavShell's cupertino-sidebar instead of the phone grid. This suite
-// inspects grid icon boxes (app-icon-box-*), which only exist on the phone path.
-jest.mock('../../hooks/useRegularWidth', () => ({
-  ...jest.requireActual('../../hooks/useRegularWidth'),
-  useRegularWidth: () => false,
-}));
-
 // issue #620: «Tinted Icons» — when enabled, real app-icon Images on the
 // home grid and dock render with the chosen colour as tintColor. Mirrors the
 // mocking pattern used by LauncherHomeScreen.wallpaperIndex.test.tsx.
