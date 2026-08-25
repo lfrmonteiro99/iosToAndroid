@@ -211,6 +211,17 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
           <CupertinoListSection
             footer="Android does not let third-party apps count how many times other apps access the camera, microphone or location — that data requires a signature-only system permission. The 'App Privacy Report' button below opens the native Android 12+ panel, which shows those access counts when your device provides it."
           >
+            <CupertinoListTile
+              title="Privacy Monitor"
+              subtitle="Acessos por app nos últimos 30 dias"
+              leading={{
+                name: 'eye',
+                color: '#FFFFFF',
+                backgroundColor: colors.accent,
+              }}
+              showChevron
+              onPress={() => navigation.navigate('PrivacyMonitor')}
+            />
             {PERMISSION_CATEGORIES.map((item) => {
               // Location row is gated by the Location Services toggle above
               const locationDisabled = item.key === 'location' && !settings.locationServices;

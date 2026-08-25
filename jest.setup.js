@@ -377,6 +377,8 @@ jest.mock('./modules/launcher-module/src', () => ({
     sendSms: jest.fn(() => Promise.resolve(true)),
     requestAllPermissions: jest.fn(() => Promise.resolve(true)),
     checkPermissions: jest.fn(() => Promise.resolve({})),
+    // #624 Privacy Monitor
+    getPrivacyReport: jest.fn(() => Promise.resolve({ generatedAt: Date.now(), sensors: [] })),
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
