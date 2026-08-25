@@ -142,4 +142,41 @@ describe('PrivacyMonitorScreen', () => {
     const { queryByText } = renderScreen();
     expect(queryByText('A carregar…')).toBeTruthy();
   });
+
+  it('collapses the per-app breakdown on the second tap of the same card', async () => {
+    const { findByText, queryByText } = renderScreen();
+    await findByText('Camera');
+
+    // Collapsed: Instagram hidden.
+    expect(queryByText('Instagram')).toBeNull();
+
+    // First tap expands the Camera card -> Instagram appears.
+    fireEvent.press(await findByText('Camera'));
+    await waitFor(() => {
+      expect(queryByText('Instagram')).toBeTruthy();
+    });
+
+    // Second tap on the SAME card collapses it again -> Instagram hidden.
+    fireEvent.press(await findByText('Camera'));
+    await waitFor(() => {
+      expect(queryByText('Instagram')).toBeNull();
+    });
+  });
+
+  it('shows an empty-state message when the report has no sensors', async () => {
+    // Override the default REPORT for THIS test only (not in beforeEach, so the
+    // 5 original tests keep their fixture).
+    launcherMock.getPrivacyReport.mockResolvedValue({ generatedAt: 1, sensors: [] });
+    const { findByText } = renderScreen();
+    expect(await findByText('Sem dados de privacidade disponíveis.')).toBeTruthy();
+  });
+
+  it('surfaces an alert when the privacy report fails to load', async () => {
+    launcherMock.getPrivacyReport.mockRejectedValue(new Error('boom'));
+    const { findByText } = renderScreen();
+    // The screen uses the app's useAlert() context (CupertinoAlertDialog), NOT
+    // RN's Alert.alert. The catch block renders the message below.
+    expect(await findByText('Não foi possível carregar o relatório de privacidade.')).toBeTruthy();
+    expect(await findByText('Erro')).toBeTruthy();
+  });
 });

@@ -1,9 +1,17 @@
 import React from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { render, fireEvent, waitFor, act } from '../../../test-utils';
+import { render, fireEvent, waitFor, act, configure } from '../../../test-utils';
 import { BackupRestoreScreen } from '../BackupRestoreScreen';
 import { AUTO_BACKUP_STORAGE_KEY } from '../../../services/AutoBackupSchedule';
 import { AlertProvider } from '../../../components/AlertProvider';
+
+// The cloud-backup path runs a real key derivation (PBKDF2) before the upload,
+// which takes well over RNTL's 1s default asyncUtilTimeout whenever this suite
+// shares CPU with the rest of the settings suites — the three upload
+// assertions passed in isolation and failed in a full run. Raised here rather
+// than per call site so any future upload assertion inherits the same budget.
+configure({ asyncUtilTimeout: 15000 });
+jest.setTimeout(60000);
 
 // BackupRestoreScreen uses useAlert() for its error/success dialogs. The shared
 // test-utils wrapper does not mount AlertProvider, so useAlert() is a no-op there
