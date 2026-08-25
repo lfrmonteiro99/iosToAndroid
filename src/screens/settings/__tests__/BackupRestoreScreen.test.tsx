@@ -3,15 +3,34 @@ import { AppState, AppStateStatus } from 'react-native';
 import { render, fireEvent, waitFor, act, configure } from '../../../test-utils';
 import { BackupRestoreScreen } from '../BackupRestoreScreen';
 import { AUTO_BACKUP_STORAGE_KEY } from '../../../services/AutoBackupSchedule';
+import * as BackupEncryption from '../../../services/BackupEncryption';
 import { AlertProvider } from '../../../components/AlertProvider';
 
-// The cloud-backup path runs a real key derivation (PBKDF2) before the upload,
-// which takes well over RNTL's 1s default asyncUtilTimeout whenever this suite
-// shares CPU with the rest of the settings suites — the three upload
-// assertions passed in isolation and failed in a full run. Raised here rather
-// than per call site so any future upload assertion inherits the same budget.
+// The cloud-backup path runs a real PBKDF2 key derivation before the upload.
+// Raising RNTL's 1s default asyncUtilTimeout was the first attempt and was not
+// enough: the three upload assertions still failed in a full-repo run (293
+// suites) while passing when only the settings suites ran. The timeout is kept
+// as headroom, but `stubEncryption` below is the actual fix — the tests that
+// assert the UPLOAD path now stub the crypto, so they no longer race a
+// CPU-bound derivation at all.
 configure({ asyncUtilTimeout: 15000 });
 jest.setTimeout(60000);
+
+/**
+ * Replaces encryptSnapshot with a fixed envelope for the tests that are about
+ * the upload, the failure alert and the lastBackupAt stamp — none of which care
+ * what the ciphertext is. The real round trip stays covered by
+ * services/__tests__/BackupEncryption.test.ts and by the wrong-passphrase
+ * restore tests in this file, which are deliberately NOT stubbed.
+ */
+function stubEncryption() {
+  jest.spyOn(BackupEncryption, 'encryptSnapshot').mockReturnValue({
+    version: 1,
+    salt: 'c3R1YnNhbHQ=',
+    iv: 'c3R1Yml2',
+    ciphertext: 'c3R1YmNpcGhlcnRleHQ=',
+  });
+}
 
 // BackupRestoreScreen uses useAlert() for its error/success dialogs. The shared
 // test-utils wrapper does not mount AlertProvider, so useAlert() is a no-op there
@@ -358,6 +377,7 @@ describe('BackupRestoreScreen — Cloud Backup', () => {
   });
 
   it('backs up via createSnapshot -> encryptSnapshot -> uploadBackup once the passphrase is confirmed', async () => {
+    stubEncryption();
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
     const { getByText, getByPlaceholderText, queryByText } = renderScreen(mockNavigation);
 
@@ -656,6 +676,7 @@ describe('BackupRestoreScreen — Auto Backup', () => {
   });
 
   it('completing the reminder flow uploads via #279 and stamps lastBackupAt', async () => {
+    stubEncryption();
     store.set(AUTO_BACKUP_STORAGE_KEY, OVERDUE);
 
     const { getByText, getByPlaceholderText, queryByText } = renderScreen();
@@ -684,6 +705,7 @@ describe('BackupRestoreScreen — Auto Backup', () => {
   // Inverse of the fix: a FAILED upload must leave the schedule alone, so the
   // reminder fires again instead of silently pretending the backup happened.
   it('a failed upload does NOT stamp lastBackupAt', async () => {
+    stubEncryption();
     store.set(AUTO_BACKUP_STORAGE_KEY, OVERDUE);
     (global.fetch as jest.Mock).mockRejectedValue(new Error('Network request failed'));
 

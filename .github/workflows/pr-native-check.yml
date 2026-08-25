@@ -1,0 +1,138 @@
+name: PR native check
+
+# THE GATE THAT WAS MISSING.
+#
+# Until this existed, NOTHING ran on a pull request into `dev`: auto-release
+# fires on close, build-dev-apk on push, build-apk on dispatch, and
+# enforce-pr-base is scoped to `branches: [main]`. So every agent PR merged into
+# dev with zero CI, and native breakage was only discovered by the post-merge
+# build — on dev, after the fact.
+#
+# #738 (the Health Connect module) is the case that motivated this. It passed
+# jest and tsc and still broke dev three times in a row, each failure only
+# visible to Gradle:
+#
+#   1. npm ci  — package.json declared two deps the lockfile did not have (#887)
+#   2. :health-connect-module:compileReleaseKotlin — suspend calls from a plain
+#      AsyncFunction lambda, which is not a coroutine scope (#889)
+#   3. :app:processReleaseMainManifest — connect-client declares minSdk 26,
+#      the app ships 24 (#890)
+#
+# None of the three is reachable from JS tooling. This workflow runs the real
+# release build, so all three fail here instead of on dev.
+#
+# WHY PATH-FILTERED: a full assembleRelease is the only honest gate (a targeted
+# task list would have caught these three and still missed dex/packaging), but
+# it costs minutes. Most agent PRs only touch src/**, where the JS gate in
+# pr-checks.yml is the relevant one. The paths below are the inputs that can
+# break a native build:
+#
+#   modules/*/android/**              Kotlin, Gradle and manifests (the #738 class)
+#   modules/*/expo-module.config.json how a module is registered natively
+#   modules/*/package.json            a module's own native dependencies
+#   android/**                        checked-in native config, if any
+#   plugins/**                        config plugins that rewrite the project
+#   package.json / package-lock.json  dependency changes (the #887 class)
+#   app.json                          Expo config: permissions, plugins, SDK
+#   this file, so changes to the gate self-test
+#
+# Deliberately NOT `modules/**`: that also matches every module's TypeScript
+# surface (modules/*/src/**), and a JS-only edit there cannot break Gradle. It
+# was the first version of this filter and it made the expensive job run on
+# PRs that had no native change at all.
+#
+# A PR that touches none of them cannot break the native build, and skipping it
+# there keeps the queue moving.
+#
+# NOTE if branch protection is ever turned on: a path-filtered workflow reports
+# as "skipped", not "success". Do not mark this check "required" as-is, or PRs
+# that legitimately skip it will block forever. Make it required only together
+# with a companion always-runs job that reports success on the skip path.
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'modules/*/android/**'
+      - 'modules/*/expo-module.config.json'
+      - 'modules/*/package.json'
+      - 'android/**'
+      - 'plugins/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'app.json'
+      - '.github/workflows/pr-native-check.yml'
+
+permissions:
+  contents: read
+
+# Superseded pushes to the same PR are dead weight — only the head matters.
+concurrency:
+  group: pr-native-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Native release build
+    runs-on: ubuntu-latest
+    # The measured dev APK build is ~6 min end to end; this is a backstop
+    # against a hung Gradle daemon, not a target.
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` and not `npm install`: ci FAILS on a package.json/lockfile
+      # mismatch, which is exactly failure (1) above. `npm install` would
+      # silently repair the lockfile in the runner and hide the problem.
+      - name: Install dependencies (fails on a desynced lockfile)
+        run: npm ci
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean
+
+      - name: Make Gradlew executable
+        run: chmod +x android/gradlew
+
+      # Read-only: a PR must never write the shared cache — it runs on
+      # untrusted-ish PR refs and its entries could not be reached by later
+      # builds anyway. Reading is what makes this gate affordable.
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      # arm64-v8a only, same as the dev APK: this gate is about whether the
+      # native build succeeds, not about shipping every ABI. Dropping the x86
+      # emulator ABIs removes most of the CMake work.
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+      # Only on failure, and only the tail: enough to read the Gradle error in
+      # the PR without downloading an artifact.
+      - name: Surface the failing manifest merger report
+        if: failure()
+        run: |
+          for f in android/app/build/outputs/logs/manifest-merger-release-report.txt; do
+            [ -f "$f" ] || continue
+            echo "::group::$f"
+            tail -60 "$f"
+            echo "::endgroup::"
+          done

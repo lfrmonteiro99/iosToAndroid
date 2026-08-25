@@ -1,0 +1,86 @@
+name: PR checks
+
+# Runs on EVERY pull request into dev, and on dev itself. Companion to
+# pr-native-check.yml, which is path-filtered to the native inputs; this one has
+# no filter, so a PR that only touches src/** still gets checked.
+#
+# Until this existed, NOTHING ran on a pull request into dev: auto-release fires
+# on close, build-dev-apk on push, build-apk on dispatch, and enforce-pr-base is
+# scoped to `branches: [main]`. Agent PRs merged into dev with zero CI.
+#
+# EVERY STEP HERE IS BLOCKING. That is a deliberate change from the first
+# version of this file, which ran lint/tsc/jest with continue-on-error because
+# dev carried 1 tsc error and 13 failing suites at the time — making them
+# blocking then would have failed every PR on breakage it did not cause. Those
+# were driven to zero (#891) and the baseline was then measured across the whole
+# repo: 293 suites, 2939 tests, 0 failures. There is no longer a reason to let
+# a red check through.
+#
+# Why each step is worth a runner minute:
+#
+#   npm ci  — fails on a package.json/lockfile mismatch. That broke dev once
+#             (#887) and cost three follow-up builds. `npm install` would
+#             silently repair the lockfile in the runner and hide it.
+#   lint    — 0 errors on dev. Warnings do not fail eslint, so this catches
+#             errors only, which is the intent.
+#   tsc     — the single tsc error dev carried was a test mock that had drifted
+#             from the store's interface. Cheap to catch, invisible otherwise.
+#   jest    — the 13 suites that were red on dev were red for weeks because
+#             nothing ran them on a PR.
+#
+# What this gate CANNOT see: anything below JavaScript. Kotlin compilation,
+# manifest merging, Gradle configuration and dex/packaging are all invisible
+# here — #738 passed jest and tsc and still broke dev three times. That is
+# pr-native-check.yml's job, and neither workflow substitutes for the other.
+
+on:
+  pull_request:
+    branches: [dev]
+  # Also on dev itself: a merge queue of one still merges things, and a
+  # post-merge signal on dev is what tells us the baseline is still clean
+  # rather than assuming the PR runs covered it.
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  # PR number when it exists, ref otherwise, so the push-on-dev runs do not
+  # cancel each other's PR runs or vice versa.
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, tests
+    runs-on: ubuntu-latest
+    # The suite is large (2939 tests). This is a backstop against a hung worker
+    # burning a full six-hour job, not a target — a healthy run is minutes.
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (fails on a desynced lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # -w 2 keeps peak memory inside the runner. The default worker count has
+      # been enough to get workers OOM-killed on this suite, and a SIGKILLed
+      # worker reports as "Test suite failed to run", which reads like a code
+      # failure and is not one.
+      - name: Tests
+        run: npx jest -w 2 --ci
