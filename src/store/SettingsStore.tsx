@@ -50,6 +50,7 @@ import {
   normalizePerformanceProfile,
   type PerformanceProfile,
 } from '../utils/performanceProfile';
+import { dispatchSetFocusMode, type FocusModeValue } from '../actions/primitiveDispatcher';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -713,10 +714,13 @@ export function SettingsProvider({
   }, []);
 
   /** setFocusMode: convenience wrapper that updates the focusMode setting.
-   *  Pass null or 'off' to disable focus mode. */
+   *  Pass null or 'off' to disable focus mode.
+   *  #781: null→'off' resolution now lives in dispatchSetFocusMode, the
+   *  framework-free primitive shared with future non-Provider callers. */
   const setFocusMode = useCallback((mode: string | null) => {
-    const resolved = (mode === null ? 'off' : mode) as SettingsState['focusMode'];
-    setSettings((prev) => ({ ...prev, focusMode: resolved }));
+    dispatchSetFocusMode(mode, (resolved: FocusModeValue) =>
+      setSettings((prev) => ({ ...prev, focusMode: resolved }))
+    );
   }, []);
 
   /** activeFocusMode: null when focus is off, otherwise the current mode string. */
