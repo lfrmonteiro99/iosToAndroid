@@ -399,6 +399,23 @@ jest.mock('./modules/launcher-module/src', () => ({
     // #626 Live Activities
     postLiveActivity: jest.fn(() => Promise.resolve(true)),
     cancelLiveActivity: jest.fn(() => Promise.resolve(true)),
+    // #636 Back Tap
+    startTapDetection: jest.fn(() => Promise.resolve(true)),
+    stopTapDetection: jest.fn(() => Promise.resolve(true)),
+    isTapDetectionRunning: jest.fn(() => Promise.resolve(false)),
+    // #634 App access (sensor usage)
+    getRecentAccessEvents: jest.fn(() => Promise.resolve([])),
+    getAppAccessCounts: jest.fn(() => Promise.resolve({})),
+    startAccessTrackingService: jest.fn(() => Promise.resolve(false)),
+    stopAccessTrackingService: jest.fn(() => Promise.resolve(false)),
+    isAccessTrackingServiceRunning: jest.fn(() => Promise.resolve(false)),
+    // #624-S4 Network usage per app — PrivacyScreen calls this on mount, so
+    // every suite rendering it (even without a local jest.mock override) needs
+    // a callable default here, same reasoning as addHomePressedListener above.
+    getNetworkUsageByApp: jest.fn(() => Promise.resolve([])),
+    startNetworkMonitorService: jest.fn(() => Promise.resolve(false)),
+    stopNetworkMonitorService: jest.fn(() => Promise.resolve(false)),
+    isNetworkMonitorServiceRunning: jest.fn(() => Promise.resolve(false)),
   },
 }));
 

@@ -3,8 +3,9 @@ import { View, Text, ScrollView, StyleSheet, Platform, ActivityIndicator, Pressa
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
-import LauncherModule from '../../../modules/launcher-module/src';
+import LauncherModule, { type NetworkUsageApp } from '../../../modules/launcher-module/src';
 import { withAutoLockSuppressed } from '../../utils/permissions';
+import { formatNetworkBytes, sortNetworkUsageByTotalDesc, totalNetworkBytes } from '../../utils/networkUsageAggregation';
 import {
   CupertinoNavigationBar,
   CupertinoListSection,
@@ -13,6 +14,8 @@ import {
   useAlert,
 } from '../../components';
 import type { AppNavigationProp } from '../../navigation/types';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const PERMISSION_CATEGORIES = [
   { key: 'location', title: 'Location Services', icon: 'location', bg: '#007AFF' },
@@ -68,6 +71,20 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
   useEffect(() => {
     checkPermissions();
   }, [checkPermissions]);
+
+  // Network usage per app (#624-S4): bytes ALREADY TRANSFERRED, sourced from the
+  // native TrafficMonitorService's per-day delta samples — never a sensor-access
+  // "count" (that vocabulary belongs to the App Privacy section above).
+  const [networkUsage, setNetworkUsage] = useState<NetworkUsageApp[] | null>(null);
+
+  const loadNetworkUsage = useCallback(async () => {
+    const usage = await LauncherModule.getNetworkUsageByApp(Date.now() - DAY_MS);
+    setNetworkUsage(sortNetworkUsageByTotalDesc(usage));
+  }, []);
+
+  useEffect(() => {
+    loadNetworkUsage();
+  }, [loadNetworkUsage]);
 
   const handleRequestPermissions = useCallback(async () => {
     setRequestingPermissions(true);
@@ -272,6 +289,40 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
               showChevron
               onPress={handleOpenPrivacyReport}
             />
+          </CupertinoListSection>
+        </View>
+
+        {/* Network usage per app (#624-S4) — bytes transferred, not access counts. */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16, paddingBottom: 6, paddingTop: 22 }]}>
+            <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase' }]}>
+              Network
+            </Text>
+          </View>
+          <CupertinoListSection footer="Data transferred by each app in the last 24 hours, sampled without a VPN.">
+            <View testID="network-usage-list">
+              {!networkUsage || networkUsage.length === 0 ? (
+                <CupertinoListTile
+                  title="No network usage data yet"
+                  leading={{ name: 'globe', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
+                  showChevron={false}
+                />
+              ) : (
+                networkUsage.map((app) => (
+                  <CupertinoListTile
+                    key={app.packageName}
+                    title={app.appName}
+                    leading={{ name: 'globe', color: '#FFFFFF', backgroundColor: colors.systemBlue }}
+                    trailing={
+                      <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                        {formatNetworkBytes(totalNetworkBytes(app))}
+                      </Text>
+                    }
+                    showChevron={false}
+                  />
+                ))
+              )}
+            </View>
           </CupertinoListSection>
         </View>
 

@@ -32,6 +32,12 @@
          equivalent here. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+    <!-- #624-S4 Network usage monitor: foreground service samples TrafficStats
+         per app. Android 14+ (API 34) requires a foreground-service permission
+         matching the service's foregroundServiceType; dataSync is the closest
+         official type for "measuring already-transferred data usage". -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <application>
         <service
             android:name=".NotificationService"
@@ -60,6 +66,16 @@
             android:name=".AccessEventsService"
             android:exported="false"
             android:stopWithTask="false" />
+
+        <!-- #624-S4: foreground service that periodically samples TrafficStats
+             per-uid counters and persists the delta per app per day. Typed
+             dataSync (API 34+ requires the type to match a declared permission);
+             it neither syncs to a server nor needs network itself beyond what
+             every app already implicitly has. -->
+        <service
+            android:name=".TrafficMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- #627 child issue: foreground monitor + Protected-Apps gate. -->
         <service

@@ -61,5 +61,10 @@ module.exports = {
     startTapDetection: jest.fn(() => Promise.resolve(true)),
     stopTapDetection: jest.fn(() => Promise.resolve(true)),
     isTapDetectionRunning: jest.fn(() => Promise.resolve(false)),
+    // #624-S4 Network usage per app
+    getNetworkUsageByApp: jest.fn(() => Promise.resolve([])),
+    startNetworkMonitorService: jest.fn(() => Promise.resolve(false)),
+    stopNetworkMonitorService: jest.fn(() => Promise.resolve(false)),
+    isNetworkMonitorServiceRunning: jest.fn(() => Promise.resolve(false)),
   },
 };

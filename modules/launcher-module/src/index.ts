@@ -196,6 +196,22 @@ export interface AppAccessCount {
 export type AppAccessCounts = Record<'camera' | 'microphone' | 'location', AppAccessCount>;
 export type AppAccessCountMap = Record<string, AppAccessCounts>;
 
+// ── Network usage per app — issue #624-S4 ─────────────────────────────────
+
+/**
+ * One app's network usage total over the requested window, already a DELTA
+ * (bytes transferred), never a raw cumulative TrafficStats counter. Produced
+ * natively by `TrafficMonitorService` + `LauncherModule.getNetworkUsageByApp`
+ * (see that Kotlin file for the sampling/delta mechanism) — no VPN involved,
+ * only the per-uid `TrafficStats` counters every app already has access to.
+ */
+export interface NetworkUsageApp {
+  packageName: string;
+  appName: string;
+  txBytes: number;
+  rxBytes: number;
+}
+
 /**
  * Máscara a aplicar aos ícones, decidida em JS (src/utils/iconShape.ts) e
  * aplicada nativamente. `exponent: null` significa "sem máscara" — o drawable
@@ -367,6 +383,13 @@ interface LauncherModuleType {
   startTapDetection(): Promise<boolean>;
   stopTapDetection(): Promise<boolean>;
   isTapDetectionRunning(): Promise<boolean>;
+  // Network usage per app (#624-S4): a foreground service samples TrafficStats
+  // per-uid counters and persists the delta per app per day; getNetworkUsageByApp
+  // returns the already-aggregated per-app totals since [sinceMs].
+  getNetworkUsageByApp(sinceMs: number): Promise<NetworkUsageApp[]>;
+  startNetworkMonitorService(): Promise<boolean>;
+  stopNetworkMonitorService(): Promise<boolean>;
+  isNetworkMonitorServiceRunning(): Promise<boolean>;
 }
 
 export interface LiveActivityProgress {
@@ -473,6 +496,10 @@ const stub: LauncherModuleType = {
   startTapDetection: async () => false,
   stopTapDetection: async () => false,
   isTapDetectionRunning: async () => false,
+  getNetworkUsageByApp: async () => [],
+  startNetworkMonitorService: async () => false,
+  stopNetworkMonitorService: async () => false,
+  isNetworkMonitorServiceRunning: async () => false,
 };
 
 /**
@@ -886,6 +913,24 @@ function createBridgedModule(): LauncherModuleType {
     isTapDetectionRunning: async () => {
       try { return await nativeModule.isTapDetectionRunning(); }
       catch (e) { console.error('LauncherModule.isTapDetectionRunning failed:', e); reportBridgeError('isTapDetectionRunning', e); return false; }
+    },
+    getNetworkUsageByApp: async (sinceMs: number) => {
+      try {
+        const raw = await nativeModule.getNetworkUsageByApp(sinceMs);
+        return Array.isArray(raw) ? raw : [];
+      } catch (e) { console.error('LauncherModule.getNetworkUsageByApp failed:', e); reportBridgeError('getNetworkUsageByApp', e); return []; }
+    },
+    startNetworkMonitorService: async () => {
+      try { return await nativeModule.startNetworkMonitorService(); }
+      catch (e) { console.error('LauncherModule.startNetworkMonitorService failed:', e); reportBridgeError('startNetworkMonitorService', e); return false; }
+    },
+    stopNetworkMonitorService: async () => {
+      try { return await nativeModule.stopNetworkMonitorService(); }
+      catch (e) { console.error('LauncherModule.stopNetworkMonitorService failed:', e); reportBridgeError('stopNetworkMonitorService', e); return false; }
+    },
+    isNetworkMonitorServiceRunning: async () => {
+      try { return await nativeModule.isNetworkMonitorServiceRunning(); }
+      catch (e) { console.error('LauncherModule.isNetworkMonitorServiceRunning failed:', e); reportBridgeError('isNetworkMonitorServiceRunning', e); return false; }
     },
   };
 }

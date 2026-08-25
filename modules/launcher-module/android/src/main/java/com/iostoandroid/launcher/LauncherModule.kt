@@ -1468,6 +1468,46 @@ class LauncherModule : Module() {
         AsyncFunction("isAccessTrackingServiceRunning") {
             AccessEventsService.instance != null
         }
+
+        // ── Network usage per app (#624-S4) ────────────────────────────────
+        //
+        // A foreground service (TrafficMonitorService) samples TrafficStats'
+        // per-uid cumulative counters on a coarse interval, diffs them into a
+        // delta, and persists the delta per app per day. No VPN, no special
+        // permission — see TrafficMonitorService.kt for the sampling mechanism
+        // and NetworkUsageCalculator.kt for the delta math.
+
+        AsyncFunction("getNetworkUsageByApp") { sinceMs: Double ->
+            try {
+                TrafficMonitorService.getUsageSince(context, sinceMs.toLong()).map { u ->
+                    mapOf(
+                        "packageName" to u.packageName,
+                        "appName" to u.appName,
+                        "txBytes" to u.txBytes,
+                        "rxBytes" to u.rxBytes,
+                    )
+                }
+            } catch (e: Exception) { emptyList<Map<String, Any>>() }
+        }
+
+        AsyncFunction("startNetworkMonitorService") {
+            try {
+                TrafficMonitorService.start(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopNetworkMonitorService") {
+            try {
+                TrafficMonitorService.stop(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isNetworkMonitorServiceRunning") {
+            TrafficMonitorService.instance != null
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────────
 
         OnCreate {
