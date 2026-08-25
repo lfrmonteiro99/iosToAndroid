@@ -307,6 +307,13 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.maps': { name: 'Maps', packageName: 'com.iostoandroid.maps', icon: '', isSystem: false },
   'com.iostoandroid.findmy': { name: 'Find My', packageName: 'com.iostoandroid.findmy', icon: '', isSystem: false },
   'com.iostoandroid.appstore': { name: 'App Store', packageName: 'com.iostoandroid.appstore', icon: '', isSystem: false },
+  // iOS facades over installed Android apps (utils/iosFacadeApps.ts). Listed
+  // here for the same reason as the built-ins: these package names are ours,
+  // not real installed packages, so views of "real apps" must exclude them.
+  'com.iostoandroid.music': { name: 'Music', packageName: 'com.iostoandroid.music', icon: '', isSystem: false },
+  'com.iostoandroid.news': { name: 'News', packageName: 'com.iostoandroid.news', icon: '', isSystem: false },
+  'com.iostoandroid.tv': { name: 'TV', packageName: 'com.iostoandroid.tv', icon: '', isSystem: false },
+  'com.iostoandroid.podcasts': { name: 'Podcasts', packageName: 'com.iostoandroid.podcasts', icon: '', isSystem: false },
 };
 
 // Single source of truth for this app's own virtual built-ins. Every entry in

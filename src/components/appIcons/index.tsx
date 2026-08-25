@@ -575,6 +575,82 @@ function AppStoreIcon({ size }: ArtworkProps) {
   );
 }
 
+// ─── Music (facade over the installed Android music app) ────────────────────
+// Red/pink gradient with the white double eighth-note. The note is two discs
+// (the heads), two stems and the beam joining them.
+function MusicIcon({ size }: ArtworkProps) {
+  return (
+    <>
+      <Ground size={size} gradient={['#FB5C74', '#F62C4B']} />
+      <Disc size={size} cx={0.36} cy={0.68} d={0.2} color="#FFFFFF" />
+      <Disc size={size} cx={0.66} cy={0.62} d={0.2} color="#FFFFFF" />
+      <Bar size={size} x={0.435} y={0.3} w={0.055} h={0.4} color="#FFFFFF" radius={0.02} />
+      <Bar size={size} x={0.735} y={0.24} w={0.055} h={0.4} color="#FFFFFF" radius={0.02} />
+      <Bar size={size} x={0.435} y={0.24} w={0.355} h={0.09} color="#FFFFFF" radius={0.03} rotate={-9} />
+    </>
+  );
+}
+
+// ─── News (facade) ──────────────────────────────────────────────────────────
+// White ground with the red slab "N" — two uprights and the diagonal.
+function NewsIcon({ size }: ArtworkProps) {
+  return (
+    <>
+      <Ground size={size} color="#FFFFFF" />
+      <Bar size={size} x={0.235} y={0.235} w={0.115} h={0.53} color={IOS.red} radius={0.02} />
+      <Bar size={size} x={0.65} y={0.235} w={0.115} h={0.53} color={IOS.red} radius={0.02} />
+      <Hand size={size} cx={0.5} cy={0.79} length={0.6} thickness={0.115} angle={-27} color={IOS.red} radius={0.02} />
+    </>
+  );
+}
+
+// ─── TV (facade) ────────────────────────────────────────────────────────────
+// Black ground with the Apple mark and "tv" set beside it, as on the real icon.
+function TvIcon({ size }: ArtworkProps) {
+  return (
+    <>
+      <Ground size={size} color="#0B0B0C" />
+      <Ionicons
+        name="logo-apple"
+        size={Math.round(size * 0.27)}
+        color="#FFFFFF"
+        style={{ position: 'absolute', left: size * 0.2, top: size * 0.33 }}
+      />
+      <Glyph
+        size={size}
+        x={0.45}
+        y={0.35}
+        w={0.4}
+        text="tv"
+        color="#FFFFFF"
+        fontSize={0.29}
+        weight="600"
+        style={{ textAlign: 'left' }}
+      />
+    </>
+  );
+}
+
+// ─── Podcasts (facade) ──────────────────────────────────────────────────────
+// Purple gradient with the white "broadcasting person": a head, a body, and two
+// arcs radiating outwards.
+function PodcastsIcon({ size }: ArtworkProps) {
+  return (
+    <>
+      <Ground
+        size={size}
+        gradient={['#C965F4', '#7A34D6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.72} color="#FFFFFF" opacity={0.22} />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.5} color="#FFFFFF" opacity={0.3} />
+      <Disc size={size} cx={0.5} cy={0.36} d={0.2} color="#FFFFFF" />
+      <Bar size={size} x={0.4} y={0.5} w={0.2} h={0.3} color="#FFFFFF" radius={0.1} />
+    </>
+  );
+}
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 export type IconArtwork = React.ComponentType<ArtworkProps>;
@@ -613,6 +689,12 @@ export function buildAppIconArtwork(now: Date = new Date()): Record<string, Icon
     'com.iostoandroid.maps': MapsIcon,
     'com.iostoandroid.findmy': FindMyIcon,
     'com.iostoandroid.appstore': AppStoreIcon,
+    // Facades over installed Android apps (utils/iosFacadeApps.ts) — the icon
+    // is ours, the app that opens is the device's.
+    'com.iostoandroid.music': MusicIcon,
+    'com.iostoandroid.news': NewsIcon,
+    'com.iostoandroid.tv': TvIcon,
+    'com.iostoandroid.podcasts': PodcastsIcon,
   };
 }
 

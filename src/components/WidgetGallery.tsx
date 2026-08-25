@@ -132,8 +132,15 @@ export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
     return ALL_WIDGET_TYPES.filter((t) => WIDGET_LABELS[t].toLowerCase().includes(q));
   }, [query]);
 
+  // Early return, not just `visible={false}` on the Modal: under jest a Modal
+  // still renders its children, so the gallery's BlurView stayed in the tree and
+  // broke callers that look one up by type (the dock-radius assertion in
+  // LauncherHomeScreen.test.tsx found two). Nothing here is worth mounting while
+  // the sheet is closed anyway.
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
       <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill}>
         <View style={[styles.sheet, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.header}>
