@@ -7,6 +7,7 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.time.LocalDate
@@ -41,14 +42,21 @@ class HealthConnectModule : Module() {
      * unavailable, or there is no data for today. Never returns a fabricated 0:
      * a real 0 means "no steps", null means "no answer".
      */
-    AsyncFunction("getTodayStepsFromHealthConnect") {
-      val context = appContext.reactContext ?: return@AsyncFunction null
-      if (!isSdkAvailable(context)) return@AsyncFunction null
+    // `Coroutine`, not a plain lambda: getGrantedPermissions() and aggregate()
+    // are both `suspend`, and a plain AsyncFunction body is not a coroutine
+    // scope — it failed to compile with "Suspend function can only be called
+    // from a coroutine or another suspend function". This is the same builder
+    // expo-asset and expo-clipboard use for their suspending bodies. Note the
+    // early-return label changes with it: return@Coroutine, not
+    // return@AsyncFunction.
+    AsyncFunction("getTodayStepsFromHealthConnect") Coroutine { ->
+      val context = appContext.reactContext ?: return@Coroutine null
+      if (!isSdkAvailable(context)) return@Coroutine null
 
       val client = HealthConnectClient.getOrCreate(context)
       val permission = HealthPermission.getReadPermission(StepsRecord::class)
       val granted = client.permissionController.getGrantedPermissions()
-      if (!granted.contains(permission)) return@AsyncFunction null
+      if (!granted.contains(permission)) return@Coroutine null
 
       val zone = ZoneId.systemDefault()
       val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
