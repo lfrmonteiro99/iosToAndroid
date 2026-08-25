@@ -247,18 +247,26 @@ describe('LauncherHomeScreen density migration (#503, ponto 2)', () => {
     mockFolders([]);
     const dense = render(<LauncherHomeScreen />);
     await waitFor(() => expect(dense.getByTestId('launcher-page-grid-1')).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => expect(countOnPage(dense, 0)).toBe(24), { timeout: 3000 });
     const densePage0Count = countOnPage(dense, 0);
     dense.unmount();
 
     seedSettings({ gridColumns: 5, gridRows: 5 });
     const sparse = render(<LauncherHomeScreen />);
     await waitFor(() => expect(sparse.getByTestId('launcher-page-grid-1')).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => expect(countOnPage(sparse, 0)).toBe(25), { timeout: 3000 });
     const sparsePage0Count = countOnPage(sparse, 0);
     sparse.unmount();
 
     expect(densePage0Count).toBe(24);
     expect(sparsePage0Count).toBe(25);
     expect(sparsePage0Count).toBeGreaterThan(densePage0Count);
+    // countOnPage is read right after the grid-1 waitFor resolves; page 0 can
+    // still be filling at that instant, so this assertion failed once under a
+    // loaded multi-suite run and passed on its own. The counts above are
+    // therefore taken from a settled tree — see the waitFor wrappers around
+    // each countOnPage call.
+
   });
 
   it('clamps currentPage and the dots when a density change shrinks the page count', async () => {

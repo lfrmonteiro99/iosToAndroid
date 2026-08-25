@@ -23,9 +23,14 @@ describe('SettingsScreen', () => {
     expect(getByText('Battery')).toBeTruthy();
   });
 
-  it('renders Dark Mode toggle', () => {
+  // The binary "Dark Mode" switch was replaced by a three-way segmented control
+  // (Light / Dark / Automatic), which is what iOS actually offers. Assert the
+  // control that exists now rather than the toggle that no longer does.
+  it('renders the Appearance theme control', () => {
     const { getByText } = render(<SettingsScreen />);
-    expect(getByText('Dark Mode')).toBeTruthy();
+    expect(getByText('Light')).toBeTruthy();
+    expect(getByText('Dark')).toBeTruthy();
+    expect(getByText('Automatic')).toBeTruthy();
   });
 
   it('renders Airplane Mode', () => {

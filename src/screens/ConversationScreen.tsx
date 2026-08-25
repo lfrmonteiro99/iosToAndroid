@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { withAutoLockSuppressed } from '../utils/permissions';
+import { dispatchSendMessage } from '../actions/primitiveDispatcher';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
@@ -379,14 +380,12 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
       return;
     }
 
-    // Ensure SEND_SMS permission is granted BEFORE hitting the native module
-    // so the user gets a system prompt instead of a silent failure.
-    if (Platform.OS === 'android') {
-      try {
-        const already = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.SEND_SMS,
-        );
-        if (!already) {
+    setIsSending(true);
+    try {
+      const success = await dispatchSendMessage(address, text, {
+        isAndroid: Platform.OS === 'android',
+        hasSmsPermission: () => PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.SEND_SMS),
+        requestSmsPermission: async () => {
           const result = await withAutoLockSuppressed(() => PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.SEND_SMS,
             {
@@ -396,45 +395,42 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
               buttonNegative: 'Deny',
             },
           ));
-          if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-            alert(
-              'Permission Needed',
-              result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-                ? 'SMS permission is disabled. Enable it in system settings to send messages.'
-                : 'SMS permission was denied. Messages can\u2019t be sent without it.',
-              [
-                ...(result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-                  ? [{ text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } }]
-                  : []),
-                { text: 'OK' },
-              ],
-            );
-            return;
-          }
-        }
-      } catch {
-        // Fall through — native module call below will surface the real failure.
-      }
-    }
-
-    const mod = await getLauncher();
-    if (mod) {
-      setIsSending(true);
-      try {
-        const success = await mod.sendSms(address, text);
-        if (success) {
-          setInputText('');
-          AsyncStorage.removeItem(draftKey).catch(() => {});
-          await device.refresh();
-          listRef.current?.scrollToIndex({ index: 0, animated: true });
-        } else {
+          if (result === PermissionsAndroid.RESULTS.GRANTED) return 'granted';
+          if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) return 'never_ask_again';
+          return 'denied';
+        },
+        sendSmsNative: async (to, body) => {
+          const mod = await getLauncher();
+          return mod ? mod.sendSms(to, body) : false;
+        },
+        onPermissionDenied: (neverAskAgain) => {
+          alert(
+            'Permission Needed',
+            neverAskAgain
+              ? 'SMS permission is disabled. Enable it in system settings to send messages.'
+              : 'SMS permission was denied. Messages can\u2019t be sent without it.',
+            [
+              ...(neverAskAgain
+                ? [{ text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } }]
+                : []),
+              { text: 'OK' },
+            ],
+          );
+        },
+        onSent: () => {},
+        onError: () => {
           alert('Failed', 'Could not send message. Check permissions and try again.');
-        }
-      } catch {
-        alert('Failed', 'Could not send message. Check permissions and try again.');
-      } finally {
-        setIsSending(false);
+        },
+      });
+
+      if (success) {
+        setInputText('');
+        AsyncStorage.removeItem(draftKey).catch(() => {});
+        await device.refresh();
+        listRef.current?.scrollToIndex({ index: 0, animated: true });
       }
+    } finally {
+      setIsSending(false);
     }
   }, [inputText, isSending, address, device, draftKey, alert]);
 

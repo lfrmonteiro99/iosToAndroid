@@ -12,16 +12,21 @@ describe('WeatherScreen', () => {
   });
 
   it('renders city name or location', async () => {
-    const { findByText } = render(<WeatherScreen navigation={mockNavigation as never} />);
-    // DeviceStore initializes weather.city from device — may show city or 'My Location'
-    const city = await findByText(/My Location|Test City|°/);
-    expect(city).toBeTruthy();
+    const { findAllByText } = render(<WeatherScreen navigation={mockNavigation as never} />);
+    // DeviceStore initializes weather.city from device — may show city or 'My Location'.
+    // findAllByText, not findByText: the screen legitimately renders several nodes
+    // matching this pattern (current conditions plus the hourly/daily forecast rows),
+    // and the assertion is about presence, not uniqueness.
+    const city = await findAllByText(/My Location|Test City|°/);
+    expect(city.length).toBeGreaterThan(0);
   });
 
   it('renders temperature display', async () => {
-    const { findByText } = render(<WeatherScreen navigation={mockNavigation as never} />);
-    const temp = await findByText(/°/);
-    expect(temp).toBeTruthy();
+    const { findAllByText } = render(<WeatherScreen navigation={mockNavigation as never} />);
+    // Same reason as above: degrees appear in the current reading and in every
+    // forecast row, so match all and assert at least one.
+    const temp = await findAllByText(/°/);
+    expect(temp.length).toBeGreaterThan(0);
   });
 
   it('renders weather condition', async () => {

@@ -7,7 +7,7 @@ import { resetIconMaskForTests } from '../../utils/iconShape';
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- default export of the jest-mocked module
 const LauncherModule = require('../../../modules/launcher-module/src').default;
 
-const app = { name: 'Apple', packageName: 'com.example.apple', icon: 'file:///icons/a_1_squircle4.7.png', isSystem: false };
+const app = { name: 'Apple', packageName: 'com.example.apple', icon: 'file:///icons/a_1_squircle5.0.png', isSystem: false };
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return <SettingsProvider gateFirstRender={false}>{children}</SettingsProvider>;
@@ -38,12 +38,15 @@ beforeEach(() => {
 });
 
 describe('AppsStore — a forma dos ícones desce até à ponte nativa (#482)', () => {
-  it('passa a máscara default (squircle 4.7) a getInstalledApps', async () => {
+  it('passa a máscara default (squircle 5.0) a getInstalledApps', async () => {
     renderHook(() => useApps(), { wrapper: bothWrapper });
     await act(async () => {});
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', exponent: 4.7, cacheKey: 'squircle4.7' }),
+      // DEFAULT_ICON_SHAPE_EXPONENT passou de 4.7 a 5.0 no ed9f035 (#480): é a
+      // aproximação por superelipse mais próxima do canto contínuo da Apple. O
+      // cacheKey acompanha o expoente, por isso muda com ele.
+      expect.objectContaining({ shape: 'squircle', exponent: 5.0, cacheKey: 'squircle5.0' }),
       // #486: a ponte recebe também o tratamento (default quando sem prop).
       'mask-adaptive-only',
     );
@@ -140,12 +143,12 @@ describe('AppsStore — a forma dos ícones desce até à ponte nativa (#482)', 
 });
 
 describe('SettingsStore — forma dos ícones persiste e é validada (#482)', () => {
-  it('tem os defaults da especificação: squircle e 4.7', async () => {
+  it('tem os defaults da especificação: squircle e 5.0', async () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     await act(async () => {});
 
     expect(result.current.settings.iconShape).toBe('squircle');
-    expect(result.current.settings.iconShapeExponent).toBe(4.7);
+    expect(result.current.settings.iconShapeExponent).toBe(5.0);
   });
 
   it('grava a forma escolhida no AsyncStorage — persiste entre arranques', async () => {
