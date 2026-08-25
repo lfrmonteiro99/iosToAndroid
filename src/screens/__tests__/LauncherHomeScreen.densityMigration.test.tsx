@@ -5,7 +5,7 @@ import { render, waitFor, within, fireEvent } from '../../test-utils';
 import * as AppsStore from '../../store/AppsStore';
 import * as FoldersStore from '../../store/FoldersStore';
 import { useSettings } from '../../store/SettingsStore';
-import { LauncherHomeScreen } from '../LauncherHomeScreen';
+import { LauncherHomeScreen, BUILT_IN_APPS } from '../LauncherHomeScreen';
 
 // issue #503 — Ponto 2: mudar a densidade da grelha (colunas/linhas) re-pagina
 // TUDO sem perder a ordem das apps e sem perder as pastas. Antes deste issue a
@@ -19,9 +19,15 @@ import { LauncherHomeScreen } from '../LauncherHomeScreen';
 // esse comportamento: ida 4x6 -> 5x5, volta 5x5 -> 4x6, e as pastas têm de
 // aparecer em ambas as densidades.
 //
-// Nota: o LauncherHomeScreen também injeta as 14 BUILT_IN_APPS virtuais na mesma
-// `gridItems`, por isso o total renderizado é apps_reais + 14; os helpers
-// abaixo filtram só o nosso conjunto para comparar a ordem relativa.
+// Nota: o LauncherHomeScreen também injeta os ícones virtuais das BUILT_IN_APPS
+// na mesma `gridItems`, por isso o total renderizado é apps_reais +
+// BUILT_IN_COUNT; os helpers abaixo filtram só o nosso conjunto para comparar a
+// ordem relativa. Esse número CRESCE sempre que se liga um novo ecrã built-in
+// ao launcher (#782 acrescentou 'Shortcuts'), por isso nenhum caso aqui pode
+// tratá-lo como constante — ver BUILT_IN_COUNT abaixo.
+
+/** Ícones virtuais que o LauncherHomeScreen injecta sempre na grelha. */
+const BUILT_IN_COUNT = Object.keys(BUILT_IN_APPS).length;
 
 const APP_NAMES = [
   'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot',
@@ -231,8 +237,9 @@ describe('LauncherHomeScreen density migration (#503, ponto 2)', () => {
   });
 
   it('5x5 packs more of our apps on page 0 than 4x6 for the same app set', async () => {
-    // 26 apps reais + 14 virtuais = 40 no total. 4x6 = 24/page, 5x5 = 25/page.
-    // Isto prova que o chunk acompanha a densidade e não é uma constante 24.
+    // 26 apps reais + BUILT_IN_COUNT virtuais. 4x6 = 24/page, 5x5 = 25/page.
+    // Isto prova que o chunk acompanha a densidade e não é uma constante 24:
+    // só depende de o total exceder 25, não do valor exacto de BUILT_IN_COUNT.
     const apps = APP_NAMES.map(makeApp);
 
     seedSettings({ gridColumns: 4, gridRows: 6 });
@@ -260,7 +267,25 @@ describe('LauncherHomeScreen density migration (#503, ponto 2)', () => {
     // totalPages — os dots perdiam a página activa e o offset ficava além do
     // conteúdo até ao próximo scroll. Tem de haver um reset: clampar a página
     // e o offset do pager juntos.
-    const apps = APP_NAMES.map(makeApp); // 26 apps + 14 virtuais = 40 itens
+    //
+    // O cenário precisa de um total de itens dentro de uma janela precisa:
+    //   4x6 = 24/página -> 2 páginas de grelha  => total em ]24, 48]
+    //   6x7 = 42/página -> 1 página de grelha   => total <= 42
+    // O total é apps_reais + BUILT_IN_COUNT, e BUILT_IN_COUNT cresce a cada
+    // ecrã built-in novo (era 16 antes de #782 ligar 'Shortcuts', o que punha
+    // o total em exactamente 42 — o limite superior da janela). Por isso o
+    // número de apps reais é DERIVADO para o total cair no meio da janela, em
+    // vez de ser o conjunto inteiro do APP_NAMES.
+    const TARGET_TOTAL = 34; // ponto médio de [25, 42], longe de ambos os limites
+    const apps = APP_NAMES.slice(0, TARGET_TOTAL - BUILT_IN_COUNT).map(makeApp);
+    // Guarda explícita: se um dia houver built-ins a mais (ou apps de menos)
+    // para este cenário, o teste falha aqui com a razão certa em vez de falhar
+    // numa asserção de dots que parece um bug de paginação.
+    expect(apps.length).toBeGreaterThan(0);
+    const totalItems = apps.length + BUILT_IN_COUNT;
+    expect(totalItems).toBeGreaterThan(24); // 2 páginas de grelha a 4x6
+    expect(totalItems).toBeLessThanOrEqual(42); // 1 página de grelha a 6x7
+
     mockApps(apps);
     mockFolders([]);
     // 4x6 = 24/page -> 2 páginas de grelha + App Library = 3 páginas.

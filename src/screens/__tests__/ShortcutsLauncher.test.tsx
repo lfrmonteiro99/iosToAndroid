@@ -2,7 +2,6 @@ import React from 'react';
 import { render, fireEvent, act } from '../../test-utils';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
 import { BUILT_IN_APPS, VIRTUAL_ICON_CONFIG } from '../LauncherHomeScreen';
-import * as AppsStore from '../../store/AppsStore';
 
 // Integration proof (#782, pedido do reviewer): o ícone "Shortcuts" do
 // launcher tem de chegar de facto ao ShortcutsScreen. Isto não é um teste que
