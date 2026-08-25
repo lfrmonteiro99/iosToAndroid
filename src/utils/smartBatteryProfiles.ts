@@ -47,6 +47,19 @@ export interface SmartBatteryEffects {
   backgroundAppRefresh: 'off' | 'wifi' | 'wifiAndCellular';
 }
 
+/**
+ * Contrato booleano do issue #648 (consolidado em #815): a única forma de obter
+ * as três regras de bateria fora do settings. `disableSync`, `reducePolling` e
+ * `delayNonCritical` espelham o Low Power Mode do perfil — os três perfis de
+ * poupança dura (extremeSaver/sleep/travel) ligam tudo; normal/performance
+ * mantêm tudo desligado.
+ */
+export interface SmartBatteryRuleState {
+  disableSync: boolean;
+  reducePolling: boolean;
+  delayNonCritical: boolean;
+}
+
 /** Catálogo ordenado dos perfis para a UI (ordem de apresentação). */
 export const SMART_BATTERY_PROFILES: SmartBatteryProfileMeta[] = [
   {
@@ -120,6 +133,25 @@ export function getProfileEffects(profile: SmartBatteryProfile): SmartBatteryEff
         backgroundAppRefresh: 'wifi',
       };
   }
+}
+
+/**
+ * Contrato booleano das regras de bateria (issue #648), DERIVADO de
+ * `getProfileEffects` — esta é a única forma de obter o contrato do issue e a
+ * fonte de verdade continua a ser a matriz de efeitos, não um switch paralelo.
+ *
+ * Os três perfis de poupança dura (extremeSaver/sleep/travel) ligam as três
+ * regras; os restantes (normal/performance) mantêm-nas desligadas. O gatilho
+ * `<threshold && !charging` de `resolveActiveProfile` NÃO é tocado aqui — este
+ * getter é puro e independe de nível de bateria ou carregamento.
+ */
+export function getBatteryRuleState(profile: SmartBatteryProfile): SmartBatteryRuleState {
+  const { lowPowerMode } = getProfileEffects(profile);
+  return {
+    disableSync: lowPowerMode,
+    reducePolling: lowPowerMode,
+    delayNonCritical: lowPowerMode,
+  };
 }
 
 /**
