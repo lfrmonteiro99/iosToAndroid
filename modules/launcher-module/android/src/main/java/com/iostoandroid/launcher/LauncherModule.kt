@@ -227,20 +227,22 @@ class LauncherModule : Module() {
                 return@AsyncFunction false  // malformed, not installed, or not launchable
             }
 
-            // Prefer the current Activity as the launching context so Android 10+
-            // (BAL — background activity launch — restrictions) treats this as a
-            // user-initiated start. Calling context.startActivity from the Expo
-            // module's Application context is a *background* start, and the
-            // system silently drops or defers it: the launcher's icon-expand
+            // Must go through the current Activity so Android 10+ BAL (background
+            // activity launch) restrictions treat this as user-initiated.
+            // Starting from the Expo module's Application context is a background
+            // start and the system silently drops or defers it: the icon-expand
             // overlay finishes and unmounts while the target activity never
-            // reaches the foreground — the user sees the launcher get out of the
-            // way but the tapped app never appears. FLAG_ACTIVITY_NEW_TASK is
-            // set both ways because starting from a non-Activity context still
-            // requires it.
+            // reaches the foreground.
+            //
+            // If currentActivity is null the fix is not to fall back to the
+            // Application context — that just re-plays the same silent drop — but
+            // to fail loudly. JS side already collapses the overlay and surfaces
+            // an alert on `false`, so the user gets an explicit outcome instead
+            // of a sinkhole.
+            val activity = appContext.currentActivity ?: return@AsyncFunction false
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            val launcher: Context = appContext.currentActivity ?: context
-            val options = ActivityOptions.makeCustomAnimation(launcher, 0, 0)
-            launcher.startActivity(intent, options.toBundle())
+            val options = ActivityOptions.makeCustomAnimation(activity, 0, 0)
+            activity.startActivity(intent, options.toBundle())
             true
         }
 
