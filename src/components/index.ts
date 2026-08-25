@@ -40,6 +40,8 @@ export { EdgePanelOverlay } from './EdgePanelOverlay';
 export { AppLaunchOverlay, interpolateLaunchFrame } from './AppLaunchOverlay';
 export type { LaunchBounds } from './AppLaunchOverlay';
 export { GlassSurface } from './GlassSurface';
+export { IOContextMenu } from './IOContextMenu';
+export type { IOContextMenuProps, IOContextMenuItem } from './IOContextMenu';
 export { WidgetCard } from './WidgetCard';
 export type { WidgetCardProps } from './WidgetCard';
 export { SmartStack, rotateForward, rotateBackward } from './SmartStack';
