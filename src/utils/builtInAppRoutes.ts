@@ -29,6 +29,12 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.mail': 'Mail',
   'com.iostoandroid.browser': 'Browser',
   'com.iostoandroid.wallet': 'Wallet',
+  // Screens that existed and were routed but had no home-screen icon, so the
+  // only way in was a deep link: MapsScreen, FindMyScreen and AppStoreScreen
+  // were all built and reachable in TabNavigator while absent from this map.
+  'com.iostoandroid.maps': 'Maps',
+  'com.iostoandroid.findmy': 'FindMy',
+  'com.iostoandroid.appstore': 'AppStore',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).

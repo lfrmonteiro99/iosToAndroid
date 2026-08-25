@@ -53,6 +53,7 @@ import {
   GlassSurface,
   useAlert,
   useWidgetConfig,
+  WidgetGallery,
   useWidgetMap,
 } from '../components';
 import type { BannerNotification } from '../components';
@@ -195,6 +196,11 @@ import {
   BUILT_IN_APPS,
   BUILT_IN_DUPLICATE_PACKAGES,
 } from '../utils/builtInAppRoutes';
+import {
+  IOS_FACADE_BY_PACKAGE,
+  resolveInstalledFacades,
+  facadeHiddenPackages,
+} from '../utils/iosFacadeApps';
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
 export const VIRTUAL_ICON_CONFIG: Record<string, {
@@ -220,6 +226,16 @@ export const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
   'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
   'com.iostoandroid.wallet': { icon: 'wallet', bg: '#5856D6', gradient: ['#7D7AFF', '#5856D6'], iconSize: 32 },
+  'com.iostoandroid.maps': { icon: 'map', bg: '#34C759', gradient: ['#5BD96B', '#1FA84A'], iconSize: 32 },
+  'com.iostoandroid.findmy': { icon: 'locate', bg: '#34C759', gradient: ['#5BD96B', '#1FA84A'], iconSize: 32 },
+  'com.iostoandroid.appstore': { icon: 'logo-apple-appstore', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
+  // iOS facades over installed Android apps (utils/iosFacadeApps.ts). The glyph
+  // and gradient here are only what Tinted mode and any artwork-less fallback
+  // use; the icon you normally see comes from APP_ICON_ARTWORK.
+  'com.iostoandroid.music': { icon: 'musical-notes', bg: '#FA2E4B', gradient: ['#FB5C74', '#F62C4B'], iconSize: 32 },
+  'com.iostoandroid.news': { icon: 'newspaper', bg: '#FF3B30', gradient: ['#FF6961', '#FF3B30'], iconSize: 32 },
+  'com.iostoandroid.tv': { icon: 'tv', bg: '#1C1C1E', gradient: ['#3A3A3C', '#0B0B0C'], iconSize: 32 },
+  'com.iostoandroid.podcasts': { icon: 'mic', bg: '#8944D6', gradient: ['#C965F4', '#7A34D6'], iconSize: 32 },
 };
 
 // ---------------------------------------------------------------------------
@@ -513,6 +529,7 @@ const AppIcon = React.memo(function AppIcon({
           <SystemAppIcon
             testID={`app-icon-box-${app.packageName}`}
             icon={virtualCfg.icon}
+            packageName={app.packageName}
             size={iconSize}
             gradient={virtualCfg.gradient}
             bg={virtualCfg.bg}
@@ -1053,12 +1070,46 @@ export function LauncherHomeScreen() {
     setLaunchTransition(null);
   }, []);
 
+  // iOS facades (Music/News/TV/Podcasts): which ones have an installed target,
+  // and what that target is. Derived from `apps` — the native scan — so an
+  // install or uninstall makes a facade appear or disappear on the next refresh
+  // rather than leaving a dead icon behind.
+  const installedPackages = useMemo(
+    () => new Set(apps.map((a) => a.packageName)),
+    [apps],
+  );
+  const installedFacades = useMemo(
+    () => resolveInstalledFacades(installedPackages),
+    [installedPackages],
+  );
+  const facadeTargets = useMemo(
+    () => Object.fromEntries(installedFacades.map((r) => [r.facade.packageName, r.target])),
+    [installedFacades],
+  );
+  // The Android app a facade fronts is hidden from the grid, so Music appears
+  // once (as Music) rather than twice (as Music and as YouTube Music).
+  const facadeHidden = useMemo(
+    () => facadeHiddenPackages(installedPackages),
+    [installedPackages],
+  );
+
   // Unified app press handler — routes built-in apps to internal screens.
   // `measure` is only invoked for a real external-app launch, never for a
   // built-in route or a folder-modal launch (see AppIcon/MeasureBounds) — a
   // built-in route stays exactly as synchronous as it always was.
   const handleAppPress = useCallback((app: InstalledApp, measure?: MeasureBounds) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // iOS facade (Music/News/TV/Podcasts): our icon and name, the device's app.
+    // Resolved to its Android package here so the rest of the launch path is
+    // the ordinary external launch it already knows how to do.
+    const facade = IOS_FACADE_BY_PACKAGE[app.packageName];
+    if (facade) {
+      const target = facadeTargets[app.packageName];
+      // No target means the facade should not have been on the grid at all;
+      // a no-op beats launching something arbitrary.
+      if (target) launchApp(target).catch(() => {});
+      return;
+    }
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BUILT_IN_APPS routes all have undefined params; navigate overloads require params spec
@@ -1089,7 +1140,7 @@ export function LauncherHomeScreen() {
         launchApp(app.packageName);
       }
     });
-  }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation]);
+  }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation, facadeTargets]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -1254,6 +1305,10 @@ export function LauncherHomeScreen() {
 
   // Jiggle (edit) mode state
   const [isJiggling, setIsJiggling] = useState(false);
+  // Widget gallery (long-press -> "+"). Widgets were configurable only from the
+  // Today View's Edit panel, three levels deep behind a right-swipe; iOS puts
+  // this behind the jiggle-mode "+" and that is where people look for it.
+  const [widgetGalleryOpen, setWidgetGalleryOpen] = useState(false);
 
   const exitJiggle = useCallback(() => {
     setIsJiggling(false);
@@ -1410,6 +1465,17 @@ export function LauncherHomeScreen() {
       }
     }
 
+    // iOS facades over installed Android apps — only those with a resolved
+    // target, so a facade never renders as an icon that opens nothing.
+    for (const { facade } of installedFacades) {
+      if (!dockPkgs.has(facade.packageName) && !appsInFolders.has(facade.packageName)) {
+        items.push({
+          type: 'app',
+          app: { name: facade.name, packageName: facade.packageName, icon: '', isSystem: false },
+        });
+      }
+    }
+
     // Add folders
     for (const folder of folders) {
       items.push({ type: 'folder', folder });
@@ -1428,11 +1494,13 @@ export function LauncherHomeScreen() {
     // unclaimed positions as 'empty' slots instead of letting the next app
     // pull up into the hole.
     const eligibleApps = nonDockApps.filter(
-      app => !BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName) && !appsInFolders.has(app.packageName),
+      app => !BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName)
+        && !facadeHidden.has(app.packageName)
+        && !appsInFolders.has(app.packageName),
     );
     items.push(...layoutHomeAppsWithGaps(eligibleApps, homeApps));
     return items;
-  }, [nonDockApps, dockApps, folders, homeApps]);
+  }, [nonDockApps, dockApps, folders, homeApps, installedFacades, facadeHidden]);
 
   // Paginate grid items — memoizado (#518): sem isto, este array era
   // recriado em TODO o render (incluindo o causado por um simples avanço de
@@ -1736,7 +1804,7 @@ export function LauncherHomeScreen() {
     });
 
     // Uninstall — only for real, non-system apps
-    const isVirtual = !!BUILT_IN_APPS[app.packageName];
+    const isVirtual = !!BUILT_IN_APPS[app.packageName] || !!IOS_FACADE_BY_PACKAGE[app.packageName];
     const isSystem = app.isSystem;
     if (!isVirtual && !isSystem) {
       options.push({
@@ -1919,7 +1987,19 @@ export function LauncherHomeScreen() {
               </Text>
             </View>
           )}
-          {/* Done button — visible only in jiggle mode */}
+          {/* Jiggle-mode controls: "+" opens the widget gallery, Done exits.
+              Both live in the status bar row, mirroring iOS. */}
+          {isJiggling && (
+            <Pressable
+              style={styles.jiggleAddBtn}
+              onPress={() => setWidgetGalleryOpen(true)}
+              accessibilityLabel="Add Widget"
+              accessibilityRole="button"
+              hitSlop={8}
+            >
+              <Ionicons name="add" size={18} color="#000000" />
+            </Pressable>
+          )}
           {isJiggling && (
             <Pressable
               style={styles.jiggleDoneBtn}
@@ -2150,6 +2230,14 @@ export function LauncherHomeScreen() {
       <NotificationCenterOverlay
         zone={zones(SCREEN_WIDTH, SCREEN_HEIGHT).notificationCenter}
         onCommit={() => navigateTo('NotificationCenter')}
+      />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Widget gallery — jiggle mode "+"                                   */}
+      {/* ---------------------------------------------------------------- */}
+      <WidgetGallery
+        visible={widgetGalleryOpen}
+        onClose={() => setWidgetGalleryOpen(false)}
       />
 
       {/* ---------------------------------------------------------------- */}
@@ -2444,6 +2532,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     lineHeight: 12,
+  },
+  jiggleAddBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   jiggleDoneBtn: {
     backgroundColor: 'rgba(255,255,255,0.2)',
