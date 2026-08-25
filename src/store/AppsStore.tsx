@@ -7,6 +7,7 @@ import { migrateAsyncStorageKey } from './storage';
 import { upsertApp, removeApp } from './appsIndexReducer';
 import { getIconMask, subscribeIconMask, type IconMaskOptions } from '../utils/iconShape';
 import { authenticateWithBiometrics } from '../utils/biometricAuth';
+import { dispatchLaunchApp } from '../actions/primitiveDispatcher';
 import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
@@ -736,33 +737,25 @@ export function AppsProvider({
   // Returns whether the launch actually succeeded (#509) — callers that show
   // an icon-expand transition need this to revert it on failure instead of
   // leaving the animation stuck full-screen over a launcher that never left.
+  // #781: the decision procedure (protected-apps gate, native launch, recents,
+  // error alert) now lives in dispatchLaunchApp — a framework-free primitive
+  // any caller can dispatch, not just one running inside this Provider.
   const launchApp = useCallback(async (packageName: string): Promise<boolean> => {
-    if (Platform.OS !== 'android') return false;
-    // #627 — Protected Apps: gate behind biometric auth before the native
-    // launch ever runs. Fail-closed (see authenticateWithBiometrics): no
-    // hardware, nothing enrolled, or a failed/cancelled prompt all mean "do
-    // not launch", not "launch anyway".
-    if (protectedAppsRef.current.includes(packageName)) {
-      const authenticated = await authenticateWithBiometrics('Unlock app');
-      if (!authenticated) return false;
-    }
-    try {
-      // getLauncherModule(), not a bare `await import(...)`: the raw dynamic
-      // import throws under Jest ("invoked without --experimental-vm-modules"),
-      // which made this whole function silently fail — and therefore
-      // untestable — for both protected and unprotected packages alike.
-      const LauncherModule = await getLauncherModule();
-      const ok = (await LauncherModule?.launchApp(packageName)) ?? false;
-      if (ok) {
-        addToRecents(packageName);
-      } else {
-        alertRef.current('Error', 'Could not launch app. Please try again.');
-      }
-      return ok;
-    } catch {
-      alertRef.current('Error', 'Could not launch app. Please try again.');
-      return false;
-    }
+    return dispatchLaunchApp(packageName, {
+      isAndroid: Platform.OS === 'android',
+      isProtected: (pkg) => protectedAppsRef.current.includes(pkg),
+      authenticate: authenticateWithBiometrics,
+      launchNative: async (pkg) => {
+        // getLauncherModule(), not a bare `await import(...)`: the raw dynamic
+        // import throws under Jest ("invoked without --experimental-vm-modules"),
+        // which made this whole function silently fail — and therefore
+        // untestable — for both protected and unprotected packages alike.
+        const LauncherModule = await getLauncherModule();
+        return (await LauncherModule?.launchApp(pkg)) ?? false;
+      },
+      onLaunched: addToRecents,
+      onError: (title, message) => alertRef.current(title, message),
+    });
   }, [addToRecents]);
 
   const addToHome = useCallback((packageName: string) => {

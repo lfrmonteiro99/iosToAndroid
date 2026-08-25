@@ -60,7 +60,7 @@ describe('ShortcutsScreen', () => {
     });
   });
 
-  it('adding the Start Work template saves it to the shortcuts list', async () => {
+  it('adding the Start Work template saves it to the shortcuts list via createShortcut', async () => {
     const { getByLabelText, findAllByText } = render(<ShortcutsScreen navigation={nav} />);
 
     fireEvent.press(getByLabelText('Add Start Work'));
@@ -84,6 +84,30 @@ describe('ShortcutsScreen', () => {
 
     await waitFor(() => {
       expect(utils.queryAllByText('Start Work')).toHaveLength(1);
+    });
+  });
+
+  it('opening a template shows its action description in the detail modal', () => {
+    const { getByLabelText, getByText } = render(<ShortcutsScreen navigation={nav} />);
+
+    fireEvent.press(getByLabelText('Start Work'));
+
+    expect(getByText('Set Focus mode to work')).toBeTruthy();
+  });
+
+  it('running a shortcut from the detail modal sets focusMode to work', async () => {
+    const { getByLabelText, getByText, getByTestId } = render(
+      <>
+        <ShortcutsScreen navigation={nav} />
+        <FocusModeProbe />
+      </>,
+    );
+
+    fireEvent.press(getByLabelText('Start Work'));
+    fireEvent.press(getByText('Run'));
+
+    await waitFor(() => {
+      expect(getByTestId('focus-mode-probe').props.children).toBe('work');
     });
   });
 });

@@ -7,37 +7,35 @@ import type { Shortcut, ShortcutAction } from '../utils/shortcutsDispatch';
  * ShortcutsStore (#782, parte de #629): lista de atalhos do utilizador,
  * persistida em AsyncStorage. Segue o mesmo padrão de `BookmarksStore.tsx`
  * (Context + Provider + hook, sanitização na leitura).
+ *
+ * O modelo de dados (Shortcut/ShortcutAction) é canónico em
+ * `src/utils/shortcutsDispatch.ts` — o store importa e re-exporta os tipos
+ * para que ecrã, dispatcher e store partilhem a mesma definição em vez de a
+ * duplicar.
  */
 
 const STORAGE_KEY = '@iostoandroid/shortcuts';
 
 interface ShortcutsContextValue {
   shortcuts: Shortcut[];
-  addShortcut: (shortcut: Shortcut) => void;
-  removeShortcut: (id: string) => void;
+  createShortcut: (name: string, icon: string, actions: ShortcutAction[]) => void;
+  updateShortcut: (id: string, updates: Partial<Pick<Shortcut, 'name' | 'icon' | 'actions'>>) => void;
+  deleteShortcut: (id: string) => void;
   isReady: boolean;
 }
 
 const ShortcutsContext = createContext<ShortcutsContextValue | null>(null);
 
-function isValidAction(value: unknown): value is ShortcutAction {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    typeof (value as ShortcutAction).id === 'string' &&
-    typeof (value as ShortcutAction).type === 'string' &&
-    typeof (value as ShortcutAction).label === 'string'
-  );
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function isValidShortcut(value: unknown): value is Shortcut {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Shortcut;
+function isShortcutAction(action: unknown): action is ShortcutAction {
   return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.name === 'string' &&
-    Array.isArray(candidate.actions) &&
-    candidate.actions.every(isValidAction)
+    !!action &&
+    typeof action === 'object' &&
+    typeof (action as ShortcutAction).type === 'string' &&
+    typeof (action as ShortcutAction).payload === 'object'
   );
 }
 
@@ -52,9 +50,18 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
         try {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) {
-            // Descarta entradas malformadas para que um payload corrompido
-            // não parta a lista inteira.
-            setShortcuts(parsed.filter(isValidShortcut));
+            // Drop malformed entries so a corrupt payload can't break the list.
+            setShortcuts(
+              parsed.filter(
+                (s): s is Shortcut =>
+                  s &&
+                  typeof s.id === 'string' &&
+                  typeof s.name === 'string' &&
+                  typeof s.icon === 'string' &&
+                  Array.isArray(s.actions) &&
+                  s.actions.every(isShortcutAction),
+              ),
+            );
           }
         } catch (e) {
           logger.warn('ShortcutsStore', 'failed to parse stored shortcuts', e);
@@ -68,17 +75,28 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
     if (isReady) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(shortcuts));
   }, [shortcuts, isReady]);
 
-  const addShortcut = useCallback((shortcut: Shortcut) => {
-    setShortcuts((prev) => [...prev.filter((s) => s.id !== shortcut.id), shortcut]);
+  const createShortcut = useCallback((name: string, icon: string, actions: ShortcutAction[]) => {
+    if (!name) return;
+    setShortcuts((prev) => [
+      ...prev,
+      { id: generateId(), name, icon, actions },
+    ]);
   }, []);
 
-  const removeShortcut = useCallback((id: string) => {
+  const updateShortcut = useCallback(
+    (id: string, updates: Partial<Pick<Shortcut, 'name' | 'icon' | 'actions'>>) => {
+      setShortcuts((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    },
+    [],
+  );
+
+  const deleteShortcut = useCallback((id: string) => {
     setShortcuts((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
   const value = useMemo(
-    () => ({ shortcuts, addShortcut, removeShortcut, isReady }),
-    [shortcuts, addShortcut, removeShortcut, isReady],
+    () => ({ shortcuts, createShortcut, updateShortcut, deleteShortcut, isReady }),
+    [shortcuts, createShortcut, updateShortcut, deleteShortcut, isReady],
   );
 
   return <ShortcutsContext.Provider value={value}>{children}</ShortcutsContext.Provider>;
@@ -89,3 +107,7 @@ export function useShortcuts() {
   if (!ctx) throw new Error('useShortcuts must be used within ShortcutsProvider');
   return ctx;
 }
+
+// Re-export the canonical data model so consumers can import it from either
+// the store or the dispatcher without drifting into two definitions.
+export type { Shortcut, ShortcutAction } from '../utils/shortcutsDispatch';

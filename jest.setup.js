@@ -393,6 +393,9 @@ jest.mock('./modules/launcher-module/src', () => ({
     // #627 child issue: push the protected set to the foreground monitor.
     setProtectedApps: jest.fn(() => Promise.resolve(true)),
     isForegroundMonitorEnabled: jest.fn(() => Promise.resolve(false)),
+    // #624-S3: real per-app usage time from UsageStatsManager (not sensor access).
+    getScreenTimeStats: jest.fn(() => Promise.resolve([])),
+    getTodayScreenTime: jest.fn(() => Promise.resolve({ totalMinutes: 0, topApps: [] })),
     openAccessibilitySettings: jest.fn(() => Promise.resolve(true)),
     // #608 Tap to Wake
     wakeScreen: jest.fn(() => Promise.resolve()),

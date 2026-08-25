@@ -17,16 +17,15 @@ import type { AppNavigationProp } from '../navigation/types';
 // "Start Work" liga o Focus mode 'work'; "Going Home" desliga-o ('off'). O
 // Focus mode já existe em SettingsStore (settings.focusMode / setFocusMode) —
 // estes templates reutilizam-no via o dispatcher em vez de criar um estado de
-// modo paralelo.
+// modo paralelo. O modelo de dados (Shortcut) é canónico em shortcutsDispatch.
 const SHORTCUT_TEMPLATES: Shortcut[] = [
   {
     id: 'template-start-work',
     name: 'Start Work',
+    icon: 'briefcase',
     actions: [
       {
-        id: 'action-start-work-focus',
         type: 'setFocusMode',
-        label: 'Set Focus mode to Work',
         payload: { mode: 'work' },
       },
     ],
@@ -34,11 +33,10 @@ const SHORTCUT_TEMPLATES: Shortcut[] = [
   {
     id: 'template-going-home',
     name: 'Going Home',
+    icon: 'home',
     actions: [
       {
-        id: 'action-going-home-focus',
         type: 'setFocusMode',
-        label: 'Turn Focus mode off',
         payload: { mode: 'off' },
       },
     ],
@@ -49,7 +47,7 @@ export function ShortcutsScreen({ navigation }: { navigation: AppNavigationProp 
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const { setFocusMode } = useSettings();
-  const { shortcuts, addShortcut, removeShortcut } = useShortcuts();
+  const { shortcuts, createShortcut, deleteShortcut } = useShortcuts();
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Shortcut | null>(null);
 
@@ -58,6 +56,16 @@ export function ShortcutsScreen({ navigation }: { navigation: AppNavigationProp 
       executeShortcut(shortcut, { setFocusMode });
     },
     [setFocusMode],
+  );
+
+  const addTemplate = useCallback(
+    (template: Shortcut) => {
+      // O template torna-se um atalho real do utilizador (omitimos o id
+      // embutido — createShortcut gera um próprio).
+      const { name, icon, actions } = template;
+      createShortcut(name, icon, actions);
+    },
+    [createShortcut],
   );
 
   return (
@@ -103,7 +111,7 @@ export function ShortcutsScreen({ navigation }: { navigation: AppNavigationProp 
                     {
                       label: `Delete ${shortcut.name}`,
                       color: colors.systemRed,
-                      onPress: () => removeShortcut(shortcut.id),
+                      onPress: () => deleteShortcut(shortcut.id),
                     },
                   ]}
                 >
@@ -138,10 +146,17 @@ export function ShortcutsScreen({ navigation }: { navigation: AppNavigationProp 
           >
             {SHORTCUT_TEMPLATES.map((template) => (
               <View key={template.id} style={[styles.row, { borderBottomColor: colors.separator }]}>
-                <Text style={[typography.body, { color: colors.label }]}>{template.name}</Text>
+                <Pressable
+                  onPress={() => setDetail(template)}
+                  style={{ flex: 1 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={template.name}
+                >
+                  <Text style={[typography.body, { color: colors.label }]}>{template.name}</Text>
+                </Pressable>
                 <View style={styles.templateActions}>
                   <Pressable
-                    onPress={() => addShortcut(template)}
+                    onPress={() => addTemplate(template)}
                     hitSlop={8}
                     accessibilityLabel={`Add ${template.name}`}
                     accessibilityRole="button"
@@ -178,12 +193,14 @@ export function ShortcutsScreen({ navigation }: { navigation: AppNavigationProp 
               <Text style={[typography.body, { color: colors.systemBlue }]}>Done</Text>
             </Pressable>
           </View>
-          {detail?.actions.map((action) => (
+          {detail?.actions.map((action, idx) => (
             <Text
-              key={action.id}
+              key={idx}
               style={[typography.body, styles.modalActionLabel, { color: colors.secondaryLabel }]}
             >
-              {action.label}
+              {action.type === 'setFocusMode'
+                ? `Set Focus mode to ${String(action.payload.mode)}`
+                : action.type}
             </Text>
           ))}
           {detail ? (
