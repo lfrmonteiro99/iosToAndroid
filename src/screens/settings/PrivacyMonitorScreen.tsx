@@ -16,8 +16,12 @@ import type { AppNavigationProp } from '../../navigation/types';
 
 // #624 — Privacy Monitor dashboard. One card per privacy sensor (📷/🎤/📍/🌐)
 // showing the total access count; tapping a card expands a ranked, per-app
-// breakdown with bars (Instagram 12×, WhatsApp 4×). Reuses CupertinoCard +
-// GlassSurface so it matches the rest of the settings chrome.
+// breakdown listing each app by name (Instagram, WhatsApp). Reuses CupertinoCard
+// + GlassSurface so it matches the rest of the settings chrome.
+// No bar/length is shown per app: the native report emits count=1 per app, so
+// any per-app ratio would be a constant 100% and convey no information. The
+// `ratio` field still exists in privacyMonitor.ts for unit tests, but the UI
+// does not consume it (#635-SI4).
 const SENSOR_ORDER: PrivacyReport['sensors'][number]['sensor'][] = [
   'camera',
   'microphone',
@@ -80,19 +84,17 @@ function PrivacySensorCard({
                   <Text
                     style={[typography.subhead, { color: colors.label, flex: 1 }]}
                     numberOfLines={1}
+                    accessibilityLabel={row.appName}
                   >
                     {row.appName}
                   </Text>
                 </View>
-                <View style={[styles.barTrack, { backgroundColor: colors.systemGray5 }]}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${Math.round(row.ratio * 100)}%`, backgroundColor: view.bg },
-                    ]}
-                    accessibilityLabel={`${row.appName}: app com permissão`}
-                  />
-                </View>
+                <Text
+                  style={[typography.footnote, { color: colors.tertiaryLabel }]}
+                  numberOfLines={1}
+                >
+                  {row.packageName}
+                </Text>
               </View>
             ))
           ) : (
@@ -234,17 +236,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
-  },
-  barTrack: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 4,
-    minWidth: 4,
   },
   loading: {
     paddingTop: 48,

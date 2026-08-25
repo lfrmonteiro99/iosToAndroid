@@ -58,6 +58,7 @@ export type RootStackParamList = {
   BackTapSettings: undefined;
   Battery: undefined;
   Privacy: undefined;
+  PrivacyMonitor: undefined;
   Storage: undefined;
   SoftwareUpdate: undefined;
   DateTime: undefined;

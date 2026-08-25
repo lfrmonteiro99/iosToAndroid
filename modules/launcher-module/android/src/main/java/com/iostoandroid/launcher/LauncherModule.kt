@@ -1258,6 +1258,124 @@ class LauncherModule : Module() {
             perms
         }
 
+        // ── Privacy Monitor (#624) ─────────────────────────────────────────
+        // Per-sensor breakdown of which INSTALLED apps *declare* the matching
+        // permission in their manifest (camera / microphone / location /
+        // internet), enumerated locally via PackageManager.GET_PERMISSIONS — a
+        // public API. Apps with the QUERY_ALL_PACKAGES permission (declared in
+        // this module's manifest) can enumerate every package, so this is a
+        // real, on-device catalogue of "which apps can access each sensor".
+        //
+        // NOTE: the Android Privacy Dashboard uses hidden @SystemApi
+        // (AppOpsManager.getHistoricalOps) that is unavailable to third-party
+        // apps, so real per-app *access counts* across other apps are not
+        // obtainable without root/Shizuku. We therefore report the set of apps
+        // that *can* access each sensor — never fabricated access tallies. `count`
+        // is 1 per app (it denotes "this app is in the set"), `totalAccesses`
+        // mirrors the number of apps, and `topApps` is the ranked app list.
+        AsyncFunction("getPrivacyReport") {
+            try {
+                val pm = context.packageManager
+                val endTime = System.currentTimeMillis()
+
+                fun appLabel(pkg: String): String {
+                    return try {
+                        val ai = pm.getApplicationInfo(pkg, 0)
+                        pm.getApplicationLabel(ai).toString()
+                    } catch (e: Exception) { pkg }
+                }
+
+                // Apps that declare [perm] in their manifest. Public API:
+                // GET_PERMISSIONS exposes requestedPermissions; null when the
+                // package is gone mid-iteration — treated as "no apps" rather
+                // than thrown.
+                fun appsWithPermission(perm: String): List<Pair<String, String>> {
+                    val result = mutableListOf<Pair<String, String>>()
+                    val installed = try {
+                        pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                    } catch (e: Exception) { emptyList<ApplicationInfo>() }
+                    for (ai in installed) {
+                        val perms = try {
+                            pm.getPackageInfo(ai.packageName, PackageManager.GET_PERMISSIONS)
+                                .requestedPermissions
+                        } catch (e: Exception) { null }
+                        if (perms != null && perms.contains(perm)) {
+                            result.add(ai.packageName to appLabel(ai.packageName))
+                        }
+                    }
+                    return result
+                }
+
+                fun sensorReport(
+                    perm: String,
+                    sensor: String,
+                    label: String,
+                    icon: String,
+                    bg: String,
+                ): Map<String, Any> {
+                    val ranked = appsWithPermission(perm)
+                        .sortedBy { (pkg, _) -> pkg.lowercase() }
+                        .map { (pkg, name) ->
+                            mapOf(
+                                "packageName" to pkg,
+                                "appName" to name,
+                                "count" to 1,
+                            )
+                        }
+                    return mapOf(
+                        "sensor" to sensor,
+                        "label" to label,
+                        "icon" to icon,
+                        "bg" to bg,
+                        "totalAccesses" to ranked.size,
+                        "appCount" to ranked.size,
+                        "topApps" to ranked,
+                    )
+                }
+
+                val sensors = listOf(
+                    sensorReport(
+                        android.Manifest.permission.CAMERA,
+                        "camera",
+                        "Camera",
+                        "camera",
+                        "#1C1C1E",
+                    ),
+                    sensorReport(
+                        android.Manifest.permission.RECORD_AUDIO,
+                        "microphone",
+                        "Microphone",
+                        "mic",
+                        "#FF2D55",
+                    ),
+                    sensorReport(
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        "location",
+                        "Location",
+                        "location",
+                        "#007AFF",
+                    ),
+                    sensorReport(
+                        android.Manifest.permission.INTERNET,
+                        "network",
+                        "Network",
+                        "globe",
+                        "#34C759",
+                    ),
+                )
+
+                mapOf(
+                    "generatedAt" to endTime,
+                    "sensors" to sensors,
+                )
+            } catch (e: Exception) {
+                mapOf(
+                    "generatedAt" to System.currentTimeMillis(),
+                    "sensors" to emptyList<Map<String, Any>>(),
+                )
+            }
+        }
+
         // ── Keyboards ────────────────────────────────────────────────────
 
         AsyncFunction("getInstalledKeyboards") {
