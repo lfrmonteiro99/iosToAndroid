@@ -135,6 +135,19 @@ The lock screen is shown on cold start and whenever the app goes to the backgrou
 
 - **`build-apk.yml`** — on every GitHub Release (or manual dispatch): lints, type‑checks, runs `expo prebuild --platform android`, builds a release APK via Gradle, uploads it as an artifact and attaches it to the Release.
 - **`auto-release.yml`** — when a PR is merged into `main`, infers a semver bump from PR/issue labels (`major|breaking` → major, `enhancement|feature|minor` → minor, everything else → patch), updates `app.json` and `package.json`, tags, and publishes a GitHub Release whose notes link the PR and closed issues.
+- **`build-dev-apk.yml`** — on every push to `dev`: builds a release‑config APK and keeps it as a workflow artifact for 30 days. No tag, no Release.
+
+### APK build times
+
+`./gradlew assembleRelease` is ~94% of those jobs, so the three build workflows trim it:
+
+| Lever | Where | Effect |
+|-------|-------|--------|
+| `-PreactNativeArchitectures` | workflow `gradlew` call | drops the `x86`/`x86_64` emulator ABIs (~⅓ of the CMake work). Released APKs are `arm64-v8a,armeabi-v7a`; dev APKs are `arm64-v8a` only, so **a dev APK will not install on an x86 emulator** |
+| `org.gradle.caching` + `gradle/actions/setup-gradle` | `plugins/withFastReleaseBuilds.js`, workflows | reuses Kotlin/Java/jar task outputs across runs. CMake output is not Gradle‑cacheable, so the C++ work is not covered |
+| `lint { checkReleaseBuilds = false }` | `plugins/withFastReleaseBuilds.js` | removes AGP's per‑module `lintVital*` tasks from `assembleRelease`; JS/TS is still linted by eslint + tsc |
+
+Local `npm run android` is untouched by the ABI flag — it still builds all four ABIs from `gradle.properties`.
 
 ---
 
