@@ -174,7 +174,7 @@ describe('Issue #494: Android Ripple Removal', () => {
       // #655: the widget card frame moved out of TodayViewScreen into the
       // shared WidgetCard component (so SmartStack can reuse it) — the
       // pressed-opacity feedback itself is unchanged, just relocated.
-      const filePath = path.join(__dirname, '../components/WidgetCard.tsx');
+      const filePath = path.join(__dirname, '../widgets/WidgetCard.tsx');
       const content = fs.readFileSync(filePath, 'utf8');
 
       // Widget card pressable should have style feedback

@@ -38,6 +38,8 @@ module.exports = {
     sendSms: jest.fn(() => Promise.resolve(true)),
     requestAllPermissions: jest.fn(() => Promise.resolve(true)),
     checkPermissions: jest.fn(() => Promise.resolve({})),
+    // #624 Privacy Monitor
+    getPrivacyReport: jest.fn(() => Promise.resolve({ generatedAt: Date.now(), sensors: [] })),
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),

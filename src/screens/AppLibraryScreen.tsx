@@ -14,7 +14,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -30,9 +29,9 @@ import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
-import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
+import { resolveInternalRoute } from '../utils/builtInAppRoutes';
 
 // ---------------------------------------------------------------------------
 // Category detection
@@ -575,10 +574,9 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 // page of the paginated home screen (LauncherHomeScreen) — see issue #434.
 // Keeping this in one place means the two call sites can't drift apart the
 // way twin overlays did in #384.
-export function AppLibraryContent() {
+export function AppLibraryContent({ navigation }: { navigation?: AppNavigationProp } = {}) {
   const { theme } = useTheme();
   const { colors } = theme;
-  const navigation = useNavigation<AppNavigationProp>();
   // `apps` é a lista completa (usada só pela procura, para que uma app
   // escondida continue lançável) e `visibleApps` é a lista sem as escondidas
   // (#606), usada nas categorias e nos strips.
@@ -690,10 +688,18 @@ export function AppLibraryContent() {
 
   const handleLaunch = useCallback((packageName: string) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    // Built-in virtual apps (Weather, Calculator, …) must open the in-app
-    // iOS-style screen via navigation, not the native launcher bridge — see
-    // launchBuiltInOrExternal.
-    launchBuiltInOrExternal(packageName, navigation, launchApp);
+    // #701: a app Android que duplica um built-in (Google Photos, Google Clock,
+    // …) aparece aqui com o MESMO nome do nosso ecrã ("Photos"), por isso tem de
+    // abrir o nosso ecrã, como já acontecia na grelha da home. Sem navigation
+    // (a App Library também é a última página do pager, #434, onde é montada sem
+    // prop) cai-se no lançamento externo em vez de rebentar.
+    const internalRoute = resolveInternalRoute(packageName);
+    if (internalRoute && navigation) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rotas de built-ins não têm params; os overloads de navigate exigem a spec
+      navigation.navigate(internalRoute as any);
+      return;
+    }
+    launchApp(packageName);
   }, [launchApp, navigation]);
 
   const isSearching = query.trim().length > 0;
@@ -841,7 +847,7 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
           </Pressable>
         }
       />
-      <AppLibraryContent />
+      <AppLibraryContent navigation={navigation} />
     </View>
   );
 }

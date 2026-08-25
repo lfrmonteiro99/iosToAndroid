@@ -215,9 +215,14 @@ export function resolveActiveProfile(
   input: SmartBatteryTriggerInput,
 ): SmartBatteryResolved {
   const threshold = clampSmartBatteryThreshold(input.threshold);
-  const belowThreshold = typeof batteryLevel === 'number'
+  // O nível tem de ser um número finito em [0, 100]. Fora disso (NaN, negativo,
+  // >100) não se assume o pior: não se restringe. Espelha o guard de
+  // `levelValid` do engine antigo batteryRulesEngine (#648).
+  const levelValid = typeof batteryLevel === 'number'
     && Number.isFinite(batteryLevel)
-    && batteryLevel < threshold;
+    && batteryLevel >= 0
+    && batteryLevel <= 100;
+  const belowThreshold = levelValid && batteryLevel < threshold;
 
   if (input.autoEnabled && !isCharging && belowThreshold) {
     return { profile: 'extremeSaver', automatic: true };

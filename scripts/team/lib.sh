@@ -13,12 +13,23 @@ TEAM_ROOT="${TEAM_ROOT:-$HOME/Documentos/iosToAndroid}"
 
 # Branch topology: SINGLE branch.
 #
-# The sibling project runs main + dev because its critic tests the app built from
-# main while fixes stage on dev. There is no critic here and nothing re-tests dev,
-# so a staging branch would only mean a later, bigger merge with the same single
-# gate — the reviewer. Implementer branches are `qa/issue-N` and their PRs target
-# main directly.
-BASE_BRANCH="${TEAM_BASE_BRANCH:-main}"
+# Implementer branches are `qa/issue-N` and their PRs target `dev`.
+#
+# This used to default to `main`, from when agent PRs went there directly. The
+# dev-based flow (66ab72e) moved every PR onto `dev` and added
+# .github/workflows/enforce-pr-base.yml, which FAILS any PR into `main` whose
+# head is not `dev` — so `qa/issue-N` -> `main` is not merely unconventional
+# now, it is rejected by CI.
+#
+# Leaving the default at `main` silently stalled the whole pipeline: pick_pr
+# lists candidates with `gh pr list --base "$BASE_BRANCH"`, that returned zero
+# rows while 20 open PRs sat on `dev`, so no reviewer was ever dispatched. The
+# dashboard still showed them (it lists PRs on its own), which made the queue
+# look alive. Anything that compares against the base — pick_pr,
+# close_orphan_prs, rescue_stuck_wip, the pre-agent merge in implement.sh, the
+# merge target in review.sh — reads this one variable, so it must name the
+# branch the PRs actually target.
+BASE_BRANCH="${TEAM_BASE_BRANCH:-dev}"
 
 # Verdicts live OUTSIDE the repository.
 #

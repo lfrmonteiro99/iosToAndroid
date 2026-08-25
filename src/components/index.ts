@@ -10,6 +10,7 @@ export { CupertinoNavigationBar } from './CupertinoNavigationBar';
 export { CupertinoActionSheet } from './CupertinoActionSheet';
 export { CupertinoAlertDialog } from './CupertinoAlertDialog';
 export { CupertinoTabBar } from './CupertinoTabBar';
+export { CupertinoSplitView } from './CupertinoSplitView';
 export { CupertinoSearchBar } from './CupertinoSearchBar';
 export { CupertinoSlider } from './CupertinoSlider';
 export { CupertinoActivityIndicator } from './CupertinoActivityIndicator';
@@ -42,8 +43,10 @@ export type { LaunchBounds } from './AppLaunchOverlay';
 export { GlassSurface } from './GlassSurface';
 export { IOContextMenu } from './IOContextMenu';
 export type { IOContextMenuProps, IOContextMenuItem } from './IOContextMenu';
-export { WidgetCard } from './WidgetCard';
-export type { WidgetCardProps } from './WidgetCard';
+// Widgets now live in the shared src/widgets/ module (#811). Re-exported here
+// so existing call sites that import from '../components' keep working.
+export { WidgetCard } from '../widgets/WidgetCard';
+export type { WidgetCardProps } from '../widgets/WidgetCard';
 export { SmartStack, rotateForward, rotateBackward } from './SmartStack';
 export type { SmartStackProps, SmartStackItem } from './SmartStack';
 export { SiriWaveform } from './SiriWaveform';
@@ -77,5 +80,5 @@ export {
   UpNextWidget,
   MessagesWidget,
   ScreenTimeWidget,
-} from './TodayWidgets';
-export type { WidgetType, CalendarEventItem } from './TodayWidgets';
+} from '../widgets/TodayWidgets';
+export type { WidgetType, CalendarEventItem } from '../widgets/TodayWidgets';
