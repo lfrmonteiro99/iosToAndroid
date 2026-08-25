@@ -107,6 +107,30 @@ describe('PrivacyMonitorScreen', () => {
     });
   });
 
+  it('removes the meaningless per-app ratio bars from the breakdown (#635-SI4)', async () => {
+    const { findByText, queryByLabelText, queryByText } = renderScreen();
+    await findByText('Camera');
+    fireEvent.press(await findByText('Camera'));
+
+    await waitFor(() => {
+      expect(queryByText('Instagram')).toBeTruthy();
+    });
+
+    // The breakdown still lists each app by name (no "×" multiplier).
+    expect(queryByText('WhatsApp')).toBeTruthy();
+    expect(queryByText('12×')).toBeNull();
+    expect(queryByText('4×')).toBeNull();
+
+    // No per-app ratio bar: the vague "app com permissão" bar label is gone.
+    // (On the buggy build each row rendered a 100%-wide bar with this label.)
+    expect(queryByLabelText('Instagram: app com permissão')).toBeNull();
+    expect(queryByLabelText('WhatsApp: app com permissão')).toBeNull();
+
+    // The package name is now shown inline (grey) instead of a width-derived bar.
+    expect(queryByText('com.instagram')).toBeTruthy();
+    expect(queryByText('com.whatsapp')).toBeTruthy();
+  });
+
   it('navigates back to Privacy via the header button', async () => {
     const { findByText } = renderScreen();
     fireEvent.press(await findByText('Privacidade'));
