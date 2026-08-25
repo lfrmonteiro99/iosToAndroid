@@ -15,9 +15,10 @@ import type { PrivacyReport } from '../../../modules/launcher-module/src';
 import type { AppNavigationProp } from '../../navigation/types';
 
 // #624 — Privacy Monitor dashboard. One card per privacy sensor (📷/🎤/📍/🌐)
-// showing the total access count; tapping a card expands a ranked, per-app
-// breakdown with bars (Instagram 12×, WhatsApp 4×). Reuses CupertinoCard +
-// GlassSurface so it matches the rest of the settings chrome.
+// showing the apps that declare that permission in their manifest; tapping a
+// card expands the per-app list (count is always 1 - this is set-membership,
+// not usage tallies). Reuses CupertinoCard + GlassSurface so it matches the
+// rest of the settings chrome.
 const SENSOR_ORDER: PrivacyReport['sensors'][number]['sensor'][] = [
   'camera',
   'microphone',
