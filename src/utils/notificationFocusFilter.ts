@@ -4,6 +4,7 @@ import {
   routeNotification,
   type NotificationRouteContext,
 } from './notificationAppRules';
+import { captureBatched } from './notificationSummaryBuffer';
 
 // Pure callback used by App.tsx's addNotificationListener to decide whether to
 // show a banner. Exported here (not from App.tsx) so tests can import it without
@@ -23,7 +24,13 @@ export function notificationCallbackForFocus(
 
   const ctx: NotificationRouteContext = routing ?? { focusMode: focusModeRef.current };
   const decision = routeNotification(n, ctx);
-  if (decision.action !== 'show') return;
+  if (decision.action !== 'show') {
+    // Scheduled Summary (issue #630, sub-issue 1): as apps com política
+    // 'scheduled'/'digest' são suprimidas com reason 'batched' e acumuladas
+    // para libertação num slot. 'blocked' e 'focus' continuam descartadas.
+    if (decision.reason === 'batched') captureBatched(n, ctx);
+    return;
+  }
 
   if (seenIds.current.size > 200) {
     const first = seenIds.current.values().next().value;
