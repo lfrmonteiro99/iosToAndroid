@@ -109,6 +109,23 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
 
   const handleAddCardPressed = useCallback(() => navigation.navigate('CardEdit'), [navigation]);
 
+  // Rendered in BOTH branches below: with zero passes and zero cards the screen
+  // falls into the empty state, and without this row there is no touch path to
+  // CardEdit at all — adding a first card would be impossible on a fresh install.
+  const addCardRow = (
+    <Pressable
+      onPress={handleAddCardPressed}
+      accessibilityRole="button"
+      accessibilityLabel="Add card"
+      style={[styles.addRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+    >
+      <Ionicons name="add" size={20} color={colors.systemBlue} />
+      <Text style={[typography.body, { color: colors.systemBlue, marginLeft: 12 }]}>
+        Add Card
+      </Text>
+    </Pressable>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
@@ -139,13 +156,20 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
       {!isReady ? (
         <View style={styles.body} />
       ) : passes.length === 0 && cards.length === 0 ? (
-        <CupertinoEmptyState
-          icon="wallet-outline"
-          title="No Passes"
-          message="Add a boarding pass, ticket or loyalty card to get started."
-          actionLabel="Add Pass"
-          onAction={handleAddPressed}
-        />
+        <View style={styles.body}>
+          <CupertinoEmptyState
+            icon="wallet-outline"
+            title="No Passes"
+            message="Add a boarding pass, ticket or loyalty card to get started."
+            actionLabel="Add Pass"
+            onAction={handleAddPressed}
+          />
+          <View
+            style={{ paddingHorizontal: spacing.md, paddingBottom: insets.bottom + 24 }}
+          >
+            {addCardRow}
+          </View>
+        </View>
       ) : (
         <ScrollView
           style={styles.body}
@@ -183,17 +207,7 @@ export function WalletScreen({ navigation }: WalletScreenProps) {
             </CupertinoListSection>
           )}
 
-          <Pressable
-            onPress={handleAddCardPressed}
-            accessibilityRole="button"
-            accessibilityLabel="Add card"
-            style={[styles.addRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}
-          >
-            <Ionicons name="add" size={20} color={colors.systemBlue} />
-            <Text style={[typography.body, { color: colors.systemBlue, marginLeft: 12 }]}>
-              Add Card
-            </Text>
-          </Pressable>
+          {addCardRow}
         </ScrollView>
       )}
     </View>

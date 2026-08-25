@@ -28,6 +28,10 @@ android {
 
 dependencies {
     implementation project(':expo-modules-core')
+    // #627 child issue: BiometricPrompt for the native Protected-Apps gate.
+    implementation "androidx.biometric:biometric:1.2.0-alpha05"
+    // AppCompatActivity (FragmentActivity) host for the biometric prompt.
+    implementation "androidx.appcompat:appcompat:1.7.0"
     testImplementation 'junit:junit:4.13.2'
 }
 

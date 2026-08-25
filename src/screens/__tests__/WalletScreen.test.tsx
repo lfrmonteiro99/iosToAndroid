@@ -191,6 +191,81 @@ describe('WalletScreen', () => {
     expect(getByLabelText('Add card')).toBeTruthy();
   });
 
+  it('renders the "Add card" affordance in the full empty state and navigates to CardEdit', async () => {
+    // Zero passes AND zero cards: the screen falls into the CupertinoEmptyState
+    // branch. Adding a first card must still be reachable from there — otherwise
+    // the whole CardEdit flow is dead code for a fresh install.
+    const navigation = makeNavigation();
+    const { getByText, getByLabelText } = render(<WalletScreen navigation={navigation} />);
+    // 'No Passes' only appears once BOTH stores have flipped isReady.
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Add card'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('CardEdit');
+  });
+
+  it('keeps the empty-state "Add Pass" action pointing at PassEdit, not CardEdit', async () => {
+    // Inverse of the fix: adding the card affordance to the empty state must not
+    // rewire the pass action, and must not fire on its own.
+    const navigation = makeNavigation();
+    const { getByText } = render(<WalletScreen navigation={navigation} />);
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+
+    expect(navigation.navigate).not.toHaveBeenCalled();
+
+    fireEvent.press(getByText('Add Pass'));
+
+    expect(navigation.navigate).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).toHaveBeenCalledWith('PassEdit', {});
+  });
+
+  it('renders exactly one "Add card" affordance in the empty state and after a card exists', async () => {
+    // Guards against the empty-state row and the ScrollView row both mounting
+    // (which would make getByLabelText throw on multiple matches).
+    let cardApi: ReturnType<typeof useCard> | null = null;
+    function CardProbe() {
+      cardApi = useCard();
+      return null;
+    }
+    const { getByText, getAllByLabelText, queryByText } = render(
+      <>
+        <CardProbe />
+        <WalletScreen navigation={makeNavigation()} />
+      </>,
+    );
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+    expect(getAllByLabelText('Add card')).toHaveLength(1);
+
+    await act(async () => {
+      cardApi!.addCard({
+        label: 'First Card',
+        brand: 'mastercard',
+        last4: '5555',
+        expiryMonth: 1,
+        expiryYear: 2031,
+      });
+    });
+
+    await waitFor(() => expect(getByText('First Card')).toBeTruthy());
+    // The empty state is gone, and the row did not duplicate.
+    expect(queryByText('No Passes')).toBeNull();
+    expect(getAllByLabelText('Add card')).toHaveLength(1);
+  });
+
+  it('navigates to CardEdit on each press when "Add Card" is tapped twice in the empty state', async () => {
+    const navigation = makeNavigation();
+    const { getByText, getByLabelText } = render(<WalletScreen navigation={navigation} />);
+    await waitFor(() => expect(getByText('No Passes')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Add card'));
+    fireEvent.press(getByLabelText('Add card'));
+
+    expect(navigation.navigate).toHaveBeenCalledTimes(2);
+    expect(navigation.navigate).toHaveBeenNthCalledWith(1, 'CardEdit');
+    expect(navigation.navigate).toHaveBeenNthCalledWith(2, 'CardEdit');
+  });
+
   it('navigates to CardEdit when "Add Card" is pressed', async () => {
     // The "Add card" row only renders once the screen leaves the full empty
     // state, which requires at least one pass or card — seed a pass.

@@ -19,6 +19,7 @@ export type RootStackParamList = {
   ContactDetail: { contactId: string };
   ContactEdit: { contactId?: string };
   Weather: undefined;
+  Health: undefined;
   Clock: undefined;
   Camera: undefined;
   Photos: undefined;
@@ -53,6 +54,7 @@ export type RootStackParamList = {
   Wallpaper: undefined;
   Accessibility: undefined;
   AssistiveTouchSettings: undefined;
+  BackTapSettings: undefined;
   Battery: undefined;
   Privacy: undefined;
   Storage: undefined;
@@ -72,6 +74,8 @@ export type RootStackParamList = {
   Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
+  ProtectedApps: undefined;
+  PerformanceProfile: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;

@@ -17,6 +17,7 @@ import { CURATED_APPS } from '../data/curatedApps';
 import { playStoreUrl, playStoreWebUrl } from './AppStoreScreen';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import { logger } from '../utils/logger';
+import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
 
 /**
  * Package-name prefix of this app's own virtual built-ins (Phone, Messages, …).
@@ -82,9 +83,12 @@ export function AppStoreDetailScreen({ navigation, route }: AppStoreDetailScreen
   // cannot be removed and virtual built-ins are not packages at all.
   const canUninstall = !!installed && !installed.isSystem && !isVirtualBuiltIn(packageName);
 
+  // Built-in virtual apps (Clock, Calculator, …) are "installed" for this
+  // screen's purposes but are not real APKs — they must open the in-app
+  // iOS-style screen, not be handed to the native launcher bridge (#706).
   const handleOpen = useCallback(() => {
-    launchApp(packageName);
-  }, [launchApp, packageName]);
+    launchBuiltInOrExternal(packageName, navigation, launchApp);
+  }, [navigation, launchApp, packageName]);
 
   // Same probe-then-fallback guard as AppStoreScreen's Get button: market://
   // has no handler on de-Googled devices and on most emulators.

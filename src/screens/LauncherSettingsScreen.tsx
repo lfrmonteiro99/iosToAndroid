@@ -36,6 +36,17 @@ import {
   REQUIRE_PASSCODE_OPTIONS,
   normalizeRequirePasscodeAfter,
 } from '../utils/passcodePolicy';
+import { AccentColors, type AccentColorKey } from '../theme/CupertinoTheme';
+
+// Tinted Icons colour swatches (issue #620): reuses the app's named accent
+// palette instead of a bespoke colour list, so «Tinted Icons» and «Display &
+// Brightness → Tint» always offer the same six options.
+const ICON_TINT_KEYS = Object.keys(AccentColors) as AccentColorKey[];
+
+/** 'blue' → 'Blue'. Mirrors DisplayBrightnessScreen's accentLabel. */
+function iconTintLabel(key: AccentColorKey) {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 /**
  * #517: os números de arranque têm de ser legíveis em runtime, e não podem
@@ -92,13 +103,14 @@ export function LauncherSettingsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update, updateMany, reset: resetSettings } = useSettings();
-  const { dockApps, apps, hiddenApps, unhideApp } = useApps();
+  const { dockApps, apps, hiddenApps, unhideApp, protectedApps = [], compactHomeLayout } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
   const [showPinModal, setShowPinModal] = useState(false);
   const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
   const [showRequirePasscodePicker, setShowRequirePasscodePicker] = useState(false);
+  const [showIconTintPicker, setShowIconTintPicker] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -315,7 +327,6 @@ export function LauncherSettingsScreen() {
             </Text>
           }
           showChevron={false}
-          isLast
         />
         <View style={styles.sliderRow}>
           <CupertinoSlider
@@ -325,6 +336,34 @@ export function LauncherSettingsScreen() {
             maximumValue={ICON_SIZE_SCALE_LARGE}
           />
         </View>
+        <CupertinoListTile
+          title="Tinted Icons"
+          leading={{ name: 'color-palette', color: '#fff', backgroundColor: '#FF2D55' }}
+          showChevron={false}
+          isLast={!settings.iconTintEnabled}
+          trailing={
+            <CupertinoSwitch
+              value={settings.iconTintEnabled}
+              onValueChange={(v) => update('iconTintEnabled', v)}
+            />
+          }
+        />
+        {settings.iconTintEnabled && (
+          <CupertinoListTile
+            title="Tint Color"
+            leading={{ name: 'color-fill', color: '#fff', backgroundColor: settings.iconTintColor }}
+            isLast
+            trailing={
+              <View style={styles.tintTrailing}>
+                <View
+                  testID="icon-tint-swatch"
+                  style={[styles.tintSwatch, { backgroundColor: settings.iconTintColor }]}
+                />
+              </View>
+            }
+            onPress={() => setShowIconTintPicker(true)}
+          />
+        )}
       </CupertinoListSection>
 
       {/* ── Home Screen ────────────────────────────────────────── */}
@@ -506,6 +545,17 @@ export function LauncherSettingsScreen() {
           />
         </View>
         <View style={styles.buttonRow}>
+          {/* #762: reassigns homeApps positions sequentially (0,1,2,...),
+              closing every hole left by removing/moving icons — no app is
+              lost, only positions shift. Non-destructive, so no `destructive`
+              styling unlike the reset buttons below. */}
+          <CupertinoButton
+            title="Compact Layout"
+            variant="tinted"
+            onPress={compactHomeLayout}
+          />
+        </View>
+        <View style={[styles.buttonRow, { marginTop: 8 }]}>
           <CupertinoButton
             title="Reset Home Layout"
             variant="tinted"
@@ -580,6 +630,20 @@ export function LauncherSettingsScreen() {
         />
       </CupertinoListSection>
 
+      {/* ── Protected Apps (#627) ─────────────────────────────────
+          Distinto do Lock Screen acima: aquele bloqueia o launcher todo, este
+          pede biometria a abrir apps individuais (ver AppsStore.launchApp). */}
+      <CupertinoListSection header="App Lock">
+        <CupertinoListTile
+          title="Protected Apps"
+          subtitle={protectedApps.length > 0 ? `${protectedApps.length} protected` : 'None'}
+          leading={{ name: 'shield-checkmark', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron
+          isLast
+          onPress={() => navigation.navigate('ProtectedApps')}
+        />
+      </CupertinoListSection>
+
       {/* ── PIN Change Modal ───────────────────────────────────── */}
       <Modal visible={showPinModal} transparent animationType="fade" onRequestClose={() => setShowPinModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowPinModal(false)} accessibilityLabel="Dismiss" accessibilityRole="button">
@@ -641,6 +705,21 @@ export function LauncherSettingsScreen() {
           onPress: () => {
             update('requirePasscodeAfter', option);
             setShowRequirePasscodePicker(false);
+          },
+        }))}
+        cancelLabel="Cancel"
+      />
+
+      {/* ── Tinted Icons colour (#620) ──────────────────────────── */}
+      <CupertinoActionSheet
+        visible={showIconTintPicker}
+        onClose={() => setShowIconTintPicker(false)}
+        title="Tint Color"
+        options={ICON_TINT_KEYS.map((key) => ({
+          label: iconTintLabel(key),
+          onPress: () => {
+            update('iconTintColor', AccentColors[key].light);
+            setShowIconTintPicker(false);
           },
         }))}
         cancelLabel="Cancel"
@@ -729,6 +808,16 @@ const styles = StyleSheet.create({
   sliderRow: {
     paddingHorizontal: 16,
     paddingBottom: 12,
+  },
+  tintTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tintSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   gridControlRow: {
     paddingHorizontal: 16,

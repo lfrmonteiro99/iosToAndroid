@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import type { CallLogEntry } from '../../modules/launcher-module/src';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
 import { useContacts, Contact } from '../store/ContactsStore';
+import { useSettings } from '../store/SettingsStore';
 import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { CupertinoSegmentedControl } from '../components/CupertinoSegmentedControl';
 import { SkeletonListRow } from '../components';
@@ -23,6 +24,7 @@ import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 import { avatarColorForName } from '../utils/avatarColor';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 
 const getLauncher = async () => {
   try {
@@ -145,6 +147,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
   const insets = useSafeAreaInsets();
   const { favorites, toggleFavorite, deviceFavoriteIds } = useContacts();
   const { contacts: deviceContacts } = useDevice();
+  const { settings } = useSettings();
 
   // Merge store favorites + device contacts that are marked as favorite
   const allFavorites = useMemo(() => {
@@ -189,7 +192,7 @@ function FavoritesTab({ onCall }: { onCall: (phone: string, name?: string) => vo
     <FlatList
       data={allFavorites}
       keyExtractor={(item) => item.id}
-      decelerationRate={0.998}
+      decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
       contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       ItemSeparatorComponent={() => (
         <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />
@@ -235,6 +238,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const { settings } = useSettings();
   const [callLog, setCallLog] = useState<CallLogEntry[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [callLogLoading, setCallLogLoading] = useState(true);
@@ -306,7 +310,7 @@ function RecentsTab({ onCall }: { onCall: (phone: string, name?: string) => void
   }
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20 }} decelerationRate={0.998}>
+    <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20 }} decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}>
       <View style={{ backgroundColor: colors.secondarySystemGroupedBackground }}>
         {callLog.map((call, idx) => (
           <CallLogItem
@@ -329,6 +333,7 @@ function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const { settings } = useSettings();
 
   const sorted = useMemo(
     () =>
@@ -370,7 +375,7 @@ function ContactsTab({ contacts, onCall, isLoading }: { contacts: DeviceContact[
       testID="contacts-list"
       data={sorted}
       keyExtractor={(item) => item.id}
-      decelerationRate={0.998}
+      decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
       contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       ItemSeparatorComponent={() => (
         <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 72 }]} />

@@ -1,4 +1,5 @@
 import type { LauncherModuleType } from '../index';
+import { clampLiveActivityProgress } from '../index';
 
 // The native module returned by requireNativeModule('LauncherModule').
 // Swapped per test so each bridge instance captures the right behaviour.
@@ -576,5 +577,184 @@ describe('wakeScreen — Tap to Wake bridge (#608)', () => {
     await mod.default.wakeScreen();
     expect(okListener).not.toHaveBeenCalled();
     unsub();
+  });
+});
+
+describe('clampLiveActivityProgress — live-activity progress normalization (#626)', () => {
+  it('computes a rounded percentage within [0, maxProgress]', () => {
+    expect(clampLiveActivityProgress(50, 100)).toEqual({ percent: 50, indeterminate: false });
+    expect(clampLiveActivityProgress(1, 3)).toEqual({ percent: 33, indeterminate: false }); // rounds 33.33 -> 33
+  });
+
+  it('boundary: progress at 0 and exactly at maxProgress', () => {
+    expect(clampLiveActivityProgress(0, 100)).toEqual({ percent: 0, indeterminate: false });
+    expect(clampLiveActivityProgress(100, 100)).toEqual({ percent: 100, indeterminate: false });
+  });
+
+  it('clamps out-of-range progress instead of producing an invalid percentage', () => {
+    expect(clampLiveActivityProgress(-10, 100)).toEqual({ percent: 0, indeterminate: false });
+    expect(clampLiveActivityProgress(150, 100)).toEqual({ percent: 100, indeterminate: false });
+  });
+
+  it('treats maxProgress <= 0 as indeterminate (no known total) instead of dividing by zero', () => {
+    expect(clampLiveActivityProgress(5, 0)).toEqual({ percent: 0, indeterminate: true });
+    expect(clampLiveActivityProgress(5, -1)).toEqual({ percent: 0, indeterminate: true });
+  });
+
+  it('treats non-finite inputs as indeterminate rather than throwing or returning NaN', () => {
+    expect(clampLiveActivityProgress(NaN, 100)).toEqual({ percent: 0, indeterminate: true });
+    expect(clampLiveActivityProgress(5, Infinity)).toEqual({ percent: 0, indeterminate: true });
+    expect(clampLiveActivityProgress(-Infinity, 100)).toEqual({ percent: 0, indeterminate: true });
+  });
+});
+
+describe('postLiveActivity / cancelLiveActivity bridge (#626)', () => {
+  let mod: typeof import('../index');
+
+  beforeAll(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterAll(() => {
+    (console.error as jest.Mock).mockRestore();
+  });
+
+  it('normalizes progress/maxProgress into percent/indeterminate before calling native', async () => {
+    const native = jest.fn(() => Promise.resolve(true));
+    mockNativeModule = makeNativeModule(false, { postLiveActivity: native });
+    mod = loadBridge();
+
+    await mod.default.postLiveActivity('order-42', 'Driver arriving', '2 min away', 8, 10);
+
+    expect(native).toHaveBeenCalledWith('order-42', 'Driver arriving', '2 min away', 80, false);
+  });
+
+  it('passes an empty id through to native rather than silently swallowing it — the guard belongs to useLiveActivity, not the bridge', async () => {
+    const native = jest.fn(() => Promise.resolve(true));
+    mockNativeModule = makeNativeModule(false, { postLiveActivity: native });
+    mod = loadBridge();
+
+    await mod.default.postLiveActivity('', 'x', 'y', 1, 1);
+
+    expect(native).toHaveBeenCalledWith('', 'x', 'y', 100, false);
+  });
+
+  it('reports a native postLiveActivity failure to onBridgeError instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const listener = jest.fn();
+    const unsub = mod.onBridgeError(listener);
+
+    await expect(mod.default.postLiveActivity('order-42', 'x', 'y', 1, 2)).resolves.toBe(false);
+    expect(listener).toHaveBeenCalledWith('postLiveActivity', expect.any(Error));
+    unsub();
+  });
+
+  it('cancelLiveActivity calls native cancel with the given id', async () => {
+    const native = jest.fn(() => Promise.resolve(true));
+    mockNativeModule = makeNativeModule(false, { cancelLiveActivity: native });
+    mod = loadBridge();
+
+    await mod.default.cancelLiveActivity('order-42');
+
+    expect(native).toHaveBeenCalledWith('order-42');
+  });
+
+  it('passes an empty id through to native rather than silently swallowing it — the guard belongs to useLiveActivity, not the bridge', async () => {
+    const native = jest.fn(() => Promise.resolve(true));
+    mockNativeModule = makeNativeModule(false, { cancelLiveActivity: native });
+    mod = loadBridge();
+
+    await mod.default.cancelLiveActivity('');
+
+    expect(native).toHaveBeenCalledWith('');
+  });
+
+  it('reports a native cancelLiveActivity failure to onBridgeError instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const listener = jest.fn();
+    const unsub = mod.onBridgeError(listener);
+
+    await expect(mod.default.cancelLiveActivity('order-42')).resolves.toBe(false);
+    expect(listener).toHaveBeenCalledWith('cancelLiveActivity', expect.any(Error));
+    unsub();
+  });
+
+  it('reports a native startTapDetection failure to onBridgeError instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const listener = jest.fn();
+    const unsub = mod.onBridgeError(listener);
+
+    await expect(mod.default.startTapDetection()).resolves.toBe(false);
+    expect(listener).toHaveBeenCalledWith('startTapDetection', expect.any(Error));
+    unsub();
+  });
+
+  it('reports a native stopTapDetection failure to onBridgeError instead of throwing', async () => {
+    mockNativeModule = makeNativeModule(true);
+    mod = loadBridge();
+    const listener = jest.fn();
+    const unsub = mod.onBridgeError(listener);
+
+    await expect(mod.default.stopTapDetection()).resolves.toBe(false);
+    expect(listener).toHaveBeenCalledWith('stopTapDetection', expect.any(Error));
+    unsub();
+  });
+});
+
+// #636: the native TapSensorService emits `onBackTap` for double/triple back
+// taps; this is the bridge half that forwards that payload to a JS listener.
+describe('LauncherModule Back Tap listener (event-driven, #636)', () => {
+  it('addBackTapListener subscribes to onBackTap', () => {
+    const addListener = jest.fn((_event: string, _handler: (payload: unknown) => void) => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    mod.addBackTapListener(jest.fn());
+
+    expect(addListener).toHaveBeenCalledWith('onBackTap', expect.any(Function));
+  });
+
+  it('addBackTapListener forwards the typed payload (type, count, taps) to the caller', () => {
+    const addListener = jest.fn((_event: string, _handler: (payload: unknown) => void) => ({ remove: jest.fn() }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    mod.addBackTapListener(handler);
+
+    const nativeHandler = addListener.mock.calls[0][1];
+    const payload = { type: 'double', count: 2, taps: [1000, 1200] };
+    nativeHandler(payload);
+
+    expect(handler).toHaveBeenCalledWith(payload);
+    expect(handler.mock.calls[0][0]).toMatchObject({ type: 'double', count: 2 });
+    expect(handler.mock.calls[0][0].taps).toEqual([1000, 1200]);
+  });
+
+  it('addBackTapListener unsubscribe calls the native subscription remove() exactly once (double-call safe)', () => {
+    const remove = jest.fn();
+    const addListener = jest.fn(() => ({ remove }));
+    mockNativeModule = makeNativeModuleWithListener(addListener);
+    const mod = loadBridge();
+
+    const unsubscribe = mod.addBackTapListener(jest.fn());
+    expect(remove).not.toHaveBeenCalled();
+
+    unsubscribe();
+    unsubscribe();
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it('addBackTapListener degrades to a no-op unsubscribe when the native module exposes no event emitter', () => {
+    mockNativeModule = makeNativeModule(false);
+    const mod = loadBridge();
+
+    const handler = jest.fn();
+    const unsubscribe = mod.addBackTapListener(handler);
+
+    expect(() => unsubscribe()).not.toThrow();
+    expect(handler).not.toHaveBeenCalled();
   });
 });

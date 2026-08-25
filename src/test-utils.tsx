@@ -10,6 +10,7 @@ import { FoldersProvider } from './store/FoldersStore';
 import { BookmarksProvider } from './store/BookmarksStore';
 import { LocationProvider } from './store/LocationStore';
 import { ReadingListProvider } from './store/ReadingListStore';
+import { HealthProvider } from './store/HealthStore';
 import { WalletProvider } from './store/WalletStore';
 import { CardProvider } from './store/CardStore';
 
@@ -36,11 +37,13 @@ function AllProviders({ children }: { children: React.ReactNode }) {
                   <BookmarksProvider>
                   <LocationProvider>
                     <ReadingListProvider>
-                    <WalletProvider>
-                    <CardProvider>
-                      {children}
-                    </CardProvider>
-                    </WalletProvider>
+                      <HealthProvider>
+                      <WalletProvider>
+                      <CardProvider>
+                        {children}
+                      </CardProvider>
+                      </WalletProvider>
+                      </HealthProvider>
                     </ReadingListProvider>
                   </LocationProvider>
                   </BookmarksProvider>
