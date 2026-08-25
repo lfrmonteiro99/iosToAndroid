@@ -3,10 +3,12 @@ import {
   SMART_BATTERY_THRESHOLD_DEFAULT,
   getProfileById,
   getProfileEffects,
+  getBatteryRuleState,
   normalizeSmartBatteryProfile,
   resolveActiveProfile,
   clampSmartBatteryThreshold,
   type SmartBatteryProfile,
+  type SmartBatteryRuleState,
 } from '../smartBatteryProfiles';
 
 // Smart Battery Profiles (#631) — pure rules engine. Estes testes exercitam as
@@ -151,6 +153,65 @@ describe('resolveActiveProfile — trigger por threshold', () => {
   });
 });
 
+// getBatteryRuleState (#815, filho de #648): contrato booleano único derivado de
+// getProfileEffects. extremeSaver/sleep/travel -> os três true; normal/performance
+// -> false. Esta é a ÚNICA forma de obter o contrato booleano do issue.
+describe('getBatteryRuleState', () => {
+  const ALL_TRUE = {
+    disableSync: true,
+    reducePolling: true,
+    delayNonCritical: true,
+  };
+  const ALL_FALSE = {
+    disableSync: false,
+    reducePolling: false,
+    delayNonCritical: false,
+  };
+
+  it('extremeSaver devolve os três true (regra do <30%)', () => {
+    expect(getBatteryRuleState('extremeSaver')).toEqual(ALL_TRUE);
+  });
+
+  it('sleep devolve os três true (é um perfil de poupança dura)', () => {
+    expect(getBatteryRuleState('sleep')).toEqual(ALL_TRUE);
+  });
+
+  it('travel devolve os três true (é um perfil de poupança dura)', () => {
+    expect(getBatteryRuleState('travel')).toEqual(ALL_TRUE);
+  });
+
+  it('normal devolve os três false (baseline sem restrições)', () => {
+    expect(getBatteryRuleState('normal')).toEqual(ALL_FALSE);
+  });
+
+  it('performance devolve os três false (máximo desempenho)', () => {
+    expect(getBatteryRuleState('performance')).toEqual(ALL_FALSE);
+  });
+
+  it('os três perfis de poupança são idênticos no contrato booleano', () => {
+    expect(getBatteryRuleState('extremeSaver')).toEqual(getBatteryRuleState('sleep'));
+    expect(getBatteryRuleState('sleep')).toEqual(getBatteryRuleState('travel'));
+  });
+
+  it('está derivado de getProfileEffects (fonte única de verdade)', () => {
+    // A fonte de verdade é getProfileEffects: os três perfis com lowPowerMode=true
+    // (extremeSaver/sleep/travel) ligam o contrato; normal/performance (false) não.
+    const profiles: SmartBatteryProfile[] = [
+      'normal', 'performance', 'extremeSaver', 'sleep', 'travel',
+    ];
+    for (const p of profiles) {
+      const effects = getProfileEffects(p);
+      const rule = getBatteryRuleState(p);
+      const expected: SmartBatteryRuleState = {
+        disableSync: effects.lowPowerMode,
+        reducePolling: effects.lowPowerMode,
+        delayNonCritical: effects.lowPowerMode,
+      };
+      expect(rule).toEqual(expected);
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Migração de batteryRulesEngine (issue #648, subsumido por #631).
 //
@@ -158,8 +219,10 @@ describe('resolveActiveProfile — trigger por threshold', () => {
 // (nunca mergeado em dev). O motor de threshold que chegou a dev é
 // `resolveActiveProfile` em smartBatteryProfiles.ts (#631). Os 13 casos do
 // batteryRulesEngine.test.ts são reexpressos abaixo contra resolveActiveProfile.
-// Nota: `getBatteryRuleState` (referido no issue) NÃO existe em lado nenhum —
-// o nome no issue estava errado; o alvo real é resolveActiveProfile.
+// Nota histórica: quando este bloco foi escrito, `getBatteryRuleState` não
+// existia e assumiu-se que o nome no issue estava errado. O #815 acabou por
+// a criar — ver o describe acima. São funções distintas: esta migração cobre
+// o motor de threshold (resolveActiveProfile), aquela o contrato booleano.
 // ---------------------------------------------------------------------------
 describe('batteryRulesEngine → #648 migrado (subsumido por #631)', () => {
   const base = {
