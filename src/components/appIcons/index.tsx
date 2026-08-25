@@ -547,11 +547,14 @@ function HealthIcon({ size }: ArtworkProps) {
 function ShortcutsIcon({ size }: ArtworkProps) {
   return (
     <>
+      {/* Pink corner pulled further into the tile: with the first stop exactly
+          on the corner the magenta occupied a few pixels and the icon read as
+          plain purple-to-blue. */}
       <Ground
         size={size}
-        gradient={['#F857A6', '#8E5BF7', '#3A8DFF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        gradient={['#FF5C9D', '#A15BF0', '#3F8CFF']}
+        start={{ x: 0.12, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
       />
       <Bar size={size} x={0.24} y={0.24} w={0.36} h={0.36} color="#FFFFFF" radius={0.11} opacity={0.95} />
       <Bar size={size} x={0.42} y={0.42} w={0.36} h={0.36} color="#FFFFFF" radius={0.11} opacity={0.6} />
@@ -560,36 +563,47 @@ function ShortcutsIcon({ size }: ArtworkProps) {
 }
 
 // ─── Maps ───────────────────────────────────────────────────────────────────
-// The real icon is a cartographic scrap: green parkland, a pale road grid and a
-// blue highway cutting across, with the location pin on top.
 function MapsIcon({ size }: ArtworkProps) {
   return (
     <>
-      <Ground size={size} gradient={['#8BD98F', '#4CAF63']} />
-      <Bar size={size} x={-0.1} y={0.14} w={1.2} h={0.09} color="#F7F7EF" radius={0} rotate={-14} />
-      <Bar size={size} x={-0.1} y={0.72} w={1.2} h={0.075} color="#F7F7EF" radius={0} rotate={-14} />
-      <Bar size={size} x={0.2} y={-0.1} w={0.085} color="#F7F7EF" h={1.2} radius={0} rotate={10} />
-      <Bar size={size} x={-0.15} y={0.42} w={1.35} h={0.13} color="#4E9BE8" radius={0} rotate={-22} />
-      {/* Location pin: a disc head over a rotated square that reads as the tip. */}
-      <Bar size={size} x={0.44} y={0.53} w={0.12} h={0.12} color={IOS.red} radius={0.02} rotate={45} />
-      <Disc size={size} cx={0.5} cy={0.47} d={0.26} color={IOS.red} />
-      <Disc size={size} cx={0.5} cy={0.47} d={0.1} color="#FFFFFF" />
+      {/* A map crop, not a lawn. This was a green ground with white stripes,
+          which reads as a golf course: the real icon's dominant colour is pale
+          paper, with a green park, water at one corner, white roads and the pin.
+          Land first, then the features, then the roads over them. */}
+      <Ground size={size} color="#F4F0E4" />
+      <Bar size={size} x={-0.02} y={-0.02} w={0.44} h={0.36} color="#A8DCA6" radius={0} />
+      <Bar size={size} x={0.56} y={0.64} w={0.5} h={0.42} color="#8FD3F4" radius={0} />
+      {/* Roads: a wide one across and a narrower one down, plus the yellow
+          arterial the real icon has cutting the corner. */}
+      <Stroke size={size} x1={-0.05} y1={0.58} x2={1.05} y2={0.36} thickness={0.115} radius={0} color="#FFFFFF" />
+      <Stroke size={size} x1={0.66} y1={-0.05} x2={0.4} y2={1.05} thickness={0.085} radius={0} color="#FFFFFF" />
+      <Stroke size={size} x1={-0.05} y1={0.16} x2={0.55} y2={1.05} thickness={0.06} radius={0} color="#F6CF77" />
+      {/* Location pin: a rotated square for the tip, a disc for the head. */}
+      <Bar size={size} x={0.435} y={0.52} w={0.12} h={0.12} color={IOS.red} radius={0.02} rotate={45} />
+      <Disc size={size} cx={0.495} cy={0.45} d={0.26} color={IOS.red} />
+      <Disc size={size} cx={0.495} cy={0.45} d={0.1} color="#FFFFFF" />
     </>
   );
 }
 
 // ─── Find My ────────────────────────────────────────────────────────────────
-// Concentric radar rings with the same pin as Maps at the centre, on white.
 function FindMyIcon({ size }: ArtworkProps) {
+  const green = '#34C759';
   return (
     <>
+      {/* Radar RINGS, drawn as alternating green and white discs. Three filled
+          translucent discs (what this was) stack into one soft green blob with
+          no ring visible at all, and the centre marker is blue on the real
+          icon — the piece that makes it read as Find My rather than as a
+          generic location app. */}
       <Ground size={size} color="#FFFFFF" />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.86} color="#34C759" opacity={0.16} />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.62} color="#34C759" opacity={0.24} />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.4} color="#34C759" opacity={0.34} />
-      <Bar size={size} x={0.44} y={0.56} w={0.12} h={0.12} color="#2FA84F" radius={0.02} rotate={45} />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.24} color="#2FA84F" />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.09} color="#FFFFFF" />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.88} color={green} />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.81} color="#FFFFFF" />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.61} color={green} />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.54} color="#FFFFFF" />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.35} color={green} />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.28} color="#FFFFFF" />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.2} color="#0A84FF" />
     </>
   );
 }
@@ -635,9 +649,23 @@ function NewsIcon({ size }: ArtworkProps) {
   return (
     <>
       <Ground size={size} color="#FFFFFF" />
-      <Bar size={size} x={0.235} y={0.235} w={0.115} h={0.53} color={IOS.red} radius={0.02} />
-      <Bar size={size} x={0.65} y={0.235} w={0.115} h={0.53} color={IOS.red} radius={0.02} />
-      <Hand size={size} cx={0.5} cy={0.79} length={0.6} thickness={0.115} angle={-27} color={IOS.red} radius={0.02} />
+      {/* Thin uprights, thick diagonal — the weight distribution of the real
+          serif N. The diagonal runs between the uprights' ENDS, top-left to
+          bottom-right. It used to be a Hand pivoted at the bottom centre and
+          swung out at -27 degrees, which put it across the middle of the tile
+          instead of corner to corner and read as an M. */}
+      <Bar size={size} x={0.225} y={0.23} w={0.1} h={0.54} color={IOS.red} radius={0.012} />
+      <Bar size={size} x={0.675} y={0.23} w={0.1} h={0.54} color={IOS.red} radius={0.012} />
+      <Stroke
+        size={size}
+        x1={0.275}
+        y1={0.26}
+        x2={0.725}
+        y2={0.74}
+        thickness={0.155}
+        radius={0.012}
+        color={IOS.red}
+      />
     </>
   );
 }

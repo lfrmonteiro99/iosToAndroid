@@ -195,7 +195,9 @@ export {
 import {
   BUILT_IN_APPS,
   BUILT_IN_DUPLICATE_PACKAGES,
+  builtInAppName,
 } from '../utils/builtInAppRoutes';
+import { logger } from '../utils/logger';
 import {
   IOS_FACADE_BY_PACKAGE,
   resolveInstalledFacades,
@@ -1119,7 +1121,7 @@ export function LauncherHomeScreen() {
       const target = facadeTargets[app.packageName];
       // No target means the facade should not have been on the grid at all;
       // a no-op beats launching something arbitrary.
-      if (target) launchApp(target).catch(() => {});
+      if (target) launchApp(target).catch((e) => logger.error('LauncherHome', 'facade launch failed', e));
       return;
     }
     const internalRoute = BUILT_IN_APPS[app.packageName];
@@ -1142,16 +1144,28 @@ export function LauncherHomeScreen() {
     // which is where LauncherModule.kt's Android transition suppression
     // lives (unconditional there), so it is never affected by this choice.
     if (!measure || reduceMotion || !settings.appLaunchAnimation) {
-      launchApp(app.packageName);
+      // .catch, because this is a floating promise on the path a user tap takes.
+      // launchApp resolves rather than rejects for every outcome it knows about,
+      // so anything arriving here is unexpected — and an unhandled rejection is
+      // exactly the kind of thing that is invisible in a release build.
+      launchApp(app.packageName).catch((e) => logger.error('LauncherHome', 'launchApp threw', e));
       return;
     }
-    measure().then((bounds) => {
-      if (bounds) {
-        setLaunchTransition({ app, bounds, phase: 'expand' });
-      } else {
-        launchApp(app.packageName);
-      }
-    });
+    measure()
+      .then((bounds) => {
+        if (bounds) {
+          setLaunchTransition({ app, bounds, phase: 'expand' });
+        } else {
+          return launchApp(app.packageName).then(() => undefined);
+        }
+      })
+      .catch((e) => {
+        // measureInWindow is a native round-trip; a throw there must not leave
+        // the tap with no outcome at all. Fall back to the plain launch, which
+        // is what a failed measurement already does.
+        logger.error('LauncherHome', 'measure/launch failed', e);
+        launchApp(app.packageName).catch(() => {});
+      });
   }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation, facadeTargets]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
@@ -1465,8 +1479,11 @@ export function LauncherHomeScreen() {
     const dockPkgs = new Set(dockApps.map(a => a.packageName));
 
     // Add virtual built-in apps to the grid (if not in dock)
-    const virtualApps: InstalledApp[] = Object.entries(BUILT_IN_APPS).map(([pkg, name]) => ({
-      name: String(name),
+    // builtInAppName, not the route: `String(name)` here is what put "Browser",
+    // "FindMy" and "AppStore" under the icons instead of Safari, Find My and
+    // App Store. A navigation route name is not a label.
+    const virtualApps: InstalledApp[] = Object.keys(BUILT_IN_APPS).map((pkg) => ({
+      name: builtInAppName(pkg),
       packageName: pkg,
       icon: '',
       isSystem: false,

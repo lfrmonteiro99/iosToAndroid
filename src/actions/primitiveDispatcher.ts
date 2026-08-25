@@ -39,19 +39,33 @@ export interface LaunchAppDeps {
 export async function dispatchLaunchApp(packageName: string, deps: LaunchAppDeps): Promise<boolean> {
   if (!deps.isAndroid) return false;
 
-  if (deps.isProtected(packageName)) {
-    const authenticated = await deps.authenticate('Unlock app');
-    if (!authenticated) return false;
-  }
-
+  // The biometric gate is INSIDE the try. It used to sit above it, so a
+  // rejecting authenticate() — a keyguard that throws, a biometric stack in a
+  // bad state — escaped this function as a rejected promise instead of a
+  // `false`, and every caller treats the return value as the outcome. Nothing
+  // reported it and nothing reverted the icon-expand overlay.
+  //
+  // onLaunched is deliberately also inside: if the recents bookkeeping throws,
+  // the app HAS launched, so the launch must still be reported as a success
+  // rather than turning into a spurious "Could not launch app".
   try {
-    const ok = await deps.launchNative(packageName);
-    if (ok) {
-      deps.onLaunched(packageName);
-    } else {
-      deps.onError('Error', 'Could not launch app. Please try again.');
+    if (deps.isProtected(packageName)) {
+      const authenticated = await deps.authenticate('Unlock app');
+      if (!authenticated) return false;
     }
-    return ok;
+
+    const ok = await deps.launchNative(packageName);
+    if (!ok) {
+      deps.onError('Error', 'Could not launch app. Please try again.');
+      return false;
+    }
+
+    try {
+      deps.onLaunched(packageName);
+    } catch {
+      // Recents is a nice-to-have; the app is already open.
+    }
+    return true;
   } catch {
     deps.onError('Error', 'Could not launch app. Please try again.');
     return false;

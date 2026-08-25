@@ -8,6 +8,7 @@ import { upsertApp, removeApp } from './appsIndexReducer';
 import { getIconMask, subscribeIconMask, type IconMaskOptions } from '../utils/iconShape';
 import { authenticateWithBiometrics } from '../utils/biometricAuth';
 import { dispatchLaunchApp } from '../actions/primitiveDispatcher';
+import { BUILT_IN_APPS, builtInAppName } from '../utils/builtInAppRoutes';
 import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
@@ -282,31 +283,18 @@ interface AppsContextValue {
 const AppsContext = createContext<AppsContextValue | null>(null);
 
 // Virtual built-in apps (our own screens, not real Android packages)
+// Built-in entries are DERIVED from BUILT_IN_APP_NAMES rather than restated:
+// this map and the home grid disagreed about three labels (the grid used the
+// navigation route, so Safari read "Browser"), and two hand-maintained lists of
+// the same names is how that happens. The facades are listed separately below
+// because they are not routes — they open an installed Android app.
 const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
-  'com.iostoandroid.phone': { name: 'Phone', packageName: 'com.iostoandroid.phone', icon: '', isSystem: false },
-  'com.iostoandroid.messages': { name: 'Messages', packageName: 'com.iostoandroid.messages', icon: '', isSystem: false },
-  'com.iostoandroid.contacts': { name: 'Contacts', packageName: 'com.iostoandroid.contacts', icon: '', isSystem: false },
-  'com.iostoandroid.settings': { name: 'Settings', packageName: 'com.iostoandroid.settings', icon: '', isSystem: false },
-  'com.iostoandroid.weather': { name: 'Weather', packageName: 'com.iostoandroid.weather', icon: '', isSystem: false },
-  'com.iostoandroid.health': { name: 'Health', packageName: 'com.iostoandroid.health', icon: '', isSystem: false },
-  'com.iostoandroid.clock': { name: 'Clock', packageName: 'com.iostoandroid.clock', icon: '', isSystem: false },
-  'com.iostoandroid.camera': { name: 'Camera', packageName: 'com.iostoandroid.camera', icon: '', isSystem: false },
-  'com.iostoandroid.photos': { name: 'Photos', packageName: 'com.iostoandroid.photos', icon: '', isSystem: false },
-  'com.iostoandroid.calendar': { name: 'Calendar', packageName: 'com.iostoandroid.calendar', icon: '', isSystem: false },
-  'com.iostoandroid.calculator': { name: 'Calculator', packageName: 'com.iostoandroid.calculator', icon: '', isSystem: false },
-  'com.iostoandroid.notes': { name: 'Notes', packageName: 'com.iostoandroid.notes', icon: '', isSystem: false },
-  'com.iostoandroid.reminders': { name: 'Reminders', packageName: 'com.iostoandroid.reminders', icon: '', isSystem: false },
-  'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
-  'com.iostoandroid.wallet': { name: 'Wallet', packageName: 'com.iostoandroid.wallet', icon: '', isSystem: false },
-  // Safari and Shortcuts were in BUILT_IN_APPS (so the grid drew them) but
-  // missing here, which is the set used to keep our own fake packages out of
-  // "real installed apps" views like the App Store's Updates list. Maps, Find
-  // My and App Store are newly surfaced on the grid and need both.
-  'com.iostoandroid.browser': { name: 'Safari', packageName: 'com.iostoandroid.browser', icon: '', isSystem: false },
-  'com.iostoandroid.shortcuts': { name: 'Shortcuts', packageName: 'com.iostoandroid.shortcuts', icon: '', isSystem: false },
-  'com.iostoandroid.maps': { name: 'Maps', packageName: 'com.iostoandroid.maps', icon: '', isSystem: false },
-  'com.iostoandroid.findmy': { name: 'Find My', packageName: 'com.iostoandroid.findmy', icon: '', isSystem: false },
-  'com.iostoandroid.appstore': { name: 'App Store', packageName: 'com.iostoandroid.appstore', icon: '', isSystem: false },
+  ...Object.fromEntries(
+    Object.keys(BUILT_IN_APPS).map((pkg) => [
+      pkg,
+      { name: builtInAppName(pkg), packageName: pkg, icon: '', isSystem: false },
+    ]),
+  ),
   // iOS facades over installed Android apps (utils/iosFacadeApps.ts). Listed
   // here for the same reason as the built-ins: these package names are ours,
   // not real installed packages, so views of "real apps" must exclude them.
@@ -767,7 +755,18 @@ export function AppsProvider({
         // which made this whole function silently fail — and therefore
         // untestable — for both protected and unprotected packages alike.
         const LauncherModule = await getLauncherModule();
-        return (await LauncherModule?.launchApp(pkg)) ?? false;
+
+        // Bracketed with breadcrumbs because this is the one call on the path
+        // that can take the whole process down without throwing anything JS can
+        // observe — startActivity crossing into the system server. A device
+        // reported "opening a third-party app kills the launcher" and there was
+        // no way to tell whether the crash happened before, during or after it.
+        // A persisted "enter" with no "exit" localises that to this line; both
+        // present moves the search past it. See utils/crashLog.ts.
+        logger.trace('AppsStore', `launchApp native enter ${pkg}`);
+        const ok = (await LauncherModule?.launchApp(pkg)) ?? false;
+        logger.trace('AppsStore', `launchApp native exit ${pkg} -> ${ok}`);
+        return ok;
       },
       onLaunched: addToRecents,
       onError: (title, message) => alertRef.current(title, message),

@@ -264,3 +264,65 @@ describe('dispatchSendMessage (#785)', () => {
     ]);
   });
 });
+
+
+// A device reported that opening a third-party app killed the launcher, with no
+// error alert. dispatchLaunchApp is the function that decides the outcome of
+// every launch, and it had two ways to produce no outcome at all.
+describe('dispatchLaunchApp — failures that used to escape', () => {
+  function deps(overrides: Partial<Parameters<typeof dispatchLaunchApp>[1]> = {}) {
+    return {
+      isAndroid: true,
+      isProtected: () => false,
+      authenticate: jest.fn(() => Promise.resolve(true)),
+      launchNative: jest.fn(() => Promise.resolve(true)),
+      onLaunched: jest.fn(),
+      onError: jest.fn(),
+      ...overrides,
+    };
+  }
+
+  it('resolves false and alerts when the biometric prompt REJECTS', async () => {
+    // The gate used to sit above the try, so a rejecting authenticate() came
+    // back as a rejected promise from a function whose contract is a boolean.
+    // Every caller treats the return value as the outcome, so nothing reported
+    // it and nothing reverted the icon-expand overlay.
+    const d = deps({
+      isProtected: () => true,
+      authenticate: jest.fn(() => Promise.reject(new Error('keyguard is in a bad state'))),
+    });
+
+    await expect(dispatchLaunchApp('com.example.app', d)).resolves.toBe(false);
+    expect(d.onError).toHaveBeenCalled();
+    expect(d.launchNative).not.toHaveBeenCalled();
+  });
+
+  it('still reports success when the RECENTS bookkeeping throws', async () => {
+    // The app is already open at that point, so turning it into "Could not
+    // launch app" would be a lie about what the user just saw happen.
+    const d = deps({
+      onLaunched: jest.fn(() => {
+        throw new Error('AsyncStorage is full');
+      }),
+    });
+
+    await expect(dispatchLaunchApp('com.example.app', d)).resolves.toBe(true);
+    expect(d.onError).not.toHaveBeenCalled();
+  });
+
+  it('a declined prompt is still a silent false, not an alert', async () => {
+    // Unchanged behaviour, pinned because it is the one failure the user
+    // caused deliberately and does not need to be told about.
+    const d = deps({ isProtected: () => true, authenticate: jest.fn(() => Promise.resolve(false)) });
+
+    await expect(dispatchLaunchApp('com.example.app', d)).resolves.toBe(false);
+    expect(d.onError).not.toHaveBeenCalled();
+    expect(d.launchNative).not.toHaveBeenCalled();
+  });
+
+  it('never rejects, whatever the native side does', async () => {
+    const d = deps({ launchNative: jest.fn(() => Promise.reject(new Error('binder died'))) });
+    await expect(dispatchLaunchApp('com.example.app', d)).resolves.toBe(false);
+    expect(d.onError).toHaveBeenCalled();
+  });
+});
