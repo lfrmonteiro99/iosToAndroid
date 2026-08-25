@@ -71,6 +71,7 @@
       "./plugins/withAsyncStorageRepo",
       "./plugins/withLauncherIntent",
       "./plugins/withGradleMemory",
+      "./plugins/withFastReleaseBuilds",
       [
         "expo-camera",
         {
