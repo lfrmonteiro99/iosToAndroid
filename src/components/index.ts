@@ -45,6 +45,8 @@ export { IOContextMenu } from './IOContextMenu';
 export type { IOContextMenuProps, IOContextMenuItem } from './IOContextMenu';
 // Widgets now live in the shared src/widgets/ module (#811). Re-exported here
 // so existing call sites that import from '../components' keep working.
+export { WidgetGallery } from './WidgetGallery';
+export type { WidgetGalleryProps } from './WidgetGallery';
 export { WidgetCard } from '../widgets/WidgetCard';
 export type { WidgetCardProps } from '../widgets/WidgetCard';
 export { SmartStack, rotateForward, rotateBackward } from './SmartStack';

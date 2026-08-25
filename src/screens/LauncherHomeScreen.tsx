@@ -53,6 +53,7 @@ import {
   GlassSurface,
   useAlert,
   useWidgetConfig,
+  WidgetGallery,
   useWidgetMap,
 } from '../components';
 import type { BannerNotification } from '../components';
@@ -1258,6 +1259,10 @@ export function LauncherHomeScreen() {
 
   // Jiggle (edit) mode state
   const [isJiggling, setIsJiggling] = useState(false);
+  // Widget gallery (long-press -> "+"). Widgets were configurable only from the
+  // Today View's Edit panel, three levels deep behind a right-swipe; iOS puts
+  // this behind the jiggle-mode "+" and that is where people look for it.
+  const [widgetGalleryOpen, setWidgetGalleryOpen] = useState(false);
 
   const exitJiggle = useCallback(() => {
     setIsJiggling(false);
@@ -1923,7 +1928,19 @@ export function LauncherHomeScreen() {
               </Text>
             </View>
           )}
-          {/* Done button — visible only in jiggle mode */}
+          {/* Jiggle-mode controls: "+" opens the widget gallery, Done exits.
+              Both live in the status bar row, mirroring iOS. */}
+          {isJiggling && (
+            <Pressable
+              style={styles.jiggleAddBtn}
+              onPress={() => setWidgetGalleryOpen(true)}
+              accessibilityLabel="Add Widget"
+              accessibilityRole="button"
+              hitSlop={8}
+            >
+              <Ionicons name="add" size={18} color="#000000" />
+            </Pressable>
+          )}
           {isJiggling && (
             <Pressable
               style={styles.jiggleDoneBtn}
@@ -2154,6 +2171,14 @@ export function LauncherHomeScreen() {
       <NotificationCenterOverlay
         zone={zones(SCREEN_WIDTH, SCREEN_HEIGHT).notificationCenter}
         onCommit={() => navigateTo('NotificationCenter')}
+      />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Widget gallery — jiggle mode "+"                                   */}
+      {/* ---------------------------------------------------------------- */}
+      <WidgetGallery
+        visible={widgetGalleryOpen}
+        onClose={() => setWidgetGalleryOpen(false)}
       />
 
       {/* ---------------------------------------------------------------- */}
@@ -2448,6 +2473,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     lineHeight: 12,
+  },
+  jiggleAddBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   jiggleDoneBtn: {
     backgroundColor: 'rgba(255,255,255,0.2)',
