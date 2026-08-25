@@ -145,7 +145,7 @@ The lock screen is shown on cold start and whenever the app goes to the backgrou
 |-------|-------|--------|
 | `-PreactNativeArchitectures` | workflow `gradlew` call | drops the `x86`/`x86_64` emulator ABIs (~⅓ of the CMake work). Released APKs are `arm64-v8a,armeabi-v7a`; dev APKs are `arm64-v8a` only, so **a dev APK will not install on an x86 emulator** |
 | `org.gradle.caching` + `gradle/actions/setup-gradle` | `plugins/withFastReleaseBuilds.js`, workflows | reuses Kotlin/Java/jar task outputs across runs. CMake output is not Gradle‑cacheable, so the C++ work is not covered |
-| `lint { checkReleaseBuilds = false }` | `plugins/withFastReleaseBuilds.js` | removes AGP's per‑module `lintVital*` tasks from `assembleRelease`; JS/TS is still linted by eslint + tsc |
+| `lintVital*` tasks disabled | `plugins/withFastReleaseBuilds.js` | skips AGP's per‑module release lint; JS/TS is still linted by eslint + tsc. Disabling the tasks rather than setting `checkReleaseBuilds` — AGP has already read that flag by the time a plugin callback runs |
 
 Local `npm run android` is untouched by the ABI flag — it still builds all four ABIs from `gradle.properties`.
 

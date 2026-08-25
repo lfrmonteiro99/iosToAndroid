@@ -14,21 +14,21 @@ const { withGradleProperties, withProjectBuildGradle } = require("expo/config-pl
  * - AGP runs `lintVital*` for every module on a release build (~100s of that job:
  *   expo-constants 30s, gesture-handler 19s, expo-speech 11s, …). We lint JS/TS
  *   separately with eslint + tsc and never read Android lint's report, so release
- *   builds opt out of it. Debug builds are untouched.
+ *   builds skip those tasks. Debug builds are untouched.
+ *
+ *   This disables the tasks rather than setting `android.lint.checkReleaseBuilds`:
+ *   AGP has already read that flag by the time a `plugins.withId` callback runs,
+ *   so writing it fails the configuration phase outright with "It is too late to
+ *   set checkReleaseBuilds". Task state has no such window — `configureEach` is
+ *   lazy, so it applies whenever each task is realized.
  */
 
 const LINT_MARKER = "// withFastReleaseBuilds: skip Android lint on release builds";
 
 const LINT_BLOCK = `${LINT_MARKER}
 subprojects { subproject ->
-  ["com.android.application", "com.android.library"].each { pluginId ->
-    subproject.plugins.withId(pluginId) {
-      subproject.android {
-        lint {
-          checkReleaseBuilds = false
-        }
-      }
-    }
+  subproject.tasks.matching { it.name.startsWith("lintVital") }.configureEach {
+    it.enabled = false
   }
 }
 `;

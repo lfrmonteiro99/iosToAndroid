@@ -19,17 +19,19 @@ describe("withFastReleaseBuilds plugin", () => {
       const result = addReleaseLintOptOut(rootBuildGradle);
 
       expect(result).toContain(LINT_MARKER);
-      expect(result).toContain("checkReleaseBuilds = false");
+      expect(result).toContain("it.enabled = false");
       // The original contents survive.
       expect(result).toContain('apply plugin: "expo-root-project"');
     });
 
-    it("scopes the opt-out to modules that apply an Android plugin", () => {
+    it("disables the tasks instead of writing the AGP lint DSL", () => {
       const result = addReleaseLintOptOut(rootBuildGradle);
 
-      expect(result).toContain('"com.android.application"');
-      expect(result).toContain('"com.android.library"');
-      expect(result).toContain("subproject.plugins.withId(pluginId)");
+      // Setting android.lint.checkReleaseBuilds from a plugin callback fails the
+      // configuration phase — AGP has already read the flag by then.
+      expect(result).not.toContain("checkReleaseBuilds");
+      expect(result).toContain('it.name.startsWith("lintVital")');
+      expect(result).toContain("configureEach");
     });
 
     it("is idempotent when prebuild runs without --clean", () => {
@@ -37,7 +39,7 @@ describe("withFastReleaseBuilds plugin", () => {
       const twice = addReleaseLintOptOut(once);
 
       expect(twice).toBe(once);
-      expect(twice.split("checkReleaseBuilds").length - 1).toBe(1);
+      expect(twice.split("lintVital").length - 1).toBe(1);
     });
   });
 
