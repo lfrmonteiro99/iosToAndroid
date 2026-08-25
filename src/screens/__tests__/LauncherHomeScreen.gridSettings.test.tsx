@@ -5,6 +5,25 @@ import * as AppsStore from '../../store/AppsStore';
 import { LauncherHomeScreen, BUILT_IN_APPS } from '../LauncherHomeScreen';
 import { computeLauncherGridGeometry } from '../../utils/launcherGridGeometry';
 
+// COMPACT WIDTH IS PART OF THIS TEST'S SUBJECT, so it is pinned rather than
+// inherited. #503 is about the phone home-screen grid, and jest-expo's default
+// window is 750x1334 — pixel numbers for an iPhone 8, whose real width is
+// 375pt. useRegularWidth compares against a 700pt breakpoint, so the default
+// mock reads as a TABLET and ResponsiveNavShell (#844/#846) renders the
+// cupertino-sidebar. That sidebar lists nav labels, so 'Phone' appeared in the
+// tree as sidebar chrome and queryByText('Phone') stopped being a statement
+// about the grid at all ("Found multiple elements with text: Phone").
+//
+// The hook is mocked rather than Dimensions: useRegularWidth reads Dimensions
+// through react-native's re-export, which a mock of
+// react-native/Libraries/Utilities/Dimensions does not intercept (tried; the
+// sidebar still rendered). Mocking the decision point states the intent
+// directly — this test runs at compact width.
+jest.mock('../../hooks/useRegularWidth', () => ({
+  ...jest.requireActual('../../hooks/useRegularWidth'),
+  useRegularWidth: () => false,
+}));
+
 // issue #503: gridColumns / gridRows / iconSizeScale / showIconLabels must
 // reshape the home-screen grid live, from SettingsStore — before this issue
 // the pager always used a fixed 4x6 = 24 apps/page regardless of settings.
