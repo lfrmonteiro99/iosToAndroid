@@ -33,6 +33,14 @@ jest.mock('expo-navigation-bar', () => ({
 
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 
+// expo-linking's real createURL() reads the manifest via expo-constants to
+// resolve the URI scheme, and throws when Constants.expoConfig is empty (as
+// it is under jest-expo's mock) — see Schemes.js's resolveScheme(). Mocked
+// like the other native-backed expo-* modules above (#785).
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path) => `iostoandroid://${path ?? ''}`),
+}));
+
 jest.mock('expo-brightness', () => ({
   getBrightnessAsync: jest.fn(() => Promise.resolve(0.5)),
   setBrightnessAsync: jest.fn(() => Promise.resolve()),

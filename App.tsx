@@ -22,6 +22,7 @@ import { WalletProvider } from './src/store/WalletStore';
 import { CardProvider } from './src/store/CardStore';
 import { HealthProvider } from './src/store/HealthStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
+import { linking } from './src/navigation/linking';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
@@ -352,7 +353,7 @@ function AppContent() {
       <StatusBar style={isDark ? 'light' : 'dark'} hidden />
       <ReachabilityShifter>
         <GestureHost>
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <TabNavigator />
           </NavigationContainer>
         </GestureHost>
