@@ -46,10 +46,35 @@ describe('computeLauncherGridGeometry', () => {
     }
   });
 
-  it('a soma das células cobre exactamente a área de conteúdo', () => {
-    for (const width of [360, 393, 411, 480]) {
-      const g = computeLauncherGridGeometry(width);
-      expect(g.cellWidth * g.cols).toBeCloseTo(width - g.horizontalPadding * 2, 5);
+  // Esta asserção era "cobre EXACTAMENTE", com cellWidth fraccionária. Essa
+  // exactidão era a causa do bug: o contentor é flexWrap, o dispositivo
+  // arredonda a largura de cada filho para cima ao pixel, e a soma passava a
+  // área de conteúdo — a última coluna caía para a linha seguinte e deixava uma
+  // coluna inteira em branco à direita. A célula passou a ser inteira, e o
+  // invariante correcto é "nunca excede, e a sobra é desprezável".
+  it('as células cabem na área de conteúdo, com sobra abaixo de uma célula', () => {
+    for (const width of [320, 360, 390, 393, 411, 412, 428, 440, 480, 800]) {
+      for (const cols of [3, 4, 5, 6]) {
+        const g = computeLauncherGridGeometry(width, cols);
+        const content = width - g.horizontalPadding * 2;
+        expect(g.cellWidth * g.cols).toBeLessThanOrEqual(content);
+        // A sobra é o resto da divisão inteira: no máximo cols - 1 px.
+        expect(content - g.cellWidth * g.cols).toBeLessThan(g.cols);
+      }
+    }
+  });
+
+  it('cabem exactamente `cols` células por linha mesmo com arredondamento para cima', () => {
+    // O teste de regressão do bug relatado: 5 colunas escolhidas nas Settings
+    // mostravam 4. Simula o que o dispositivo faz — arredondar a largura de
+    // cada filho para cima — e exige que a linha continue a caber.
+    for (let width = 320; width <= 1024; width += 1) {
+      for (const cols of [3, 4, 5, 6]) {
+        const g = computeLauncherGridGeometry(width, cols);
+        const content = width - g.horizontalPadding * 2;
+        expect(Math.ceil(g.cellWidth) * g.cols).toBeLessThanOrEqual(content);
+        expect(Number.isInteger(g.cellWidth)).toBe(true);
+      }
     }
   });
 

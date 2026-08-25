@@ -22,7 +22,7 @@ export type LauncherGridGeometry = {
   iconSize: number;
   /** Margem lateral da grelha, em dp. */
   horizontalPadding: number;
-  /** Largura de cada célula, em dp (pode ser fraccionária). */
+  /** Largura de cada célula, em dp. Sempre inteira — ver computeLauncherGridGeometry. */
   cellWidth: number;
   /** Raio do canto do ícone, proporcional ao lado. */
   iconRadius: number;
@@ -59,13 +59,31 @@ export function computeLauncherGridGeometry(
     ),
   );
 
-  const cellWidth = (width - horizontalPadding * 2) / safeCols;
+  // A célula é INTEIRA, nunca fraccionária.
+  //
+  // Antes disto a célula era `(width - padding * 2) / cols`, e isso partia a
+  // grelha em quase todas as combinações reais de largura/colunas: o contentor
+  // da grelha é `flexWrap`, o dispositivo arredonda a largura de cada filho
+  // para cima ao pixel, e a soma passava a área de conteúdo por 1-2 px — pelo
+  // que a ÚLTIMA coluna era empurrada para a linha seguinte. O utilizador
+  // escolhia 5 colunas nas Settings, via 4, e sobrava uma coluna inteira em
+  // branco à direita (W=393 cols=5: 67.4 -> 68*5 = 340 > 337 disponíveis; o
+  // mesmo a 360/390/412/428/440 e também em 3, 4 e 6 colunas).
+  //
+  // Com o piso, `cellWidth * cols <= disponível` por construção. A sobra fica
+  // no fim da linha e é no máximo `cols - 1` px (<= 5 px), ou seja invisível —
+  // ao contrário da coluna inteira que se perdia antes. A margem §2 não é
+  // tocada: dobrar a sobra para dentro dela mudaria o valor especificado (a
+  // 360dp passaria de 25 para 26) para ganhar 1 px de simetria.
+  const available = width - horizontalPadding * 2;
+  const cellWidth = Math.max(0, Math.floor(available / safeCols));
+
   // O ícone tem de caber na célula: se o valor da especificação (escalado) não
   // couber (larguras muito estreitas ou mais colunas), fica limitado pela
   // célula em vez de transbordar/sobrepor a coluna seguinte.
   const iconSize = Math.max(
     0,
-    Math.min(Math.round(width * ICON_SIZE_RATIO * iconScale), Math.floor(cellWidth)),
+    Math.min(Math.round(width * ICON_SIZE_RATIO * iconScale), cellWidth),
   );
 
   return {
