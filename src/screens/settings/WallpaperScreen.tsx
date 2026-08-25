@@ -261,6 +261,16 @@ export function WallpaperScreen({ navigation }: { navigation: AppNavigationProp 
               title="Reset Shape Exponent"
               onPress={() => update('iconShapeExponent', DEFAULT_ICON_SHAPE_EXPONENT)}
             />
+            <CupertinoListTile
+              title="Icon Gloss"
+              subtitle="Glassy top sheen on built-in app icons"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.iconGloss}
+                  onValueChange={(v: boolean) => update('iconGloss', v)}
+                />
+              }
+            />
           </CupertinoListSection>
         </View>
 

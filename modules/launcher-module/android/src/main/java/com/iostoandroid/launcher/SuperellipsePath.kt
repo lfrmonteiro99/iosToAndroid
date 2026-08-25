@@ -28,7 +28,7 @@ object SuperellipsePath {
      * @param segments number of sample points
      * @return [size] point pairs (x, y), ordered by angle
      */
-    fun points(size: Int, n: Double = 4.7, segments: Int = 64): List<Pair<Double, Double>> {
+    fun points(size: Int, n: Double = 5.0, segments: Int = 64): List<Pair<Double, Double>> {
         val a = size / 2.0
         val b = size / 2.0
         val center = size / 2.0

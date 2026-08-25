@@ -22,7 +22,15 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- #636 Back Tap: foreground sensor service needs a foreground notification -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <!-- TYPE_SENSOR foreground service (#770): Android 14+ requires the
+         foreground-service permission that matches the service's
+         foregroundServiceType. The AAPT in CI does not yet recognise the
+         `sensor` type token, so we declare `connectedDevice` (the next closest
+         hardware-sensor type the resource linker accepts) and the matching
+         FOREGROUND_SERVICE_CONNECTED_DEVICE permission. The back-tap detector
+         reads the accelerometer, so any hardware-sensor type is functionally
+         equivalent here. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <application>
         <service
@@ -39,7 +47,7 @@
         <service
             android:name=".TapSensorService"
             android:exported="false"
-            android:foregroundServiceType="health" />
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- #634: foreground service that polls UsageStats + AppOps for camera /
              mic / location access. Its own low-importance notification is shown via

@@ -281,3 +281,68 @@ describe('useContextEngine', () => {
     await waitFor(() => expect(refreshLocation).toHaveBeenCalled());
   });
 });
+
+describe('context engine — persisted-rule round-trip (#628)', () => {
+  beforeEach(() => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+    mockUseDevice.mockReturnValue(baseDevice());
+    mockUseLocation.mockReturnValue(baseLocation());
+    refreshLocation.mockClear();
+  });
+
+  it('activates the target mode from rules reloaded off the AsyncStorage blob, dropping malformed entries', async () => {
+    // Seed the persisted blob exactly as a prior session would have written it.
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        contextRules: [
+          // valid → must survive normalization and drive the engine
+          {
+            id: 'good',
+            name: 'Office',
+            enabled: true,
+            combinator: 'AND',
+            conditions: [{ type: 'wifi', ssid: 'Office-5G' }],
+            targetMode: 'work',
+          },
+          // invalid targetMode → must be dropped, never activates a bogus mode
+          {
+            id: 'bad-mode',
+            name: 'Nonsense',
+            enabled: true,
+            combinator: 'AND',
+            conditions: [{ type: 'wifi', ssid: 'X' }],
+            targetMode: 'bogus',
+          },
+          // malformed condition (empty ssid) → whole rule dropped
+          {
+            id: 'bad-cond',
+            name: 'Empty',
+            enabled: true,
+            combinator: 'AND',
+            conditions: [{ type: 'wifi', ssid: '' }],
+            targetMode: 'sleep',
+          },
+        ],
+      }),
+    );
+    mockUseDevice.mockReturnValue(
+      baseDevice({ wifi: { enabled: true, ssid: 'Office-5G', rssi: -50, linkSpeed: 0, ip: '', networks: [] } }),
+    );
+    const clock = makeClock(new Date(2026, 0, 5, 10, 0, 0));
+    const { result, rerender } = renderHook(() => useProbe(clock), { wrapper: Harness });
+
+    // Let SettingsProvider read the blob and normalize contextRules via normalizeContextRules.
+    await act(async () => {});
+
+    // Engine sees the persisted, normalized rule and activates its target mode.
+    act(() => {
+      rerender(undefined);
+      result.current.handle.tick();
+    });
+    await waitFor(() => expect(result.current.settings.focusMode).toBe('work'));
+
+    // Only the well-formed rule survived the reload; malformed persisted entries were filtered.
+    expect(result.current.settings.contextRules.map((r) => r.id)).toEqual(['good']);
+  });
+});

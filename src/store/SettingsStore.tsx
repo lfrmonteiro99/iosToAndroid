@@ -35,6 +35,11 @@ import {
   normalizeScrollDeceleration,
 } from '../utils/motionIntensity';
 import { normalizeFocusDockOverride } from '../utils/focusDockOverride';
+import {
+  type SmartBatteryProfile,
+  normalizeSmartBatteryProfile,
+  clampSmartBatteryThreshold,
+} from '../utils/smartBatteryProfiles';
 import { normalizeContextRules, type ContextRule } from '../utils/contextTriggerEngine';
 import {
   type BackTapConfig,
@@ -50,6 +55,7 @@ import {
   normalizePerformanceProfile,
   type PerformanceProfile,
 } from '../utils/performanceProfile';
+import { dispatchSetFocusMode, type FocusModeValue } from '../actions/primitiveDispatcher';
 
 const STORAGE_KEY = '@iostoandroid/settings';
 
@@ -137,6 +143,27 @@ export interface SettingsState {
   vpnEnabled: boolean;
   lowPowerMode: boolean;
   batteryPercentage: boolean;
+  /**
+   * Smart Battery Profiles (#631): perfil selecionado manualmente
+   * (Normal/Performance/Extreme Saver/Sleep/Travel). Quando o trigger
+   * automático dispara (< threshold, sem carregar), a app sobrepõe-se a este
+   * valor e aplica o Extreme Saver por segurança. Normalizado na leitura do
+   * AsyncStorage (normalizeSmartBatteryProfile) — qualquer blob corrompido
+   * reverte para 'normal'.
+   */
+  smartBatteryProfile: SmartBatteryProfile;
+  /**
+   * Smart Battery Profiles (#631): quando true, a bateria abaixo do
+   * `smartBatteryThreshold` (e sem carregar) força o Extreme Saver
+   * automaticamente. Default false (o utilizador escolhe o perfil).
+   */
+  autoBatteryProfile: boolean;
+  /**
+   * Smart Battery Profiles (#631): percentagem (5–50%) abaixo da qual o
+   * trigger automático entra em ação. Clampado na leitura
+   * (clampSmartBatteryThreshold). Default 30.
+   */
+  smartBatteryThreshold: number;
   locationServices: boolean;
   wallpaperIndex: number;
   /**
@@ -264,6 +291,12 @@ export interface SettingsState {
    * Só afecta a forma 'squircle' (ver effectiveIconExponent).
    */
   iconShapeExponent: number;
+  /**
+   * Glassy top-sheen on the launcher's built-in (system) app icons — the
+   * subtle white highlight real iOS icons have. Restyled in SystemAppIcon.
+   * Default true (iOS look); off gives a flat tint tile.
+   */
+  iconGloss: boolean;
   /**
    * Overrides de categorias da App Library (#516): ocultar, renomear, reordenar
    * categorias e recategorizar apps individualmente. Toda a lógica opera sobre
@@ -424,6 +457,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   vpnEnabled: false,
   lowPowerMode: false,
   batteryPercentage: true,
+  smartBatteryProfile: 'normal',
+  autoBatteryProfile: false,
+  smartBatteryThreshold: 30,
   locationServices: true,
   wallpaperIndex: 0,
   reduceMotion: false,
@@ -445,7 +481,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   perAppDelivery: {},
   reduceInterruptions: false,
   fontChoice: 'inter',
-  iconTreatment: 'mask-adaptive-only',
+  iconTreatment: 'mask-all',
   pressFeedback: 'scale-opacity',
   gridColumns: 4,
   gridRows: 6,
@@ -458,6 +494,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   appLaunchDurationMs: 280,
   iconShape: 'squircle',
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
+  iconGloss: true,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
   newAppsToHome: true,
   appLibraryShowNotifications: true,
@@ -529,6 +566,9 @@ export function SettingsProvider({
             // uma máscara indefinida, por isso normaliza-se na leitura.
             iconShape: normalizeIconShape(parsed?.iconShape),
             iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
+            // iconGloss é um booleano simples; um valor corrompido (string,
+            // null) cai para o default true via coerção.
+            iconGloss: typeof parsed?.iconGloss === 'boolean' ? parsed.iconGloss : DEFAULT_SETTINGS.iconGloss,
             // whitePointLevel tem de ficar na gama 0.25–1.0; um valor
             // corrompido (NaN, fora da gama) faria um overlay com opacidade
             // inválida, por isso normaliza-se na leitura.
@@ -544,9 +584,15 @@ export function SettingsProvider({
             // render pacotes inexistentes ou rebentar — normaliza-se na
             // leitura como os irmãos acima.
             focusDockOverride: normalizeFocusDockOverride(parsed?.focusDockOverride),
+            // smartBatteryProfile (#631) e smartBatteryThreshold (#631) descem
+            // até ao AsyncStorage não confiável; um id corrompido reverteria para
+            // um perfil que restringe a app sem o utilizador querer, por isso
+            // normaliza-se na leitura como os campos irmãos acima.
+            smartBatteryProfile: normalizeSmartBatteryProfile(parsed?.smartBatteryProfile),
+            smartBatteryThreshold: clampSmartBatteryThreshold(parsed?.smartBatteryThreshold),
             // contextRules (#628): blob de regras compostas vindo do AsyncStorage
             // não é confiável — uma regra malformada (targetMode inválido,
-            // condições sem forma reconhecível) faria pickActiveRule devolver
+            // condições por forma reconhecível) faria pickActiveRule devolver
             // um destino inventado ou o `.includes`/`.every` das condições
             // rebentar. Normaliza-se na leitura como os irmãos acima.
             contextRules: normalizeContextRules(parsed?.contextRules),
@@ -703,10 +749,13 @@ export function SettingsProvider({
   }, []);
 
   /** setFocusMode: convenience wrapper that updates the focusMode setting.
-   *  Pass null or 'off' to disable focus mode. */
+   *  Pass null or 'off' to disable focus mode.
+   *  #781: null→'off' resolution now lives in dispatchSetFocusMode, the
+   *  framework-free primitive shared with future non-Provider callers. */
   const setFocusMode = useCallback((mode: string | null) => {
-    const resolved = (mode === null ? 'off' : mode) as SettingsState['focusMode'];
-    setSettings((prev) => ({ ...prev, focusMode: resolved }));
+    dispatchSetFocusMode(mode, (resolved: FocusModeValue) =>
+      setSettings((prev) => ({ ...prev, focusMode: resolved }))
+    );
   }, []);
 
   /** activeFocusMode: null when focus is off, otherwise the current mode string. */
