@@ -76,6 +76,7 @@ import { ShortcutsScreen } from '../screens/ShortcutsScreen';
 import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
 import { WalletScreen } from '../screens/WalletScreen';
+import { CardDetailScreen } from '../screens/CardDetailScreen';
 import { CardEditScreen } from '../screens/CardEditScreen';
 import { PassDetailScreen } from '../screens/PassDetailScreen';
 import { PassEditScreen } from '../screens/PassEditScreen';
@@ -129,6 +130,7 @@ export function TabNavigator() {
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
       <Stack.Screen name="Wallet" component={WalletScreen} options={{ animation }} />
+      <Stack.Screen name="CardDetail" component={CardDetailScreen} options={{ animation }} />
       <Stack.Screen name="CardEdit" component={CardEditScreen} options={{ animation }} />
       <Stack.Screen name="PassDetail" component={PassDetailScreen} options={{ animation }} />
       <Stack.Screen name="PassEdit" component={PassEditScreen} options={{ animation }} />

@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ThemeContext';
-import { useWallet } from '../store/WalletStore';
+import { useWallet, PassType } from '../store/WalletStore';
 import { useCard, WalletCard } from '../store/CardStore';
 import { BRAND_LABELS } from './CardEditScreen';
 import {
@@ -21,7 +21,10 @@ import {
 } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 
-const PASS_TYPE_LABELS: Record<string, string> = {
+// Exported so CardDetailScreen can render the same brand-equivalent label for
+// a pass without duplicating the mapping (#286 — see WalletCard/CardStore
+// mismatch note in CardDetailScreen.tsx).
+export const PASS_TYPE_LABELS: Record<PassType, string> = {
   boarding: 'Boarding',
   ticket: 'Ticket',
   loyalty: 'Loyalty',

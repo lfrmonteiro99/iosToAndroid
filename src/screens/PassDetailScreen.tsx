@@ -95,7 +95,15 @@ export function PassDetailScreen({ navigation, route }: PassDetailScreenProps) {
           </View>
         </View>
 
-        <View style={[styles.deleteContainer, { marginTop: spacing.lg }]}>
+        <View style={[styles.payContainer, { marginTop: spacing.lg }]}>
+          <CupertinoButton
+            title="Pay"
+            variant="filled"
+            onPress={() => navigation.navigate('CardDetail', { passId: pass.id })}
+          />
+        </View>
+
+        <View style={styles.deleteContainer}>
           <CupertinoButton
             title="Delete Pass"
             variant="plain"
@@ -164,8 +172,12 @@ const styles = StyleSheet.create({
   cardCodeArea: {
     marginTop: 24,
   },
+  payContainer: {
+    paddingHorizontal: 20,
+  },
   deleteContainer: {
     alignItems: 'center',
     paddingVertical: 8,
+    marginTop: 8,
   },
 });
