@@ -40,7 +40,8 @@ function mockApps(overrides: Record<string, unknown> = {}) {
   jest.spyOn(AppsStore, 'useApps').mockReturnValue({
     apps: [], homeApps: [], dockApps: [], nonDockApps: [], recentPackages: [], recentApps: [],
     isLoading: false, refreshApps: jest.fn(() => Promise.resolve()), launchApp: jest.fn(() => Promise.resolve(true)),
-    addToHome: jest.fn(), removeFromHome: jest.fn(), addToDock: jest.fn(), removeFromDock: jest.fn(),
+    addToHome: jest.fn(), removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(), addToDock: jest.fn(), removeFromDock: jest.fn(),
     removeFromRecents: jest.fn(), clearRecents: jest.fn(), isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()), hiddenApps: [], visibleApps: [],
     hideApp: jest.fn(), unhideApp: jest.fn(), iconCacheSizeBytes: 0, isRebuildingIconCache: false,

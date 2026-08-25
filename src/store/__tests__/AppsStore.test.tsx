@@ -215,7 +215,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
 
     // #486/#482: a máscara (forma/expoente) viaja no 1º argumento, o tratamento no 2º.
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-all',
     );
   });
@@ -226,7 +226,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
   });
@@ -244,7 +244,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
     await act(async () => {});
     expect(LauncherModule.getInstalledApps).toHaveBeenLastCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-all',
     );
 
@@ -257,7 +257,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledTimes(1);
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'none',
     );
   });
@@ -287,12 +287,12 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     // devolver ícones com outra silhueta (#486 + #482).
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.a',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.b',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(result.current.isRebuildingIconCache).toBe(false);
@@ -471,6 +471,324 @@ describe('AppsStore — new apps destination (#601: newAppsToHome)', () => {
     });
     expect(result.current.nonDockApps.map(a => a.packageName)).toContain('com.example.banana');
     expect(result.current.libraryOnlyApps).not.toContain('com.example.banana');
+  });
+});
+
+describe('AppsStore — home grid holes (#762: removeFromHome no longer recompacts positions)', () => {
+  const STORAGE_KEY = '@iostoandroid/apps_layout';
+  const apple = { name: 'Apple', packageName: 'com.example.apple', icon: 'file:///icons/a_1.png', isSystem: false };
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: 'file:///icons/b_1.png', isSystem: false };
+  const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: 'file:///icons/c_1.png', isSystem: false };
+
+  function seedLayout(homeApps: Array<{ packageName: string; position: number }>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === STORAGE_KEY ? JSON.stringify({ dockApps: [], homeApps }) : null),
+    );
+  }
+
+  // NOTA: `removeFromHome` já era um simples `filter` em `main` — nunca
+  // recomprimiu as posições, ao contrário do que o enunciado do #762 diz. Este
+  // teste é uma guarda de regressão (passa em `main`), não a prova do fix: a
+  // recompactação que se via era feita pelo render, e é essa que
+  // `layoutHomeAppsWithGaps` corrige.
+  it('removing an app from the middle of homeApps leaves the others positions untouched (hole preserved)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+
+    await act(async () => {
+      result.current.removeFromHome('com.example.banana');
+    });
+
+    // banana disappears; apple keeps 0 and — crucially — cherry KEEPS 2,
+    // it is not renumbered down to 1. A recompacting implementation would
+    // produce position 1 for cherry here.
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+  });
+
+  it('compactHomeLayout reassigns sequential positions (0,1,2,...) without dropping or reordering apps', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 3 },
+      { packageName: 'com.example.cherry', position: 5 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    await act(async () => {
+      result.current.compactHomeLayout();
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+  });
+
+  it('compactHomeLayout keeps entries whose package never renders in the grid (dock/folder/built-in duplicate)', async () => {
+    const dialer = { name: 'Phone', packageName: 'com.google.android.dialer', icon: '', isSystem: true };
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.google.android.dialer', position: 4 },
+      { packageName: 'com.example.cherry', position: 9 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, dialer, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.compactHomeLayout();
+    });
+
+    // The duplicate is invisible in the grid but still owns a slot: dropping
+    // it here would renumber every later app on top of a position the grid
+    // still skips. All three survive, renumbered 0..2 in the same order.
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.google.android.dialer', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+  });
+
+  it('compactHomeLayout pressed twice in a row is idempotent (no reorder, no drift)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 3 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.compactHomeLayout();
+      result.current.compactHomeLayout();
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+  });
+
+  it('a hole survives a reload: the removed app is re-numbered after the last position, never back into its old slot', async () => {
+    // What persistence looks like after "Remove from Home" on banana: no
+    // banana entry, and banana in libraryOnlyApps.
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+      if (key === STORAGE_KEY) {
+        return Promise.resolve(JSON.stringify({
+          dockApps: [],
+          homeApps: [
+            { packageName: 'com.example.apple', position: 0 },
+            { packageName: 'com.example.cherry', position: 2 },
+          ],
+        }));
+      }
+      if (key === '@iostoandroid/library_only') {
+        return Promise.resolve(JSON.stringify(['com.example.banana']));
+      }
+      return Promise.resolve(null);
+    });
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    // Position 1 stays vacant; banana (still installed, so assignHomePositions
+    // gives it a slot) lands after the highest position, not in the hole.
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.cherry', position: 2 },
+      { packageName: 'com.example.banana', position: 3 },
+    ]);
+    expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+  });
+});
+
+// ─── #761: arrastar um ícone em jiggle-mode para outra célula troca posições ──
+describe('AppsStore — swapHomeApps (#761: jiggle-mode drag swaps two positions)', () => {
+  const apple = { name: 'Apple', packageName: 'com.example.apple', icon: '', isSystem: false };
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: '', isSystem: false };
+  const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: '', isSystem: false };
+
+  function seedLayout(homeApps: Array<{ packageName: string; position: number }>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === '@iostoandroid/apps_layout' ? JSON.stringify({ dockApps: [], homeApps }) : null),
+    );
+  }
+
+  it('swaps the two positions and leaves every other entry untouched', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.cherry');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 2 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 0 },
+    ]);
+  });
+
+  it('persists the swapped layout so it survives the next launch', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.banana');
+    });
+
+    const persistCall = (AsyncStorage.setItem as jest.Mock).mock.calls.find(
+      (call) => call[0] === '@iostoandroid/apps_layout',
+    );
+    expect(persistCall).toBeTruthy();
+    expect(JSON.parse(persistCall![1]).homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 1 },
+      { packageName: 'com.example.banana', position: 0 },
+    ]);
+  });
+
+  it('swapping a package with itself is a no-op (no persist, no position change)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.apple');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    expect(AsyncStorage.setItem).not.toHaveBeenCalledWith('@iostoandroid/apps_layout', expect.anything());
+  });
+
+  it('swapping against an unknown package is a no-op (dropping on something not in homeApps)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.nonexistent');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+  });
+});
+
+// ─── #760: homeApps.position é a fonte de verdade da ordem/pertença ────────
+//
+// addToHome/removeFromHome já escreviam `position`, mas nada mais o fazia:
+// uma app carregada pelo scan nativo (loadApps) nunca ganhava entrada em
+// homeApps. Sem posição, LauncherHomeScreen não tem por onde ordenar a
+// grelha que não seja a ordem de scan — daí este fix atribuir a próxima
+// posição livre (maxPos + 1) a qualquer app em falta, na primeira leitura.
+describe('AppsStore — homeApps.position atribuída ao carregar (#760)', () => {
+  it('instalação limpa (sem homeApps persistido) atribui position sequencial na ordem de scan', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    const apps = [
+      { name: 'Alpha', packageName: 'com.example.alpha', icon: '', isSystem: false },
+      { name: 'Beta', packageName: 'com.example.beta', icon: '', isSystem: false },
+      { name: 'Gamma', packageName: 'com.example.gamma', icon: '', isSystem: false },
+    ];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(apps);
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.alpha', position: 0 },
+      { packageName: 'com.example.beta', position: 1 },
+      { packageName: 'com.example.gamma', position: 2 },
+    ]);
+  });
+
+  it('uma app já com position guardada não é reatribuída, e as em falta continuam a partir do maxPos', async () => {
+    const savedLayout = JSON.stringify({
+      dockApps: [],
+      homeApps: [{ packageName: 'com.example.beta', position: 5 }],
+    });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(savedLayout);
+    const apps = [
+      { name: 'Alpha', packageName: 'com.example.alpha', icon: '', isSystem: false },
+      { name: 'Beta', packageName: 'com.example.beta', icon: '', isSystem: false },
+    ];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(apps);
+
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    // Beta mantém a position persistida (5); Alpha (nova para o homeApps) fica
+    // a seguir ao maxPos existente, não reinicia do zero.
+    expect(result.current.homeApps).toEqual(expect.arrayContaining([
+      { packageName: 'com.example.beta', position: 5 },
+      { packageName: 'com.example.alpha', position: 6 },
+    ]));
+  });
+
+  it('persiste o homeApps calculado para que o próximo arranque não repita o cálculo', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    const apps = [{ name: 'Alpha', packageName: 'com.example.alpha', icon: '', isSystem: false }];
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue(apps);
+
+    renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/apps_layout',
+      JSON.stringify({ dockApps: ['com.iostoandroid.phone', 'com.iostoandroid.messages', 'com.iostoandroid.contacts', 'com.iostoandroid.settings'], homeApps: [{ packageName: 'com.example.alpha', position: 0 }] }),
+    );
   });
 });
 

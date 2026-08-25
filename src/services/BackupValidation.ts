@@ -17,6 +17,41 @@ export class InvalidBackupError extends Error {
   }
 }
 
+/**
+ * UTF-8 byte length of `str`.
+ *
+ * `str.length` counts UTF-16 code units, not bytes. One CJK character is a
+ * single code unit and three UTF-8 bytes, so a `.length` ceiling of 1_000_000
+ * waves through a 3 MB payload — exactly the pathological entry these ceilings
+ * exist to reject. Lone surrogates are counted as the 3-byte replacement
+ * character, matching what an encoder emits for them.
+ *
+ * Implemented by hand rather than via TextEncoder: Hermes does not guarantee
+ * TextEncoder, and Buffer is a Node built-in that is not available on device.
+ */
+export function utf8ByteLength(str: string): number {
+  let bytes = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    const code = str.charCodeAt(i);
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
+      const next = str.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4; // well-formed surrogate pair
+        i += 1;
+      } else {
+        bytes += 3; // lone high surrogate
+      }
+    } else {
+      bytes += 3; // BMP character, or a lone surrogate
+    }
+  }
+  return bytes;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object') return false;
   if (Array.isArray(value)) return false;
@@ -47,9 +82,10 @@ export function validateSnapshot(data: unknown): asserts data is Record<string, 
     if (typeof key !== 'string') {
       throw new InvalidBackupError(`key is not a string: ${String(key)}`);
     }
-    if (key.length > MAX_KEY_BYTES) {
+    const keyBytes = utf8ByteLength(key);
+    if (keyBytes > MAX_KEY_BYTES) {
       throw new InvalidBackupError(
-        `key exceeds ${MAX_KEY_BYTES} bytes: ${key.slice(0, 32)}…`,
+        `key exceeds ${MAX_KEY_BYTES} bytes (${keyBytes} bytes): ${key.slice(0, 32)}…`,
       );
     }
     if (typeof value !== 'string') {
@@ -57,9 +93,10 @@ export function validateSnapshot(data: unknown): asserts data is Record<string, 
         `value for "${key}" is not a string (received ${typeof value})`,
       );
     }
-    if (value.length > MAX_VALUE_BYTES) {
+    const valueBytes = utf8ByteLength(value);
+    if (valueBytes > MAX_VALUE_BYTES) {
       throw new InvalidBackupError(
-        `value for "${key}" exceeds ${MAX_VALUE_BYTES} bytes (${value.length} bytes)`,
+        `value for "${key}" exceeds ${MAX_VALUE_BYTES} bytes (${valueBytes} bytes)`,
       );
     }
   }

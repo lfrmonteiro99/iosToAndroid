@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,20 +9,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useWallet, PassType } from '../store/WalletStore';
-import type { AppNavigationProp } from '../navigation/types';
 import {
   CupertinoNavigationBar,
   CupertinoEmptyState,
   CupertinoListSection,
   CupertinoListTile,
-  CupertinoTextField,
-  CupertinoSegmentedControl,
 } from '../components';
+import type { AppNavigationProp } from '../navigation/types';
 
-const PASS_TYPE_VALUES: PassType[] = ['boarding', 'ticket', 'loyalty', 'other'];
 // Exported so CardDetailScreen can render the same brand-equivalent label for
 // a pass without duplicating the mapping (#286 — see WalletCard/CardStore
 // mismatch note in CardDetailScreen.tsx).
@@ -32,13 +28,6 @@ export const PASS_TYPE_LABELS: Record<PassType, string> = {
   loyalty: 'Loyalty',
   other: 'Other',
 };
-
-// Default palette for the free-text colour picker. Plain, non-sensitive JSON —
-// see issue #125: no payment data, so a colour swatch is enough.
-const COLOR_SWATCHES = [
-  '#007AFF', '#34C759', '#FF9500', '#FF3B30',
-  '#AF52DE', '#5AC8FA', '#FF2D55', '#5856D6',
-];
 
 function PassRow({
   pass,
@@ -66,128 +55,30 @@ function PassRow({
   );
 }
 
-function AddPassSheet({ onClose }: { onClose: () => void }) {
-  const { theme, typography, spacing } = useTheme();
-  const safeInsets = useSafeAreaInsets();
-  const { colors } = theme;
-  const { addPass } = useWallet();
-
-  const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
-  const [code, setCode] = useState('');
-  const [typeIndex, setTypeIndex] = useState(0);
-  const [color, setColor] = useState(COLOR_SWATCHES[0]);
-
-  const type = PASS_TYPE_VALUES[typeIndex];
-  const canSave = title.trim().length > 0 && code.trim().length > 0;
-
-  const handleSave = useCallback(() => {
-    if (!canSave) return;
-    addPass({
-      type,
-      title: title.trim(),
-      subtitle: subtitle.trim() || undefined,
-      code: code.trim(),
-      color,
-    });
-    onClose();
-  }, [addPass, canSave, type, title, subtitle, code, color, onClose]);
-
-  return (
-    <View style={[styles.sheet, { backgroundColor: colors.systemGroupedBackground }]}>
-      <View style={[styles.sheetHandle, { backgroundColor: colors.systemGray4 }]} />
-      <View style={styles.sheetHeader}>
-        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Cancel">
-          <Text style={[typography.body, { color: colors.systemBlue }]}>Cancel</Text>
-        </Pressable>
-        <Text style={[typography.headline, { color: colors.label }]}>New Pass</Text>
-        <Pressable
-          onPress={handleSave}
-          disabled={!canSave}
-          accessibilityRole="button"
-          accessibilityLabel="Save pass"
-        >
-          <Text style={[typography.body, { color: canSave ? colors.systemBlue : colors.systemGray3 }]}>
-            Add
-          </Text>
-        </Pressable>
-      </View>
-
-      <ScrollView
-        style={styles.sheetBody}
-        contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: safeInsets.bottom + 24 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <CupertinoTextField
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Title"
-        />
-        <View style={styles.fieldSpacer} />
-        <CupertinoTextField
-          value={subtitle}
-          onChangeText={setSubtitle}
-          placeholder="Subtitle (optional)"
-        />
-        <View style={styles.fieldSpacer} />
-        <CupertinoTextField
-          value={code}
-          onChangeText={setCode}
-          placeholder="Code / value"
-        />
-        <View style={styles.fieldSpacer} />
-
-        <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>
-          TYPE
-        </Text>
-        <CupertinoSegmentedControl
-          values={PASS_TYPE_VALUES.map((t) => PASS_TYPE_LABELS[t])}
-          selectedIndex={typeIndex}
-          onChange={setTypeIndex}
-          testID="wallet-pass-type-segment"
-        />
-        <View style={styles.fieldSpacer} />
-
-        <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>
-          COLOUR
-        </Text>
-        <View style={styles.colorRow}>
-          {COLOR_SWATCHES.map((c) => {
-            const selected = c === color;
-            return (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                accessibilityRole="button"
-                accessibilityLabel={`Colour ${c}`}
-                style={[
-                  styles.colorSwatch,
-                  { backgroundColor: c },
-                  selected && { borderColor: colors.label, borderWidth: 3 },
-                ]}
-              >
-                {selected && (
-                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
-    </View>
-  );
+interface WalletScreenProps {
+  navigation: AppNavigationProp;
 }
 
-export function WalletScreen() {
+export function WalletScreen({ navigation }: WalletScreenProps) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { passes, isReady } = useWallet();
-  const [adding, setAdding] = useState(false);
-  const navigation = useNavigation<AppNavigationProp>();
 
-  const handleAddPressed = useCallback(() => setAdding(true), []);
-  const handleCloseSheet = useCallback(() => setAdding(false), []);
+  const handleAddPressed = useCallback(() => {
+    navigation.navigate('PassEdit', {});
+  }, [navigation]);
+
+  const handleScanPressed = useCallback(() => {
+    navigation.navigate('PassScan');
+  }, [navigation]);
+
+  const handlePassPressed = useCallback(
+    (passId: string) => {
+      navigation.navigate('PassDetail', { passId });
+    },
+    [navigation],
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -196,14 +87,23 @@ export function WalletScreen() {
         title="Wallet"
         largeTitle={false}
         rightButton={
-          <Pressable
-            onPress={handleAddPressed}
-            accessibilityRole="button"
-            accessibilityLabel="Add pass"
-            style={{ flexDirection: 'row', alignItems: 'center' }}
-          >
-            <Ionicons name="add" size={26} color={colors.systemBlue} />
-          </Pressable>
+          <View style={styles.navBarActions}>
+            <Pressable
+              onPress={handleScanPressed}
+              accessibilityRole="button"
+              accessibilityLabel="Scan pass"
+            >
+              <Ionicons name="camera-outline" size={24} color={colors.systemBlue} />
+            </Pressable>
+            <Pressable
+              onPress={handleAddPressed}
+              accessibilityRole="button"
+              accessibilityLabel="Add pass"
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+            >
+              <Ionicons name="add" size={26} color={colors.systemBlue} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -227,7 +127,7 @@ export function WalletScreen() {
               <PassRow
                 key={pass.id}
                 pass={pass}
-                onPress={() => navigation.navigate('CardDetail', { passId: pass.id })}
+                onPress={() => handlePassPressed(pass.id)}
               />
             ))}
           </CupertinoListSection>
@@ -245,8 +145,6 @@ export function WalletScreen() {
           </Pressable>
         </ScrollView>
       )}
-
-      {adding && <AddPassSheet onClose={handleCloseSheet} />}
     </View>
   );
 }
@@ -254,40 +152,7 @@ export function WalletScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   body: { flex: 1 },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  sheetBody: { flex: 1, paddingTop: 8 },
-  fieldSpacer: { height: 12 },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  colorSwatch: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
-    marginBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  navBarActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   codeBadge: { maxWidth: 120 },
   addRow: {
     flexDirection: 'row',
