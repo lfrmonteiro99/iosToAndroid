@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, within } from '../../test-utils';
+import { render, fireEvent, within, act } from '../../test-utils';
 import { Ionicons } from '@expo/vector-icons';
 import * as AppsStore from '../../store/AppsStore';
 import { LauncherHomeScreen } from '../LauncherHomeScreen';
@@ -45,12 +45,17 @@ function mockLoadedApps(overrides: Partial<ReturnType<typeof AppsStore.useApps>>
     launchApp: mockLaunchApp,
     addToHome: jest.fn(),
     removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
     addToDock: jest.fn(),
     removeFromDock: jest.fn(),
     removeFromRecents: jest.fn(),
     clearRecents: jest.fn(),
     isDefaultLauncher: true,
     openLauncherSettings: jest.fn(() => Promise.resolve()),
+    hiddenApps: [],
+    visibleApps: [],
+    hideApp: jest.fn(),
+    unhideApp: jest.fn(),
     ...overrides,
   } as ReturnType<typeof AppsStore.useApps>);
 }
@@ -124,15 +129,26 @@ describe('LauncherHomeScreen built-in icons for Notes, Reminders, Mail (#442)', 
     expect(mockLaunchApp).not.toHaveBeenCalled();
   });
 
-  it('still launches real Android apps externally — adding the 3 entries did not internalise everything', () => {
+  it('still launches real Android apps externally — adding the 3 entries did not internalise everything', async () => {
     // The inverse of the fix: a package that is NOT in BUILT_IN_APPS must
     // keep going through launchApp, so widening the table cannot have
     // silently swallowed every third-party icon into navigate().
+    //
+    // #509 made this path asynchronous: pressing a non-built-in icon now
+    // measures its on-screen bounds before deciding to launch (so it can show
+    // the icon-expand transition), and this suite mocks neither
+    // measureInWindow nor the reanimated spring — so the icon falls through
+    // AppIcon's real ~50ms measurement-fallback timer before launchApp fires.
     mockLoadedApps({
       nonDockApps: [{ name: 'YT Music', packageName: 'com.google.android.apps.youtube.music', icon: '', isSystem: false }],
     });
     const { getByLabelText } = render(<LauncherHomeScreen />);
     fireEvent.press(getByLabelText('Open YT Music'));
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    });
+
     expect(mockLaunchApp).toHaveBeenCalledWith('com.google.android.apps.youtube.music');
     expect(mockNavigate).not.toHaveBeenCalledWith('Notes');
   });

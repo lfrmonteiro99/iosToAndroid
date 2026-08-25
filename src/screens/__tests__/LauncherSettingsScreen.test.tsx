@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '../../test-utils';
+import { within } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { LauncherSettingsScreen } from '../LauncherSettingsScreen';
@@ -109,5 +110,149 @@ describe('LauncherSettingsScreen', () => {
       expect(getByText('Enter New Passcode')).toBeTruthy();
     });
     expect(store.has('@iostoandroid/lock_pin')).toBe(true);
+  });
+});
+
+describe('LauncherSettingsScreen Show Page Dots toggle (#603)', () => {
+  it('renders a "Show Page Dots" switch in the Home Screen section, default ON', () => {
+    const { getByLabelText } = render(<LauncherSettingsScreen />);
+    const tile = getByLabelText('Show Page Dots');
+    const sw = within(tile).getByRole('switch');
+    expect(sw.props.accessibilityState.checked).toBe(true);
+  });
+
+  it('toggles showPageDots off and persists it to AsyncStorage', async () => {
+    const store = setupMemoryAsyncStorage();
+
+    const { getByLabelText } = render(<LauncherSettingsScreen />);
+    const tile = getByLabelText('Show Page Dots');
+    const sw = within(tile).getByRole('switch');
+
+    fireEvent.press(sw);
+
+    await waitFor(() => {
+      expect(
+        within(getByLabelText('Show Page Dots')).getByRole('switch').props.accessibilityState.checked,
+      ).toBe(false);
+    });
+
+    // Persiste entre arranques: o SettingsStore escreve o JSON completo.
+    await waitFor(() => {
+      const raw = store.get('@iostoandroid/settings');
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw as string);
+      expect(parsed.showPageDots).toBe(false);
+    });
+  });
+
+  it('leaves showPageDots unset (true by default) when nothing is toggled', async () => {
+    const store = setupMemoryAsyncStorage();
+
+    render(<LauncherSettingsScreen />);
+
+    // O default true não precisa de ser escrito explicitamente para persistir
+    // o comportamento; mas se o store gravar, deve refletir true.
+    await waitFor(() => {
+      const raw = store.get('@iostoandroid/settings');
+      if (raw) expect(JSON.parse(raw).showPageDots ?? true).toBe(true);
+    });
+  });
+});
+
+// ─── secção «App Library» (#602): dois toggles, ambos default true ─────────
+// Mantém o mock de @react-navigation/native que o ecrã usa (useNavigation) —
+// sem ele o provider vem a null e os queries falham.
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
+  useRoute: () => ({ params: {} }),
+}));
+
+describe('LauncherSettingsScreen — secção App Library (#602)', () => {
+  it('tem a secção App Library com dois toggles, ambos default ligados', () => {
+    const { getByText, getByTestId } = render(<LauncherSettingsScreen />);
+    // Secção presente (o header é renderizado em maiúsculas pelo CupertinoListSection).
+    expect(getByText('APP LIBRARY')).toBeTruthy();
+    // Dois toggles com os títulos esperados.
+    expect(getByText('Show Notifications')).toBeTruthy();
+    expect(getByText('Show Suggestions')).toBeTruthy();
+    // Default on (accessibilityState.checked === true).
+    expect(getByTestId('toggle-appLibraryShowNotifications').props.accessibilityState.checked).toBe(true);
+    expect(getByTestId('toggle-appLibraryShowSuggestions').props.accessibilityState.checked).toBe(true);
+  });
+
+  it('Show Notifications toggle desliga e reflete o estado', async () => {
+    const { getByTestId } = render(<LauncherSettingsScreen />);
+    const toggle = getByTestId('toggle-appLibraryShowNotifications');
+    expect(toggle.props.accessibilityState.checked).toBe(true);
+    fireEvent.press(toggle);
+    await waitFor(() =>
+      expect(getByTestId('toggle-appLibraryShowNotifications').props.accessibilityState.checked).toBe(false),
+    );
+  });
+
+  it('Show Suggestions toggle desliga e reflete o estado', async () => {
+    const { getByTestId } = render(<LauncherSettingsScreen />);
+    const toggle = getByTestId('toggle-appLibraryShowSuggestions');
+    expect(toggle.props.accessibilityState.checked).toBe(true);
+    fireEvent.press(toggle);
+    await waitFor(() =>
+      expect(getByTestId('toggle-appLibraryShowSuggestions').props.accessibilityState.checked).toBe(false),
+    );
+  });
+});
+
+describe('LauncherSettingsScreen — Compact Layout button (#762)', () => {
+  const LAYOUT_KEY = '@iostoandroid/apps_layout';
+
+  it('reassigns homeApps positions sequentially, removing holes without dropping any app', async () => {
+    const store = setupMemoryAsyncStorage({
+      [LAYOUT_KEY]: JSON.stringify({
+        dockApps: [],
+        homeApps: [
+          { packageName: 'com.example.apple', position: 0 },
+          { packageName: 'com.example.banana', position: 3 },
+          { packageName: 'com.example.cherry', position: 5 },
+        ],
+      }),
+    });
+
+    const { getByText } = render(<LauncherSettingsScreen />);
+    await waitFor(() => expect(getByText('Compact Layout')).toBeTruthy());
+
+    fireEvent.press(getByText('Compact Layout'));
+
+    await waitFor(() => {
+      const persisted = JSON.parse(store.get(LAYOUT_KEY) as string);
+      expect(persisted.homeApps).toEqual([
+        { packageName: 'com.example.apple', position: 0 },
+        { packageName: 'com.example.banana', position: 1 },
+        { packageName: 'com.example.cherry', position: 2 },
+      ]);
+    });
+  });
+
+  it('is a no-op on a layout with no holes (idempotent, does not reorder)', async () => {
+    const store = setupMemoryAsyncStorage({
+      [LAYOUT_KEY]: JSON.stringify({
+        dockApps: [],
+        homeApps: [
+          { packageName: 'com.example.apple', position: 0 },
+          { packageName: 'com.example.banana', position: 1 },
+        ],
+      }),
+    });
+
+    const { getByText } = render(<LauncherSettingsScreen />);
+    await waitFor(() => expect(getByText('Compact Layout')).toBeTruthy());
+
+    fireEvent.press(getByText('Compact Layout'));
+
+    await waitFor(() => {
+      const persisted = JSON.parse(store.get(LAYOUT_KEY) as string);
+      expect(persisted.homeApps).toEqual([
+        { packageName: 'com.example.apple', position: 0 },
+        { packageName: 'com.example.banana', position: 1 },
+      ]);
+    });
   });
 });

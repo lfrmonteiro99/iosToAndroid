@@ -1,5 +1,6 @@
 import { requireNativeModule } from 'expo';
 import { Platform } from 'react-native';
+import { aggregateAppAccessByType } from '../../../src/utils/appAccessAggregation';
 
 export interface InstalledApp {
   name: string;
@@ -20,6 +21,13 @@ export interface InstalledApp {
    */
   icon: string;
   isSystem: boolean;
+  /**
+   * ApplicationInfo.category mapped to a stable string constant.
+   * Possible values: 'undefined', 'game', 'audio', 'video', 'image', 'social',
+   * 'news', 'maps', 'productivity', 'accessibility'.
+   * API 26+; older devices return 'undefined'.
+   */
+  category: string;
 }
 
 export interface WifiInfo {
@@ -157,14 +165,98 @@ export interface InstalledKeyboard {
   enabled: boolean;
 }
 
+// ── App access (sensor usage) — issue #634 ────────────────────────────────
+
+/**
+ * One observed sensor access, emitted by the native foreground service
+ * (`AccessEventsService`) / `LauncherModule.getRecentAccessEvents`. `appName`
+ * is best-effort and may be missing on the wire — the aggregator falls back to
+ * `packageName`. `accessType` is one of camera | microphone | location; the
+ * native side only reports types it has a real signal for (UsageStats window
+ * + AppOps noteOp for camera/mic, and a coarse/fine location op for location).
+ */
+export interface AccessEvent {
+  packageName: string;
+  appName?: string;
+  accessType: 'camera' | 'microphone' | 'location';
+  timestamp: number;
+}
+
+/**
+ * Aggregated view the UI consumes: `{ packageName: { accessType: { count,
+ * lastAccess, ... } } }`. Produced by `aggregateAppAccessByType` (see
+ * src/utils/appAccessAggregation.ts) over the raw {@link AccessEvent} stream.
+ */
+export interface AppAccessCount {
+  packageName: string;
+  appName: string;
+  count: number;
+  lastAccess: number;
+}
+export type AppAccessCounts = Record<'camera' | 'microphone' | 'location', AppAccessCount>;
+export type AppAccessCountMap = Record<string, AppAccessCounts>;
+
+/**
+ * Máscara a aplicar aos ícones, decidida em JS (src/utils/iconShape.ts) e
+ * aplicada nativamente. `exponent: null` significa "sem máscara" — o drawable
+ * do sistema tal como ele vem. `cacheKey` entra no nome do PNG em disco, o que
+ * é o que faz uma mudança de forma invalidar a cache em vez de devolver o
+ * ficheiro com a forma antiga.
+ */
+export interface IconMask {
+  shape: string;
+  exponent: number | null;
+  cacheKey: string;
+}
+
 interface LauncherModuleType {
   // Apps
-  getInstalledApps(): Promise<InstalledApp[]>;
+  /**
+   * [mask] selects the icon mask applied at render time (#482); [treatment]
+   * selects whether icons get the squircle mask applied — 'mask-all' |
+   * 'mask-adaptive-only' | 'none', mirrors SettingsState['iconTreatment']
+   * (#486). treatment is folded into the on-disk cache key
+   * (IconCache.fileName), so passing a different value than last time makes
+   * the previous PNGs orphaned and forces a redraw. Omit to use the native
+   * default ('mask-adaptive-only').
+   */
+  getInstalledApps(mask?: IconMask, treatment?: string): Promise<InstalledApp[]>;
   launchApp(packageName: string): Promise<boolean>;
-  getAppIcon(packageName: string): Promise<string>;
+  getAppIcon(packageName: string, mask?: IconMask): Promise<string>;
+  /**
+   * Single-package variant of getInstalledApps: resolves the launcher entry for
+   * one package, or null when the package is not installed or has no launcher
+   * activity. Used to refresh only the package a PACKAGE_* broadcast named,
+   * instead of rescanning every installed app. [treatment] — see getInstalledApps.
+   */
+  /**
+   * Single-package variant of getInstalledApps: resolves the launcher entry for
+   * one package, or null when the package is not installed or has no launcher
+   * activity. Used to refresh only the package a PACKAGE_* broadcast named,
+   * instead of rescanning every installed app. [mask]/[treatment] — see
+   * getInstalledApps.
+   */
+  getAppInfo(packageName: string, mask?: IconMask, treatment?: string): Promise<InstalledApp | null>;
+  /**
+   * Deletes every cached icon PNG under filesDir/icons. Returns the number of
+   * files deleted. The manual escape hatch (#486) for when versionCode/treatment
+   * key invalidation misses a case — callers must re-populate the cache
+   * themselves afterwards (e.g. via getAppInfo per package).
+   */
+  clearIconCache(): Promise<number>;
+  /** Total size, in bytes, of the on-disk icon cache (filesDir/icons). */
+  getIconCacheSizeBytes(): Promise<number>;
   isDefaultLauncher(): Promise<boolean>;
   openLauncherSettings(): Promise<boolean>;
   goHome(): Promise<boolean>;
+  /**
+   * Idade do processo em ms. -1 quando indisponível (< API 24, fora de Android,
+   * ou erro na bridge) — nunca 0, para "sem medição" não passar por
+   * "instantâneo". Async como todos os métodos desta bridge, ainda que o lado
+   * nativo seja uma leitura de relógio: o contrato uniforme é o que o
+   * tratamento de erros (`onBridgeError`) e os seus testes assumem.
+   */
+  getProcessStartAgeMs(): Promise<number>;
   uninstallApp(packageName: string): Promise<boolean>;
   // Wi-Fi
   getWifiInfo(): Promise<WifiInfo | null>;
@@ -199,6 +291,8 @@ interface LauncherModuleType {
   // Flashlight
   setFlashlight(enabled: boolean): Promise<boolean>;
   isFlashlightOn(): Promise<boolean>;
+  // Wake Screen (Tap to Wake, #608) — wakes the (app-dimmed) screen on tap
+  wakeScreen(): Promise<void>;
   // Call Log
   getCallLog(limit: number): Promise<CallLogEntry[]>;
   makeCall(number: string): Promise<boolean>;
@@ -232,6 +326,66 @@ interface LauncherModuleType {
   canWriteSystemSettings(): Promise<boolean>;
   openWriteSettingsAccess(): Promise<boolean>;
   setRingtone(uri: string): Promise<boolean>;
+  // Speech recognition (Siri / voice-to-text)
+  startSpeechRecognition(): Promise<boolean>;
+  stopSpeechRecognition(): Promise<boolean>;
+  isSpeechRecognitionAvailable(): Promise<boolean>;
+  // App access (sensor usage, #634): a foreground service observes camera /
+  // microphone / location access over the trailing window; getRecentAccessEvents
+  // returns the raw stream, getAppAccessCounts returns it aggregated by package.
+  getRecentAccessEvents(limit: number): Promise<AccessEvent[]>;
+  getAppAccessCounts(windowHours: number): Promise<AppAccessCountMap>;
+  startAccessTrackingService(): Promise<boolean>;
+  stopAccessTrackingService(): Promise<boolean>;
+  isAccessTrackingServiceRunning(): Promise<boolean>;
+  // Foreground monitor + Protected-Apps gate (#627 child issue). The native
+  // AccessibilityService (ForegroundMonitorService) watches the foreground app
+  // and, after setProtectedApps([...]) seeds its in-memory set, shows a
+  // BiometricPrompt before releasing a protected package. The launcher pushes
+  // its AppsStore set down here whenever it changes.
+  setProtectedApps(packageNames: string[]): Promise<boolean>;
+  // True when the AccessibilityService is enabled in system settings (the user
+  // must toggle it there — we cannot do it for them). Used to warn the user
+  // that the global gate is inactive.
+  isForegroundMonitorEnabled(): Promise<boolean>;
+  // Opens the Accessibility settings screen so the user can enable the service.
+  openAccessibilitySettings(): Promise<boolean>;
+  // Live Activities (Android equivalent of iOS Live Activities, #626): an
+  // ongoing notification whose title/text/progress updates in place.
+  // `progress`/`maxProgress` are normalized client-side (clampLiveActivityProgress)
+  // before reaching native — see createBridgedModule().
+  postLiveActivity(
+    id: string,
+    title: string,
+    text: string,
+    progress: number,
+    maxProgress: number,
+  ): Promise<boolean>;
+  cancelLiveActivity(id: string): Promise<boolean>;
+  // Back Tap (#636): foreground sensor service detecting double/triple taps on
+  // the device back via accelerometer + gyroscope; emits `onBackTap`.
+  startTapDetection(): Promise<boolean>;
+  stopTapDetection(): Promise<boolean>;
+  isTapDetectionRunning(): Promise<boolean>;
+}
+
+export interface LiveActivityProgress {
+  percent: number;
+  indeterminate: boolean;
+}
+
+/**
+ * Normalizes a progress/maxProgress pair for a live-activity notification.
+ * `maxProgress <= 0` (or either value non-finite) means "no known total" —
+ * the Android progress bar should be indeterminate rather than showing a
+ * bogus percentage from a division by zero.
+ */
+export function clampLiveActivityProgress(progress: number, maxProgress: number): LiveActivityProgress {
+  if (!Number.isFinite(progress) || !Number.isFinite(maxProgress) || maxProgress <= 0) {
+    return { percent: 0, indeterminate: true };
+  }
+  const ratio = Math.min(1, Math.max(0, progress / maxProgress));
+  return { percent: Math.round(ratio * 100), indeterminate: false };
 }
 
 const isAndroid = Platform.OS === 'android';
@@ -247,10 +401,14 @@ const stub: LauncherModuleType = {
   getInstalledApps: async () => [],
   launchApp: async () => false,
   getAppIcon: async () => '',
+  getAppInfo: async () => null,
   isDefaultLauncher: async () => false,
   openLauncherSettings: async () => false,
   goHome: async () => false,
+  getProcessStartAgeMs: async () => -1,
   uninstallApp: async () => false,
+  clearIconCache: async () => 0,
+  getIconCacheSizeBytes: async () => 0,
   getWifiInfo: async () => ({ enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '' }),
   setWifiEnabled: async () => false,
   isLocationEnabled: async () => true,
@@ -274,6 +432,7 @@ const stub: LauncherModuleType = {
   getAppStorageStats: async () => [],
   setFlashlight: async () => false,
   isFlashlightOn: async () => false,
+  wakeScreen: async () => { /* stub: app-dimmed wake is best-effort / no-op off-Android */ },
   getCallLog: async () => [],
   makeCall: async () => false,
   getNotifications: async () => [],
@@ -289,6 +448,17 @@ const stub: LauncherModuleType = {
   canWriteSystemSettings: async () => false,
   openWriteSettingsAccess: async () => false,
   setRingtone: async () => false,
+  startSpeechRecognition: async () => false,
+  stopSpeechRecognition: async () => false,
+  isSpeechRecognitionAvailable: async () => false,
+  getRecentAccessEvents: async () => [],
+  getAppAccessCounts: async () => ({}),
+  startAccessTrackingService: async () => false,
+  stopAccessTrackingService: async () => false,
+  isAccessTrackingServiceRunning: async () => false,
+  setProtectedApps: async () => false,
+  isForegroundMonitorEnabled: async () => false,
+  openAccessibilitySettings: async () => false,
   getCalendarEvents: async () => [],
   getNowPlaying: async () => ({ title: '', artist: '', album: '', isPlaying: false, packageName: '' }),
   mediaPrev: async () => false,
@@ -298,6 +468,11 @@ const stub: LauncherModuleType = {
   openUsageAccessSettings: async () => false,
   getScreenTimeStats: async () => [],
   getTodayScreenTime: async () => ({ totalMinutes: 0, topApps: [] }),
+  postLiveActivity: async () => false,
+  cancelLiveActivity: async () => false,
+  startTapDetection: async () => false,
+  stopTapDetection: async () => false,
+  isTapDetectionRunning: async () => false,
 };
 
 /**
@@ -313,6 +488,25 @@ const stub: LauncherModuleType = {
  * The native side dedupes at the source too; this keeps existing installs
  * correct when the JS bundle updates ahead of the native binary.
  */
+// `InstalledApp.category` é declarado obrigatório, e uma declaração de tipo não
+// é uma garantia: o valor vem da ponte nativa. Falta em dois casos reais — um
+// dispositivo em API 24/25, onde o campo `ApplicationInfo.category` não existe, e
+// um APK com uma versão anterior deste módulo nativo instalada. Nesses casos o
+// consumidor recebia `undefined` num campo tipado como `string`, e o TypeScript
+// não avisa porque a fronteira nativa é `any`.
+//
+// Normaliza a AUSÊNCIA, não o valor: qualquer string que o nativo mande passa
+// intacta, incluindo categorias novas de APIs futuras. Coagir strings
+// desconhecidas para 'undefined' esconderia exactamente a informação nova.
+function withCategory<T extends { category?: unknown }>(items: T[]): T[] {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) =>
+    item && typeof item === 'object' && typeof (item as { category?: unknown }).category !== 'string'
+      ? { ...item, category: 'undefined' }
+      : item,
+  );
+}
+
 function dedupeByPackageName<T extends { packageName?: string }>(items: T[]): T[] {
   // A malformed payload is passed through untouched rather than coerced, so a
   // native contract break stays visible to the caller instead of becoming [].
@@ -330,12 +524,35 @@ function dedupeByPackageName<T extends { packageName?: string }>(items: T[]): T[
   });
 }
 
+/**
+ * True when a rejected bridge call is the Android 12+ BLUETOOTH_CONNECT
+ * SecurityException (issue #675). The native rejection arrives over RN as an
+ * Error whose message embeds the Java cause, e.g.
+ *   "Call to function 'LauncherModule.getBluetoothInfo' has been rejected.
+ *    → Caused by: java.lang.SecurityException: Need android.permission.BLUETOOTH_CONNECT ..."
+ * We match on the runtime permission name rather than the exact method, so the
+ * same guard covers getBluetoothInfo / getDiscoveredBluetoothDevices / etc. if
+ * any of them ever rejects with the same permission error. A genuine failure
+ * (no adapter, a different exception) is NOT a permission error and must still
+ * be reported.
+ */
+export function isBluetoothPermissionSecurityException(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return /BLUETOOTH_CONNECT/.test(message) && /SecurityException/.test(message);
+}
+
 function createBridgedModule(): LauncherModuleType {
   if (!nativeModule) return stub;
 
   return {
-    getInstalledApps: async () => {
-      try { return dedupeByPackageName<InstalledApp>(await nativeModule.getInstalledApps()); }
+    getInstalledApps: async (mask?: IconMask, treatment?: string) => {
+      try { return dedupeByPackageName<InstalledApp>(withCategory(await nativeModule.getInstalledApps(mask ?? null, treatment ?? null))); }
       catch (e) { console.error('LauncherModule.getInstalledApps failed:', e); reportBridgeError('getInstalledApps', e); return []; }
     },
     launchApp: async (packageName: string) => {
@@ -349,9 +566,13 @@ function createBridgedModule(): LauncherModuleType {
         return ok;
       } catch (e) { console.error('LauncherModule.launchApp failed:', e); reportBridgeError('launchApp', e); return false; }
     },
-    getAppIcon: async (packageName: string) => {
-      try { return await nativeModule.getAppIcon(packageName); }
+    getAppIcon: async (packageName: string, mask?: IconMask) => {
+      try { return await nativeModule.getAppIcon(packageName, mask ?? null); }
       catch (e) { console.error('LauncherModule.getAppIcon failed:', e); reportBridgeError('getAppIcon', e); return ''; }
+    },
+    getAppInfo: async (packageName: string, mask?: IconMask, treatment?: string) => {
+      try { return await nativeModule.getAppInfo(packageName, mask ?? null, treatment ?? null); }
+      catch (e) { console.error('LauncherModule.getAppInfo failed:', e); reportBridgeError('getAppInfo', e); return null; }
     },
     isDefaultLauncher: async () => {
       try { return await nativeModule.isDefaultLauncher(); }
@@ -368,6 +589,14 @@ function createBridgedModule(): LauncherModuleType {
     uninstallApp: async (packageName: string) => {
       try { return await nativeModule.uninstallApp(packageName); }
       catch (e) { console.error('LauncherModule.uninstallApp failed:', e); reportBridgeError('uninstallApp', e); return false; }
+    },
+    clearIconCache: async () => {
+      try { return await nativeModule.clearIconCache(); }
+      catch (e) { console.error('LauncherModule.clearIconCache failed:', e); reportBridgeError('clearIconCache', e); return 0; }
+    },
+    getIconCacheSizeBytes: async () => {
+      try { return await nativeModule.getIconCacheSizeBytes(); }
+      catch (e) { console.error('LauncherModule.getIconCacheSizeBytes failed:', e); reportBridgeError('getIconCacheSizeBytes', e); return 0; }
     },
     getWifiInfo: async () => {
       try { return await nativeModule.getWifiInfo(); }
@@ -395,7 +624,19 @@ function createBridgedModule(): LauncherModuleType {
     },
     getBluetoothInfo: async () => {
       try { return await nativeModule.getBluetoothInfo(); }
-      catch (e) { console.error('LauncherModule.getBluetoothInfo failed:', e); reportBridgeError('getBluetoothInfo', e); return null; }
+      catch (e) {
+        // #675: on Android 12+ (API 31) reading the adapter name/address without
+        // the BLUETOOTH_CONNECT runtime permission throws a SecurityException
+        // over the bridge. That is an expected, recoverable state (the UI already
+        // falls back to "Unknown"/"" when the call returns null) — surfacing it as
+        // a reportBridgeError would paint a LogBox toast on every launch. Swallow
+        // that one permission error silently; any other failure is still reported.
+        if (!isBluetoothPermissionSecurityException(e)) {
+          console.error('LauncherModule.getBluetoothInfo failed:', e);
+          reportBridgeError('getBluetoothInfo', e);
+        }
+        return null;
+      }
     },
     setBluetoothEnabled: async (enabled: boolean) => {
       try { return await nativeModule.setBluetoothEnabled(enabled); }
@@ -420,6 +661,12 @@ function createBridgedModule(): LauncherModuleType {
     unpairBluetoothDevice: async (address: string) => {
       try { return await nativeModule.unpairBluetoothDevice(address); }
       catch (e) { console.error('LauncherModule.unpairBluetoothDevice failed:', e); reportBridgeError('unpairBluetoothDevice', e); return false; }
+    },
+    getProcessStartAgeMs: async () => {
+      try {
+        const age = await nativeModule.getProcessStartAgeMs();
+        return typeof age === 'number' ? age : -1;
+      } catch (e) { reportBridgeError('getProcessStartAgeMs', e); return -1; }
     },
     getStorageInfo: async () => {
       try { return await nativeModule.getStorageInfo(); }
@@ -460,6 +707,10 @@ function createBridgedModule(): LauncherModuleType {
     isFlashlightOn: async () => {
       try { return await nativeModule.isFlashlightOn(); }
       catch (e) { console.error('LauncherModule.isFlashlightOn failed:', e); reportBridgeError('isFlashlightOn', e); return false; }
+    },
+    wakeScreen: async () => {
+      try { await nativeModule.wakeScreen(); }
+      catch (e) { console.error('LauncherModule.wakeScreen failed:', e); reportBridgeError('wakeScreen', e); }
     },
     getCallLog: async (limit: number) => {
       try { return await nativeModule.getCallLog(limit); }
@@ -557,6 +808,85 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.setRingtone(uri); }
       catch (e) { console.error('LauncherModule.setRingtone failed:', e); reportBridgeError('setRingtone', e); return false; }
     },
+    startSpeechRecognition: async () => {
+      try { return await nativeModule.startSpeechRecognition(); }
+      catch (e) { console.error('LauncherModule.startSpeechRecognition failed:', e); reportBridgeError('startSpeechRecognition', e); return false; }
+    },
+    stopSpeechRecognition: async () => {
+      try { return await nativeModule.stopSpeechRecognition(); }
+      catch (e) { console.error('LauncherModule.stopSpeechRecognition failed:', e); reportBridgeError('stopSpeechRecognition', e); return false; }
+    },
+    isSpeechRecognitionAvailable: async () => {
+      try { return await nativeModule.isSpeechRecognitionAvailable(); }
+      catch (e) { console.error('LauncherModule.isSpeechRecognitionAvailable failed:', e); reportBridgeError('isSpeechRecognitionAvailable', e); return false; }
+    },
+    getRecentAccessEvents: async (limit: number) => {
+      try {
+        const raw = await nativeModule.getRecentAccessEvents(limit);
+        return Array.isArray(raw) ? raw : [];
+      } catch (e) { console.error('LauncherModule.getRecentAccessEvents failed:', e); reportBridgeError('getRecentAccessEvents', e); return []; }
+    },
+    getAppAccessCounts: async (windowHours: number) => {
+      try {
+        // The aggregation is shared, pure, and unit-tested independently
+        // (src/utils/appAccessAggregation.test.ts). We feed it the raw native
+        // stream straight from the bridge — no reimplementation here — so this
+        // method can only fail to wire correctly, never to compute wrongly.
+        const raw = await nativeModule.getRecentAccessEvents(0) as AccessEvent[];
+        return aggregateAppAccessByType(Array.isArray(raw) ? raw : [], windowHours);
+      } catch (e) { console.error('LauncherModule.getAppAccessCounts failed:', e); reportBridgeError('getAppAccessCounts', e); return {}; }
+    },
+    startAccessTrackingService: async () => {
+      try { return await nativeModule.startAccessTrackingService(); }
+      catch (e) { console.error('LauncherModule.startAccessTrackingService failed:', e); reportBridgeError('startAccessTrackingService', e); return false; }
+    },
+    stopAccessTrackingService: async () => {
+      try { return await nativeModule.stopAccessTrackingService(); }
+      catch (e) { console.error('LauncherModule.stopAccessTrackingService failed:', e); reportBridgeError('stopAccessTrackingService', e); return false; }
+    },
+    isAccessTrackingServiceRunning: async () => {
+      try { return await nativeModule.isAccessTrackingServiceRunning(); }
+      catch (e) { console.error('LauncherModule.isAccessTrackingServiceRunning failed:', e); reportBridgeError('isAccessTrackingServiceRunning', e); return false; }
+    },
+    // #627 child issue: push the protected set to the foreground monitor.
+    // Accepts null/undefined from a careless caller → normalize to [] so the
+    // service never receives a malformed payload; a null set is "nothing
+    // protected", not a rejected promise.
+    setProtectedApps: async (packageNames: string[]) => {
+      const list = Array.isArray(packageNames) ? packageNames : [];
+      try { return await nativeModule.setProtectedApps(list); }
+      catch (e) { console.error('LauncherModule.setProtectedApps failed:', e); reportBridgeError('setProtectedApps', e); return false; }
+    },
+    isForegroundMonitorEnabled: async () => {
+      try { return await nativeModule.isForegroundMonitorEnabled(); }
+      catch (e) { console.error('LauncherModule.isForegroundMonitorEnabled failed:', e); reportBridgeError('isForegroundMonitorEnabled', e); return false; }
+    },
+    openAccessibilitySettings: async () => {
+      try { return await nativeModule.openAccessibilitySettings(); }
+      catch (e) { console.error('LauncherModule.openAccessibilitySettings failed:', e); reportBridgeError('openAccessibilitySettings', e); return false; }
+    },
+    postLiveActivity: async (id: string, title: string, text: string, progress: number, maxProgress: number) => {
+      try {
+        const { percent, indeterminate } = clampLiveActivityProgress(progress, maxProgress);
+        return await nativeModule.postLiveActivity(id, title, text, percent, indeterminate);
+      } catch (e) { console.error('LauncherModule.postLiveActivity failed:', e); reportBridgeError('postLiveActivity', e); return false; }
+    },
+    cancelLiveActivity: async (id: string) => {
+      try { return await nativeModule.cancelLiveActivity(id); }
+      catch (e) { console.error('LauncherModule.cancelLiveActivity failed:', e); reportBridgeError('cancelLiveActivity', e); return false; }
+    },
+    startTapDetection: async () => {
+      try { return await nativeModule.startTapDetection(); }
+      catch (e) { console.error('LauncherModule.startTapDetection failed:', e); reportBridgeError('startTapDetection', e); return false; }
+    },
+    stopTapDetection: async () => {
+      try { return await nativeModule.stopTapDetection(); }
+      catch (e) { console.error('LauncherModule.stopTapDetection failed:', e); reportBridgeError('stopTapDetection', e); return false; }
+    },
+    isTapDetectionRunning: async () => {
+      try { return await nativeModule.isTapDetectionRunning(); }
+      catch (e) { console.error('LauncherModule.isTapDetectionRunning failed:', e); reportBridgeError('isTapDetectionRunning', e); return false; }
+    },
   };
 }
 
@@ -606,25 +936,46 @@ function addModuleListener<TPayload>(
 
 /**
  * Subscribe to new notifications as they arrive.
+ * The native event (a Bundle sent from NotificationService) may be partial —
+ * older builds only carried `id`/`packageName`/`title`/`text`/`postedAt`, and
+ * even now we normalize defensively — so this bridge turns it into a full
+ * `DeviceNotification`: `key` falls back to `id`, `time` falls back to
+ * `postedAt`, and `isOngoing` defaults to `false`. A never-`undefined` object
+ * keeps the screen's grouping/mapping (which keys by `packageName`/`key`) safe
+ * instead of throwing and blanking the whole center.
  * Returns an unsubscribe function — call it in the useEffect cleanup.
  */
 export function addNotificationListener(
   listener: (n: DeviceNotification) => void,
 ): () => void {
-  const sub = addModuleListener('onNotificationPosted', listener);
+  const sub = addModuleListener('onNotificationPosted', (raw: Partial<DeviceNotification> & { postedAt?: number }) => {
+    const norm: DeviceNotification = {
+      id: raw.id ?? '',
+      key: raw.key ?? raw.id ?? '',
+      packageName: raw.packageName ?? '',
+      title: raw.title ?? '',
+      text: raw.text ?? '',
+      time: typeof raw.time === 'number' ? raw.time : (raw.postedAt ?? 0),
+      isOngoing: raw.isOngoing ?? false,
+    };
+    listener(norm);
+  });
   return () => sub.remove();
 }
 
 /**
  * Subscribe to notification removals.
- * The callback receives the notification key (string id).
+ * The callback receives the notification **key** (string id) — matching the
+ * `key` the screen uses to key and remove rows. The native `onNotificationRemoved`
+ * event historically carried `id` but not `key`, so we prefer `key` and fall
+ * back to `id` only when `key` is absent.
  * Returns an unsubscribe function — call it in the useEffect cleanup.
  */
 export function addNotificationRemovedListener(
-  listener: (id: string) => void,
+  listener: (key: string) => void,
 ): () => void {
-  const sub = addModuleListener('onNotificationRemoved', (n: { id: string }) => {
-    listener(n.id);
+  const sub = addModuleListener('onNotificationRemoved', (n: { id?: string; key?: string }) => {
+    listener(n.key ?? n.id ?? '');
   });
   return () => sub.remove();
 }
@@ -638,5 +989,126 @@ export function addNotificationRemovedListener(
  */
 export function addHomePressedListener(listener: () => void): () => void {
   const sub = addModuleListener('onHomePressed', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to speech-to-text results as they are recognized.
+ * The callback receives the recognized text (string). Partial results arrive
+ * via onSpeechPartialResult; the final result via onSpeechResult.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechResultListener(
+  listener: (text: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechResult', (n: { text: string }) => {
+    listener(n.text);
+  });
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to partial (in-flight) speech-to-text results.
+ * Fires repeatedly while the user is still speaking so callers can render a
+ * live transcript before the recognizer commits with onSpeechResult.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechPartialResultListener(
+  listener: (text: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechPartialResult', (n: { text: string }) => {
+    listener(n.text);
+  });
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to speech-recognition errors emitted by the native recognizer.
+ * The callback receives the error message (string).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addSpeechErrorListener(
+  listener: (error: string) => void,
+): () => void {
+  const sub = addModuleListener('onSpeechError', (n: { error: string }) => {
+    listener(n.error);
+  });
+  return () => sub.remove();
+}
+
+export type PackageChangeAction = 'added' | 'removed' | 'replaced';
+
+export interface PackageChange {
+  action: PackageChangeAction;
+  packageName: string;
+}
+
+/**
+ * Emitted by the native back-tap sensor service (#636) when the user double- or
+ * triple-taps the back of the device (iOS 14+ Back Tap equivalent).
+ * `taps` are the raw impulse timestamps (ms) that formed the gesture; `count`
+ * is 2 or 3. Surfaced to JS via the `addBackTapListener` subscription.
+ */
+export interface BackTapEvent {
+  type: 'double' | 'triple';
+  count: number;
+  taps: number[];
+}
+
+/**
+ * Subscribe to apps being installed, uninstalled or updated on the device.
+ * Backed by a dynamically registered BroadcastReceiver on the Kotlin side
+ * (PackageChangeReceiver) — implicit package broadcasts are not delivered to
+ * manifest-declared receivers since API 26, so the registration lives in the
+ * module's OnCreate/OnDestroy.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addPackageChangedListener(
+  listener: (change: PackageChange) => void,
+): () => void {
+  const sub = addModuleListener<PackageChange>('onPackageChanged', listener);  return () => sub.remove();
+}
+
+/**
+ * Subscribe to double/triple "back tap" gestures detected by the native
+ * TapSensorService (#636). The callback receives a [BackTapEvent] describing
+ * the gesture (`type` is 'double' | 'triple', `count` is 2 or 3).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addBackTapListener(
+  listener: (event: BackTapEvent) => void,
+): () => void {
+  const sub = addModuleListener<BackTapEvent>('onBackTap', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to real-time app sensor-access events emitted by the native
+ * foreground service (`AccessEventsService`) per issue #634. Each event names
+ * the package and the sensor used (camera | microphone | location) and the
+ * access timestamp; the service coalesces bursts and only emits when a NEW
+ * access begins (see AccessEventsService.kt for the de-bounce rationale).
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addAppAccessListener(
+  listener: (event: AccessEvent) => void,
+): () => void {
+  const sub = addModuleListener<AccessEvent>('onAppAccess', listener);
+  return () => sub.remove();
+}
+
+/**
+ * Subscribe to foreground-app changes reported by ForegroundMonitorService
+ * (#627 child issue). The callback receives the package name that just moved
+ * to the foreground, or '' for HOME / no app. The launcher uses this to keep
+ * its own UI in sync and to know when the native BiometricPrompt gate fired.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addForegroundAppListener(
+  listener: (packageName: string) => void,
+): () => void {
+  const sub = addModuleListener<{ packageName: string }>('onForegroundAppChanged', (n: { packageName: string }) => {
+    listener(n.packageName);
+  });
   return () => sub.remove();
 }

@@ -6,6 +6,7 @@ import { Text } from 'react-native';
 // that gate off — see the comment there.
 import { render as renderWithTheme } from '../../test-utils';
 import { CupertinoCard } from '../CupertinoCard';
+import { Shape } from '../../theme/CupertinoTheme';
 
 describe('CupertinoCard', () => {
   it('renders with title and subtitle', () => {
@@ -45,5 +46,22 @@ describe('CupertinoCard', () => {
     expect(shadowStyle).toBeDefined();
     expect(shadowStyle?.shadowColor).toBe('#000');
     expect(shadowStyle?.elevation).toBe(4);
+  });
+
+  it('uses the Shape.card radius token (10), not the old BorderRadius.medium (12) — spec §1.6', () => {
+    const { root } = renderWithTheme(
+      <CupertinoCard>
+        <Text>Card</Text>
+      </CupertinoCard>,
+    );
+
+    const styles = root.props.style;
+    const radiusStyle = Array.isArray(styles)
+      ? styles.find((s) => s && typeof s === 'object' && 'borderRadius' in s)
+      : null;
+
+    expect(radiusStyle).toBeDefined();
+    expect(radiusStyle?.borderRadius).toBe(Shape.card.radius);
+    expect(radiusStyle?.borderRadius).toBe(10);
   });
 });

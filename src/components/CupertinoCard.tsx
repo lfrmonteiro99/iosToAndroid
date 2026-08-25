@@ -10,7 +10,7 @@ interface CupertinoCardProps {
 }
 
 export const CupertinoCard = React.memo(function CupertinoCard({ title, subtitle, children, style }: CupertinoCardProps) {
-  const { theme, typography, spacing, borderRadius, shadows } = useTheme();
+  const { theme, typography, spacing, shape, shadows } = useTheme();
   const { colors } = theme;
 
   return (
@@ -22,7 +22,7 @@ export const CupertinoCard = React.memo(function CupertinoCard({ title, subtitle
           backgroundColor: theme.dark
             ? colors.secondarySystemBackground
             : colors.systemBackground,
-          borderRadius: borderRadius.medium,
+          borderRadius: shape.card.radius,
           padding: spacing.md,
         },
         style,

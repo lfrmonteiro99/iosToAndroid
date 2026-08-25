@@ -16,11 +16,19 @@ import { useAssistiveTouch } from '../../store/AssistiveTouchStore';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const TEXT_SIZE_LABELS = ['Small', 'Default', 'Large', 'XL'];
+const FONT_CHOICE_LABELS = ['Inter', 'System'];
+const PRESS_FEEDBACK_LABELS = ['Scale & Opacity', 'Opacity Only', 'None'];
+const PRESS_FEEDBACK_VALUES = ['scale-opacity', 'opacity', 'none'] as const;
+// #493: 'full' molas + velocidade, 'reduced' o antigo binário Reduce Motion
+// (withTiming 180ms), 'off' salto directo sem transição.
+const MOTION_INTENSITY_LABELS = ['Full', 'Reduced', 'Off'];
+const MOTION_INTENSITY_VALUES = ['full', 'reduced', 'off'] as const;
+const SCROLL_DECELERATION_LABELS = ['Normal', 'Fast'];
+const SCROLL_DECELERATION_VALUES = ['normal', 'fast'] as const;
 
 const A11Y_KEYS = {
   textscale: '@iostoandroid/a11y_textscale',
   bold: '@iostoandroid/a11y_bold',
-  reduceMotion: '@iostoandroid/a11y_reduce_motion',
 } as const;
 
 export function AccessibilityScreen({ navigation }: { navigation: AppNavigationProp }) {
@@ -36,7 +44,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
   const [largerTextEnabled, setLargerTextEnabled] = useState(false);
   const [largerTextScale, setLargerTextScale] = useState(1.0);
   const [boldTextLocal, setBoldTextLocal] = useState(false);
-  const [reduceMotionLocal, setReduceMotionLocal] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getMany(Object.values(A11Y_KEYS)).then((map) => {
@@ -46,7 +53,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
         setLargerTextEnabled(scale > 1.0);
       }
       if (map[A11Y_KEYS.bold] !== null) setBoldTextLocal(map[A11Y_KEYS.bold] === 'true');
-      if (map[A11Y_KEYS.reduceMotion] !== null) setReduceMotionLocal(map[A11Y_KEYS.reduceMotion] === 'true');
     });
   }, []);
 
@@ -68,13 +74,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
     update('boldText', v);
     AsyncStorage.setItem(A11Y_KEYS.bold, String(v));
   }, [update]);
-
-  const toggleReduceMotion = useCallback((v: boolean) => {
-    setReduceMotionLocal(v);
-    update('reduceMotion', v);
-    AsyncStorage.setItem(A11Y_KEYS.reduceMotion, String(v));
-  }, [update]);
-
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -102,16 +101,6 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
                 <CupertinoSwitch
                   value={boldTextLocal}
                   onValueChange={toggleBoldText}
-                />
-              }
-              showChevron={false}
-            />
-            <CupertinoListTile
-              title="Reduce Motion"
-              trailing={
-                <CupertinoSwitch
-                  value={reduceMotionLocal}
-                  onValueChange={toggleReduceMotion}
                 />
               }
               showChevron={false}
@@ -150,6 +139,85 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               }
               showChevron={false}
             />
+            <CupertinoListTile
+              title="Reduce White Point"
+              trailing={
+                <CupertinoSwitch
+                  value={settings.reduceWhitePoint}
+                  onValueChange={(v) => update('reduceWhitePoint', v)}
+                />
+              }
+              showChevron={false}
+            />
+            {settings.reduceWhitePoint && (
+              <View style={styles.sliderRow}>
+                <Text style={[typography.caption1, { color: colors.secondaryLabel, width: 32 }]}>
+                  A
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <CupertinoSlider
+                    value={settings.whitePointLevel}
+                    onValueChange={(v) => update('whitePointLevel', v)}
+                    minimumValue={0.25}
+                    maximumValue={1.0}
+                  />
+                </View>
+                <Text style={[typography.body, { color: colors.secondaryLabel, width: 32, textAlign: 'right' }]}>
+                  A
+                </Text>
+              </View>
+            )}
+          </CupertinoListSection>
+        </View>
+
+        {/* Motion (#493) — motionIntensity replaces the old binary Reduce
+            Motion switch. Scroll deceleration lives here too: it's more
+            "General" than accessibility by category, but splitting the two
+            motion controls across two screens is worse than the category
+            mismatch, so they stay together. */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Motion"
+            footer="Full uses springs with momentum. Reduced fades instead of springing. Off jumps directly with no transition at all. Haptic feedback is unaffected by any of these."
+          >
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={MOTION_INTENSITY_LABELS}
+                selectedIndex={MOTION_INTENSITY_VALUES.indexOf(settings.motionIntensity)}
+                onChange={(i) => update('motionIntensity', MOTION_INTENSITY_VALUES[i])}
+              />
+            </View>
+          </CupertinoListSection>
+        </View>
+
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Scroll Deceleration"
+            footer="Controls how far lists coast after a swipe. Normal matches iOS's default inertia; Fast stops sooner."
+          >
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={SCROLL_DECELERATION_LABELS}
+                selectedIndex={SCROLL_DECELERATION_VALUES.indexOf(settings.scrollDeceleration)}
+                onChange={(i) => update('scrollDeceleration', SCROLL_DECELERATION_VALUES[i])}
+              />
+            </View>
+          </CupertinoListSection>
+        </View>
+
+        {/* Touch Feedback */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Touch Feedback"
+            footer="Controls the visual response when pressing buttons and controls. 'None' turns off the visual effect only — haptic feedback (from Sounds & Haptics) is unaffected."
+          >
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={PRESS_FEEDBACK_LABELS}
+                selectedIndex={PRESS_FEEDBACK_VALUES.indexOf(settings.pressFeedback)}
+                onChange={(i) => update('pressFeedback', PRESS_FEEDBACK_VALUES[i])}
+              />
+            </View>
           </CupertinoListSection>
         </View>
 
@@ -209,6 +277,22 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
           </CupertinoListSection>
         </View>
 
+        {/* Font — Inter (iOS metrics) or the Android system typeface */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            header="Font"
+            footer="Inter matches iOS type metrics. System uses your device's default typeface."
+          >
+            <View style={{ padding: spacing.md }}>
+              <CupertinoSegmentedControl
+                values={FONT_CHOICE_LABELS}
+                selectedIndex={settings.fontChoice === 'system' ? 1 : 0}
+                onChange={(i) => update('fontChoice', i === 1 ? 'system' : 'inter')}
+              />
+            </View>
+          </CupertinoListSection>
+        </View>
+
         {/* Physical and Motor */}
         <View style={{ paddingHorizontal: spacing.md }}>
           <CupertinoListSection
@@ -219,6 +303,12 @@ export function AccessibilityScreen({ navigation }: { navigation: AppNavigationP
               title="AssistiveTouch"
               subtitle={assistive.enabled ? 'On' : 'Off'}
               onPress={() => navigation.navigate('AssistiveTouchSettings')}
+            />
+            <CupertinoListTile
+              title="Back Tap"
+              subtitle={settings.backTap.enabled ? 'On' : 'Off'}
+              onPress={() => navigation.navigate('BackTapSettings')}
+              isLast
             />
           </CupertinoListSection>
         </View>

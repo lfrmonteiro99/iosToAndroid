@@ -14,18 +14,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
+import { useSettings } from '../store/SettingsStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow, CupertinoNavigationBar } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
 import { avatarColorForName } from '../utils/avatarColor';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ interface ConversationRowProps {
   conversation: Conversation;
   contacts: DeviceContact[];
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   onPress: () => void;
   onDelete: () => void;
   onMarkRead: () => void;
@@ -129,7 +130,7 @@ const ConversationRow = React.memo(function ConversationRow({
     <Pressable
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: pressed ? colors.systemGray5 : colors.systemBackground },
+        { backgroundColor: pressed ? colors.pressedRowBackground : colors.systemBackground },
       ]}
       onPress={editMode ? onSelect : onPress}
       accessibilityRole="button"
@@ -245,6 +246,7 @@ export function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<AppNavigationProp>();
   const device = useDevice();
+  const { settings } = useSettings();
   const alert = useAlert();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -629,7 +631,7 @@ export function MessagesScreen() {
           renderItem={renderItem}
           ListEmptyComponent={ListEmpty}
           showsVerticalScrollIndicator={false}
-          decelerationRate={0.998}
+          decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
           contentContainerStyle={
             filtered.length === 0
               ? styles.emptyList

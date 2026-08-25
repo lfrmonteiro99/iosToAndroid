@@ -21,7 +21,9 @@ describe('CameraScreen', () => {
     const { getByText } = render(<CameraScreen navigation={mockNavigation} />);
     expect(getByText('PHOTO')).toBeTruthy();
     expect(getByText('VIDEO')).toBeTruthy();
-    expect(getByText('PORTRAIT')).toBeTruthy();
+    // PORTRAIT is intentionally NOT offered: expo-camera v17 has no such mode,
+    // so a PORTRAIT button would be a dead/lying control.
+    expect(() => getByText('PORTRAIT')).toThrow();
   });
 
   it('shows camera unavailable placeholder when expo-camera is not installed', () => {

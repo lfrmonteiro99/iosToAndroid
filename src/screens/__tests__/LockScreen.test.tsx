@@ -185,6 +185,8 @@ function MockDeviceProvider({
     openSystemPanel: async () => {},
     requestContactsPermission: async () => false,
     requestSmsPermission: async () => false,
+    autoBrightness: true,
+    setAutoBrightness: async () => {},
   };
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;
 }
@@ -300,5 +302,112 @@ describe('LockScreen notification access', () => {
 
     await waitFor(() => expect(getByText('Notifications are off')).toBeTruthy());
     expect(queryByText('Hello')).toBeNull();
+  });
+});
+
+// Lock screen widget slots (#656): iOS-style complications above/below the clock.
+
+describe('LockScreen widget slots', () => {
+  it('renders the battery widget slot below the clock with the current battery level', () => {
+    // Note: "72%" also appears in the status-bar battery readout, so this
+    // asserts on the widget's unique accessibility label rather than getByText.
+    const { getByLabelText } = render(
+      <MockDeviceProvider notificationAccessGranted={false}>
+        <LockScreen />
+      </MockDeviceProvider>
+    );
+    expect(getByLabelText('Battery widget, 72%')).toBeTruthy();
+  });
+
+  it('renders the storage widget slot below the clock with usage data', () => {
+    const { getByLabelText } = render(
+      <MockDeviceProvider notificationAccessGranted={false}>
+        <LockScreen />
+      </MockDeviceProvider>
+    );
+    // Default mock storage is totalGB 0 / usedGB 0 — the slot still renders (no storageError).
+    expect(getByLabelText('Storage widget, 0 GB of 0 GB used')).toBeTruthy();
+  });
+
+  it('hides the storage widget slot when the device store reports a storage read error', () => {
+    const value: DeviceContextValue = {
+      battery: { level: 0.72, isCharging: false },
+      brightness: 0.5,
+      volume: 0.5,
+      wifi: { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '', networks: [] },
+      wifiError: false,
+      bluetooth: { enabled: false, name: '', address: '', pairedDevices: [] },
+      bluetoothError: false,
+      storage: { totalGB: '0', usedGB: '0', freeGB: '0', usedPercentage: 0 },
+      storageError: true,
+      network: { isConnected: false, isWifi: false, isCellular: false },
+      messages: [],
+      contacts: [],
+      weather: { temp: 0, condition: '', icon: 'cloud', city: '' },
+      notificationAccessGranted: false,
+      isReady: true,
+      refresh: async () => {},
+      setBrightness: async () => {},
+      setVolume: async () => {},
+      toggleWifi: async () => {},
+      toggleBluetooth: async () => {},
+      openSystemPanel: async () => {},
+      requestContactsPermission: async () => false,
+      requestSmsPermission: async () => false,
+      autoBrightness: true,
+      setAutoBrightness: async () => {},
+    };
+    const { queryByLabelText } = render(
+      <DeviceContext.Provider value={value}>
+        <LockScreen />
+      </DeviceContext.Provider>
+    );
+    expect(queryByLabelText(/Storage widget/)).toBeNull();
+  });
+
+  it('renders the weather widget slot above the clock when weather data is available', () => {
+    const value: DeviceContextValue = {
+      battery: { level: 1, isCharging: false },
+      brightness: 0.5,
+      volume: 0.5,
+      wifi: { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '', networks: [] },
+      wifiError: false,
+      bluetooth: { enabled: false, name: '', address: '', pairedDevices: [] },
+      bluetoothError: false,
+      storage: { totalGB: '0', usedGB: '0', freeGB: '0', usedPercentage: 0 },
+      storageError: false,
+      network: { isConnected: false, isWifi: false, isCellular: false },
+      messages: [],
+      contacts: [],
+      weather: { temp: 22, condition: 'Sunny', icon: 'sunny', city: 'Lisbon' },
+      notificationAccessGranted: false,
+      isReady: true,
+      refresh: async () => {},
+      setBrightness: async () => {},
+      setVolume: async () => {},
+      toggleWifi: async () => {},
+      toggleBluetooth: async () => {},
+      openSystemPanel: async () => {},
+      requestContactsPermission: async () => false,
+      requestSmsPermission: async () => false,
+      autoBrightness: true,
+      setAutoBrightness: async () => {},
+    };
+    const { getByLabelText } = render(
+      <DeviceContext.Provider value={value}>
+        <LockScreen />
+      </DeviceContext.Provider>
+    );
+    expect(getByLabelText('Weather widget, 22°C, Sunny')).toBeTruthy();
+  });
+
+  it('hides the weather widget slot when weather data is unavailable (default/unloaded state)', () => {
+    const { queryByLabelText } = render(
+      <MockDeviceProvider notificationAccessGranted={false}>
+        <LockScreen />
+      </MockDeviceProvider>
+    );
+    // MockDeviceProvider's default weather condition is '' (unavailable) — no chip should render.
+    expect(queryByLabelText(/Weather widget/)).toBeNull();
   });
 });

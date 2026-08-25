@@ -80,6 +80,21 @@ export function HomeIndicator({ onHome, onSwitcher, navigationRef, variant = 'li
   const doHome = useCallback(async () => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
     if (onHome) return onHome();
+    // Stay inside the app whenever React Navigation can take us home. The
+    // in-app HomeMain is the iOS-style grid the user expects; calling the
+    // native goHome() here instead escapes to the *system* launcher when this
+    // app is not the device's default launcher — which surfaces the Android
+    // home screen over the app (issue #697: "Bluetooth frame shows Android
+    // home screen instead of BT settings"). goHome() is therefore only the
+    // last-resort escape hatch when no navigator is wired up.
+    if (navigationRef?.current) {
+      try {
+        navigationRef.current.navigate('HomeMain' as never);
+        return;
+      } catch {
+        /* fall through to native goHome */
+      }
+    }
     if (Platform.OS === 'android') {
       try {
         const mod = (await import('../../modules/launcher-module/src')).default;

@@ -4,13 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { useContacts } from '../store/ContactsStore';
 import { useDevice, DeviceContact } from '../store/DeviceStore';
+import { useSettings } from '../store/SettingsStore';
 import { CupertinoNavigationBar, CupertinoSearchBar, CupertinoActionSheet, CupertinoButton, SkeletonListRow, BackEdgeSwipe } from '../components';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 
 function groupByLetter(contacts: DeviceContact[]) {
   const groups: Record<string, DeviceContact[]> = {};
@@ -37,7 +38,7 @@ const ContactRow = React.memo(function ContactRow({
 }: {
   contact: DeviceContact;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   isLast: boolean;
   onPress: () => void;
   onLongPress: () => void;
@@ -47,7 +48,7 @@ const ContactRow = React.memo(function ContactRow({
       style={({ pressed }) => [
         styles.row,
         {
-          backgroundColor: pressed ? colors.systemGray5 : colors.secondarySystemGroupedBackground,
+          backgroundColor: pressed ? colors.pressedRowBackground : colors.secondarySystemGroupedBackground,
         },
       ]}
       onPress={onPress}
@@ -95,6 +96,7 @@ export function ContactsScreen() {
   const navigation = useNavigation<AppNavigationProp>();
   const { toggleFavorite } = useContacts();
   const { contacts: deviceContacts, requestContactsPermission, isReady: deviceReady } = useDevice();
+  const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [contextContact, setContextContact] = useState<DeviceContact | null>(null);
@@ -198,7 +200,7 @@ export function ContactsScreen() {
           renderItem={renderItem}
           renderSectionHeader={renderSectionHeader}
           stickySectionHeadersEnabled
-          decelerationRate={0.998}
+          decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
           contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
           showsVerticalScrollIndicator
           refreshControl={

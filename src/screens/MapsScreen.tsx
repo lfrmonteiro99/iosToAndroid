@@ -6,24 +6,27 @@ import {
   StyleSheet,
   Pressable,
   Modal,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import {
   CupertinoNavigationBar,
   CupertinoSearchBar,
   CupertinoSwipeableRow,
   CupertinoEmptyState,
   CupertinoShareSheet,
+  BrowserReadingList,
   useAlert,
 } from '../components';
+import { useReadingList } from '../store/ReadingListStore';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -41,6 +44,11 @@ interface RecentLocation {
 const STORAGE_KEY = '@iostoandroid/maps_recents';
 const DEMO_BANNER_KEY = '@iostoandroid/maps_demo_dismissed';
 const MAPS_ACCENT = '#007AFF';
+
+// DEVIATION from the §3.2 default press dim (0.40) — see the call site on the
+// current-location FAB: at 0.40 a white floating button over the map reads as
+// disappearing rather than as pressed.
+const MAPS_FAB_PRESS = { opacity: 0.7 } as const;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -71,7 +79,7 @@ interface QuickActionProps {
   label: string;
   onPress: () => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 const QuickAction = React.memo(function QuickAction({
@@ -116,7 +124,7 @@ interface RecentRowProps {
   onDelete: () => void;
   onToggleFavorite: () => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 const RecentRow = React.memo(function RecentRow({
@@ -198,6 +206,7 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<RecentLocation | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showReadingList, setShowReadingList] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(true);
 
@@ -229,6 +238,8 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
     }).catch(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, []);
+
+  const { addItem: addToReadingList } = useReadingList();
 
   const dismissDemoBanner = useCallback(() => {
     setDemoBannerDismissed(true);
@@ -298,6 +309,28 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
       persistRecents(updated);
     },
     [recents, persistRecents],
+  );
+
+  // Reading List: persist the current location as a "read later" page, and
+  // open a saved item in the browser (no in-app WebView exists yet, so we
+  // hand the URL to the system — the same fallback the share sheet uses).
+  const handleAddToReadingList = useCallback(
+    (url: string, title: string) => {
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      addToReadingList(url, title || 'Shared page');
+    },
+    [addToReadingList],
+  );
+
+  const handleOpenReadingItem = useCallback(
+    (item: { url: string; title: string }) => {
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      Linking.openURL(item.url).catch(() => {
+        alert('Cannot open link', 'This device cannot open the saved page.');
+      });
+      setShowReadingList(false);
+    },
+    [alert],
   );
 
   // ── Filtered Recents ────────────────────────────────────────
@@ -414,19 +447,18 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
           </View>
 
           {/* Current Location FAB */}
-          <Pressable
+          <CupertinoPressable
             onPress={handleCurrentLocation}
-            style={({ pressed }) => [
-              styles.locationButton,
-              {
-                backgroundColor: pressed ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.95)',
-              },
-            ]}
+            style={[styles.locationButton, { backgroundColor: 'rgba(255,255,255,0.95)' }]}
+            // DEVIATION: this floating action button sits on top of the map, so
+            // the default 0.40 dim would read as the button vanishing against the
+            // wallpaper. 0.70 keeps it legible while still reading as pressed.
+            pressOptions={MAPS_FAB_PRESS}
             accessibilityLabel="Current location"
             accessibilityRole="button"
           >
             <Ionicons name="navigate" size={20} color={MAPS_ACCENT} />
-          </Pressable>
+          </CupertinoPressable>
         </LinearGradient>
       </View>
 
@@ -493,6 +525,16 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
         leftButton={
           <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={24} color={MAPS_ACCENT} />
+          </Pressable>
+        }
+        rightButton={
+          <Pressable
+            onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setShowReadingList(true); }}
+            hitSlop={8}
+            accessibilityLabel="Open Reading List"
+            accessibilityRole="button"
+          >
+            <Ionicons name="book-outline" size={24} color={MAPS_ACCENT} />
           </Pressable>
         }
       />
@@ -574,6 +616,14 @@ export function MapsScreen({ navigation }: { navigation: AppNavigationProp }) {
         onClose={() => setShowShareSheet(false)}
         title={selectedLocation?.name}
         url={selectedLocation ? `https://maps.apple.com/?q=${encodeURIComponent(selectedLocation.name)}` : undefined}
+        onAddToReadingList={handleAddToReadingList}
+      />
+
+      {/* Reading List */}
+      <BrowserReadingList
+        visible={showReadingList}
+        onClose={() => setShowReadingList(false)}
+        onOpenItem={handleOpenReadingItem}
       />
     </View>
   );

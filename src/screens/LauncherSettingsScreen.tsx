@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,9 +17,59 @@ import {
   CupertinoListTile,
   CupertinoSwitch,
   CupertinoButton,
+  CupertinoSegmentedControl,
+  CupertinoSlider,
+  CupertinoActionSheet,
   useAlert,
 } from '../components';
 import { logger } from '../utils/logger';
+import {
+  PERF_BUDGETS,
+  getPerfMetrics,
+  isWithinBudget,
+  subscribePerfMetrics,
+  type PerfBudgetKey,
+  type PerfMetrics,
+} from '../utils/perfMetrics';
+import {
+  REQUIRE_PASSCODE_LABELS,
+  REQUIRE_PASSCODE_OPTIONS,
+  normalizeRequirePasscodeAfter,
+} from '../utils/passcodePolicy';
+import { AccentColors, type AccentColorKey } from '../theme/CupertinoTheme';
+
+// Tinted Icons colour swatches (issue #620): reuses the app's named accent
+// palette instead of a bespoke colour list, so «Tinted Icons» and «Display &
+// Brightness → Tint» always offer the same six options.
+const ICON_TINT_KEYS = Object.keys(AccentColors) as AccentColorKey[];
+
+/** 'blue' → 'Blue'. Mirrors DisplayBrightnessScreen's accentLabel. */
+function iconTintLabel(key: AccentColorKey) {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+/**
+ * #517: os números de arranque têm de ser legíveis em runtime, e não podem
+ * viver num `console.log` — o `transform-remove-console` do babel apaga-os
+ * na build de release, que é precisamente a que interessa medir. Por isso são
+ * lidos do registo em memória e mostrados aqui.
+ */
+function usePerfMetrics(): PerfMetrics {
+  const [metrics, setMetrics] = useState<PerfMetrics>(() => getPerfMetrics());
+  useEffect(() => subscribePerfMetrics(setMetrics), []);
+  return metrics;
+}
+
+/** "312 ms (alvo 400 ms)" / "sem medição (alvo 400 ms)" — nunca um 0 inventado. */
+export function formatPerfValue(value: number | null, budget: PerfBudgetKey): string {
+  const target = `alvo ${PERF_BUDGETS[budget]} ms`;
+  if (value === null || !Number.isFinite(value)) return `sem medição (${target})`;
+  return `${Math.round(value)} ms (${target})`;
+}
+
+// Top of the App Icon Size slider range (#503): the iOS «Large (no text)»
+// preset (#621) — reaching it also hides app-name labels.
+const ICON_SIZE_SCALE_LARGE = 1.2;
 
 // Default dock package names — mirrors AppsStore constant
 const DEFAULT_DOCK = [
@@ -35,6 +85,10 @@ const LOCK_PIN_KEY = 'lock_pin';
 const LOCK_PIN_STORAGE_KEY = '@iostoandroid/lock_pin';
 const LOCK_PIN_LEGACY_KEY = '@lock_pin';
 
+// Home-screen grid density options (issue #503).
+const GRID_COLUMN_VALUES = [3, 4, 5, 6] as const;
+const GRID_ROW_VALUES = [4, 5, 6, 7] as const;
+
 const DOCK_LABELS: Record<string, string> = {
   'com.iostoandroid.phone': 'Phone',
   'com.iostoandroid.messages': 'Messages',
@@ -48,12 +102,15 @@ export function LauncherSettingsScreen() {
   const { theme, typography, isDark, toggleTheme, textScale } = themeCtx;
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update, reset: resetSettings } = useSettings();
-  const { dockApps } = useApps();
+  const { settings, update, updateMany, reset: resetSettings } = useSettings();
+  const { dockApps, apps, hiddenApps, unhideApp, protectedApps = [], compactHomeLayout } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showNewAppsPicker, setShowNewAppsPicker] = useState(false);
+  const [showRequirePasscodePicker, setShowRequirePasscodePicker] = useState(false);
+  const [showIconTintPicker, setShowIconTintPicker] = useState(false);
   const [pinStep, setPinStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [pinInput, setPinInput] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -210,6 +267,20 @@ export function LauncherSettingsScreen() {
     ]);
   };
 
+  const perf = usePerfMetrics();
+
+  // iOS «Grande» esconde os nomes das apps — ao chegar ao topo da gama
+  // (Large), combina-se com showIconLabels=false num único update atómico.
+  // Abaixo do máximo o comportamento fica inalterado: o utilizador continua a
+  // controlar showIconLabels pelo switch "Show App Names".
+  const handleIconSizeChange = (v: number) => {
+    if (v >= ICON_SIZE_SCALE_LARGE) {
+      updateMany({ iconSizeScale: v, showIconLabels: false });
+    } else {
+      update('iconSizeScale', v);
+    }
+  };
+
   const doneButton = (
     <Text
       style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}
@@ -250,14 +321,64 @@ export function LauncherSettingsScreen() {
         <CupertinoListTile
           title="App Icon Size"
           leading={{ name: 'apps', color: '#fff', backgroundColor: colors.accent }}
-          trailing={<Text style={[typography.body, { color: colors.secondaryLabel }]}>Default</Text>}
+          trailing={
+            <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+              {Math.round(settings.iconSizeScale * 100)}%
+            </Text>
+          }
           showChevron={false}
-          isLast
         />
+        <View style={styles.sliderRow}>
+          <CupertinoSlider
+            value={settings.iconSizeScale}
+            onValueChange={handleIconSizeChange}
+            minimumValue={0.8}
+            maximumValue={ICON_SIZE_SCALE_LARGE}
+          />
+        </View>
+        <CupertinoListTile
+          title="Tinted Icons"
+          leading={{ name: 'color-palette', color: '#fff', backgroundColor: '#FF2D55' }}
+          showChevron={false}
+          isLast={!settings.iconTintEnabled}
+          trailing={
+            <CupertinoSwitch
+              value={settings.iconTintEnabled}
+              onValueChange={(v) => update('iconTintEnabled', v)}
+            />
+          }
+        />
+        {settings.iconTintEnabled && (
+          <CupertinoListTile
+            title="Tint Color"
+            leading={{ name: 'color-fill', color: '#fff', backgroundColor: settings.iconTintColor }}
+            isLast
+            trailing={
+              <View style={styles.tintTrailing}>
+                <View
+                  testID="icon-tint-swatch"
+                  style={[styles.tintSwatch, { backgroundColor: settings.iconTintColor }]}
+                />
+              </View>
+            }
+            onPress={() => setShowIconTintPicker(true)}
+          />
+        )}
       </CupertinoListSection>
 
       {/* ── Home Screen ────────────────────────────────────────── */}
       <CupertinoListSection header="Home Screen">
+        <CupertinoListTile
+          title="New Apps Go To"
+          leading={{ name: 'apps', color: '#fff', backgroundColor: '#5856D6' }}
+          showChevron
+          trailing={
+            <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+              {settings.newAppsToHome ? 'Home Screen' : 'App Library Only'}
+            </Text>
+          }
+          onPress={() => setShowNewAppsPicker(true)}
+        />
         <CupertinoListTile
           title="Show Badge Counts"
           leading={{ name: 'notifications', color: '#fff', backgroundColor: '#FF3B30' }}
@@ -284,7 +405,6 @@ export function LauncherSettingsScreen() {
           title="Show Search Label"
           leading={{ name: 'search', color: '#fff', backgroundColor: '#5AC8FA' }}
           showChevron={false}
-          isLast
           trailing={
             <CupertinoSwitch
               value={settings.showSearchLabel}
@@ -292,7 +412,98 @@ export function LauncherSettingsScreen() {
             />
           }
         />
+        <CupertinoListTile
+          title="Show Page Dots"
+          leading={{ name: 'apps', color: '#fff', backgroundColor: '#FF9500' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.showPageDots}
+              onValueChange={(v) => update('showPageDots', v)}
+            />
+          }
+        />
+        <CupertinoListTile
+          title="Show Status Bar"
+          leading={{ name: 'cellular', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.statusBarVisible}
+              onValueChange={(v) => update('statusBarVisible', v)}
+            />
+          }
+        />
+        <CupertinoListTile
+          title="Show App Names"
+          leading={{ name: 'text-outline', color: '#fff', backgroundColor: '#8E8E93' }}
+          showChevron={false}
+          isLast
+          trailing={
+            <CupertinoSwitch
+              value={settings.showIconLabels}
+              onValueChange={(v) => update('showIconLabels', v)}
+            />
+          }
+        />
       </CupertinoListSection>
+
+      {/* ── App Library (#602) ─────────────────────────────────── */}
+      <CupertinoListSection header="App Library">
+        <CupertinoListTile
+          title="Show Notifications"
+          leading={{ name: 'notifications', color: '#fff', backgroundColor: '#FF3B30' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.appLibraryShowNotifications}
+              onValueChange={(v) => update('appLibraryShowNotifications', v)}
+              testID="toggle-appLibraryShowNotifications"
+            />
+          }
+        />
+        <CupertinoListTile
+          title="Show Suggestions"
+          leading={{ name: 'apps', color: '#fff', backgroundColor: '#5856D6' }}
+          showChevron={false}
+          isLast
+          trailing={
+            <CupertinoSwitch
+              value={settings.appLibraryShowSuggestions}
+              onValueChange={(v) => update('appLibraryShowSuggestions', v)}
+              testID="toggle-appLibraryShowSuggestions"
+            />
+          }
+        />
+      </CupertinoListSection>
+
+      {/* ── Hidden Apps (#606) ─────────────────────────────────── */}
+      {/* Só existe quando há algo escondido: uma secção permanentemente vazia
+          seria ruído no ecrã, e o utilizador só chega aqui depois de esconder. */}
+      {hiddenApps.length > 0 && (
+        <CupertinoListSection header="Hidden Apps">
+          {hiddenApps.map((pkg, i) => (
+            <CupertinoListTile
+              key={pkg}
+              // Um pacote desinstalado entretanto já não está em `apps`; mostra-se
+              // o packageName para continuar a ser possível revelá-lo.
+              title={apps.find(a => a.packageName === pkg)?.name ?? pkg}
+              subtitle="Tap to unhide"
+              leading={{ name: 'eye-off', color: '#fff', backgroundColor: '#8E8E93' }}
+              showChevron={false}
+              isLast={i === hiddenApps.length - 1}
+              onPress={() => unhideApp(pkg)}
+            />
+          ))}
+          <View style={styles.buttonRow}>
+            <CupertinoButton
+              title="Unhide All Apps"
+              variant="tinted"
+              onPress={() => hiddenApps.forEach(unhideApp)}
+            />
+          </View>
+        </CupertinoListSection>
+      )}
 
       {/* ── Dock ───────────────────────────────────────────────── */}
       <CupertinoListSection header="Dock">
@@ -317,7 +528,34 @@ export function LauncherSettingsScreen() {
 
       {/* ── App Grid ───────────────────────────────────────────── */}
       <CupertinoListSection header="App Grid">
+        <View style={styles.gridControlRow}>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>Columns</Text>
+          <CupertinoSegmentedControl
+            values={GRID_COLUMN_VALUES.map(String)}
+            selectedIndex={GRID_COLUMN_VALUES.indexOf(settings.gridColumns)}
+            onChange={(i) => update('gridColumns', GRID_COLUMN_VALUES[i])}
+          />
+        </View>
+        <View style={styles.gridControlRow}>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>Rows</Text>
+          <CupertinoSegmentedControl
+            values={GRID_ROW_VALUES.map(String)}
+            selectedIndex={GRID_ROW_VALUES.indexOf(settings.gridRows)}
+            onChange={(i) => update('gridRows', GRID_ROW_VALUES[i])}
+          />
+        </View>
         <View style={styles.buttonRow}>
+          {/* #762: reassigns homeApps positions sequentially (0,1,2,...),
+              closing every hole left by removing/moving icons — no app is
+              lost, only positions shift. Non-destructive, so no `destructive`
+              styling unlike the reset buttons below. */}
+          <CupertinoButton
+            title="Compact Layout"
+            variant="tinted"
+            onPress={compactHomeLayout}
+          />
+        </View>
+        <View style={[styles.buttonRow, { marginTop: 8 }]}>
           <CupertinoButton
             title="Reset Home Layout"
             variant="tinted"
@@ -359,12 +597,50 @@ export function LauncherSettingsScreen() {
             />
           }
         />
+        {/* #611 — sub-opção do master `biometricUnlock` (iOS «iPhone Unlock»). */}
+        <CupertinoListTile
+          title="Face ID for Unlock"
+          leading={{ name: 'scan', color: '#fff', backgroundColor: '#5856D6' }}
+          showChevron={false}
+          trailing={
+            <CupertinoSwitch
+              value={settings.faceIdForUnlock}
+              onValueChange={(v) => update('faceIdForUnlock', v)}
+            />
+          }
+        />
+        {/* #611 — iOS «Require Passcode». */}
+        <CupertinoListTile
+          title="Require Passcode"
+          leading={{ name: 'time', color: '#fff', backgroundColor: '#FF3B30' }}
+          showChevron
+          trailing={
+            <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+              {REQUIRE_PASSCODE_LABELS[normalizeRequirePasscodeAfter(settings.requirePasscodeAfter)]}
+            </Text>
+          }
+          onPress={() => setShowRequirePasscodePicker(true)}
+        />
         <CupertinoListTile
           title="Change Passcode"
           leading={{ name: 'keypad', color: '#fff', backgroundColor: '#8E8E93' }}
           showChevron
           isLast
           onPress={handleChangePinPress}
+        />
+      </CupertinoListSection>
+
+      {/* ── Protected Apps (#627) ─────────────────────────────────
+          Distinto do Lock Screen acima: aquele bloqueia o launcher todo, este
+          pede biometria a abrir apps individuais (ver AppsStore.launchApp). */}
+      <CupertinoListSection header="App Lock">
+        <CupertinoListTile
+          title="Protected Apps"
+          subtitle={protectedApps.length > 0 ? `${protectedApps.length} protected` : 'None'}
+          leading={{ name: 'shield-checkmark', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron
+          isLast
+          onPress={() => navigation.navigate('ProtectedApps')}
         />
       </CupertinoListSection>
 
@@ -401,6 +677,101 @@ export function LauncherSettingsScreen() {
         </Pressable>
       </Modal>
 
+      {/* ── New Apps destination (#601) ────────────────────────── */}
+      <CupertinoActionSheet
+        visible={showNewAppsPicker}
+        onClose={() => setShowNewAppsPicker(false)}
+        title="New Apps Go To"
+        options={[
+          {
+            label: 'App Library Only',
+            onPress: () => { update('newAppsToHome', false); setShowNewAppsPicker(false); },
+          },
+          {
+            label: 'Home Screen',
+            onPress: () => { update('newAppsToHome', true); setShowNewAppsPicker(false); },
+          },
+        ]}
+        cancelLabel="Cancel"
+      />
+
+      {/* ── Require Passcode after (#611) ──────────────────────── */}
+      <CupertinoActionSheet
+        visible={showRequirePasscodePicker}
+        onClose={() => setShowRequirePasscodePicker(false)}
+        title="Require Passcode"
+        options={REQUIRE_PASSCODE_OPTIONS.map((option) => ({
+          label: REQUIRE_PASSCODE_LABELS[option],
+          onPress: () => {
+            update('requirePasscodeAfter', option);
+            setShowRequirePasscodePicker(false);
+          },
+        }))}
+        cancelLabel="Cancel"
+      />
+
+      {/* ── Tinted Icons colour (#620) ──────────────────────────── */}
+      <CupertinoActionSheet
+        visible={showIconTintPicker}
+        onClose={() => setShowIconTintPicker(false)}
+        title="Tint Color"
+        options={ICON_TINT_KEYS.map((key) => ({
+          label: iconTintLabel(key),
+          onPress: () => {
+            update('iconTintColor', AccentColors[key].light);
+            setShowIconTintPicker(false);
+          },
+        }))}
+        cancelLabel="Cancel"
+      />
+
+      {/* ── Diagnostics (#517) ─────────────────────────────────── */}
+      <CupertinoListSection header="Diagnostics">
+        <CupertinoListTile
+          title="Cold Start"
+          leading={{ name: 'speedometer', color: '#fff', backgroundColor: '#FF9500' }}
+          showChevron={false}
+          trailing={
+            <Text
+              accessibilityLabel={`Cold start: ${formatPerfValue(perf.coldStartMs, 'coldStartMs')}`}
+              style={[
+                typography.body,
+                {
+                  color:
+                    isWithinBudget('coldStartMs', perf.coldStartMs) === false
+                      ? colors.systemRed
+                      : colors.secondaryLabel,
+                },
+              ]}
+            >
+              {formatPerfValue(perf.coldStartMs, 'coldStartMs')}
+            </Text>
+          }
+        />
+        <CupertinoListTile
+          title="Warm Start"
+          leading={{ name: 'flash', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron={false}
+          isLast
+          trailing={
+            <Text
+              accessibilityLabel={`Warm start: ${formatPerfValue(perf.warmStartMs, 'warmStartMs')}`}
+              style={[
+                typography.body,
+                {
+                  color:
+                    isWithinBudget('warmStartMs', perf.warmStartMs) === false
+                      ? colors.systemRed
+                      : colors.secondaryLabel,
+                },
+              ]}
+            >
+              {formatPerfValue(perf.warmStartMs, 'warmStartMs')}
+            </Text>
+          }
+        />
+      </CupertinoListSection>
+
       {/* ── About ──────────────────────────────────────────────── */}
       <CupertinoListSection header="About">
         <CupertinoListTile
@@ -433,6 +804,25 @@ const styles = StyleSheet.create({
   buttonRow: {
     paddingHorizontal: 16,
     paddingVertical: 4,
+  },
+  sliderRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  tintTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tintSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  gridControlRow: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   modalOverlay: {
     flex: 1,

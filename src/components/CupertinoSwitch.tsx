@@ -17,6 +17,8 @@ interface CupertinoSwitchProps {
   onValueChange?: (value: boolean) => void;
   trackColor?: { true?: string; false?: string };
   disabled?: boolean;
+  /** Identificador de teste opcional (passado ao Pressable raiz). */
+  testID?: string;
 }
 
 const TRACK_WIDTH = 51;
@@ -29,6 +31,7 @@ export function CupertinoSwitch({
   onValueChange,
   trackColor,
   disabled = false,
+  testID,
 }: CupertinoSwitchProps) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -76,6 +79,7 @@ export function CupertinoSwitch({
     <Pressable
       onPress={handlePress}
       disabled={disabled}
+      testID={testID}
       accessibilityRole="switch"
       accessibilityState={{ checked: value, disabled }}
       accessibilityLabel={value ? 'On' : 'Off'}

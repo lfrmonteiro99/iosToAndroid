@@ -36,6 +36,9 @@ jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 jest.mock('expo-brightness', () => ({
   getBrightnessAsync: jest.fn(() => Promise.resolve(0.5)),
   setBrightnessAsync: jest.fn(() => Promise.resolve()),
+  // #612 Auto-Brightness: drives the OS brightness mode (AUTOMATIC vs MANUAL).
+  setSystemBrightnessModeAsync: jest.fn(() => Promise.resolve()),
+  BrightnessMode: { UNKNOWN: 0, AUTOMATIC: 1, MANUAL: 2 },
 }));
 
 jest.mock('expo-battery', () => ({
@@ -56,6 +59,65 @@ jest.mock('expo-contacts', () => ({
   getContactsAsync: jest.fn(() => Promise.resolve({ data: [] })),
   Fields: { FirstName: 'firstName', LastName: 'lastName', PhoneNumbers: 'phoneNumbers', Emails: 'emails', Company: 'company', Image: 'image' },
   SortTypes: { LastName: 'lastName' },
+}));
+
+// Mock @react-native-google-signin/google-signin — the native module cannot be
+// exercised in the JS-only test environment. Default state is SIGNED OUT
+// (hasPreviousSignIn false, getCurrentUser null); tests override these per case.
+jest.mock('@react-native-google-signin/google-signin', () => ({
+  GoogleSignin: {
+    configure: jest.fn(),
+    hasPlayServices: jest.fn(() => Promise.resolve(true)),
+    signIn: jest.fn(() =>
+      Promise.resolve({
+        type: 'success',
+        data: {
+          user: {
+            id: '1',
+            name: 'Test User',
+            email: 'user@gmail.com',
+            photo: null,
+            familyName: null,
+            givenName: 'Test',
+          },
+          scopes: ['https://www.googleapis.com/auth/drive.appdata'],
+          idToken: 'id-token',
+          serverAuthCode: null,
+        },
+      }),
+    ),
+    addScopes: jest.fn(() => Promise.resolve(null)),
+    signInSilently: jest.fn(() => Promise.resolve({ type: 'noSavedCredentialFound', data: null })),
+    signOut: jest.fn(() => Promise.resolve(null)),
+    revokeAccess: jest.fn(() => Promise.resolve(null)),
+    hasPreviousSignIn: jest.fn(() => false),
+    getCurrentUser: jest.fn(() => null),
+    clearCachedAccessToken: jest.fn(() => Promise.resolve(null)),
+    getTokens: jest.fn(() => Promise.resolve({ idToken: 'id-token', accessToken: 'access-token-123' })),
+  },
+  statusCodes: {},
+}));
+
+jest.mock('expo-location', () => ({
+  getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getCurrentPositionAsync: jest.fn(() =>
+    Promise.resolve({
+      coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 10 },
+      timestamp: Date.now(),
+    }),
+  ),
+  Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
+}));
+
+// #271 Health: the step-counter sensor does not exist in the JS test
+// environment. Default to "available" so the store's happy path is reachable;
+// individual tests override with mockResolvedValue(false).
+jest.mock('expo-sensors', () => ({
+  Pedometer: {
+    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+    watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
+  },
 }));
 
 jest.mock('expo-image-picker', () => ({
@@ -271,11 +333,25 @@ jest.mock('./modules/launcher-module/src', () => ({
   // renders it without a local jest.mock override (test-file jest.mock >
   // setupFiles) needs a callable default here, or the effect throws.
   addHomePressedListener: jest.fn(() => jest.fn()),
+  // AppsProvider subscribes to package install/remove/replace events (#485).
+  addPackageChangedListener: jest.fn(() => jest.fn()),
+  // SiriScreen subscribes to these when the mic is tapped. Return a no-op
+  // unsubscribe so mount/unmount cycles don't blow up in tests.
+  addSpeechResultListener: jest.fn(() => jest.fn()),
+  addSpeechPartialResultListener: jest.fn(() => jest.fn()),
+  addSpeechErrorListener: jest.fn(() => jest.fn()),
+  // NotificationCenterScreen subscribes to live posted/removed events (#646).
+  // Return a no-op unsubscribe; individual tests override with mockReturnValue.
+  addNotificationListener: jest.fn(() => jest.fn()),
+  addNotificationRemovedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
     getAppIcon: jest.fn(() => Promise.resolve('')),
+    getAppInfo: jest.fn(() => Promise.resolve(null)),
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
+    // #517: a instrumentação de cold start chama isto no arranque de App.tsx.
+    getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
     openLauncherSettings: jest.fn(() => Promise.resolve(true)),
     getWifiInfo: jest.fn(() => Promise.resolve({ enabled: true, ssid: 'TestWiFi', rssi: -50, ip: '192.168.1.100' })),
     setWifiEnabled: jest.fn(() => Promise.resolve(true)),
@@ -304,11 +380,28 @@ jest.mock('./modules/launcher-module/src', () => ({
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
+    clearIconCache: jest.fn(() => Promise.resolve(0)),
+    getIconCacheSizeBytes: jest.fn(() => Promise.resolve(0)),
     getInstalledKeyboards: jest.fn(() => Promise.resolve([])),
     getRingtone: jest.fn(() => Promise.resolve('')),
     canWriteSystemSettings: jest.fn(() => Promise.resolve(false)),
     openWriteSettingsAccess: jest.fn(() => Promise.resolve(true)),
     setRingtone: jest.fn(() => Promise.resolve(false)),
+    startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #627 child issue: push the protected set to the foreground monitor.
+    setProtectedApps: jest.fn(() => Promise.resolve(true)),
+    isForegroundMonitorEnabled: jest.fn(() => Promise.resolve(false)),
+    // #624-S3: real per-app usage time from UsageStatsManager (not sensor access).
+    getScreenTimeStats: jest.fn(() => Promise.resolve([])),
+    getTodayScreenTime: jest.fn(() => Promise.resolve({ totalMinutes: 0, topApps: [] })),
+    openAccessibilitySettings: jest.fn(() => Promise.resolve(true)),
+    // #608 Tap to Wake
+    wakeScreen: jest.fn(() => Promise.resolve()),
+    // #626 Live Activities
+    postLiveActivity: jest.fn(() => Promise.resolve(true)),
+    cancelLiveActivity: jest.fn(() => Promise.resolve(true)),
   },
 }));
 
@@ -322,3 +415,23 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativePermissionsAn
     requestMultiplePermissions: jest.fn(() => Promise.resolve({})),
   },
 }));
+
+// Mock react-native-webview: it calls TurboModuleRegistry.getEnforcing('RNCWebViewModule')
+// at import time, which throws in the JS-only test environment. The mock keeps the
+// component contract (source/testID props + an imperative reload()) so screens that
+// render a WebView can be asserted on.
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const WebView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      reload: jest.fn(),
+      goBack: jest.fn(),
+      goForward: jest.fn(),
+      stopLoading: jest.fn(),
+    }));
+    return React.createElement(View, props);
+  });
+  WebView.displayName = 'WebView';
+  return { __esModule: true, WebView, default: WebView };
+});

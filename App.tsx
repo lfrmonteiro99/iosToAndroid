@@ -14,11 +14,17 @@ import { ContactsProvider } from './src/store/ContactsStore';
 import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
 import { DeviceProvider, useDevice } from './src/store/DeviceStore';
+import { LocationProvider } from './src/store/LocationStore';
 import { FoldersProvider } from './src/store/FoldersStore';
+import { BookmarksProvider } from './src/store/BookmarksStore';
+import { ReadingListProvider } from './src/store/ReadingListStore';
+import { WalletProvider } from './src/store/WalletStore';
+import { HealthProvider } from './src/store/HealthStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
+import { WhitePointOverlay } from './src/components/WhitePointOverlay';
 import { HomeIndicator } from './src/components/HomeIndicator';
 import { QuickSwitchHomeBar } from './src/components/QuickSwitchHomeBar';
 import { GestureHost } from './src/components/GestureHost';
@@ -31,6 +37,20 @@ import { suppressAutoLock } from './src/utils/permissions';
 import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
+import { markProcessStartFromAge } from './src/utils/perfMetrics';
+import { useFocusSchedule } from './src/hooks/useFocusSchedule';
+import { useContextEngine } from './src/hooks/useContextEngine';
+
+// Cold start (#517): a marca de origem é a idade do processo lida do lado
+// nativo, não o instante em que este módulo é avaliado — assim o número inclui
+// o arranque do processo e do runtime JS. Dispara no topo do módulo, antes de
+// qualquer render; se a resposta da bridge chegar depois do primeiro layout da
+// grelha, o registo fecha o cold start retroactivamente com o instante já
+// guardado (ver perfMetrics.markProcessStart). -1 (indisponível) não deixa
+// marca nenhuma, em vez de deixar um número errado.
+void LauncherModule.getProcessStartAgeMs()
+  .then(markProcessStartFromAge)
+  .catch(() => {});
 
 function AppContent() {
   const { isDark } = useTheme();
@@ -38,6 +58,16 @@ function AppContent() {
   const { settings } = useSettings();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const [isLocked, setIsLocked] = useState(true);
+
+  // Agendamento de Focus por horário (#616): ativa/desativa o Work nos limites
+  // do intervalo definido em Settings. Montado aqui — um único ponto de verdade
+  // para toda a app, independente de qual ecrã está montado.
+  useFocusSchedule();
+
+  // Context Engine (#628): regras Wi-Fi/Bluetooth/localização/hora compostas
+  // (AND/OR) que ativam um Focus mode automaticamente. Aditivo ao Focus
+  // Schedule acima — mesmo ponto único de montagem, coexiste sem o substituir.
+  useContextEngine();
 
   // Inter / Inter Display (#474, sub-issue de #464 — substituto sancionado da
   // SF Pro, cuja licença restringe o uso a mocks para SO Apple). Uma falha no
@@ -105,6 +135,24 @@ function AppContent() {
   // callback (registered once) always reads the current value without stale closure.
   const focusModeRef = useRef(settings.focusMode);
   useEffect(() => { focusModeRef.current = settings.focusMode; }, [settings.focusMode]);
+
+  // Contexto de routing por-app das notificações (#630): allow-list imediata,
+  // política por app e Reduce Interruptions. Espelhado num ref para o listener
+  // (registado uma vez) ler o valor corrente sem closure obsoleta.
+  const routingRef = useRef({
+    focusMode: settings.focusMode,
+    allowListImmediate: settings.allowListImmediate,
+    perAppDelivery: settings.perAppDelivery,
+    reduceInterruptions: settings.reduceInterruptions,
+  });
+  useEffect(() => {
+    routingRef.current = {
+      focusMode: settings.focusMode,
+      allowListImmediate: settings.allowListImmediate,
+      perAppDelivery: settings.perAppDelivery,
+      reduceInterruptions: settings.reduceInterruptions,
+    };
+  }, [settings.focusMode, settings.allowListImmediate, settings.perAppDelivery, settings.reduceInterruptions]);
 
   // Pending auto-lock timer. We don't lock the instant the app goes to
   // background — a permission dialog, the system HOME intent fired by our
@@ -177,9 +225,18 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem('@iostoandroid/onboarding_done').then(val => {
-      setShowOnboarding(val !== 'true');
-    });
+    AsyncStorage.getItem('@iostoandroid/onboarding_done')
+      .then(val => {
+        setShowOnboarding(val !== 'true');
+      })
+      .catch(() => {
+        // Leitura falhou (BD corrompido, erro de permissão, escrita concorrente
+        // no arranque). Sem este .catch, showOnboarding ficaria null para sempre
+        // e AppContent devolveria null em App.tsx:296 — ecrã em branco que
+        // bloqueia o launcher E a App Library. Em caso de erro, mostramos o
+        // launcher (first-run/returning user continuam inalterados).
+        setShowOnboarding(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -263,7 +320,7 @@ function AppContent() {
         for (const n of initial) seenNotifIds.current.add(n.id);
 
         unsub = addNotificationListener((n) => {
-          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner);
+          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner, routingRef.current);
         });
       } catch { /* ignore */ }
     })();
@@ -317,6 +374,10 @@ function AppContent() {
         notification={banner}
         onDismiss={() => setBanner(null)}
       />
+
+      {/* iOS «Reduce White Point» — dark overlay over the whole app root,
+          pinned above every screen but tap-through (pointerEvents none). */}
+      <WhitePointOverlay />
     </View>
   );
 }
@@ -338,6 +399,21 @@ function ReachabilityShifter({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Forwards settings.iconTreatment (#486) into AppsProvider as a prop instead
+ * of AppsProvider calling useSettings() itself — every existing AppsStore
+ * test mounts a bare <AppsProvider> with no SettingsProvider above it, and
+ * this way that keeps working unchanged.
+ */
+function AppsProviderWithIconTreatment({ children }: { children: React.ReactNode }) {
+  const { settings } = useSettings();
+  return (
+    <AppsProvider iconTreatment={settings.iconTreatment} newAppsToHome={settings.newAppsToHome}>
+      {children}
+    </AppsProvider>
+  );
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -346,19 +422,32 @@ export default function App() {
           <ThemeProvider>
             <ContactsProvider>
               <ProfileProvider>
-                <AppsProvider>
+                <AppsProviderWithIconTreatment>
                 <DeviceProvider>
+                <LocationProvider>
                 <FoldersProvider>
+                <BookmarksProvider>
+                <ReadingListProvider>
                 <AssistiveTouchProvider>
+                <WalletProvider>
+                {/* Health (#276): o HealthScreen chama useHealth(), que lança
+                    sem provider acima — abrir o ícone Health no launcher real
+                    rebentava. Montado aqui, ao lado dos restantes stores. */}
+                <HealthProvider>
                 <ErrorBoundary>
                   <AlertProvider>
                     <AppContent />
                   </AlertProvider>
                 </ErrorBoundary>
+                </HealthProvider>
+                </WalletProvider>
                 </AssistiveTouchProvider>
+                </ReadingListProvider>
+                </BookmarksProvider>
                 </FoldersProvider>
+                </LocationProvider>
                 </DeviceProvider>
-                </AppsProvider>
+                </AppsProviderWithIconTreatment>
               </ProfileProvider>
             </ContactsProvider>
           </ThemeProvider>

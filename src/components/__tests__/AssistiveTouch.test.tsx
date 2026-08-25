@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { act, render, fireEvent } from '../../test-utils';
-import { AssistiveTouch } from '../AssistiveTouch';
+import { AssistiveTouch, MENU_GEOMETRY } from '../AssistiveTouch';
 import { AssistiveTouchProvider, useAssistiveTouch } from '../../store/AssistiveTouchStore';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
 import type { RootStackParamList } from '../../navigation/types';
@@ -67,6 +67,15 @@ function EnableAssistiveTouch() {
   const { update } = useAssistiveTouch();
   useEffect(() => {
     update({ enabled: true });
+  }, [update]);
+  return null;
+}
+
+/** Enables AssistiveTouch AND puts `siri` in the menu (it is not there by default). */
+function EnableWithSiri() {
+  const { update } = useAssistiveTouch();
+  useEffect(() => {
+    update({ enabled: true, menuItems: ['siri', 'spotlight'] });
   }, [update]);
   return null;
 }
@@ -201,7 +210,7 @@ describe('AssistiveTouch menu backdrop', () => {
     // Sem backdrop montado, o toque no item não pode ser consumido por ele.
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
 
-    fireEvent.press(getByLabelText('Notifications'));
+    fireEvent.press(getByLabelText('Notification Centre'));
     expect(navigationRef.navigate).toHaveBeenCalledWith('NotificationCenter');
   });
 
@@ -223,7 +232,7 @@ describe('AssistiveTouch menu backdrop', () => {
     expect(getByLabelText(BACKDROP_LABEL)).toBeTruthy();
 
     // Tocar num item fecha; `menuOpen` continua true durante a animação de saída.
-    fireEvent.press(getByLabelText('Notifications'));
+    fireEvent.press(getByLabelText('Notification Centre'));
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
 
     // Reabrir antes de o fecho terminar — o `menuOpen` nunca transiciona, por
@@ -240,10 +249,78 @@ describe('AssistiveTouch menu backdrop', () => {
     openMenu();
     advance(50); // antes de o guard da abertura disparar
 
-    fireEvent.press(getByLabelText('Notifications')); // fecha o menu
+    fireEvent.press(getByLabelText('Notification Centre')); // fecha o menu
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
 
     advance(150); // o timer da abertura original dispararia nesta janela
     expect(queryByLabelText(BACKDROP_LABEL)).toBeNull();
+  });
+});
+
+describe('AssistiveTouch acção siri', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockTapRecords.length = 0;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function renderWithSiri(navigationRef = makeNavigationRef()) {
+    return {
+      navigationRef,
+      ...render(
+        <AssistiveTouchProvider>
+          <EnableWithSiri />
+          <AssistiveTouch navigationRef={navigationRef} />
+        </AssistiveTouchProvider>
+      ),
+    };
+  }
+
+  it('tocar em Siri navega para Siri, não para SpotlightSearch', () => {
+    const { navigationRef, getByLabelText } = renderWithSiri();
+    openMenu();
+    advance(150);
+
+    fireEvent.press(getByLabelText('Siri'));
+    expect(navigationRef.navigate).toHaveBeenCalledWith('Siri');
+    expect(navigationRef.navigate).not.toHaveBeenCalledWith('SpotlightSearch');
+  });
+
+  it('a acção Spotlight continua a navegar para SpotlightSearch', () => {
+    const { navigationRef, getByLabelText } = renderWithSiri();
+    openMenu();
+    advance(150);
+
+    fireEvent.press(getByLabelText('Spotlight'));
+    expect(navigationRef.navigate).toHaveBeenCalledWith('SpotlightSearch');
+    expect(navigationRef.navigate).not.toHaveBeenCalledWith('Siri');
+  });
+});
+
+describe('AssistiveTouch menu geometry', () => {
+  // The popover clips its overflow, so cells positioned partly outside the
+  // square would be cut off instead of wrapping into view.
+  const { size, cellSize, radius, maxItems } = MENU_GEOMETRY;
+  const centre = size / 2;
+
+  it('every ring position keeps a full cell inside the popover square', () => {
+    for (let i = 0; i < maxItems; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / maxItems;
+      const x = centre + radius * Math.cos(angle);
+      const y = centre + radius * Math.sin(angle);
+      expect(x - cellSize / 2).toBeGreaterThanOrEqual(0);
+      expect(y - cellSize / 2).toBeGreaterThanOrEqual(0);
+      expect(x + cellSize / 2).toBeLessThanOrEqual(size);
+      expect(y + cellSize / 2).toBeLessThanOrEqual(size);
+    }
+  });
+
+  it('adjacent cells on the ring do not overlap', () => {
+    // Chord length between two neighbouring centres must exceed the cell side.
+    const chord = 2 * radius * Math.sin(Math.PI / maxItems);
+    expect(chord).toBeGreaterThanOrEqual(cellSize);
   });
 });

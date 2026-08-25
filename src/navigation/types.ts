@@ -19,14 +19,22 @@ export type RootStackParamList = {
   ContactDetail: { contactId: string };
   ContactEdit: { contactId?: string };
   Weather: undefined;
+  Health: undefined;
   Clock: undefined;
   Camera: undefined;
   Photos: undefined;
   Calendar: undefined;
   Notes: undefined;
   Maps: undefined;
+  FindMy: undefined;
+  FindMyLocationHistory: undefined;
   Reminders: undefined;
+  Browser: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
+  Wallet: undefined;
+  PassDetail: { passId: string };
+  PassEdit: { passId?: string; prefillCode?: string };
+  PassScan: undefined;
 
   // Settings
   Settings: undefined;
@@ -37,6 +45,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   SoundsHaptics: undefined;
   Focus: undefined;
+  SiriSearch: undefined;
   ScreenTime: undefined;
   General: undefined;
   About: undefined;
@@ -44,6 +53,7 @@ export type RootStackParamList = {
   Wallpaper: undefined;
   Accessibility: undefined;
   AssistiveTouchSettings: undefined;
+  BackTapSettings: undefined;
   Battery: undefined;
   Privacy: undefined;
   Storage: undefined;
@@ -58,9 +68,13 @@ export type RootStackParamList = {
   ComponentsGallery: undefined;
   AppLibrary: undefined;
   AppStore: undefined;
+  AppStoreDetail: { packageName: string; name: string };
   SpotlightSearch: undefined;
+  Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
+  ProtectedApps: undefined;
+  PerformanceProfile: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;

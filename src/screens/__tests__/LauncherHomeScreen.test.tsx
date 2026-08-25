@@ -1,5 +1,7 @@
 import React from 'react';
-import { render, fireEvent } from '../../test-utils';
+import { View as RNView, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { render, fireEvent, within, waitFor, act } from '../../test-utils';
 import {
   LauncherHomeScreen,
   NonAndroidFallback,
@@ -11,6 +13,8 @@ import {
 } from '../LauncherHomeScreen';
 import * as DeviceStore from '../../store/DeviceStore';
 import * as AppsStore from '../../store/AppsStore';
+import { useSettings } from '../../store/SettingsStore';
+import { Shape } from '../../theme/CupertinoTheme';
 
 function flattenStyle(style: unknown): Record<string, unknown>[] {
   if (Array.isArray(style)) return style.flat(Infinity).filter(Boolean) as Record<string, unknown>[];
@@ -21,6 +25,50 @@ describe('LauncherHomeScreen', () => {
   it('renders without crashing', () => {
     const { toJSON } = render(<LauncherHomeScreen />);
     expect(toJSON()).toBeTruthy();
+  });
+
+  // #481: dock corner radius must consume Shape.dock (34), not the old
+  // hand-picked literal (22) — 35% below spec §1.6.
+  it('renders the dock at the Shape.dock radius (34)', () => {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+
+    const { UNSAFE_getByType } = render(<LauncherHomeScreen />);
+    const dockBlur = UNSAFE_getByType('BlurView' as never);
+    const flat = flattenStyle(dockBlur.props.style);
+    const radiusStyle = flat.find((s) => 'borderRadius' in s) as { borderRadius: number } | undefined;
+
+    expect(radiusStyle).toBeDefined();
+    expect(radiusStyle?.borderRadius).toBe(Shape.dock.radius);
+    expect(radiusStyle?.borderRadius).toBe(34);
+
+    jest.restoreAllMocks();
   });
 
   it('renders the home screen container', () => {
@@ -176,15 +224,24 @@ describe('LauncherHomeScreen wallpaper parallax (#433)', () => {
       recentApps: [],
       isLoading: false,
       refreshApps: jest.fn(() => Promise.resolve()),
-      launchApp: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
 
     const { getByTestId } = render(<LauncherHomeScreen />);
@@ -232,7 +289,7 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
   function mockApps(allApps: AppsStore.InstalledApp[], dock: string[] = []) {
     const dockApps = allApps.filter((a) => dock.includes(a.packageName));
     const nonDockApps = allApps.filter((a) => !dock.includes(a.packageName));
-    const launchApp = jest.fn(() => Promise.resolve());
+    const launchApp = jest.fn(() => Promise.resolve(true));
     jest.spyOn(AppsStore, 'useApps').mockReturnValue({
       apps: allApps,
       homeApps: [],
@@ -245,12 +302,21 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
       launchApp,
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
     return { launchApp };
   }
@@ -357,15 +423,24 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
       recentApps: [],
       isLoading: false,
       refreshApps: jest.fn(() => Promise.resolve()),
-      launchApp: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
       addToHome: jest.fn(),
       removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
       addToDock: jest.fn(),
       removeFromDock: jest.fn(),
       removeFromRecents: jest.fn(),
       clearRecents: jest.fn(),
       isDefaultLauncher: true,
       openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
       ...over,
     } as ReturnType<typeof AppsStore.useApps>);
   }
@@ -384,6 +459,9 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
     const app = { name: 'Chrome', packageName: 'com.android.chrome', icon: '', isSystem: false };
     mockLoadedApps({
       apps: [app],
+      // #606: a App Library lista `visibleApps` (apps menos as escondidas); só
+      // a procura lê `apps`. Sem isto a biblioteca vinha vazia neste mock.
+      visibleApps: [app],
       nonDockApps: [app],   // grelha do home
       // `recentApps` e ordenado por `launchedAt` e cruzado contra `apps` pelo
       // packageName (AppLibraryScreen.tsx:355-364) — sem o timestamp a app nao
@@ -410,7 +488,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
   it('shows the App Library search bar directly on mount, with no tap required', () => {
     mockLoadedApps();
     const { getByPlaceholderText } = render(<LauncherHomeScreen />);
-    expect(getByPlaceholderText('App Library')).toBeTruthy();
+    expect(getByPlaceholderText('Search')).toBeTruthy();
   });
 
   it('shows the Categories section directly, without navigating anywhere first', () => {
@@ -438,7 +516,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
     // to the search-results view, proving the search bar is wired to real
     // state inside the embedded component, not just visually present.
     expect(getByText('Categories')).toBeTruthy();
-    fireEvent.changeText(getByPlaceholderText('App Library'), 'zzz-no-such-app');
+    fireEvent.changeText(getByPlaceholderText('Search'), 'zzz-no-such-app');
     expect(queryByText('Categories')).toBeNull();
   });
 });
@@ -473,5 +551,514 @@ describe('resolveHomePressAction (#508)', () => {
   // isOnFirstPage: false, identical to being on any other non-first page.
   it('treats being on the App Library page the same as any other non-first page', () => {
     expect(resolveHomePressAction({ isFolderOpen: false, isOnFirstPage: false })).toBe('scrollToFirstPage');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #490: Pagination ScrollView decelerationRate must match iOS spec (0.998)
+// to ensure proper scroll deceleration and page snapping on Android.
+// The fix adds `decelerationRate={0.998}` to the horizontal pagination
+// ScrollView (§3.3 of ESPECIFICACAO.md).
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen pagination ScrollView deceleration (#490)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  function mockLoadedApps(over: Partial<ReturnType<typeof AppsStore.useApps>> = {}) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [],
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: [],
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      ...over,
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  it('sets decelerationRate to 0.998 on the pagination ScrollView', () => {
+    mockLoadedApps();
+    const { getByTestId } = render(<LauncherHomeScreen />);
+
+    const paginationScrollView = getByTestId('launcher-pager');
+    expect(paginationScrollView.props.decelerationRate).toBe(0.998);
+  });
+
+  // #493: scrollDeceleration exposes the 0.998 literal above as a setting.
+  // 'fast' maps to 0.99 — see src/utils/motionIntensity.ts:scrollDecelerationValue.
+  // Drives the update directly via useSettings() rather than seeding
+  // AsyncStorage — the async hydration path is already covered by
+  // SettingsStore.motionIntensity.test.tsx, and depending on it here made
+  // this assertion flaky under full-suite load (passed in isolation, missed
+  // its waitFor window when 44 sibling tests ran first in the same file).
+  it('sets decelerationRate to 0.99 when scrollDeceleration is "fast"', async () => {
+    mockLoadedApps();
+
+    function SetScrollDeceleration() {
+      const { update } = useSettings();
+      React.useEffect(() => { update('scrollDeceleration', 'fast'); }, [update]);
+      return null;
+    }
+
+    const { getByTestId } = render(
+      <>
+        <SetScrollDeceleration />
+        <LauncherHomeScreen />
+      </>,
+    );
+
+    await waitFor(() =>
+      expect(getByTestId('launcher-pager').props.decelerationRate).toBe(0.99),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #501: the dock reused the same AppIcon rendered for the home grid, which
+// always draws a name label below the icon — the iOS dock has no labels.
+// This inflated the dock capsule to ~108pt (padding 20 + the grid's 88pt
+// label-inclusive wrapper) instead of the ~96pt from §2. AppIcon gets a
+// `showLabel` prop (default true, so the grid is untouched) instead of a
+// second component, per the issue's explicit "um só AppIcon" requirement.
+// ---------------------------------------------------------------------------
+describe('LauncherHomeScreen dock has no app-name labels (#501)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  const dockApp: AppsStore.InstalledApp = {
+    name: 'DockOnlyApp',
+    packageName: 'com.example.dockonly',
+    icon: '',
+    isSystem: false,
+  };
+  const gridApp: AppsStore.InstalledApp = {
+    name: 'GridOnlyApp',
+    packageName: 'com.example.gridonly',
+    icon: '',
+    isSystem: false,
+  };
+
+  function mockApps(dockApps: AppsStore.InstalledApp[], nonDockApps: AppsStore.InstalledApp[]) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [...dockApps, ...nonDockApps],
+      homeApps: [],
+      dockApps,
+      nonDockApps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  it('does not render the app name text under a dock icon', () => {
+    // Scoped to the dock icon's own subtree (`within`), not the whole tree:
+    // `apps` also feeds the App Library page (#434), which lists every app —
+    // including dock ones — by name regardless of this fix, so a global
+    // queryByText would find that unrelated match and prove nothing about
+    // the dock icon itself.
+    mockApps([dockApp], [gridApp]);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+
+    const dockIcon = getByLabelText('Open DockOnlyApp');
+    expect(dockIcon).toBeTruthy();
+    expect(within(dockIcon).queryByText('DockOnlyApp')).toBeNull();
+  });
+
+  it('still renders the app name text under a home-grid icon (grid is unaffected)', () => {
+    mockApps([dockApp], [gridApp]);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+
+    const gridIcon = getByLabelText('Open GridOnlyApp');
+    expect(within(gridIcon).getByText('GridOnlyApp')).toBeTruthy();
+  });
+
+  it('keeps the dock icon accessible press target intact without a label', () => {
+    mockApps([dockApp], [gridApp]);
+    const { getByLabelText } = render(<LauncherHomeScreen />);
+    const icon = getByLabelText('Open DockOnlyApp');
+    expect(icon.props.accessibilityRole).toBe('button');
+    expect(() => fireEvent.press(icon)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Focus filters — page visibility per Focus mode (#618)
+// ---------------------------------------------------------------------------
+// Um modo de Focus activo esconde as páginas cujo índice está em
+// settings.focusPageVisibility[focusMode]. Os testes montam o LauncherHomeScreen
+// real com apps suficientes para haver 2 páginas e afirmam sobre os testIDs
+// `launcher-page-grid-N` e sobre os page dots (#603), que têm de refletir o
+// número real de páginas visíveis.
+describe('LauncherHomeScreen — Focus page visibility (#618)', () => {
+  const FOCUS_APP_NAMES = Array.from({ length: 26 }, (_, i) => `FocusApp${i}`);
+
+  function focusApp(name: string): AppsStore.InstalledApp {
+    const pkg = `com.example.${name.toLowerCase()}`;
+    return { name, packageName: pkg, icon: `file:///${pkg}.png`, isSystem: false };
+  }
+
+  function mockFocusApps(apps: AppsStore.InstalledApp[]) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps,
+      homeApps: [],
+      dockApps: [],
+      nonDockApps: apps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+    compactHomeLayout: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  function seedSettings(partial: Record<string, unknown>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      key === '@iostoandroid/settings'
+        ? Promise.resolve(JSON.stringify(partial))
+        : Promise.resolve(null),
+    );
+  }
+
+  /** Conta os page dots (#603): View 7x7 com borderRadius 3.5. */
+  function countDots(root: ReturnType<typeof render>): number {
+    return root.UNSAFE_getAllByType(RNView).filter((n: { props?: { style?: unknown } }) => {
+      const s = StyleSheet.flatten(n.props?.style) as Record<string, unknown> | undefined;
+      return !!s && s.width === 7 && s.height === 7 && s.borderRadius === 3.5;
+    }).length;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('hides a page whose index is listed for the active focus mode', async () => {
+    // 26 apps reais + 14 virtuais = 40 itens; 4x6 = 24/página → 2 páginas.
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(root.queryByTestId('launcher-page-grid-1')).toBeNull();
+    root.unmount();
+  });
+
+  it('shows every page when focusMode is off, even with entries stored', async () => {
+    // O inverso do fix: a configuração existe mas 'off' não filtra nada.
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'off',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    root.unmount();
+  });
+
+  it('ignores hidden pages configured for a DIFFERENT mode than the active one', async () => {
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'sleep',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    root.unmount();
+  });
+
+  it('page dots reflect the real number of visible pages (#603 + #618)', async () => {
+    // Sem filtro: 2 páginas + App Library = 3 dots. Com a página 1 oculta: 2.
+    seedSettings({ gridColumns: 4, gridRows: 6, focusMode: 'off' });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+    const unfiltered = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(unfiltered.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    const dotsWithAllPages = countDots(unfiltered);
+    expect(dotsWithAllPages).toBe(3);
+    unfiltered.unmount();
+
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+    const filtered = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(filtered.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(countDots(filtered)).toBe(dotsWithAllPages - 1);
+    filtered.unmount();
+  });
+
+  it('keeps the first page visible when every page is hidden (no empty home)', async () => {
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [0, 1] },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    expect(root.queryByTestId('launcher-page-grid-1')).toBeNull();
+    root.unmount();
+  });
+
+  it('survives a corrupted focusPageVisibility blob in AsyncStorage', async () => {
+    // Inválido e hostil: valor não-array, índices negativos e strings.
+    seedSettings({
+      gridColumns: 4,
+      gridRows: 6,
+      focusMode: 'work',
+      focusPageVisibility: { work: [-1, 'x', 1.5], sleep: 'nope' },
+    });
+    mockFocusApps(FOCUS_APP_NAMES.map(focusApp));
+
+    const root = render(<LauncherHomeScreen />);
+    // Nenhum índice válido → nada é escondido, e nada rebenta.
+    await waitFor(() => expect(root.getByTestId('launcher-page-grid-1')).toBeTruthy(), {
+      timeout: 3000,
+    });
+    root.unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Focus dock override — swap the dock per Focus mode (#619, filho de #617)
+// ---------------------------------------------------------------------------
+// `settings.focusDockOverride[focusMode]` pode substituir os pacotes do dock
+// enquanto esse modo está activo. Os testes montam o LauncherHomeScreen real,
+// com `dockApps` (dock normal) e `nonDockApps` (candidatos ao override)
+// distintos, e afirmam sobre `app-icon-box-<pkg>` dentro do testID
+// `launcher-dock` — nunca sobre a árvore inteira, porque as apps do override
+// também aparecem na grelha normal (o override só troca o dock, não a home).
+describe('LauncherHomeScreen — Focus dock override (#619)', () => {
+  function dockApp(pkg: string, name: string): AppsStore.InstalledApp {
+    return { name, packageName: pkg, icon: `file:///${pkg}.png`, isSystem: false };
+  }
+
+  const NORMAL_DOCK = [dockApp('com.phone', 'Phone'), dockApp('com.messages', 'Messages')];
+  const WORK_APPS = [dockApp('com.slack', 'Slack'), dockApp('com.gmail', 'Gmail')];
+
+  function mockDockApps(dockApps: AppsStore.InstalledApp[], nonDockApps: AppsStore.InstalledApp[]) {
+    jest.spyOn(AppsStore, 'useApps').mockReturnValue({
+      apps: [...dockApps, ...nonDockApps],
+      homeApps: [],
+      dockApps,
+      nonDockApps,
+      recentPackages: [],
+      recentApps: [],
+      isLoading: false,
+      refreshApps: jest.fn(() => Promise.resolve()),
+      launchApp: jest.fn(() => Promise.resolve(true)),
+      addToHome: jest.fn(),
+      removeFromHome: jest.fn(),
+      compactHomeLayout: jest.fn(),
+      addToDock: jest.fn(),
+      removeFromDock: jest.fn(),
+      removeFromRecents: jest.fn(),
+      clearRecents: jest.fn(),
+      isDefaultLauncher: true,
+      openLauncherSettings: jest.fn(() => Promise.resolve()),
+      hiddenApps: [],
+      visibleApps: [],
+      hideApp: jest.fn(),
+      unhideApp: jest.fn(),
+      iconCacheSizeBytes: 0,
+      isRebuildingIconCache: false,
+      iconCacheRebuildProgress: null,
+      rebuildIconCache: jest.fn(() => Promise.resolve()),
+    } as ReturnType<typeof AppsStore.useApps>);
+  }
+
+  function seedSettings(partial: Record<string, unknown>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      key === '@iostoandroid/settings'
+        ? Promise.resolve(JSON.stringify(partial))
+        : Promise.resolve(null),
+    );
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // As settings resolvem via AsyncStorage.getItem (uma promise); o
+  // `act(async () => { await Promise.resolve(); })` a seguir ao render força
+  // um tick de microtasks real antes do primeiro `waitFor`, evitando que a sua
+  // primeira ronda de polling corra antes de setSettings aplicar o valor
+  // seedado — sem isto, sob a carga de correr o ficheiro inteiro (~50 testes
+  // antes deste bloco), o `waitFor` chegava a esgotar o timeout apesar do
+  // estado ficar correto poucos milissegundos depois do mount (confirmado com
+  // instrumentação: o valor seedado já estava presente em ~300ms).
+  async function flushSettingsLoad() {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  it('swaps the dock icons for the active focus mode override', async () => {
+    seedSettings({ focusMode: 'work', focusDockOverride: { work: ['com.slack', 'com.gmail'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.slack')).toBeTruthy();
+      expect(within(dock).getByTestId('app-icon-box-com.gmail')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.phone')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('keeps the normal dock when the override for the active mode is an empty array', async () => {
+    // AC: "Vazio = manter dock normal".
+    seedSettings({ focusMode: 'work', focusDockOverride: { work: [] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).getByTestId('app-icon-box-com.messages')).toBeTruthy();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('restores the normal dock when focus mode is off, even with an override stored', async () => {
+    // AC: "'off' restaura dock normal" — o inverso do fix.
+    seedSettings({ focusMode: 'off', focusDockOverride: { work: ['com.slack', 'com.gmail'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.slack')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('ignores a dock override configured for a DIFFERENT mode than the active one', async () => {
+    seedSettings({ focusMode: 'sleep', focusDockOverride: { work: ['com.slack', 'com.gmail'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.slack')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('drops override package names that no longer resolve to an installed app', async () => {
+    seedSettings({ focusMode: 'work', focusDockOverride: { work: ['com.slack', 'com.uninstalled'] } });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      expect(within(dock).getByTestId('app-icon-box-com.slack')).toBeTruthy();
+      expect(within(dock).queryByTestId('app-icon-box-com.uninstalled')).toBeNull();
+    }, { timeout: 3000 });
+    root.unmount();
+  });
+
+  it('survives a corrupted focusDockOverride blob in AsyncStorage', async () => {
+    // Inválido e hostil: valor não-array e entradas que não são string.
+    seedSettings({
+      focusMode: 'work',
+      focusDockOverride: { work: 'not-an-array', sleep: [1, null, 'com.slack'] },
+    });
+    mockDockApps(NORMAL_DOCK, WORK_APPS);
+
+    const root = render(<LauncherHomeScreen />);
+    await flushSettingsLoad();
+    await waitFor(() => {
+      const dock = root.getByTestId('launcher-dock');
+      // 'work' não é array -> normalizado para [] -> mantém o dock normal.
+      expect(within(dock).getByTestId('app-icon-box-com.phone')).toBeTruthy();
+      expect(within(dock).getByTestId('app-icon-box-com.messages')).toBeTruthy();
+    }, { timeout: 3000 });
+    root.unmount();
   });
 });

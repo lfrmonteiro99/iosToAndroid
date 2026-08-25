@@ -69,6 +69,10 @@ case "$ACTION" in
     else
       echo "orquestrador: parado"
     fi
+    # SAÚDE PRIMEIRO. As contagens de issues pareciam saudáveis nas duas avarias
+    # de hoje; o que as denunciava era não haver PRs nem agentes.
+    bash "$SCRIPT_DIR/watchdog.sh" --report 2>/dev/null || true
+    echo
     echo -n "issues por estado: "
     for s in qa:ready qa:wip qa:review qa:blocked-impl qa:blocked-spec qa:triage qa:needs-human; do
       # --limit 300: `gh issue list` defaults to 30, so without it the status
@@ -156,8 +160,59 @@ log "a arrancar em tmux '$SESSION'; log: $LOGFILE"
 # exactamente o que aconteceu na primeira tentativa de ligar o par Hermes.
 #
 # Passar no comando é a única forma que não depende do estado do servidor.
-TEAM_ENV=""
-for v in TEAM_HERMES TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL; do
+#
+# A LISTA TEM DE ESTAR COMPLETA, e não estava: TEAM_REVIEWERS nunca cá esteve,
+# portanto `TEAM_REVIEWERS=3 bash start.sh` arrancava com UM reviewer e sem uma
+# única linha de aviso — exactamente o modo de falha que este bloco existe para
+# evitar. Qualquer variável nova de paralelismo entra aqui.
+#
+# O PATH TAMBÉM É INJECTADO, E NÃO HERDADO.
+#
+# `tmux new-session` herda o ambiente do SERVIDOR tmux, e o servidor herda o de
+# quem o arrancou primeiro. Se isso foi uma sessão de agente em vez de um
+# terminal com o profile do utilizador, o PATH não tem `~/.local/bin` — e a
+# pipeline corre a noite inteira sem encontrar o `claude`, em silêncio, com
+# 1069 despachos e zero PRs (2026-08-21, 02:46→10:35).
+#
+# Portanto: os motores são resolvidos AQUI, por caminho, e os directórios deles
+# entram no PATH da sessão. Se não se resolvem, isto grita agora em vez de
+# falhar durante horas.
+TEAM_PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+for b in claude hermes; do
+  case "$b" in
+    claude) resolved=$(claude_bin || true) ;;
+    hermes) resolved=$(hermes_bin || true) ;;
+  esac
+  if [ -n "$resolved" ]; then
+    TEAM_PATH="$(dirname "$resolved"):$TEAM_PATH"
+    log "motor $b: $resolved"
+  else
+    log "AVISO: não encontrei o binário do $b — a pipeline vai correr sem ele"
+  fi
+done
+export PATH="$TEAM_PATH"
+
+# DEEPSEEK_API_KEY: o auth.json do perfil hermes aponta para `env:DEEPSEEK_API_KEY`,
+# e a chave vive no .env do Jarvis (single source of truth — ver ~/.bashrc). O tmux
+# não passa por shells de login: sem esta injeção os agentes hermes morrem com
+# "No usable credentials found for provider 'deepseek'".
+if [ -z "${DEEPSEEK_API_KEY:-}" ] && [ -f "$HOME/Documentos/jarvis/.env" ]; then
+  _ds_key=$(grep -E '^deepseek_api_key=' "$HOME/Documentos/jarvis/.env" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d "\"'")
+  [ -n "$_ds_key" ] && export DEEPSEEK_API_KEY="$_ds_key"
+  unset _ds_key
+fi
+
+TEAM_ENV=" PATH='$TEAM_PATH'"
+for v in DEEPSEEK_API_KEY TEAM_HERMES TEAM_HERMES_BIN TEAM_CLAUDE_BIN TEAM_USE_FALLBACK TEAM_SESSION AGENT_HERMES_MODEL HERMES_MODEL \
+         TEAM_IMPLEMENTERS TEAM_IMPL_ENGINES TEAM_REVIEWERS \
+         TEAM_AGENT_MEM_MB TEAM_MEM_FLOOR_MB TEAM_AGENT_WARMUP_S TEAM_JEST_WORKERS \
+         TEAM_CYCLE_SLEEP TEAM_HEALTH_DELIVERY_S TEAM_HEALTH_AGENT_S \
+         TEAM_HEALTH_STRANDED_S TEAM_HEALTH_DEFER_MANY TEAM_HEALTH_BASELINE_AHEAD \
+         TEAM_REVIEW_HERMES \
+         TEAM_USE_ALIBABA ALIBABA_API_KEY TEAM_ALIBABA_BASE_URL \
+         TEAM_ALIBABA_MODEL_LOW TEAM_ALIBABA_MODEL_MED TEAM_ALIBABA_MODEL_STRONG \
+         TEAM_ALIBABA_COOLDOWN_H TEAM_ALIBABA_RATE_COOLDOWN_M \
+         TEAM_REVIEW_ALIBABA AGENT_FORCE_ALIBABA TEAM_WT_ROOT; do
   [ -n "${!v:-}" ] && TEAM_ENV="$TEAM_ENV $v='${!v}'"
 done
 

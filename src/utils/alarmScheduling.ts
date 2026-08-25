@@ -161,3 +161,46 @@ export async function rescheduleOneShotAlarms(): Promise<Alarm[] | null> {
   listeners.forEach((listener) => listener(next));
   return next;
 }
+
+/**
+ * Creates a one-shot alarm outside of ClockScreen's UI (assistant entry point).
+ *
+ * Reads the currently stored alarms and appends to them: no component owns this
+ * call, so the in-memory list of a mounted AlarmTab is not available and
+ * assuming an empty list would wipe existing alarms. Subscribers are notified
+ * afterwards so an AlarmTab mounted under the transparent Siri modal picks the
+ * new alarm up instead of later persisting its stale list over it.
+ *
+ * A denied notification permission is not an error here: scheduleAlarmNotifications
+ * degrades to an empty id list and the alarm is still persisted enabled, the same
+ * state rescheduleOneShotAlarms already tolerates.
+ */
+// Monotonic suffix keeps ids distinct when two quick alarms are created within
+// the same millisecond (back-to-back assistant commands): Date.now() alone
+// collides there, and duplicate ids would make cancelling/toggling one alarm
+// affect the other.
+let quickAlarmSeq = 0;
+
+export async function createQuickAlarm(
+  hour: number,
+  minute: number,
+  label?: string,
+): Promise<Alarm> {
+  const alarm: Alarm = {
+    id: `${Date.now()}-${quickAlarmSeq++}`,
+    hour,
+    minute,
+    label: label?.trim() || 'Alarm',
+    days: [],
+    enabled: true,
+    notificationIds: [],
+  };
+
+  alarm.notificationIds = await scheduleAlarmNotifications(alarm);
+
+  const next = [...(await loadAlarms()), alarm];
+  await saveAlarms(next);
+  listeners.forEach((listener) => listener(next));
+
+  return alarm;
+}
