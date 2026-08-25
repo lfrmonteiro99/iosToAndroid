@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Modal, Pressable } from 'react-native';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, TextInput, Modal, Pressable, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -23,6 +23,7 @@ import {
   useAlert,
 } from '../components';
 import { logger } from '../utils/logger';
+import { maxColumnsFor, maxIconScaleFor } from '../utils/launcherGridGeometry';
 import {
   PERF_BUDGETS,
   getPerfMetrics,
@@ -87,6 +88,8 @@ const LOCK_PIN_LEGACY_KEY = '@lock_pin';
 
 // Home-screen grid density options (issue #503).
 const GRID_COLUMN_VALUES = [3, 4, 5, 6] as const;
+/** Menor coluna oferecida — o fallback se nem esta couber (larguras absurdas). */
+const MIN_GRID_COLUMNS = GRID_COLUMN_VALUES[0];
 const GRID_ROW_VALUES = [4, 5, 6, 7] as const;
 
 const DOCK_LABELS: Record<string, string> = {
@@ -269,16 +272,57 @@ export function LauncherSettingsScreen() {
 
   const perf = usePerfMetrics();
 
+  // ── Colunas x tamanho de ícone: limites mútuos ────────────────────────────
+  //
+  // A geometria da grelha nunca deixa um ícone transbordar: se não cabe na
+  // célula, encolhe. O resultado era um controlo que aceitava tudo e degradava
+  // em silêncio — 6 colunas com ícones a 120% dava ícones a ~93% sem nada a
+  // dizer que o pedido era impossível. Aqui só se oferece o que cabe.
+  const { width: windowWidth } = useWindowDimensions();
+
+  const columnOptions = useMemo(() => {
+    const limit = maxColumnsFor(windowWidth, settings.iconSizeScale);
+    const fitting = GRID_COLUMN_VALUES.filter((c) => c <= limit);
+    // Nunca deixar o controlo vazio: numa largura absurda oferece-se a menor.
+    return fitting.length > 0 ? fitting : [MIN_GRID_COLUMNS];
+  }, [windowWidth, settings.iconSizeScale]);
+
+  // Tecto do slider = o que a densidade escolhida permite, nunca acima da gama.
+  const iconScaleCeiling = useMemo(
+    () => Math.min(ICON_SIZE_SCALE_LARGE, maxIconScaleFor(windowWidth, settings.gridColumns)),
+    [windowWidth, settings.gridColumns],
+  );
+
+  // O valor guardado pode ter ficado fora da lista (guardado 6, e depois o
+  // tamanho do ícone subiu). Mostra-se o maior que ainda cabe em vez de deixar
+  // o controlo sem nada seleccionado.
+  const selectedColumnIndex = Math.max(
+    0,
+    columnOptions.indexOf(
+      columnOptions.includes(settings.gridColumns)
+        ? settings.gridColumns
+        : columnOptions[columnOptions.length - 1],
+    ),
+  );
+
   // iOS «Grande» esconde os nomes das apps — ao chegar ao topo da gama
   // (Large), combina-se com showIconLabels=false num único update atómico.
   // Abaixo do máximo o comportamento fica inalterado: o utilizador continua a
   // controlar showIconLabels pelo switch "Show App Names".
   const handleIconSizeChange = (v: number) => {
-    if (v >= ICON_SIZE_SCALE_LARGE) {
-      updateMany({ iconSizeScale: v, showIconLabels: false });
-    } else {
-      update('iconSizeScale', v);
-    }
+    // Subir o tamanho pode tornar as colunas actuais impossíveis. Baixa-se as
+    // colunas no MESMO update, em vez de guardar um par que a grelha teria de
+    // corrigir por baixo do utilizador.
+    const limit = maxColumnsFor(windowWidth, v);
+    // Escolhido da lista tipada, não calculado: gridColumns é uma união
+    // estreita (3 | 4 | 5 | 6) e um Math.min devolveria um `number` qualquer.
+    const fitting = GRID_COLUMN_VALUES.filter((c) => c <= limit);
+    const largestFitting = fitting.length > 0 ? fitting[fitting.length - 1] : MIN_GRID_COLUMNS;
+    const columns = settings.gridColumns <= largestFitting ? settings.gridColumns : largestFitting;
+    const patch: Partial<typeof settings> = { iconSizeScale: v };
+    if (columns !== settings.gridColumns) patch.gridColumns = columns;
+    if (v >= ICON_SIZE_SCALE_LARGE) patch.showIconLabels = false;
+    updateMany(patch);
   };
 
   const doneButton = (
@@ -333,7 +377,7 @@ export function LauncherSettingsScreen() {
             value={settings.iconSizeScale}
             onValueChange={handleIconSizeChange}
             minimumValue={0.8}
-            maximumValue={ICON_SIZE_SCALE_LARGE}
+            maximumValue={iconScaleCeiling}
           />
         </View>
         <CupertinoListTile
@@ -531,10 +575,15 @@ export function LauncherSettingsScreen() {
         <View style={styles.gridControlRow}>
           <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>Columns</Text>
           <CupertinoSegmentedControl
-            values={GRID_COLUMN_VALUES.map(String)}
-            selectedIndex={GRID_COLUMN_VALUES.indexOf(settings.gridColumns)}
-            onChange={(i) => update('gridColumns', GRID_COLUMN_VALUES[i])}
+            values={columnOptions.map(String)}
+            selectedIndex={selectedColumnIndex}
+            onChange={(i) => update('gridColumns', columnOptions[i])}
           />
+          {columnOptions.length < GRID_COLUMN_VALUES.length && (
+            <Text style={[typography.caption1, { color: colors.secondaryLabel, marginTop: 6 }]}>
+              {`Up to ${columnOptions[columnOptions.length - 1]} columns fit at this icon size. Make icons smaller for more.`}
+            </Text>
+          )}
         </View>
         <View style={styles.gridControlRow}>
           <Text style={[typography.footnote, { color: colors.secondaryLabel, marginBottom: 6 }]}>Rows</Text>

@@ -94,3 +94,47 @@ export function computeLauncherGridGeometry(
     iconRadius: iconSize * ICON_RADIUS_RATIO,
   };
 }
+
+// ─── Limites mútuos entre colunas e tamanho de ícone ────────────────────────
+//
+// `computeLauncherGridGeometry` nunca deixa um ícone transbordar: se não cabe na
+// célula, ENCOLHE. Isso mantém a grelha correcta mas mente ao utilizador — ele
+// escolhe 6 colunas e 120% de tamanho, e o que recebe são ícones a ~90% sem
+// nenhuma indicação de que o pedido não era possível.
+//
+// As duas funções abaixo tornam esse limite explícito para a UI das Settings
+// poder oferecer apenas o que cabe, em vez de aceitar tudo e degradar em
+// silêncio. São puras e derivadas da MESMA aritmética do layout, para não
+// poderem discordar dele.
+
+/**
+ * Número máximo de colunas que caibam à largura dada sem encolher o ícone
+ * abaixo do seu tamanho especificado (§2, escalado por `iconScale`).
+ *
+ * "Cabe" é apenas "o ícone entra na célula". Deliberadamente não se exige uma
+ * goteira mínima extra: a 393dp com ícone a 100% isso reprovaria 5 colunas, que
+ * é uma escolha legítima e cabe (célula 67 >= ícone 60).
+ */
+export function maxColumnsFor(screenWidth: number, iconScale: number = 1): number {
+  const width = Math.max(1, screenWidth);
+  const { horizontalPadding } = computeLauncherGridGeometry(width, 1, iconScale);
+  const available = width - horizontalPadding * 2;
+  const specIconSize = Math.max(1, Math.round(width * ICON_SIZE_RATIO * iconScale));
+  return Math.max(1, Math.floor(available / specIconSize));
+}
+
+/**
+ * Maior escala de ícone que ainda cabe na célula, para a largura e o número de
+ * colunas dados. O inverso de `maxColumnsFor`, para o slider do tamanho poder
+ * limitar-se ao que a densidade escolhida permite.
+ *
+ * Devolve a escala exacta (não arredondada); o chamador é que decide o passo e
+ * o mínimo do seu controlo.
+ */
+export function maxIconScaleFor(screenWidth: number, cols: number): number {
+  const width = Math.max(1, screenWidth);
+  const { cellWidth } = computeLauncherGridGeometry(width, cols, 1);
+  const specIconAtScaleOne = width * ICON_SIZE_RATIO;
+  if (specIconAtScaleOne <= 0) return 1;
+  return cellWidth / specIconAtScaleOne;
+}

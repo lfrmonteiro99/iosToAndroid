@@ -1,5 +1,7 @@
 import {
   computeLauncherGridGeometry,
+  maxColumnsFor,
+  maxIconScaleFor,
   ICON_SIZE_RATIO,
   GRID_PADDING_RATIO,
   ICON_RADIUS_RATIO,
@@ -247,3 +249,92 @@ describe('LauncherHomeScreen: altura do dock deriva do ícone (#501)', () => {
     expect(mod.DOCK_HORIZONTAL_INSET).toBe(10);
   });
 });
+
+// ─── Limites mútuos colunas <-> tamanho de ícone ────────────────────────────
+// A grelha encolhe o ícone quando não cabe, o que é correcto mas silencioso: o
+// utilizador pedia 6 colunas a 120% e recebia ~93% sem aviso. Estas duas
+// funções tornam o limite explícito para as Settings só oferecerem o possível.
+// O que se testa é a COERÊNCIA com o layout: o que elas dizem que cabe tem de
+// caber de facto em computeLauncherGridGeometry.
+
+describe('maxColumnsFor', () => {
+  it('nunca devolve menos de uma coluna', () => {
+    for (const width of [0, -1, 1, 10, 320, 1024]) {
+      expect(maxColumnsFor(width)).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('o que declara caber, cabe — o ícone não é encolhido', () => {
+    for (let width = 320; width <= 1024; width += 7) {
+      for (const scale of [0.8, 1, 1.1, 1.2]) {
+        const cols = maxColumnsFor(width, scale);
+        const g = computeLauncherGridGeometry(width, cols, scale);
+        const spec = Math.round(width * ICON_SIZE_RATIO * scale);
+        // Se caber, o ícone é exactamente o da especificação (não limitado
+        // pela célula).
+        expect(g.iconSize).toBe(Math.min(spec, g.cellWidth));
+        expect(g.cellWidth).toBeGreaterThanOrEqual(spec);
+      }
+    }
+  });
+
+  it('uma coluna a mais já não caberia', () => {
+    for (let width = 320; width <= 1024; width += 7) {
+      const scale = 1;
+      const cols = maxColumnsFor(width, scale);
+      const g = computeLauncherGridGeometry(width, cols + 1, scale);
+      const spec = Math.round(width * ICON_SIZE_RATIO * scale);
+      expect(g.cellWidth).toBeLessThan(spec);
+    }
+  });
+
+  it('ícones maiores permitem menos colunas', () => {
+    for (const width of [360, 393, 412, 440]) {
+      expect(maxColumnsFor(width, 1.2)).toBeLessThanOrEqual(maxColumnsFor(width, 1));
+      expect(maxColumnsFor(width, 1)).toBeLessThanOrEqual(maxColumnsFor(width, 0.8));
+    }
+  });
+
+  it('num telefone típico o máximo a 100% é 5 colunas', () => {
+    // Documenta o caso relatado: 5 colunas é uma escolha legítima e cabe; 6 é
+    // que forçava o encolhimento.
+    for (const width of [360, 393, 412, 428, 440]) {
+      expect(maxColumnsFor(width, 1)).toBe(5);
+    }
+  });
+});
+
+describe('maxIconScaleFor', () => {
+  it('a escala que devolve cabe na célula', () => {
+    for (let width = 320; width <= 1024; width += 7) {
+      for (const cols of [3, 4, 5, 6]) {
+        const scale = maxIconScaleFor(width, cols);
+        const g = computeLauncherGridGeometry(width, cols, scale);
+        expect(g.iconSize).toBeLessThanOrEqual(g.cellWidth);
+      }
+    }
+  });
+
+  it('é o inverso de maxColumnsFor — na escala limite, as colunas ainda cabem', () => {
+    for (const width of [360, 393, 412, 440]) {
+      for (const cols of [3, 4, 5]) {
+        const scale = maxIconScaleFor(width, cols);
+        expect(maxColumnsFor(width, scale)).toBeGreaterThanOrEqual(cols);
+      }
+    }
+  });
+
+  it('mais colunas deixam menos margem para o tamanho do ícone', () => {
+    for (const width of [360, 393, 440]) {
+      expect(maxIconScaleFor(width, 6)).toBeLessThan(maxIconScaleFor(width, 5));
+      expect(maxIconScaleFor(width, 5)).toBeLessThan(maxIconScaleFor(width, 4));
+    }
+  });
+
+  it('a 6 colunas num telefone o ícone tem de ficar abaixo de 100%', () => {
+    for (const width of [360, 393, 412, 440]) {
+      expect(maxIconScaleFor(width, 6)).toBeLessThan(1);
+    }
+  });
+});
+
