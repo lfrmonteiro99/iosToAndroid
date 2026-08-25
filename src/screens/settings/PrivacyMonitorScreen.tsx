@@ -7,7 +7,6 @@ import { CupertinoNavigationBar, CupertinoCard, useAlert } from '../../component
 import { GlassSurface } from '../../components/GlassSurface';
 import {
   toPrivacySensorViews,
-  totalAccessCount,
   type PrivacySensorView,
 } from '../../utils/privacyMonitor';
 import LauncherModule from '../../../modules/launcher-module/src';
@@ -138,7 +137,15 @@ export function PrivacyMonitorScreen({ navigation }: { navigation: AppNavigation
   const ordered = [...views].sort(
     (a, b) => SENSOR_ORDER.indexOf(a.sensor) - SENSOR_ORDER.indexOf(b.sensor),
   );
-  const total = totalAccessCount(report);
+  // The header labels the count as "apps com permissão de sensor". Summing the
+  // per-sensor totals double-counts any app that appears under more than one
+  // sensor (most declare several, e.g. INTERNET), so the number could exceed
+  // the number of installed apps. Count DISTINCT package names instead (#840).
+  const total = report
+    ? new Set(
+        report.sensors.flatMap((s) => (s.topApps ?? []).map((a) => a.packageName)),
+      ).size
+    : 0;
 
   const toggle = (sensor: string) =>
     setExpanded((prev) => ({ ...prev, [sensor]: !prev[sensor] }));

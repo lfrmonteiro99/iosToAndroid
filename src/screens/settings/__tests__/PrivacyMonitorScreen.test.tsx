@@ -74,8 +74,22 @@ describe('PrivacyMonitorScreen', () => {
     expect(await findByText('Microphone')).toBeTruthy();
     expect(await findByText('Location')).toBeTruthy();
     expect(await findByText('Network')).toBeTruthy();
-    // Total = 16 + 0 + 7 + 3 (sum of per-sensor totals = apps with permission)
-    expect(await findByText('26 apps com permissão de sensor')).toBeTruthy();
+    // Header must count DISTINCT packages, not the sum of per-sensor access
+    // counts. The fixture has 4 distinct apps (instagram, whatsapp, maps,
+    // browser) even though the per-sensor totals sum to 26.
+    expect(await findByText('4 apps com permissão de sensor')).toBeTruthy();
+  });
+
+  it('counts DISTINCT package names in the header, not the per-sensor total sum', async () => {
+    // The same app can appear in several sensors' topApps (e.g. most apps
+    // declare INTERNET). The header must de-duplicate by packageName so the
+    // count never exceeds the number of distinct apps. Our fixture sums to 26
+    // across sensors but has only 4 distinct packages.
+    const { findByText, queryByText } = renderScreen();
+    const header = await findByText('4 apps com permissão de sensor');
+    expect(header).toBeTruthy();
+    // The buggy sum (26) must NOT be present in the header text.
+    expect(queryByText('26 apps com permissão de sensor')).toBeNull();
   });
 
   it('hides the per-app breakdown until the card is expanded', async () => {
