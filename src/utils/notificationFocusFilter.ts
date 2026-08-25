@@ -3,6 +3,7 @@ import type { BannerNotification } from '../components/NotificationBanner';
 import {
   routeNotification,
   type NotificationRouteContext,
+  type IncomingNotification,
 } from './notificationAppRules';
 
 // Pure callback used by App.tsx's addNotificationListener to decide whether to
@@ -18,12 +19,18 @@ export function notificationCallbackForFocus(
   focusModeRef: React.MutableRefObject<string>,
   setBanner: (b: BannerNotification) => void,
   routing?: NotificationRouteContext,
+  captureBatched?: (n: IncomingNotification) => void,
 ): void {
   if (!n || seenIds.current.has(n.id)) return;
 
   const ctx: NotificationRouteContext = routing ?? { focusMode: focusModeRef.current };
   const decision = routeNotification(n, ctx);
-  if (decision.action !== 'show') return;
+  if (decision.action !== 'show') {
+    // App configurada para resumo (Scheduled/Digest, issue #630): em vez de
+    // descartar em silêncio, empilha no buffer do Scheduled Summary (#868).
+    if (decision.reason === 'batched') captureBatched?.(n);
+    return;
+  }
 
   if (seenIds.current.size > 200) {
     const first = seenIds.current.values().next().value;
