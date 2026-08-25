@@ -226,21 +226,21 @@ class LauncherModule : Module() {
             if (intent == null) {
                 return@AsyncFunction false  // malformed, not installed, or not launchable
             }
+
+            // Prefer the current Activity as the launching context so Android 10+
+            // (BAL — background activity launch — restrictions) treats this as a
+            // user-initiated start. Calling context.startActivity from the Expo
+            // module's Application context is a *background* start, and the
+            // system silently drops or defers it: the launcher's icon-expand
+            // overlay finishes and unmounts while the target activity never
+            // reaches the foreground — the user sees the launcher get out of the
+            // way but the tapped app never appears. FLAG_ACTIVITY_NEW_TASK is
+            // set both ways because starting from a non-Activity context still
+            // requires it.
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // Suppresses Android's default activity-open animation so it never shows
-            // underneath the JS-side icon-expand transition (#509, §6.3). This is the
-            // one piece of that animation actually controllable from here — what the
-            // launched app itself renders on entry is up to that app.
-            //
-            // ActivityOptions.makeCustomAnimation(context, 0, 0) is used instead of
-            // Activity#overridePendingTransition (deprecated in API 34 in favor of
-            // Activity#overrideActivityTransition) because `context` here is not
-            // guaranteed to be an Activity — launchApp is called from the launcher's
-            // process via FLAG_ACTIVITY_NEW_TASK, and overridePendingTransition is an
-            // Activity-only method. makeCustomAnimation works from any Context and
-            // carries no deprecation on any API level this app targets.
-            val noTransition = ActivityOptions.makeCustomAnimation(context, 0, 0)
-            context.startActivity(intent, noTransition.toBundle())
+            val launcher: Context = appContext.currentActivity ?: context
+            val options = ActivityOptions.makeCustomAnimation(launcher, 0, 0)
+            launcher.startActivity(intent, options.toBundle())
             true
         }
 
