@@ -74,3 +74,58 @@ export function dispatchSetFocusMode(
 ): void {
   applyFocusMode(resolveFocusMode(mode));
 }
+
+export type SmsPermissionResult = 'granted' | 'denied' | 'never_ask_again';
+
+export interface SendMessageDeps {
+  /** False on iOS, where SEND_SMS and the launcher bridge don't exist. */
+  isAndroid: boolean;
+  hasSmsPermission(): Promise<boolean>;
+  requestSmsPermission(): Promise<SmsPermissionResult>;
+  sendSmsNative(to: string, text: string): Promise<boolean>;
+  onPermissionDenied(neverAskAgain: boolean): void;
+  onSent(): void;
+  onError(): void;
+}
+
+/**
+ * Send an SMS, negotiating SEND_SMS permission first when it isn't already
+ * granted (#785, part of #629 — extracted from ConversationScreen.tsx's
+ * `handleSend`, which inlined this so a future Shortcuts "send message"
+ * primitive would have had to duplicate the permission dance instead of
+ * reusing it, the same problem #781 solved for launchApp/setFocusMode).
+ *
+ * A permission-check failure falls through to attempt the native send
+ * anyway, mirroring the original ConversationScreen behaviour: the send
+ * call itself surfaces the real failure instead of a possibly-spurious
+ * permission error.
+ */
+export async function dispatchSendMessage(to: string, text: string, deps: SendMessageDeps): Promise<boolean> {
+  if (!deps.isAndroid) return false;
+
+  try {
+    const already = await deps.hasSmsPermission();
+    if (!already) {
+      const result = await deps.requestSmsPermission();
+      if (result !== 'granted') {
+        deps.onPermissionDenied(result === 'never_ask_again');
+        return false;
+      }
+    }
+  } catch {
+    // Fall through — the native call below will surface the real failure.
+  }
+
+  try {
+    const success = await deps.sendSmsNative(to, text);
+    if (success) {
+      deps.onSent();
+    } else {
+      deps.onError();
+    }
+    return success;
+  } catch {
+    deps.onError();
+    return false;
+  }
+}

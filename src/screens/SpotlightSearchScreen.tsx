@@ -20,7 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
-import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
+import { resolveInternalRoute } from '../utils/builtInAppRoutes';
 
 // ---------------------------------------------------------------------------
 // Fuzzy matching
@@ -365,12 +365,19 @@ export function SpotlightSearchScreen({ navigation }: { navigation: AppNavigatio
     setHistory(updatedHistory);
 
     switch (item.type) {
-      case 'app':
-        // Built-in virtual apps (Weather, Calculator, …) must open the in-app
-        // iOS-style screen, not be handed to the native launcher bridge — see
-        // launchBuiltInOrExternal.
-        launchBuiltInOrExternal(item.app.packageName, navigation, launchApp);
+      case 'app': {
+        // #701: a app Android que duplica um built-in (Google Photos, Google
+        // Clock, …) é listada aqui com o nome do nosso ecrã, por isso resolve-se
+        // o alias para a rota interna em vez de a lançar externamente.
+        const internalRoute = resolveInternalRoute(item.app.packageName);
+        if (internalRoute) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rotas de built-ins não têm params; os overloads de navigate exigem a spec
+          navigation.navigate(internalRoute as any);
+        } else {
+          launchApp(item.app.packageName);
+        }
         break;
+      }
       case 'contact':
         navigation.navigate('ContactDetail', { contactId: item.contactId });
         break;

@@ -3,19 +3,27 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { GlassSurface } from './GlassSurface';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../theme/ThemeContext';
 import { hapticSelection } from '../utils/haptics';
+import type { NavItem } from './navigation/navItems';
 
-const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
-  Home: { active: 'home', inactive: 'home-outline' },
-  Phone: { active: 'call', inactive: 'call-outline' },
-  Messages: { active: 'chatbubble', inactive: 'chatbubble-outline' },
-  Contacts: { active: 'people', inactive: 'people-outline' },
-  Settings: { active: 'settings', inactive: 'settings-outline' },
-};
+export interface CupertinoTabBarProps {
+  items: NavItem[];
+  /** Currently selected item id. */
+  activeId: string;
+  /** Called with the item id when the user picks a different destination. */
+  onSelect: (id: string) => void;
+}
 
-export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+/**
+ * Compact bottom tab bar for the "compact width" (phone) form factor (#633).
+ *
+ * Purely controlled — the parent owns `activeId` and the selection callback and
+ * decides what navigation actually happens. This keeps it decoupled from any
+ * specific React Navigation navigator so the SAME item list drives the tablet
+ * sidebar (`CupertinoSidebar`) and this phone bar.
+ */
+export function CupertinoTabBar({ items, activeId, onSelect }: CupertinoTabBarProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -34,38 +42,28 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
       ]}
     >
       <View style={styles.tabRow}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const label = options.tabBarLabel ?? options.title ?? route.name;
-          const isFocused = state.index === index;
-
-          const icons = TAB_ICONS[route.name] || { active: 'ellipse', inactive: 'ellipse-outline' };
-          const iconName = isFocused ? icons.active : icons.inactive;
-          const color = isFocused ? colors.systemBlue : colors.systemGray;
+        {items.map((item) => {
+          const isActive = item.id === activeId;
+          const color = isActive ? colors.systemBlue : colors.systemGray;
 
           const onPress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              hapticSelection();
-              navigation.navigate(route.name);
-            }
+            // Double-tap safety: re-selecting the active tab is a no-op.
+            if (isActive) return;
+            hapticSelection();
+            onSelect(item.id);
           };
 
           return (
             <Pressable
-              key={route.key}
+              key={item.id}
+              testID={`tab-bar-item-${item.id}`}
               onPress={onPress}
               accessibilityRole="tab"
-              accessibilityLabel={label as string}
-              accessibilityState={{ selected: isFocused }}
+              accessibilityLabel={item.label}
+              accessibilityState={{ selected: isActive }}
               style={styles.tab}
             >
-              <Ionicons name={iconName} size={25} color={color} />
+              <Ionicons name={item.icon} size={25} color={color} />
               <Text
                 numberOfLines={1}
                 style={[
@@ -73,7 +71,7 @@ export function CupertinoTabBar({ state, descriptors, navigation }: BottomTabBar
                   { color, marginTop: 2 },
                 ]}
               >
-                {label as string}
+                {item.label}
               </Text>
             </Pressable>
           );

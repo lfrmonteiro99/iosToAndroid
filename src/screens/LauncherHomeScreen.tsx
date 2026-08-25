@@ -44,6 +44,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { Shape } from '../theme/CupertinoTheme';
 import { useDevice } from '../store/DeviceStore';
 import { useFolders, AppFolder } from '../store/FoldersStore';
+import { ResponsiveNavShell } from '../components/ResponsiveNavShell';
+import { TABLET_NAV_ITEMS } from '../components/navigation/navItems';
 import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
@@ -90,6 +92,17 @@ import { computeDragTargetIndex, computeEdgeScrollDirection } from '../utils/lau
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+// #651-B: maps ResponsiveNavShell's nav item ids (TABLET_NAV_ITEMS) to the
+// RootStackParamList route each one opens, so picking a sidebar destination
+// on regular-width windows navigates to the matching screen.
+const NAV_ITEM_TO_ROUTE: Record<string, keyof RootStackParamList> = {
+  Home: 'HomeMain',
+  Phone: 'Phone',
+  Messages: 'Messages',
+  Contacts: 'Contacts',
+  Settings: 'Settings',
+};
 // Default geometry (4 cols, scale 1) — dock, folder-overlay icons, and this
 // module's own exports intentionally stay pinned to this regardless of the
 // user's grid density settings (issue #503). The actual home-screen grid
@@ -169,56 +182,19 @@ export function computePagerRubberBandOffset(
   return clampWithRubberBand(translationX, 0, 0, dimension);
 }
 
-// Built-in app routing: packageName → navigation screen name
-export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
-  'com.iostoandroid.phone': 'Phone',
-  'com.iostoandroid.messages': 'Messages',
-  'com.iostoandroid.contacts': 'Contacts',
-  'com.iostoandroid.settings': 'Settings',
-  'com.iostoandroid.weather': 'Weather',
-  'com.iostoandroid.health': 'Health',
-  'com.iostoandroid.clock': 'Clock',
-  'com.iostoandroid.camera': 'Camera',
-  'com.iostoandroid.photos': 'Photos',
-  'com.iostoandroid.calendar': 'Calendar',
-  'com.iostoandroid.calculator': 'Calculator',
-  'com.iostoandroid.notes': 'Notes',
-  'com.iostoandroid.reminders': 'Reminders',
-  'com.iostoandroid.mail': 'Mail',
-  'com.iostoandroid.browser': 'Browser',
-  'com.iostoandroid.wallet': 'Wallet',
-};
-
-// Known Android packages that duplicate a built-in app (issue #438).
-//
-// The home screen shows a virtual icon for every entry of BUILT_IN_APPS, which
-// opens the internal iOS-style screen. The real Android app that serves the
-// same function has a different packageName, so it used to pass through the
-// grid filter untouched and render a second icon with the SAME label that
-// launched an external app instead — one "Phone" going to the internal screen,
-// another going to the Google Dialer.
-//
-// Product decision (issue #438, option 1): the Android duplicate is hidden from
-// the home screen grid. This is an explicit alias list, not a heuristic: dialer
-// / messaging package names vary by OEM, so unlisted equivalents are simply not
-// deduped rather than being guessed at. The App Library (AppLibraryScreen) is
-// unaffected and keeps listing everything that is installed.
-export const BUILT_IN_APP_ANDROID_ALIASES: Record<string, readonly string[]> = {
-  'com.iostoandroid.phone': ['com.google.android.dialer', 'com.android.dialer'],
-  'com.iostoandroid.messages': ['com.google.android.apps.messaging', 'com.android.messaging'],
-  'com.iostoandroid.contacts': ['com.google.android.contacts', 'com.android.contacts'],
-  'com.iostoandroid.settings': ['com.android.settings'],
-  'com.iostoandroid.clock': ['com.google.android.deskclock', 'com.android.deskclock'],
-  'com.iostoandroid.camera': ['com.google.android.GoogleCamera', 'com.android.camera2'],
-  'com.iostoandroid.photos': ['com.google.android.apps.photos'],
-  'com.iostoandroid.calendar': ['com.google.android.calendar', 'com.android.calendar'],
-  'com.iostoandroid.calculator': ['com.google.android.calculator', 'com.android.calculator2'],
-};
-
-// Flat set of every Android package that duplicates a built-in app.
-export const BUILT_IN_DUPLICATE_PACKAGES: ReadonlySet<string> = new Set(
-  Object.values(BUILT_IN_APP_ANDROID_ALIASES).flat(),
-);
+// A tabela de routing dos built-ins mudou para src/utils/builtInAppRoutes.ts
+// (#701) para poder ser usada também pela App Library e pelo Spotlight sem
+// criar um ciclo de imports (este ficheiro importa AppLibraryScreen). Re-exporta-se
+// daqui para não quebrar os consumidores existentes.
+export {
+  BUILT_IN_APPS,
+  BUILT_IN_APP_ANDROID_ALIASES,
+  BUILT_IN_DUPLICATE_PACKAGES,
+} from '../utils/builtInAppRoutes';
+import {
+  BUILT_IN_APPS,
+  BUILT_IN_DUPLICATE_PACKAGES,
+} from '../utils/builtInAppRoutes';
 
 // Icon config for virtual (built-in) apps rendered in dock/grid
 export const VIRTUAL_ICON_CONFIG: Record<string, {
@@ -944,6 +920,25 @@ export function NonAndroidFallback() {
 export function LauncherHomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<AppNavigationProp>();
+
+  // #651-B: the sidebar shown on regular-width windows (ResponsiveNavShell)
+  // selects a destination from TABLET_NAV_ITEMS/NAV_ITEM_TO_ROUTE and pushes
+  // the matching route. LauncherHomeScreen only ever renders while "Home" is
+  // the active destination — a pushed screen (Phone/Messages/...) covers it
+  // full-screen rather than composing beside it — so activeId is always
+  // "Home" here; this stays a plain constant (not `useNavigationState`,
+  // which every LauncherHomeScreen.*.test.tsx locally mocks
+  // `@react-navigation/native` without) on purpose.
+  const activeNavId = 'Home';
+  const handleNavSelect = useCallback(
+    (id: string) => {
+      const route = NAV_ITEM_TO_ROUTE[id];
+      if (route) {
+        navigation.navigate(route as never);
+      }
+    },
+    [navigation],
+  );
 
   const {
     apps,
@@ -1815,6 +1810,11 @@ export function LauncherHomeScreen() {
     });
 
   return (
+    <ResponsiveNavShell
+      navItems={TABLET_NAV_ITEMS}
+      activeId={activeNavId}
+      onSelect={handleNavSelect}
+    >
     <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture, lastPageRubberBandGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
@@ -2046,7 +2046,7 @@ export function LauncherHomeScreen() {
           key="app-library"
           style={[styles.page, styles.appLibraryPage, lastPageOverscrollStyle]}
         >
-          <AppLibraryContent />
+          <AppLibraryContent navigation={navigation} />
         </Animated.View>
       </ScrollView>
 
@@ -2175,6 +2175,7 @@ export function LauncherHomeScreen() {
       )}
       </Animated.View>
     </GestureDetector>
+    </ResponsiveNavShell>
   );
 }
 

@@ -19,8 +19,10 @@ import { FoldersProvider } from './src/store/FoldersStore';
 import { BookmarksProvider } from './src/store/BookmarksStore';
 import { ReadingListProvider } from './src/store/ReadingListStore';
 import { WalletProvider } from './src/store/WalletStore';
+import { CardProvider } from './src/store/CardStore';
 import { HealthProvider } from './src/store/HealthStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
+import { linking } from './src/navigation/linking';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
@@ -37,6 +39,12 @@ import { suppressAutoLock } from './src/utils/permissions';
 import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
+import { releaseBatched } from './src/utils/scheduledSummaryBuffer';
+import {
+  createScheduledSummaryTracker,
+  runScheduledSummaryCheck,
+  SCHEDULED_SUMMARY_CHECK_MS,
+} from './src/utils/scheduledSummaryScheduler';
 import { markProcessStartFromAge } from './src/utils/perfMetrics';
 import { useFocusSchedule } from './src/hooks/useFocusSchedule';
 import { useContextEngine } from './src/hooks/useContextEngine';
@@ -328,6 +336,30 @@ function AppContent() {
     return () => { if (unsub) unsub(); };
   }, [device.isReady, isLocked]);
 
+  // Scheduled Summary (#869, sub-issue 2 de #630/#838): agrega as notificações
+  // que routeNotification suprimiu com reason:'batched' (apps em política
+  // 'scheduled'/'digest') e liberta-as num único banner-resumo nos slots
+  // configurados em scheduledSummaryIdx (0=Off, 1=Morning 8:00, 2=Evening
+  // 18:00, 3=Both). Com idx===0 nenhum timer é registado — as notificações
+  // embaladas continuam suprimidas, tal como antes.
+  const scheduledSummaryTrackerRef = useRef(createScheduledSummaryTracker());
+  useEffect(() => {
+    if (settings.scheduledSummaryIdx === 0) return;
+
+    const check = () => {
+      void runScheduledSummaryCheck({
+        now: new Date(),
+        scheduledSummaryIdx: settings.scheduledSummaryIdx,
+        tracker: scheduledSummaryTrackerRef.current,
+        releaseBatched,
+        setBanner,
+      });
+    };
+    check();
+    const id = setInterval(check, SCHEDULED_SUMMARY_CHECK_MS);
+    return () => clearInterval(id);
+  }, [settings.scheduledSummaryIdx]);
+
   if (!fontsLoaded && !fontError) return null;
   if (showOnboarding === null) return null;
 
@@ -351,7 +383,7 @@ function AppContent() {
       <StatusBar style={isDark ? 'light' : 'dark'} hidden />
       <ReachabilityShifter>
         <GestureHost>
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <TabNavigator />
           </NavigationContainer>
         </GestureHost>
@@ -430,6 +462,7 @@ export default function App() {
                 <ReadingListProvider>
                 <AssistiveTouchProvider>
                 <WalletProvider>
+                <CardProvider>
                 {/* Health (#276): o HealthScreen chama useHealth(), que lança
                     sem provider acima — abrir o ícone Health no launcher real
                     rebentava. Montado aqui, ao lado dos restantes stores. */}
@@ -440,6 +473,7 @@ export default function App() {
                   </AlertProvider>
                 </ErrorBoundary>
                 </HealthProvider>
+                </CardProvider>
                 </WalletProvider>
                 </AssistiveTouchProvider>
                 </ReadingListProvider>

@@ -36,21 +36,15 @@ import {
   useWidgetMap,
   type WidgetType,
 } from '../widgets/TodayWidgets';
+import {
+  computeWidgetGrid,
+} from '../widgets/widgetGrid';
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
 // (side-by-side pairs); 'medium'/'large' widgets span both columns, with
 // 'large' getting extra vertical room for denser content (e.g. event lists).
-// Mirrors the Home screen widget area sizing (#654/#655).
-type WidgetSize = 'small' | 'medium' | 'large';
-
-const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
-  battery: 'small',
-  storage: 'small',
-  weather: 'medium',
-  upNext: 'large',
-  messages: 'small',
-  screenTime: 'small',
-};
+// Sizes and packing live in the framework-free src/widgets/widgetGrid.ts so
+// they stay unit-testable in isolation (#809).
 
 // ---------------------------------------------------------------------------
 // Date formatting
@@ -321,17 +315,17 @@ export function TodayViewScreen({ navigation }: { navigation: AppNavigationProp 
               <>
                 {loaded && (
                   <View style={styles.widgetGrid}>
-                    {enabled.map((type) => (
+                    {computeWidgetGrid(enabled).map((cell) => (
                       <View
-                        key={type}
-                        testID={`widget-cell-${type}`}
+                        key={cell.type}
+                        testID={`widget-cell-${cell.type}`}
                         style={[
                           styles.widgetCell,
-                          WIDGET_SIZES[type] === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
-                          WIDGET_SIZES[type] === 'large' && styles.widgetCellLarge,
+                          cell.size === 'small' ? styles.widgetCellSmall : styles.widgetCellFull,
+                          cell.size === 'large' && styles.widgetCellLarge,
                         ]}
                       >
-                        {widgetMap[type]}
+                        {widgetMap[cell.type]}
                       </View>
                     ))}
                   </View>
