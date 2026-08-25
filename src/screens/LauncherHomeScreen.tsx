@@ -220,6 +220,9 @@ export const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
   'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
   'com.iostoandroid.wallet': { icon: 'wallet', bg: '#5856D6', gradient: ['#7D7AFF', '#5856D6'], iconSize: 32 },
+  'com.iostoandroid.maps': { icon: 'map', bg: '#34C759', gradient: ['#5BD96B', '#1FA84A'], iconSize: 32 },
+  'com.iostoandroid.findmy': { icon: 'locate', bg: '#34C759', gradient: ['#5BD96B', '#1FA84A'], iconSize: 32 },
+  'com.iostoandroid.appstore': { icon: 'logo-apple-appstore', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
 };
 
 // ---------------------------------------------------------------------------
@@ -513,6 +516,7 @@ const AppIcon = React.memo(function AppIcon({
           <SystemAppIcon
             testID={`app-icon-box-${app.packageName}`}
             icon={virtualCfg.icon}
+            packageName={app.packageName}
             size={iconSize}
             gradient={virtualCfg.gradient}
             bg={virtualCfg.bg}

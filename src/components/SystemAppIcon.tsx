@@ -22,6 +22,7 @@ import React from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { APP_ICON_ARTWORK, type IconArtwork } from './appIcons';
 
 export interface SystemAppIconProps {
   /** Ionicons glyph name (filled variant preferred). */
@@ -41,6 +42,16 @@ export interface SystemAppIconProps {
    * tint silhouette with a white glyph, overriding gradient/gloss.
    */
   tint?: string | null;
+  /**
+   * Built-in package name. When `appIcons` has artwork for it, that artwork is
+   * drawn instead of the glyph-on-gradient tile: most iOS stock icons are not a
+   * pictogram on a coloured square (Clock, Photos, Calculator, Calendar, Notes,
+   * Reminders, Contacts, Wallet and Health all sit on a white or near-black
+   * ground). Packages without artwork keep the glyph treatment unchanged.
+   */
+  packageName?: string;
+  /** Explicit artwork override, mostly for tests and previews. */
+  artwork?: IconArtwork;
   /** Forwarded for tests: `app-icon-box-<packageName>`. */
   testID?: string;
   style?: ViewStyle;
@@ -57,6 +68,8 @@ export function SystemAppIcon({
   gloss = true,
   iconSize,
   tint,
+  packageName,
+  artwork,
   testID,
   style,
 }: SystemAppIconProps) {
@@ -64,6 +77,10 @@ export function SystemAppIcon({
   const glyph = iconSize ?? Math.round(size * 0.57);
   const isTinted = typeof tint === 'string' && tint.length > 0;
   const colors = gradient ?? [bg ?? '#8E8E93', bg ?? '#636366'];
+  // Tinted mode keeps the silhouette treatment for every app: a tint is a
+  // single-colour stencil, so full-colour artwork has nothing to contribute to
+  // it and would defeat the setting.
+  const Artwork = isTinted ? undefined : artwork ?? (packageName ? APP_ICON_ARTWORK[packageName] : undefined);
   return (
     <View
       testID={testID}
@@ -83,32 +100,37 @@ export function SystemAppIcon({
         style,
       ]}
     >
-      {isTinted ? (
-        // Tinted mode: solid tint silhouette + white glyph.
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+      {Artwork ? (
+        // Artwork owns the whole surface — ground included, since many of these
+        // icons are white or near-black rather than a tinted tile. No gloss over
+        // it either: the glassy sheen is an iOS 6 trait, and iOS icons have been
+        // flat since iOS 7.
+        <Artwork size={size} />
       ) : (
-        <LinearGradient
-          colors={colors}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+        <>
+          {isTinted ? (
+            // Tinted mode: solid tint silhouette + white glyph.
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+          ) : (
+            <LinearGradient
+              colors={colors}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          {/* Gloss: white sheen fading out across the top third of the tile. */}
+          {!isTinted && gloss && (
+            <LinearGradient
+              colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.0)']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 0.55 }}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          <Ionicons name={icon} size={glyph} color="#ffffff" style={styles.glyph} />
+        </>
       )}
-      {/* Gloss: white sheen fading out across the top third of the tile. */}
-      {!isTinted && gloss && (
-        <LinearGradient
-          colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.0)']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 0.55 }}
-          style={StyleSheet.absoluteFill}
-        />
-      )}
-      <Ionicons
-        name={icon}
-        size={glyph}
-        color={isTinted ? '#ffffff' : '#ffffff'}
-        style={styles.glyph}
-      />
     </View>
   );
 }

@@ -81,8 +81,13 @@ describe('LauncherHomeScreen built-in icons for Notes, Reminders, Mail (#442)', 
   it('uses a themed icon for each, not the generic fallback glyph ("apps")', () => {
     const { getByLabelText } = render(<LauncherHomeScreen />);
     for (const label of ['Open Notes', 'Open Reminders', 'Open Mail']) {
-      const icon = within(getByLabelText(label)).UNSAFE_getByType(Ionicons);
-      expect(icon.props.name).not.toBe('apps');
+      // queryAll, not getByType: Notes and Reminders are now drawn as composed
+      // artwork (white ground, ruled lines, coloured dots) with no Ionicons in
+      // the tree at all, which satisfies "not the fallback glyph" more strongly
+      // than a themed glyph did. Mail is still a white pictogram on a gradient,
+      // as it is on iOS. The invariant is that nothing renders `apps`.
+      const glyphs = within(getByLabelText(label)).UNSAFE_queryAllByType(Ionicons);
+      expect(glyphs.map((g) => g.props.name)).not.toContain('apps');
     }
   });
 

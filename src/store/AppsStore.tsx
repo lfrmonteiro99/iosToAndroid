@@ -298,6 +298,15 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.reminders': { name: 'Reminders', packageName: 'com.iostoandroid.reminders', icon: '', isSystem: false },
   'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
   'com.iostoandroid.wallet': { name: 'Wallet', packageName: 'com.iostoandroid.wallet', icon: '', isSystem: false },
+  // Safari and Shortcuts were in BUILT_IN_APPS (so the grid drew them) but
+  // missing here, which is the set used to keep our own fake packages out of
+  // "real installed apps" views like the App Store's Updates list. Maps, Find
+  // My and App Store are newly surfaced on the grid and need both.
+  'com.iostoandroid.browser': { name: 'Safari', packageName: 'com.iostoandroid.browser', icon: '', isSystem: false },
+  'com.iostoandroid.shortcuts': { name: 'Shortcuts', packageName: 'com.iostoandroid.shortcuts', icon: '', isSystem: false },
+  'com.iostoandroid.maps': { name: 'Maps', packageName: 'com.iostoandroid.maps', icon: '', isSystem: false },
+  'com.iostoandroid.findmy': { name: 'Find My', packageName: 'com.iostoandroid.findmy', icon: '', isSystem: false },
+  'com.iostoandroid.appstore': { name: 'App Store', packageName: 'com.iostoandroid.appstore', icon: '', isSystem: false },
 };
 
 // Single source of truth for this app's own virtual built-ins. Every entry in
