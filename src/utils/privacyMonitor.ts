@@ -7,7 +7,8 @@ import type { PrivacyReport, PrivacySensorSummary, PrivacySensorUsage } from '..
  * derived shapes:
  *  - a ranked, absolute per-app breakdown so the longest bar is fully scaled;
  *  - a normalized 0..1 ratio per app so each card's bars are comparable
- *    regardless of whether that sensor was hit 4 or 400 times.
+ *    regardless of which sensor; count is the membership flag (always 1), so
+ *    normalization is by max-per-sensor only.
  *
  * These are pure functions: no React, no LauncherModule, no clock. That keeps
  * the bar math unit-testable in isolation (the red step proves the test is
@@ -29,8 +30,8 @@ export interface PrivacySensorView extends PrivacySensorSummary {
 
 /**
  * Turn one sensor summary into a view with a ranked, normalized per-app
- * breakdown. Apps with count <= 0 are dropped (AppOps occasionally reports a
- * zero-length op entry); an otherwise-empty sensor yields `hasAccesses:false`
+ * breakdown. Apps with count <= 0 are dropped defensively (native can emit
+ * partial entries); an otherwise-empty sensor yields `hasAccesses:false`
  * and an empty breakdown rather than a divide-by-zero NaN ratio.
  */
 export function sensorBreakdown(summary: PrivacySensorSummary): PrivacyAppBreakdownRow[] {
