@@ -14,6 +14,7 @@ import {
 import {
   SMART_BATTERY_PROFILES,
   resolveActiveProfile,
+  getProfileEffects,
   SMART_BATTERY_THRESHOLD_MIN,
   SMART_BATTERY_THRESHOLD_MAX,
 } from '../../utils/smartBatteryProfiles';
@@ -36,7 +37,7 @@ export function BatteryScreen({ navigation }: { navigation: AppNavigationProp })
   const { theme, typography, spacing, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
+  const { settings, update, updateMany } = useSettings();
   const { battery } = useDevice();
 
   const batteryLevel = Math.round(battery.level * 100);
@@ -51,6 +52,15 @@ export function BatteryScreen({ navigation }: { navigation: AppNavigationProp })
     manualProfile: settings.smartBatteryProfile,
   });
   const automaticActive = resolved.automatic && resolved.profile === 'extremeSaver';
+
+  // A matriz de efeitos (lowPowerMode/backgroundAppRefresh) só é significativa
+  // se aplicada aos settings reais. Quando o trigger automático dispara, ele
+  // sobrepõe-se ao perfil manual e os efeitos têm de seguir — não só o badge.
+  React.useEffect(() => {
+    if (resolved.automatic) {
+      updateMany(getProfileEffects(resolved.profile));
+    }
+  }, [resolved.automatic, resolved.profile, updateMany]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -150,7 +160,10 @@ export function BatteryScreen({ navigation }: { navigation: AppNavigationProp })
                       ) : undefined
                     }
                     showChevron={false}
-                    onPress={() => update('smartBatteryProfile', profile.id)}
+                    onPress={() => {
+                      update('smartBatteryProfile', profile.id);
+                      updateMany(getProfileEffects(profile.id));
+                    }}
                   />
                 </View>
               );

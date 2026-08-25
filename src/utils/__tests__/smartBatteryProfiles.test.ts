@@ -46,8 +46,6 @@ describe('getProfileEffects', () => {
     expect(getProfileEffects('normal')).toEqual({
       lowPowerMode: false,
       backgroundAppRefresh: 'wifi',
-      notificationDelayNonCritical: false,
-      reducePolling: true,
     });
   });
 
@@ -55,35 +53,29 @@ describe('getProfileEffects', () => {
     expect(getProfileEffects('performance')).toEqual({
       lowPowerMode: false,
       backgroundAppRefresh: 'wifiAndCellular',
-      notificationDelayNonCritical: false,
-      reducePolling: false,
     });
   });
 
   it('extremeSaver aplica o conjunto de regras do <30% (issue)', () => {
-    // Regra documentada: < 30% -> disable sync, reduzir polling, delay
-    // non-critical notifications, disable background work.
+    // Regra documentada: < 30% -> disable sync + disable background work.
+    // (reducePolling/notificationDelayNonCritical não têm consumidor na app,
+    // por isso não entram na matriz — ver comentário no topo do módulo.)
     expect(getProfileEffects('extremeSaver')).toEqual({
       lowPowerMode: true,
       backgroundAppRefresh: 'off',
-      notificationDelayNonCritical: true,
-      reducePolling: true,
     });
   });
 
-  it('sleep difere de extremeSaver (ambos throttled mas distintos)', () => {
+  it('sleep difere de extremeSaver apenas na intenção, não no efeito', () => {
     const sleep = getProfileEffects('sleep');
     expect(sleep.lowPowerMode).toBe(true);
     expect(sleep.backgroundAppRefresh).toBe('off');
-    expect(sleep.notificationDelayNonCritical).toBe(true);
   });
 
-  it('travel usa wifi (não off) mas mantém low power + delay', () => {
+  it('travel usa wifi (não off) mas mantém low power', () => {
     expect(getProfileEffects('travel')).toEqual({
       lowPowerMode: true,
       backgroundAppRefresh: 'wifi',
-      notificationDelayNonCritical: true,
-      reducePolling: true,
     });
   });
 });

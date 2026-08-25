@@ -3,9 +3,11 @@ import { render, fireEvent, within } from '../../../test-utils';
 import { BatteryScreen } from '../BatteryScreen';
 
 const mockUpdate = jest.fn();
+const mockUpdateMany = jest.fn();
 const baseSettings = {
   lowPowerMode: false,
   batteryPercentage: true,
+  backgroundAppRefresh: 'wifi',
   smartBatteryProfile: 'normal',
   autoBatteryProfile: false,
   smartBatteryThreshold: 30,
@@ -16,12 +18,16 @@ const baseSettings = {
 const mockSettings = { ...baseSettings };
 
 jest.mock('../../../store/SettingsStore', () => ({
-  useSettings: jest.fn(() => ({ settings: mockSettings, update: mockUpdate })),
+  useSettings: jest.fn(() => ({ settings: mockSettings, update: mockUpdate, updateMany: mockUpdateMany })),
   SettingsProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+const baseBattery = { level: 0.72, isCharging: false };
+// Bateria mutável via mock factory, mesmo padrão de `mockSettings`.
+const mockBattery = { ...baseBattery };
+
 jest.mock('../../../store/DeviceStore', () => ({
-  useDevice: () => ({ battery: { level: 0.72, isCharging: false } }),
+  useDevice: jest.fn(() => ({ battery: mockBattery })),
   DeviceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DeviceContext: null,
 }));
@@ -33,6 +39,7 @@ describe('BatteryScreen', () => {
     jest.clearAllMocks();
     // Restaura o perfil base antes de cada teste.
     Object.assign(mockSettings, baseSettings);
+    Object.assign(mockBattery, baseBattery);
   });
 
   it('renders without crashing', () => {
@@ -125,5 +132,54 @@ describe('BatteryScreen', () => {
     const switches = getAllByRole('switch');
     fireEvent.press(switches[2]);
     expect(mockUpdate).toHaveBeenCalledWith('autoBatteryProfile', true);
+  });
+
+  // ─── Rules engine wiring (retrabalho #631 — reviewer feedback) ───────
+  // getProfileEffects() calculava a matriz mas nunca era aplicada a settings
+  // reais. Selecionar um perfil (ou o trigger automático disparar) tem de se
+  // traduzir em lowPowerMode/backgroundAppRefresh reais, não só no id gravado.
+
+  it('selecting Extreme Saver applies its real effects via updateMany', () => {
+    const { getByText } = render(<BatteryScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Extreme Saver'));
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      lowPowerMode: true,
+      backgroundAppRefresh: 'off',
+    });
+  });
+
+  it('selecting Performance applies its (non-restrictive) effects too', () => {
+    const { getByText } = render(<BatteryScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Performance'));
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      lowPowerMode: false,
+      backgroundAppRefresh: 'wifiAndCellular',
+    });
+  });
+
+  it('selecting Travel applies wifi-only background refresh, not off', () => {
+    const { getByText } = render(<BatteryScreen navigation={mockNavigation as never} />);
+    fireEvent.press(getByText('Travel'));
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      lowPowerMode: true,
+      backgroundAppRefresh: 'wifi',
+    });
+  });
+
+  it('the automatic threshold trigger applies Extreme Saver effects, not just the badge', () => {
+    Object.assign(mockSettings, { autoBatteryProfile: true, smartBatteryThreshold: 30 });
+    Object.assign(mockBattery, { level: 0.1, isCharging: false });
+    render(<BatteryScreen navigation={mockNavigation as never} />);
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      lowPowerMode: true,
+      backgroundAppRefresh: 'off',
+    });
+  });
+
+  it('does not force effects while the automatic trigger has not fired', () => {
+    // battery 72%, autoBatteryProfile off, manual profile 'normal' (baseSettings)
+    // -> resolveActiveProfile stays manual/non-automatic; no effects are forced.
+    render(<BatteryScreen navigation={mockNavigation as never} />);
+    expect(mockUpdateMany).not.toHaveBeenCalled();
   });
 });

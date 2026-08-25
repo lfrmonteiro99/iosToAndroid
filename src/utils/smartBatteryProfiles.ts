@@ -5,11 +5,16 @@
  * nível. Isto acrescenta camadas de perfil (Normal / Performance / Extreme
  * Saver / Sleep / Travel) com regras por threshold e um trigger automático.
  *
- * O perfil controla o comportamento da PRÓPRIA app + algumas integrações de
- * sistema (não todas as políticas internas do Android). A regra documentada no
- * issue para bateria < 30% é: disable sync, reduzir polling, delay de
- * notificações non-critical, disable de background work — e é essa a matriz de
- * efeitos do Extreme Saver (e dos demais perfis throttled, com matizes).
+ * O perfil controla o comportamento da PRÓPRIA app através de settings que já
+ * existem e já têm consumidor: `lowPowerMode` e `backgroundAppRefresh`. A regra
+ * documentada no issue para bateria < 30% inclui também "reduzir polling" e
+ * "delay de notificações non-critical" — mas a app não tem nenhum scheduler de
+ * polling nem fila de notificações não-críticas para essas flags controlarem,
+ * por isso ficam fora da matriz de efeitos (dado morto sem consumidor é pior
+ * que scope reduzido). Ficam apenas os dois efeitos que ligam a comportamento
+ * real, seguindo exactamente o padrão de `getPerformanceProfileTriggers` em
+ * `performanceProfile.ts` (patch de `Partial<SettingsState>` aplicado via
+ * `updateMany`).
  *
  * Tudo o que sai do AsyncStorage é tratado como não confiável, por isso
  * `normalizeSmartBatteryProfile` é o único ponto de validação do id guardado,
@@ -34,16 +39,12 @@ export interface SmartBatteryProfileMeta {
 
 /**
  * Consequências práticas de um perfil sobre o comportamento da app.
- *   lowPowerMode                  -> liga o Low Power Mode do iOS
- *   backgroundAppRefresh          -> mapeia para o setting homónimo ('off' desliga)
- *   notificationDelayNonCritical  -> atrasa notificações não-críticas
- *   reducePolling                 -> reduz a cadência de polling da app
+ *   lowPowerMode          -> liga o Low Power Mode do iOS
+ *   backgroundAppRefresh  -> mapeia para o setting homónimo ('off' desliga)
  */
 export interface SmartBatteryEffects {
   lowPowerMode: boolean;
   backgroundAppRefresh: 'off' | 'wifi' | 'wifiAndCellular';
-  notificationDelayNonCritical: boolean;
-  reducePolling: boolean;
 }
 
 /** Catálogo ordenado dos perfis para a UI (ordem de apresentação). */
@@ -63,19 +64,19 @@ export const SMART_BATTERY_PROFILES: SmartBatteryProfileMeta[] = [
   {
     id: 'extremeSaver',
     label: 'Extreme Saver',
-    description: 'Disable sync, background work and delays non-critical alerts.',
+    description: 'Low Power Mode on, background sync disabled.',
     icon: 'battery-dead-outline',
   },
   {
     id: 'sleep',
     label: 'Sleep',
-    description: 'Quiet mode: no background, only critical notifications.',
+    description: 'Low Power Mode on, background sync disabled for a quiet night.',
     icon: 'moon-outline',
   },
   {
     id: 'travel',
     label: 'Travel',
-    description: 'Low power on Wi-Fi, keeps essential sync for trips.',
+    description: 'Low Power Mode on, background sync limited to Wi-Fi.',
     icon: 'airplane-outline',
   },
 ];
@@ -96,37 +97,27 @@ export function getProfileEffects(profile: SmartBatteryProfile): SmartBatteryEff
       return {
         lowPowerMode: false,
         backgroundAppRefresh: 'wifiAndCellular',
-        notificationDelayNonCritical: false,
-        reducePolling: false,
       };
     case 'extremeSaver':
       return {
         lowPowerMode: true,
         backgroundAppRefresh: 'off',
-        notificationDelayNonCritical: true,
-        reducePolling: true,
       };
     case 'sleep':
       return {
         lowPowerMode: true,
         backgroundAppRefresh: 'off',
-        notificationDelayNonCritical: true,
-        reducePolling: true,
       };
     case 'travel':
       return {
         lowPowerMode: true,
         backgroundAppRefresh: 'wifi',
-        notificationDelayNonCritical: true,
-        reducePolling: true,
       };
     case 'normal':
     default:
       return {
         lowPowerMode: false,
         backgroundAppRefresh: 'wifi',
-        notificationDelayNonCritical: false,
-        reducePolling: true,
       };
   }
 }
