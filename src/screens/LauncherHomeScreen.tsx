@@ -44,6 +44,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { Shape } from '../theme/CupertinoTheme';
 import { useDevice } from '../store/DeviceStore';
 import { useFolders, AppFolder } from '../store/FoldersStore';
+import { ResponsiveNavShell } from '../components/ResponsiveNavShell';
+import { TABLET_NAV_ITEMS } from '../components/navigation/navItems';
 import {
   CupertinoActivityIndicator,
   CupertinoActionSheet,
@@ -90,6 +92,17 @@ import { computeDragTargetIndex, computeEdgeScrollDirection } from '../utils/lau
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+// #651-B: maps ResponsiveNavShell's nav item ids (TABLET_NAV_ITEMS) to the
+// RootStackParamList route each one opens, so picking a sidebar destination
+// on regular-width windows navigates to the matching screen.
+const NAV_ITEM_TO_ROUTE: Record<string, keyof RootStackParamList> = {
+  Home: 'HomeMain',
+  Phone: 'Phone',
+  Messages: 'Messages',
+  Contacts: 'Contacts',
+  Settings: 'Settings',
+};
 // Default geometry (4 cols, scale 1) — dock, folder-overlay icons, and this
 // module's own exports intentionally stay pinned to this regardless of the
 // user's grid density settings (issue #503). The actual home-screen grid
@@ -944,6 +957,25 @@ export function NonAndroidFallback() {
 export function LauncherHomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<AppNavigationProp>();
+
+  // #651-B: the sidebar shown on regular-width windows (ResponsiveNavShell)
+  // selects a destination from TABLET_NAV_ITEMS/NAV_ITEM_TO_ROUTE and pushes
+  // the matching route. LauncherHomeScreen only ever renders while "Home" is
+  // the active destination — a pushed screen (Phone/Messages/...) covers it
+  // full-screen rather than composing beside it — so activeId is always
+  // "Home" here; this stays a plain constant (not `useNavigationState`,
+  // which every LauncherHomeScreen.*.test.tsx locally mocks
+  // `@react-navigation/native` without) on purpose.
+  const activeNavId = 'Home';
+  const handleNavSelect = useCallback(
+    (id: string) => {
+      const route = NAV_ITEM_TO_ROUTE[id];
+      if (route) {
+        navigation.navigate(route as never);
+      }
+    },
+    [navigation],
+  );
 
   const {
     apps,
@@ -1815,6 +1847,11 @@ export function LauncherHomeScreen() {
     });
 
   return (
+    <ResponsiveNavShell
+      navItems={TABLET_NAV_ITEMS}
+      activeId={activeNavId}
+      onSelect={handleNavSelect}
+    >
     <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture, lastPageRubberBandGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
@@ -2175,6 +2212,7 @@ export function LauncherHomeScreen() {
       )}
       </Animated.View>
     </GestureDetector>
+    </ResponsiveNavShell>
   );
 }
 
