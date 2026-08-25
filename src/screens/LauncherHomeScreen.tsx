@@ -216,6 +216,7 @@ export const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.calculator': { icon: 'calculator', bg: '#1C1C1E', gradient: ['#636366', '#1C1C1E'], iconSize: 34 },
   'com.iostoandroid.notes': { icon: 'document-text', bg: '#FFCC00', gradient: ['#FFD60A', '#FFB300'], iconSize: 32 },
   'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
+  'com.iostoandroid.shortcuts': { icon: 'flash', bg: '#FF9500', gradient: ['#FFB340', '#FF8800'], iconSize: 32 },
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
   'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
   'com.iostoandroid.wallet': { icon: 'wallet', bg: '#5856D6', gradient: ['#7D7AFF', '#5856D6'], iconSize: 32 },

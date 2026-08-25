@@ -25,6 +25,7 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.calculator': 'Calculator',
   'com.iostoandroid.notes': 'Notes',
   'com.iostoandroid.reminders': 'Reminders',
+  'com.iostoandroid.shortcuts': 'Shortcuts',
   'com.iostoandroid.mail': 'Mail',
   'com.iostoandroid.browser': 'Browser',
   'com.iostoandroid.wallet': 'Wallet',

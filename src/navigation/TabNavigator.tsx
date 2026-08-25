@@ -71,6 +71,7 @@ import { MapsScreen } from '../screens/MapsScreen';
 import { FindMyScreen } from '../screens/FindMyScreen';
 import { FindMyLocationHistoryScreen } from '../screens/FindMyLocationHistoryScreen';
 import { RemindersScreen } from '../screens/RemindersScreen';
+import { ShortcutsScreen } from '../screens/ShortcutsScreen';
 import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
 import { WalletScreen } from '../screens/WalletScreen';
@@ -123,6 +124,7 @@ export function TabNavigator() {
       <Stack.Screen name="FindMy" component={FindMyScreen} options={{ animation }} />
       <Stack.Screen name="FindMyLocationHistory" component={FindMyLocationHistoryScreen} options={{ animation }} />
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
+      <Stack.Screen name="Shortcuts" component={ShortcutsScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
       <Stack.Screen name="Wallet" component={WalletScreen} options={{ animation }} />

@@ -21,6 +21,7 @@ import { ReadingListProvider } from './src/store/ReadingListStore';
 import { WalletProvider } from './src/store/WalletStore';
 import { CardProvider } from './src/store/CardStore';
 import { HealthProvider } from './src/store/HealthStore';
+import { ShortcutsProvider } from './src/store/ShortcutsStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { linking } from './src/navigation/linking';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -467,11 +468,13 @@ export default function App() {
                     sem provider acima — abrir o ícone Health no launcher real
                     rebentava. Montado aqui, ao lado dos restantes stores. */}
                 <HealthProvider>
+                <ShortcutsProvider>
                 <ErrorBoundary>
                   <AlertProvider>
                     <AppContent />
                   </AlertProvider>
                 </ErrorBoundary>
+                </ShortcutsProvider>
                 </HealthProvider>
                 </CardProvider>
                 </WalletProvider>

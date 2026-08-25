@@ -1,22 +1,20 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../utils/logger';
+import type { Shortcut, ShortcutAction } from '../utils/shortcutsDispatch';
+
+/**
+ * ShortcutsStore (#782, parte de #629): lista de atalhos do utilizador,
+ * persistida em AsyncStorage. Segue o mesmo padrão de `BookmarksStore.tsx`
+ * (Context + Provider + hook, sanitização na leitura).
+ *
+ * O modelo de dados (Shortcut/ShortcutAction) é canónico em
+ * `src/utils/shortcutsDispatch.ts` — o store importa e re-exporta os tipos
+ * para que ecrã, dispatcher e store partilhem a mesma definição em vez de a
+ * duplicar.
+ */
 
 const STORAGE_KEY = '@iostoandroid/shortcuts';
-
-export type ShortcutActionType = 'launchApp' | 'setFocusMode';
-
-export interface ShortcutAction {
-  type: ShortcutActionType;
-  payload: Record<string, unknown>;
-}
-
-export interface Shortcut {
-  id: string;
-  name: string;
-  icon: string;
-  actions: ShortcutAction[];
-}
 
 interface ShortcutsContextValue {
   shortcuts: Shortcut[];
@@ -125,3 +123,7 @@ export function useShortcuts() {
   if (!ctx) throw new Error('useShortcuts must be used within ShortcutsProvider');
   return ctx;
 }
+
+// Re-export the canonical data model so consumers can import it from either
+// the store or the dispatcher without drifting into two definitions.
+export type { Shortcut, ShortcutAction } from '../utils/shortcutsDispatch';
