@@ -10,6 +10,7 @@ export { CupertinoNavigationBar } from './CupertinoNavigationBar';
 export { CupertinoActionSheet } from './CupertinoActionSheet';
 export { CupertinoAlertDialog } from './CupertinoAlertDialog';
 export { CupertinoTabBar } from './CupertinoTabBar';
+export { CupertinoSplitView } from './CupertinoSplitView';
 export { CupertinoSearchBar } from './CupertinoSearchBar';
 export { CupertinoSlider } from './CupertinoSlider';
 export { CupertinoActivityIndicator } from './CupertinoActivityIndicator';
