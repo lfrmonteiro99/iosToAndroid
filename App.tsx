@@ -37,6 +37,12 @@ import { suppressAutoLock } from './src/utils/permissions';
 import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
+import { releaseBatched } from './src/utils/scheduledSummaryBuffer';
+import {
+  createScheduledSummaryTracker,
+  runScheduledSummaryCheck,
+  SCHEDULED_SUMMARY_CHECK_MS,
+} from './src/utils/scheduledSummaryScheduler';
 import { markProcessStartFromAge } from './src/utils/perfMetrics';
 import { useFocusSchedule } from './src/hooks/useFocusSchedule';
 import { useContextEngine } from './src/hooks/useContextEngine';
@@ -327,6 +333,30 @@ function AppContent() {
 
     return () => { if (unsub) unsub(); };
   }, [device.isReady, isLocked]);
+
+  // Scheduled Summary (#869, sub-issue 2 de #630/#838): agrega as notificações
+  // que routeNotification suprimiu com reason:'batched' (apps em política
+  // 'scheduled'/'digest') e liberta-as num único banner-resumo nos slots
+  // configurados em scheduledSummaryIdx (0=Off, 1=Morning 8:00, 2=Evening
+  // 18:00, 3=Both). Com idx===0 nenhum timer é registado — as notificações
+  // embaladas continuam suprimidas, tal como antes.
+  const scheduledSummaryTrackerRef = useRef(createScheduledSummaryTracker());
+  useEffect(() => {
+    if (settings.scheduledSummaryIdx === 0) return;
+
+    const check = () => {
+      void runScheduledSummaryCheck({
+        now: new Date(),
+        scheduledSummaryIdx: settings.scheduledSummaryIdx,
+        tracker: scheduledSummaryTrackerRef.current,
+        releaseBatched,
+        setBanner,
+      });
+    };
+    check();
+    const id = setInterval(check, SCHEDULED_SUMMARY_CHECK_MS);
+    return () => clearInterval(id);
+  }, [settings.scheduledSummaryIdx]);
 
   if (!fontsLoaded && !fontError) return null;
   if (showOnboarding === null) return null;
