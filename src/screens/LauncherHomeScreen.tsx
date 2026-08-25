@@ -19,6 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SystemAppIcon } from '../components/SystemAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -49,6 +50,8 @@ import {
   NotificationBanner,
   GlassSurface,
   useAlert,
+  useWidgetConfig,
+  useWidgetMap,
 } from '../components';
 import type { BannerNotification } from '../components';
 import type { RootStackParamList } from '../navigation/types';
@@ -79,6 +82,7 @@ import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 import { hiddenPageIndicesForMode, filterVisiblePages } from '../utils/focusPageVisibility';
 import { dockOverrideForMode } from '../utils/focusDockOverride';
 import { clampWithRubberBand } from '../theme/motion';
+import { computeDragTargetIndex, computeEdgeScrollDirection } from '../utils/launcherDrag';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -104,6 +108,10 @@ const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each s
 export const DOCK_VERTICAL_PADDING = 18;
 // §2: "Dock: inset lateral" = 10.
 export const DOCK_HORIZONTAL_INSET = 10;
+// Home screen widget stack (#654): two cards per row, same 16px side padding
+// convention as the dock above, with a 12px gap between the pair.
+const HOME_WIDGET_GAP = 12;
+export const HOME_WIDGET_ITEM_WIDTH = (SCREEN_WIDTH - 32 - HOME_WIDGET_GAP) / 2;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -112,6 +120,17 @@ export const DOCK_HORIZONTAL_INSET = 10;
 // the layer can translate further than it was oversized and expose bare
 // background at the screen edge.
 export const PARALLAX_OVERHANG = 20;
+
+// Jiggle-mode drag-to-reorder (#761). How close to the pager's left/right
+// screen edge a dragged icon must be for the drag to page-scroll to the
+// adjacent page — same idea as a file-manager's drag-to-scroll near a list's
+// edge.
+export const DRAG_EDGE_THRESHOLD_DP = 40;
+// Minimum time between two edge-triggered page scrolls for the SAME drag, so
+// a finger held still in the edge zone (onUpdate fires on every pixel of
+// jitter, not just real movement) doesn't fire scrollTo() dozens of times a
+// second.
+const EDGE_SCROLL_THROTTLE_MS = 500;
 
 // Maps raw scroll progress (0 = first page, 1 = last page) to a horizontal
 // shift bounded by `overhang` in both directions, so the oversized layer never
@@ -335,6 +354,24 @@ interface AppIconProps {
    * monochrome silhouette in, or undefined/null for the normal, untinted
    * icon. Only the icon is affected — `showLabel`'s text is untouched. */
   iconTint?: string | null;
+  /** Gloss sheen on built-in (virtual) icons — follows settings.iconGloss. */
+  gloss?: boolean;
+  /** Flat index of this icon within the current page's item array (#761 —
+   * drag-to-reorder needs to know where a drag started to compute the
+   * target cell from the gesture's translation). Ignored when isJiggling is
+   * false. */
+  pageItemIndex?: number;
+  /** Index of the page this icon currently renders on (#761 — so an edge
+   * scroll during the drag, and the eventual drop, resolve against the
+   * right page's item array even if the pager already advanced). */
+  pageIndex?: number;
+  /** Drag lifecycle (#761, jiggle-mode only). Mirrors onPress/onLongPress:
+   * the app is passed as an argument (not captured by closure) so the
+   * parent can hand every AppIcon the same useCallback-memoized function
+   * (#518) instead of a fresh arrow function per icon per render. */
+  onDragStart?: (app: InstalledApp, pageIndex: number, pageItemIndex: number) => void;
+  onDragUpdate?: (app: InstalledApp, translationX: number, translationY: number, absoluteX: number) => void;
+  onDragEnd?: (app: InstalledApp, translationX: number, translationY: number) => void;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -359,6 +396,12 @@ const AppIcon = React.memo(function AppIcon({
   iconRadius = ICON_RADIUS,
   showLabel = true,
   iconTint,
+  gloss = true,
+  pageItemIndex = 0,
+  pageIndex = 0,
+  onDragStart,
+  onDragUpdate,
+  onDragEnd,
 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   // Label block (margin + text line) measured at the 393dp reference so the
@@ -368,6 +411,8 @@ const AppIcon = React.memo(function AppIcon({
   const iconBoxSize = { width: iconSize, height: iconSize, borderRadius: iconRadius };
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const dragTranslateX = useSharedValue(0);
+  const dragTranslateY = useSharedValue(0);
   const iconRef = useRef<View>(null);
 
   const measureBounds = useCallback<MeasureBounds>(() => new Promise((resolve) => {
@@ -417,6 +462,8 @@ const AppIcon = React.memo(function AppIcon({
     transform: [
       { rotate: `${rotation.value}deg` },
       { scale: pressScale.value },
+      { translateX: dragTranslateX.value },
+      { translateY: dragTranslateY.value },
     ],
   }));
 
@@ -435,7 +482,39 @@ const AppIcon = React.memo(function AppIcon({
     pressScale.value = withSpring(1.0, launcherIconPress);
   }, [pressScale]);
 
+  // Drag-to-reorder (#761). Built fresh every render, same convention as the
+  // screen-level pan gestures below (panGesture/todayViewGesture) — AppIcon
+  // is already React.memo'd, so this only re-runs when this icon's own props
+  // change. `.minDistance(10)`: the jiggle "✕" delete button is a nested
+  // Pressable rendered inside this same gesture's subtree, and a Pan with no
+  // minimum travel would win the responder race on a plain tap and swallow
+  // the delete press. 10dp of slack gives RNGH's native responder time to let
+  // the child Pressable's own tap-recognition claim a stationary touch first.
+  const dragGesture = Gesture.Pan()
+    .enabled(!!isJiggling)
+    .minDistance(10)
+    .onBegin(() => {
+      'worklet';
+      if (onDragStart) runOnJS(onDragStart)(app, pageIndex, pageItemIndex);
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragTranslateX.value = e.translationX;
+      dragTranslateY.value = e.translationY;
+      if (onDragUpdate) runOnJS(onDragUpdate)(app, e.translationX, e.translationY, e.absoluteX);
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (onDragEnd) runOnJS(onDragEnd)(app, e.translationX, e.translationY);
+    })
+    .onFinalize(() => {
+      'worklet';
+      dragTranslateX.value = withSpring(0);
+      dragTranslateY.value = withSpring(0);
+    });
+
   return (
+    <GestureDetector gesture={dragGesture}>
     <Pressable
       ref={iconRef}
       // O `appIconWrapperCompact` (height: ICON_SIZE estático, paddingTop 0)
@@ -454,21 +533,16 @@ const AppIcon = React.memo(function AppIcon({
     >
       <Animated.View style={animatedStyle}>
         {virtualCfg ? (
-          virtualCfg.gradient ? (
-            <LinearGradient
-              testID={`app-icon-box-${app.packageName}`}
-              colors={virtualCfg.gradient}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[styles.appIconPlaceholder, iconBoxSize]}
-            >
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </LinearGradient>
-          ) : (
-            <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize, { backgroundColor: virtualCfg.bg }]}>
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </View>
-          )
+          <SystemAppIcon
+            testID={`app-icon-box-${app.packageName}`}
+            icon={virtualCfg.icon}
+            size={iconSize}
+            gradient={virtualCfg.gradient}
+            bg={virtualCfg.bg}
+            gloss={gloss}
+            tint={iconTint}
+            iconSize={virtualCfg.iconSize ?? Math.round(iconSize * 0.57)}
+          />
         ) : app.icon ? (
           <Image
             testID={`app-icon-box-${app.packageName}`}
@@ -523,6 +597,7 @@ const AppIcon = React.memo(function AppIcon({
         </Text>
       )}
     </Pressable>
+    </GestureDetector>
   );
 });
 
@@ -725,6 +800,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
   textScale?: number;
   iconTint?: string | null;
 }) {
+  const { settings } = useSettings();
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean) as InstalledApp[];
@@ -771,6 +847,7 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   cellWidth={70}
                   textScale={textScale}
                   iconTint={iconTint}
+                  gloss={settings.iconGloss}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -880,6 +957,7 @@ export function LauncherHomeScreen() {
     addToDock,
     removeFromDock,
     removeFromHome,
+    swapHomeApps,
   } = useApps();
   const { settings } = useSettings();
   const device = useDevice();
@@ -887,6 +965,13 @@ export function LauncherHomeScreen() {
   const { theme: launcherTheme, isDark, textScale } = useTheme();
   const colors = launcherTheme.colors;
   const alert = useAlert();
+
+  // Home screen widgets (#654): top of the first page, iOS-style — the same
+  // widgetMap/config the Today View sheet reads/writes, so a widget looks and
+  // behaves identically whether it's reached by swiping right into Today View
+  // or seen directly on the home page.
+  const { enabled: homeWidgetsEnabled, loaded: homeWidgetsLoaded } = useWidgetConfig();
+  const homeWidgetMap = useWidgetMap();
 
   // Tap to Wake (#608): the HOME-press effect below is registered with deps
   // [openFolder, currentPage] (it must not re-subscribe on every render), so
@@ -1427,6 +1512,59 @@ export function LauncherHomeScreen() {
     }
   }, [currentPage, totalPages]);
 
+  // Jiggle-mode drag-to-reorder (#761). A ref, not state: onDragStart/onDragUpdate
+  // fire on every pixel of finger movement (via runOnJS from the worklet), and
+  // routing that through setState would re-render the whole screen (and every
+  // AppIcon under it, defeating the #518 memoization) dozens of times per
+  // second for a value nothing renders from.
+  const dragOriginRef = useRef<{ app: InstalledApp; pageIndex: number; pageItemIndex: number } | null>(null);
+  const lastEdgeScrollAtRef = useRef(0);
+
+  const handleDragStart = useCallback((app: InstalledApp, pageIndex: number, pageItemIndex: number) => {
+    dragOriginRef.current = { app, pageIndex, pageItemIndex };
+  }, []);
+
+  const handleDragUpdate = useCallback((_app: InstalledApp, _translationX: number, _translationY: number, absoluteX: number) => {
+    const origin = dragOriginRef.current;
+    if (!origin) return;
+    const direction = computeEdgeScrollDirection(absoluteX, SCREEN_WIDTH, DRAG_EDGE_THRESHOLD_DP);
+    if (!direction) return;
+    if (Date.now() - lastEdgeScrollAtRef.current < EDGE_SCROLL_THROTTLE_MS) return;
+    const targetPage = direction === 'prev' ? origin.pageIndex - 1 : origin.pageIndex + 1;
+    // totalPages includes the App Library page at the end, which has no
+    // homeApps grid to drop into — an edge-scroll during a home-icon drag
+    // must never land there.
+    if (targetPage < 0 || targetPage >= pages.length) return;
+    lastEdgeScrollAtRef.current = Date.now();
+    dragOriginRef.current = { ...origin, pageIndex: targetPage };
+    setCurrentPage(targetPage);
+    scrollViewRef.current?.scrollTo({ x: targetPage * SCREEN_WIDTH, animated: true });
+  }, [pages.length]);
+
+  const handleDragEnd = useCallback((app: InstalledApp, translationX: number, translationY: number) => {
+    const origin = dragOriginRef.current;
+    dragOriginRef.current = null;
+    if (!origin) return;
+    const pageItems = pages[origin.pageIndex];
+    if (!pageItems || pageItems.length === 0) return;
+    const targetIndex = computeDragTargetIndex({
+      startIndex: origin.pageItemIndex,
+      translationX,
+      translationY,
+      cellWidth: gridGeometry.cellWidth,
+      cellHeight: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+      cols: gridGeometry.cols,
+      itemCount: pageItems.length,
+    });
+    const targetItem = pageItems[targetIndex];
+    // #761 scope: only a drop onto ANOTHER app icon swaps positions. Dropping
+    // on an empty cell (holes/compaction) and dropping on a folder are both
+    // explicitly out of scope for this issue.
+    if (targetItem && targetItem.type === 'app' && targetItem.app.packageName !== app.packageName) {
+      swapHomeApps?.(app.packageName, targetItem.app.packageName);
+    }
+  }, [pages, gridGeometry, settings.showIconLabels, swapHomeApps]);
+
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
     return <NonAndroidFallback />;
@@ -1819,6 +1957,15 @@ export function LauncherHomeScreen() {
             key={pageIndex}
             style={[styles.page, { paddingHorizontal: gridGeometry.horizontalPadding }, pageIndex === 0 ? firstPageOverscrollStyle : null]}
           >
+            {pageIndex === 0 && homeWidgetsLoaded && homeWidgetsEnabled.length > 0 && (
+              <View testID="launcher-home-widgets" style={styles.homeWidgetRow}>
+                {homeWidgetsEnabled.map((type) => (
+                  <View key={type} testID={`launcher-home-widget-${type}`} style={styles.homeWidgetItem}>
+                    {homeWidgetMap[type]}
+                  </View>
+                ))}
+              </View>
+            )}
             <View
               testID={`launcher-page-grid-${pageIndex}`}
               style={styles.pageGrid}
@@ -1831,7 +1978,7 @@ export function LauncherHomeScreen() {
               // segundas medições.
               onLayout={pageIndex === 0 ? markGridVisible : undefined}
             >
-              {pageItems.map((item) => {
+              {pageItems.map((item, pageItemIndex) => {
                 if (item.type === 'empty') {
                   // #762: a position with no app renders a blank cell instead
                   // of letting the next app slide up into it — no Pressable,
@@ -1874,11 +2021,17 @@ export function LauncherHomeScreen() {
                     showLabel={settings.showIconLabels}
                     textScale={textScale}
                     iconTint={iconTint}
+                    gloss={settings.iconGloss}
                     onPress={handleAppPress}
                     onLongPress={handleLongPress}
                     isJiggling={isJiggling}
                     badge={badgeCounts[item.app.packageName]}
                     onDelete={handleDeleteApp}
+                    pageIndex={pageIndex}
+                    pageItemIndex={pageItemIndex}
+                    onDragStart={handleDragStart}
+                    onDragUpdate={handleDragUpdate}
+                    onDragEnd={handleDragEnd}
                   />
                 );
               })}
@@ -1928,6 +2081,7 @@ export function LauncherHomeScreen() {
                 textScale={textScale}
                 showLabel={false}
                 iconTint={iconTint}
+                gloss={settings.iconGloss}
                 onPress={handleAppPress}
                 onLongPress={handleLongPress}
                 isJiggling={isJiggling}
@@ -2118,6 +2272,17 @@ const styles = StyleSheet.create({
   pageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+
+  // Home screen widgets (#654)
+  homeWidgetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: HOME_WIDGET_GAP,
+    marginBottom: 16,
+  },
+  homeWidgetItem: {
+    width: HOME_WIDGET_ITEM_WIDTH,
   },
 
   // App icons

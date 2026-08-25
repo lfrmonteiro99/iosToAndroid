@@ -7,6 +7,7 @@ import { migrateAsyncStorageKey } from './storage';
 import { upsertApp, removeApp } from './appsIndexReducer';
 import { getIconMask, subscribeIconMask, type IconMaskOptions } from '../utils/iconShape';
 import { authenticateWithBiometrics } from '../utils/biometricAuth';
+import { dispatchLaunchApp } from '../actions/primitiveDispatcher';
 import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
@@ -95,6 +96,33 @@ export function assignHomePositions(homeApps: HomeApp[], apps: InstalledApp[]): 
   let nextPosition = homeApps.reduce((max, h) => Math.max(max, h.position), -1) + 1;
   const additions: HomeApp[] = missing.map(a => ({ packageName: a.packageName, position: nextPosition++ }));
   return [...homeApps, ...additions];
+}
+
+/**
+ * Swaps the `position` of two homeApps entries (#761 — jiggle-mode drag to
+ * reorder). This is the classic iOS behaviour: dropping icon A onto icon B's
+ * cell trades their positions, it does not shift everything in between (that
+ * shift, and dropping on an EMPTY cell, is the next sub-issue's scope — #761
+ * explicitly excludes it).
+ *
+ * Returns the same array reference when there is nothing to do (same
+ * package, or either package has no recorded position — dragging something
+ * not yet in homeApps shouldn't happen via the grid, but failing closed here
+ * means a stray call is a no-op instead of corrupting positions), so a no-op
+ * swap does not trigger an extra persist()/re-render.
+ */
+export function swapHomePositions(homeApps: HomeApp[], packageA: string, packageB: string): HomeApp[] {
+  if (packageA === packageB) return homeApps;
+  const idxA = homeApps.findIndex(h => h.packageName === packageA);
+  const idxB = homeApps.findIndex(h => h.packageName === packageB);
+  if (idxA === -1 || idxB === -1) return homeApps;
+  const posA = homeApps[idxA].position;
+  const posB = homeApps[idxB].position;
+  if (posA === posB) return homeApps;
+  const next = [...homeApps];
+  next[idxA] = { ...next[idxA], position: posB };
+  next[idxB] = { ...next[idxB], position: posA };
+  return next;
 }
 
 // Dynamic import to avoid crashing the module on non-Android. Falls back to a
@@ -205,6 +233,13 @@ interface AppsContextValue {
   launchApp: (packageName: string) => Promise<boolean>;
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
+  /**
+   * Swaps two homeApps entries' positions (#761 — jiggle-mode drag to
+   * reorder). Optional on the context value for the same reason as
+   * protectApp above: older hand-built test mocks cast to AppsContextValue
+   * without it keep type-checking; the real provider always populates it.
+   */
+  swapHomeApps?: (packageA: string, packageB: string) => void;
   /**
    * Reassigns every homeApps[].position sequentially (0, 1, 2, ...) in their
    * current relative order, removing any holes left by removeFromHome or by
@@ -702,33 +737,25 @@ export function AppsProvider({
   // Returns whether the launch actually succeeded (#509) — callers that show
   // an icon-expand transition need this to revert it on failure instead of
   // leaving the animation stuck full-screen over a launcher that never left.
+  // #781: the decision procedure (protected-apps gate, native launch, recents,
+  // error alert) now lives in dispatchLaunchApp — a framework-free primitive
+  // any caller can dispatch, not just one running inside this Provider.
   const launchApp = useCallback(async (packageName: string): Promise<boolean> => {
-    if (Platform.OS !== 'android') return false;
-    // #627 — Protected Apps: gate behind biometric auth before the native
-    // launch ever runs. Fail-closed (see authenticateWithBiometrics): no
-    // hardware, nothing enrolled, or a failed/cancelled prompt all mean "do
-    // not launch", not "launch anyway".
-    if (protectedAppsRef.current.includes(packageName)) {
-      const authenticated = await authenticateWithBiometrics('Unlock app');
-      if (!authenticated) return false;
-    }
-    try {
-      // getLauncherModule(), not a bare `await import(...)`: the raw dynamic
-      // import throws under Jest ("invoked without --experimental-vm-modules"),
-      // which made this whole function silently fail — and therefore
-      // untestable — for both protected and unprotected packages alike.
-      const LauncherModule = await getLauncherModule();
-      const ok = (await LauncherModule?.launchApp(packageName)) ?? false;
-      if (ok) {
-        addToRecents(packageName);
-      } else {
-        alertRef.current('Error', 'Could not launch app. Please try again.');
-      }
-      return ok;
-    } catch {
-      alertRef.current('Error', 'Could not launch app. Please try again.');
-      return false;
-    }
+    return dispatchLaunchApp(packageName, {
+      isAndroid: Platform.OS === 'android',
+      isProtected: (pkg) => protectedAppsRef.current.includes(pkg),
+      authenticate: authenticateWithBiometrics,
+      launchNative: async (pkg) => {
+        // getLauncherModule(), not a bare `await import(...)`: the raw dynamic
+        // import throws under Jest ("invoked without --experimental-vm-modules"),
+        // which made this whole function silently fail — and therefore
+        // untestable — for both protected and unprotected packages alike.
+        const LauncherModule = await getLauncherModule();
+        return (await LauncherModule?.launchApp(pkg)) ?? false;
+      },
+      onLaunched: addToRecents,
+      onError: (title, message) => alertRef.current(title, message),
+    });
   }, [addToRecents]);
 
   const addToHome = useCallback((packageName: string) => {
@@ -753,6 +780,15 @@ export function AppsProvider({
       return { ...prev, homeApps, libraryOnlyApps };
     });
   }, [persist, persistLibraryOnly]);
+
+  const swapHomeApps = useCallback((packageA: string, packageB: string) => {
+    setState(prev => {
+      const homeApps = swapHomePositions(prev.homeApps, packageA, packageB);
+      if (homeApps === prev.homeApps) return prev;
+      persist(prev.dockApps, homeApps);
+      return { ...prev, homeApps };
+    });
+  }, [persist]);
 
   // #762: sorts by current position (stable — Array.prototype.sort is stable
   // since ES2019, and ties can't happen because positions are unique) then
@@ -920,6 +956,7 @@ export function AppsProvider({
     launchApp,
     addToHome,
     removeFromHome,
+    swapHomeApps,
     compactHomeLayout,
     hideApp,
     unhideApp,
@@ -939,7 +976,7 @@ export function AppsProvider({
     isRebuildingIconCache,
     iconCacheRebuildProgress,
     rebuildIconCache,
-  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, compactHomeLayout, hideApp, unhideApp, protectApp, unprotectApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
+  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, swapHomeApps, compactHomeLayout, hideApp, unhideApp, protectApp, unprotectApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }

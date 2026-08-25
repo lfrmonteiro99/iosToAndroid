@@ -132,8 +132,8 @@ describe('iconShape — pré-visualização', () => {
 });
 
 describe('iconShape — máscara activa ao nível do módulo', () => {
-  it('começa no default squircle 4.7', () => {
-    expect(getIconMask()).toMatchObject({ shape: 'squircle', cacheKey: 'squircle4.7' });
+  it('começa no default squircle 5.0', () => {
+    expect(getIconMask()).toMatchObject({ shape: 'squircle', cacheKey: 'squircle5.0' });
   });
 
   it('notifica os subscritores quando a chave de cache muda', () => {
@@ -151,8 +151,8 @@ describe('iconShape — máscara activa ao nível do módulo', () => {
     const listener = jest.fn();
     subscribeIconMask(listener);
 
-    setIconMask('squircle', 4.7);
-    setIconMask('squircle', 4.7);
+    setIconMask('squircle', 5.0);
+    setIconMask('squircle', 5.0);
 
     expect(listener).not.toHaveBeenCalled();
   });
@@ -190,7 +190,7 @@ describe('iconMaskOptions — o que desce até ao Kotlin', () => {
     expect(iconMaskOptions('blob', 'muito')).toEqual({
       shape: 'squircle',
       exponent: DEFAULT_ICON_SHAPE_EXPONENT,
-      cacheKey: 'squircle4.7',
+      cacheKey: 'squircle5.0',
     });
   });
 
