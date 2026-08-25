@@ -48,6 +48,15 @@ const HOUR = 3600_000;
 describe('app access bridge (issue #634)', () => {
   let mod: typeof import('../index');
 
+  // Restores ONLY the clock spy. jest.restoreAllMocks() would also undo the
+  // console.error silencing installed in beforeAll, which the rest of the suite
+  // depends on.
+  let nowSpy: jest.SpyInstance<number, []> | undefined;
+  afterEach(() => {
+    nowSpy?.mockRestore();
+    nowSpy = undefined;
+  });
+
   beforeAll(() => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -97,7 +106,15 @@ describe('app access bridge (issue #634)', () => {
   });
 
   it('getAppAccessCounts drops events outside the requested window', async () => {
-    const t = Date.now();
+    // Date.now is pinned, not sampled. The fixture put one event 5ms inside the
+    // window and one 5ms outside, then let aggregateAppAccessByType take its own
+    // Date.now() reading — so any scheduling delay above 5ms between building
+    // the fixture and running the aggregation pushed the inside event out and
+    // failed the test. It passed alone and failed in the full run, which is the
+    // signature. Pinning keeps the assertion about the boundary (that is the
+    // point of the test) while making the margin exact.
+    const t = 1_700_000_000_000;
+    nowSpy = jest.spyOn(Date, 'now').mockReturnValue(t);
     const events: AccessEvent[] = [
       { packageName: 'com.a', accessType: 'camera', timestamp: t - 24 * HOUR - 5 },
       { packageName: 'com.b', accessType: 'camera', timestamp: t - 24 * HOUR + 5 },
