@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -21,6 +21,7 @@ import {
   CupertinoSearchBar,
   CupertinoSegmentedControl,
   BackEdgeSwipe,
+  CupertinoSplitView,
   useAlert,
 } from '../components';
 import type { AppNavigationProp, RootStackParamList } from '../navigation/types';
@@ -106,6 +107,7 @@ export function SettingsScreen() {
         { key: 'battery', title: 'Battery', icon: 'battery-half', iconBg: '#34C759', type: 'navigate', route: 'Battery' },
         { key: 'performanceProfile', title: 'Performance Profile', icon: 'speedometer', iconBg: colors.accent, type: 'navigate', route: 'PerformanceProfile' },
         { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, type: 'navigate', route: 'Privacy' },
+        { key: 'privacyMonitor', title: 'Privacy Monitor', icon: 'eye', iconBg: colors.accent, type: 'navigate', route: 'PrivacyMonitor' },
       ],
     },
     {
@@ -117,6 +119,37 @@ export function SettingsScreen() {
       ],
     },
   ], [colors.accent, profile.name, profile.email]);
+
+  // Tablet sidebar groups — the top-level Settings destinations shown in the
+  // stable left column on regular width (iPad-style master/detail). These reuse
+  // the same routes the top-level list already navigates to, so the sidebar and
+  // the phone body never desynchronise.
+  const SIDEBAR_GROUPS: { title: string; items: { key: string; title: string; icon: keyof typeof Ionicons.glyphMap; iconBg: string; route: keyof RootStackParamList }[] }[] = useMemo(() => [
+    {
+      title: 'General',
+      items: [
+        { key: 'general', title: 'General', icon: 'settings', iconBg: '#8E8E93', route: 'General' },
+        { key: 'display', title: 'Display & Brightness', icon: 'sunny', iconBg: colors.accent, route: 'DisplayBrightness' },
+        { key: 'wallpaper', title: 'Wallpaper', icon: 'image', iconBg: '#5AC8FA', route: 'Wallpaper' },
+        { key: 'accessibility', title: 'Accessibility', icon: 'accessibility', iconBg: colors.accent, route: 'Accessibility' },
+      ],
+    },
+    {
+      title: 'Privacy',
+      items: [
+        { key: 'privacy', title: 'Privacy & Security', icon: 'shield-checkmark', iconBg: colors.accent, route: 'Privacy' },
+        { key: 'battery', title: 'Battery', icon: 'battery-half', iconBg: '#34C759', route: 'Battery' },
+      ],
+    },
+    {
+      title: 'Automation',
+      items: [
+        { key: 'focus', title: 'Focus', icon: 'moon', iconBg: '#5856D6', route: 'Focus' },
+        { key: 'siriSearch', title: 'Siri & Search', icon: 'search', iconBg: '#000000', route: 'SiriSearch' },
+        { key: 'screentime', title: 'Screen Time', icon: 'hourglass', iconBg: '#5856D6', route: 'ScreenTime' },
+      ],
+    },
+  ], [colors.accent]);
 
   const getTrailing = (item: SettingsItem): string | undefined => {
     switch (item.key) {
@@ -154,6 +187,24 @@ export function SettingsScreen() {
       (navigation as AppNavigationProp).navigate(item.route as any);
     }
   };
+
+  const renderSidebarItem = (item: { key: string; title: string; icon: keyof typeof Ionicons.glyphMap; iconBg: string; route: keyof RootStackParamList }) => (
+    <Pressable
+      key={item.key}
+      onPress={() => (navigation as AppNavigationProp).navigate(item.route as never)}
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+      style={({ pressed }) => [
+        styles.sidebarRow,
+        { backgroundColor: pressed ? colors.pressedRowBackground : 'transparent' },
+      ]}
+    >
+      <View style={[styles.sidebarIcon, { backgroundColor: item.iconBg }]}>
+        <Ionicons name={item.icon} size={20} color="#FFFFFF" />
+      </View>
+      <Text style={[typography.body, { color: colors.label }]}>{item.title}</Text>
+    </Pressable>
+  );
 
   // ─── Back Tap (#625 / #772): inline gesture→action mapping ──────────────
   // Each gesture row opens an action-sheet picker (the same CupertinoAlertDialog
@@ -266,106 +317,126 @@ export function SettingsScreen() {
     );
   };
 
-  return (
-    <BackEdgeSwipe>
-    <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <CupertinoNavigationBar
-        title="Settings"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
-        leftButton={
-          <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityLabel="Go back" accessibilityRole="button">
-            <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
-          </Pressable>
-        }
-      >
-        <View style={{ paddingHorizontal: spacing.md, marginBottom: spacing.sm }}>
-          <CupertinoSearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search Settings"
-          />
+  const sidebar = (
+    <ScrollView style={styles.sidebarScroll} testID="settings-sidebar" contentContainerStyle={{ paddingVertical: spacing.md }}>
+      <View style={styles.sidebarHeader}>
+        <Text style={[typography.title2, { color: colors.label }]}>Settings</Text>
+      </View>
+      {SIDEBAR_GROUPS.map((group) => (
+        <View key={group.title} style={styles.sidebarGroup}>
+          <Text style={[typography.footnote, { color: colors.secondaryLabel, paddingHorizontal: spacing.md, marginBottom: 4 }]}>
+            {group.title}
+          </Text>
+          {group.items.map(renderSidebarItem)}
         </View>
+      ))}
+    </ScrollView>
+  );
 
-        {filteredSections.map((section) => (
-          <View key={section.section} style={{ paddingHorizontal: spacing.md }}>
-            <CupertinoListSection>
-              {section.items.map(renderItem)}
-            </CupertinoListSection>
+  const settingsBody = (
+    <BackEdgeSwipe>
+      <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <CupertinoNavigationBar
+          title="Settings"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+          leftButton={
+            <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityLabel="Go back" accessibilityRole="button">
+              <Ionicons name="chevron-back" size={28} color={colors.systemBlue} />
+            </Pressable>
+          }
+        >
+          <View style={{ paddingHorizontal: spacing.md, marginBottom: spacing.sm }}>
+            <CupertinoSearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search Settings"
+            />
           </View>
-        ))}
 
-        {!searchQuery.trim() && (
-          <View style={{ paddingHorizontal: spacing.md }}>
-            <CupertinoListSection
-              header="Back Tap"
-              footer="Double or triple tap the back of your device to trigger an action. For app or shortcut targets, open Back Tap settings."
-            >
-              <CupertinoListTile
-                title="Back Tap"
-                subtitle={settings.backTap.enabled ? 'On' : 'Off'}
-                leading={{
-                  name: 'hand-left',
-                  color: '#FFFFFF',
-                  backgroundColor: colors.accent,
-                }}
-                trailing={
-                  <CupertinoSwitch
-                    value={settings.backTap.enabled}
-                    onValueChange={(v) => update('backTap', { ...settings.backTap, enabled: v })}
+          {filteredSections.map((section) => (
+            <View key={section.section} style={{ paddingHorizontal: spacing.md }}>
+              <CupertinoListSection>
+                {section.items.map(renderItem)}
+              </CupertinoListSection>
+            </View>
+          ))}
+
+          {!searchQuery.trim() && (
+            <View style={{ paddingHorizontal: spacing.md }}>
+              <CupertinoListSection
+                header="Back Tap"
+                footer="Double or triple tap the back of your device to trigger an action. For app or shortcut targets, open Back Tap settings."
+              >
+                <CupertinoListTile
+                  title="Back Tap"
+                  subtitle={settings.backTap.enabled ? 'On' : 'Off'}
+                  leading={{
+                    name: 'hand-left',
+                    color: '#FFFFFF',
+                    backgroundColor: colors.accent,
+                  }}
+                  trailing={
+                    <CupertinoSwitch
+                      value={settings.backTap.enabled}
+                      onValueChange={(v) => update('backTap', { ...settings.backTap, enabled: v })}
+                    />
+                  }
+                  showChevron={false}
+                />
+                {settings.backTap.enabled && (
+                  <CupertinoListTile
+                    title="Double Tap"
+                    trailing={
+                      <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                        {inlineBackTapLabel(settings.backTap.double.action)}
+                      </Text>
+                    }
+                    onPress={() => pickBackTapAction('double')}
                   />
-                }
-                showChevron={false}
-              />
-              {settings.backTap.enabled && (
-                <CupertinoListTile
-                  title="Double Tap"
-                  trailing={
-                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                      {inlineBackTapLabel(settings.backTap.double.action)}
-                    </Text>
-                  }
-                  onPress={() => pickBackTapAction('double')}
-                />
-              )}
-              {settings.backTap.enabled && (
-                <CupertinoListTile
-                  title="Triple Tap"
-                  trailing={
-                    <Text style={[typography.body, { color: colors.secondaryLabel }]}>
-                      {inlineBackTapLabel(settings.backTap.triple.action)}
-                    </Text>
-                  }
-                  onPress={() => pickBackTapAction('triple')}
-                />
-              )}
-              {settings.backTap.enabled && (
-                <CupertinoListTile
-                  title="Open Back Tap Settings"
-                  onPress={openBackTapSettings}
-                  isLast
-                />
-              )}
-            </CupertinoListSection>
-          </View>
-        )}
+                )}
+                {settings.backTap.enabled && (
+                  <CupertinoListTile
+                    title="Triple Tap"
+                    trailing={
+                      <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                        {inlineBackTapLabel(settings.backTap.triple.action)}
+                      </Text>
+                    }
+                    onPress={() => pickBackTapAction('triple')}
+                  />
+                )}
+                {settings.backTap.enabled && (
+                  <CupertinoListTile
+                    title="Open Back Tap Settings"
+                    onPress={openBackTapSettings}
+                    isLast
+                  />
+                )}
+              </CupertinoListSection>
+            </View>
+          )}
 
-        {!searchQuery.trim() && (
-          <View style={{ paddingHorizontal: spacing.md }}>
-            <CupertinoListSection header="Appearance">
-              <View style={{ padding: spacing.md }}>
-                <CupertinoSegmentedControl
-                  values={['Light', 'Dark', 'Automatic']}
-                  selectedIndex={mode === 'light' ? 0 : mode === 'dark' ? 1 : 2}
-                  onChange={(i) => setThemeMode(i === 0 ? 'light' : i === 1 ? 'dark' : 'system')}
-                />
-              </View>
-            </CupertinoListSection>
-          </View>
-        )}
-      </CupertinoNavigationBar>
-    </View>
+          {!searchQuery.trim() && (
+            <View style={{ paddingHorizontal: spacing.md }}>
+              <CupertinoListSection header="Appearance">
+                <View style={{ padding: spacing.md }}>
+                  <CupertinoSegmentedControl
+                    values={['Light', 'Dark', 'Automatic']}
+                    selectedIndex={mode === 'light' ? 0 : mode === 'dark' ? 1 : 2}
+                    onChange={(i) => setThemeMode(i === 0 ? 'light' : i === 1 ? 'dark' : 'system')}
+                  />
+                </View>
+              </CupertinoListSection>
+            </View>
+          )}
+        </CupertinoNavigationBar>
+      </View>
     </BackEdgeSwipe>
+  );
+
+  return (
+    <CupertinoSplitView sidebar={sidebar} content={settingsBody} />
   );
 }
 
@@ -389,5 +460,29 @@ const styles = StyleSheet.create({
   },
   profileMeta: {
     flex: 1,
+  },
+  sidebarScroll: {
+    flex: 1,
+  },
+  sidebarHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sidebarGroup: {
+    marginTop: 8,
+  },
+  sidebarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  sidebarIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

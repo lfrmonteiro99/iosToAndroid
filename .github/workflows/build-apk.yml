@@ -48,9 +48,19 @@ jobs:
       - name: Make Gradlew executable
         run: chmod +x android/gradlew
 
+      # Dispatched from main, so this run is what seeds the default-branch Gradle
+      # cache that auto-release.yml (which fires on a pull_request ref and can
+      # only read) restores.
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      # Shipped APK keeps 32-bit ARM for older devices; the x86 emulator ABIs are
+      # dropped, which is where most of the CMake time went.
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4

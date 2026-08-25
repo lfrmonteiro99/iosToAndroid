@@ -292,7 +292,7 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
             on iOS (there is no equivalent native data source here) and the label
             always says "usage time" / "Screen Time", never "access". */}
         {Platform.OS === 'android' && (
-          <View style={{ paddingHorizontal: spacing.md }}>
+          <View testID="screen-time-card" style={{ paddingHorizontal: spacing.md }}>
             <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16, paddingBottom: 6, paddingTop: 22 }]}>
               <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase' }]}>
                 Screen Time

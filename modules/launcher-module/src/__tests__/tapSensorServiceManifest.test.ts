@@ -49,18 +49,29 @@ describe('TapSensorService manifest declaration (#770)', () => {
     expect(block).not.toBeNull();
   });
 
-  it('types the service as a SENSOR foreground service, not another type', () => {
-    // The issue's acceptance criterion: foreground service TYPE_SENSOR.
+  // #770 originally asserted foregroundServiceType="sensor" and the matching
+  // FOREGROUND_SERVICE_SENSOR permission. That is what 827a72f had to undo to get
+  // the APK building again: AAPT rejected the `sensor` token, so the manifest now
+  // declares `connectedDevice` — the closest hardware-sensor type the resource
+  // linker accepts — with the permission that matches it. Android 14+ requires the
+  // permission to match the declared type, so the pair has to move together.
+  //
+  // These assertions follow the manifest that actually compiles. Asserting a token
+  // the toolchain will not link is a test that can only ever be red.
+  it('types the service as a hardware-sensor foreground service', () => {
     const type = block ? attr(block, 'android:foregroundServiceType') : null;
-    expect(type).toBe('sensor');
+    expect(type).toBe('connectedDevice');
   });
 
-  it('declares the FOREGROUND_SERVICE_SENSOR permission', () => {
+  it('declares the permission matching the declared service type', () => {
     expect(manifest).toMatch(
-      /<uses-permission[^>]*android:name="android\.permission\.FOREGROUND_SERVICE_SENSOR"/,
+      /<uses-permission[^>]*android:name="android\.permission\.FOREGROUND_SERVICE_CONNECTED_DEVICE"/,
     );
   });
 
+  // Still the load-bearing assertion from #770: `health` is the type this started
+  // as, and it demands FOREGROUND_SERVICE_HEALTH. Whatever the sensor-ish type is
+  // called, it must not drift back to health.
   it('does not type the service as a non-sensor type (e.g. health)', () => {
     const type = block ? attr(block, 'android:foregroundServiceType') : null;
     expect(type).not.toBe('health');

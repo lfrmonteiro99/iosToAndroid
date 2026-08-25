@@ -47,6 +47,19 @@ export interface SmartBatteryEffects {
   backgroundAppRefresh: 'off' | 'wifi' | 'wifiAndCellular';
 }
 
+/**
+ * Contrato booleano do issue #648 (consolidado em #815): a única forma de obter
+ * as três regras de bateria fora do settings. `disableSync`, `reducePolling` e
+ * `delayNonCritical` espelham o Low Power Mode do perfil — os três perfis de
+ * poupança dura (extremeSaver/sleep/travel) ligam tudo; normal/performance
+ * mantêm tudo desligado.
+ */
+export interface SmartBatteryRuleState {
+  disableSync: boolean;
+  reducePolling: boolean;
+  delayNonCritical: boolean;
+}
+
 /** Catálogo ordenado dos perfis para a UI (ordem de apresentação). */
 export const SMART_BATTERY_PROFILES: SmartBatteryProfileMeta[] = [
   {
@@ -123,6 +136,25 @@ export function getProfileEffects(profile: SmartBatteryProfile): SmartBatteryEff
 }
 
 /**
+ * Contrato booleano das regras de bateria (issue #648), DERIVADO de
+ * `getProfileEffects` — esta é a única forma de obter o contrato do issue e a
+ * fonte de verdade continua a ser a matriz de efeitos, não um switch paralelo.
+ *
+ * Os três perfis de poupança dura (extremeSaver/sleep/travel) ligam as três
+ * regras; os restantes (normal/performance) mantêm-nas desligadas. O gatilho
+ * `<threshold && !charging` de `resolveActiveProfile` NÃO é tocado aqui — este
+ * getter é puro e independe de nível de bateria ou carregamento.
+ */
+export function getBatteryRuleState(profile: SmartBatteryProfile): SmartBatteryRuleState {
+  const { lowPowerMode } = getProfileEffects(profile);
+  return {
+    disableSync: lowPowerMode,
+    reducePolling: lowPowerMode,
+    delayNonCritical: lowPowerMode,
+  };
+}
+
+/**
  * Normaliza o id de perfil lido do AsyncStorage. Qualquer valor que não seja um
  * dos cinco ids canónicos (string vazia, null, undefined, número, typo antigo)
  * reverte para 'normal' — o perfil seguro que não restringe nada.
@@ -183,9 +215,14 @@ export function resolveActiveProfile(
   input: SmartBatteryTriggerInput,
 ): SmartBatteryResolved {
   const threshold = clampSmartBatteryThreshold(input.threshold);
-  const belowThreshold = typeof batteryLevel === 'number'
+  // O nível tem de ser um número finito em [0, 100]. Fora disso (NaN, negativo,
+  // >100) não se assume o pior: não se restringe. Espelha o guard de
+  // `levelValid` do engine antigo batteryRulesEngine (#648).
+  const levelValid = typeof batteryLevel === 'number'
     && Number.isFinite(batteryLevel)
-    && batteryLevel < threshold;
+    && batteryLevel >= 0
+    && batteryLevel <= 100;
+  const belowThreshold = levelValid && batteryLevel < threshold;
 
   if (input.autoEnabled && !isCharging && belowThreshold) {
     return { profile: 'extremeSaver', automatic: true };

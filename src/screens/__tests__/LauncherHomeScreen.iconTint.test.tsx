@@ -38,6 +38,17 @@ function mockApps(overrides: Record<string, unknown> = {}) {
     openLauncherSettings: jest.fn(() => Promise.resolve()), hiddenApps: [], visibleApps: [],
     hideApp: jest.fn(), unhideApp: jest.fn(), iconCacheSizeBytes: 0, isRebuildingIconCache: false,
     iconCacheRebuildProgress: null, rebuildIconCache: jest.fn(() => Promise.resolve()),
+    // Fields AppsContextValue gained after this test was written. compactHomeLayout
+    // is the required one — without it the `as AppsContextValue` cast stops
+    // type-checking ("neither type sufficiently overlaps"), which was the single
+    // tsc error on dev. The other five are optional; included so the mock stays
+    // a faithful stand-in rather than the minimum that compiles today.
+    compactHomeLayout: jest.fn(),
+    swapHomeApps: jest.fn(),
+    libraryOnlyApps: [],
+    protectedApps: [],
+    protectApp: jest.fn(),
+    unprotectApp: jest.fn(),
     ...overrides,
   } as ReturnType<typeof AppsStore.useApps>);
 }
@@ -65,7 +76,7 @@ describe('LauncherHomeScreen — Tinted Icons (#620)', () => {
 
   it('applies no tintColor to a grid app icon when iconTintEnabled is false (default)', () => {
     const app = realApp('Chess Deluxe', 'com.example.chess');
-    mockApps({ homeApps: [app], nonDockApps: [app], dockApps: [] });
+    mockApps({ homeApps: [{ packageName: app.packageName, position: 0 }], nonDockApps: [app], dockApps: [] });
     withSettings({ iconTintEnabled: false, iconTintColor: '#FF3B30' });
 
     const { getByTestId } = render(<LauncherHomeScreen />);
@@ -78,7 +89,7 @@ describe('LauncherHomeScreen — Tinted Icons (#620)', () => {
 
   it('applies iconTintColor as tintColor to a grid app icon when iconTintEnabled is true', () => {
     const app = realApp('Chess Deluxe', 'com.example.chess');
-    mockApps({ homeApps: [app], nonDockApps: [app], dockApps: [] });
+    mockApps({ homeApps: [{ packageName: app.packageName, position: 0 }], nonDockApps: [app], dockApps: [] });
     withSettings({ iconTintEnabled: true, iconTintColor: '#FF3B30' });
 
     const { getByTestId } = render(<LauncherHomeScreen />);
@@ -101,7 +112,7 @@ describe('LauncherHomeScreen — Tinted Icons (#620)', () => {
 
   it('does not tint the app-name label — only the icon (combines with showIconLabels)', () => {
     const app = realApp('Chess Deluxe', 'com.example.chess');
-    mockApps({ homeApps: [app], nonDockApps: [app], dockApps: [] });
+    mockApps({ homeApps: [{ packageName: app.packageName, position: 0 }], nonDockApps: [app], dockApps: [] });
     withSettings({ iconTintEnabled: true, iconTintColor: '#FF3B30', showIconLabels: true });
 
     const { getByText } = render(<LauncherHomeScreen />);
@@ -112,7 +123,7 @@ describe('LauncherHomeScreen — Tinted Icons (#620)', () => {
 
   it('keeps icon dimensions unchanged across a smaller grid density (adaptive-icon safety, #503 geometry)', () => {
     const app = realApp('Chess Deluxe', 'com.example.chess');
-    mockApps({ homeApps: [app], nonDockApps: [app], dockApps: [] });
+    mockApps({ homeApps: [{ packageName: app.packageName, position: 0 }], nonDockApps: [app], dockApps: [] });
 
     withSettings({ iconTintEnabled: false, gridColumns: 4 });
     const untinted = render(<LauncherHomeScreen />);

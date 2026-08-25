@@ -92,40 +92,46 @@ describe('CardDetailScreen', () => {
     });
 
     it('ends in a success state after the animation, without touching Linking, fetch, or the store', async () => {
-      jest.useFakeTimers();
+      // Real timers, deliberately. Two things fight fake timers here:
+      // WalletStore hydrates through an AsyncStorage promise chain (and the
+      // Harness only mounts the screen once `passes` is populated), and
+      // handleSimulatedPay starts an Animated.loop that never ends on its own —
+      // it is stopped by the 1200ms timeout. Freezing the clock deadlocked the
+      // first and left the second scheduling forever, so this suite hung
+      // instead of failing. SIMULATION_DURATION_MS is 1200ms, short enough to
+      // simply wait out.
       const { getByText, getByLabelText } = renderCardDetail();
       await waitFor(() => expect(getByText('Loyalty')).toBeTruthy());
 
       fireEvent.press(getByLabelText('Pay'));
       expect(getByText('Pay')).toBeTruthy(); // still processing, label unchanged yet
 
-      await act(async () => {
-        jest.advanceTimersByTime(1200);
-      });
-
-      expect(getByText('Paid')).toBeTruthy();
+      await waitFor(() => expect(getByText('Paid')).toBeTruthy(), { timeout: 5000 });
       expect(canOpenSpy).not.toHaveBeenCalled();
       expect(openSpy).not.toHaveBeenCalled();
-      expect(global.fetch).not.toHaveBeenCalled();
+      // DeviceProvider (mounted globally by test-utils) fetches the weather
+      // widget, and with real timers it has time to fire — so a blanket
+      // "fetch was never called" would assert something about the provider, not
+      // about Pay. The claim under test is that the simulation itself reaches
+      // no network, so every fetch that did happen must be that widget.
+      const nonWeatherFetches = (global.fetch as jest.Mock).mock.calls.filter(
+        ([url]) => !String(url).includes('wttr.in'),
+      );
+      expect(nonWeatherFetches).toEqual([]);
     });
 
     it('double-tapping Pay only runs the simulation once (disabled while processing)', async () => {
-      jest.useFakeTimers();
+      // Real timers, same reasons as the test above.
       const { getByText, getByLabelText } = renderCardDetail();
       await waitFor(() => expect(getByText('Loyalty')).toBeTruthy());
 
       fireEvent.press(getByLabelText('Pay'));
       fireEvent.press(getByLabelText('Pay')); // second tap while processing — must be a no-op
 
-      await act(async () => {
-        jest.advanceTimersByTime(1200);
-      });
-
-      expect(getByText('Paid')).toBeTruthy();
-      // A second timer firing later must not throw or double-transition.
-      await act(async () => {
-        jest.advanceTimersByTime(1200);
-      });
+      await waitFor(() => expect(getByText('Paid')).toBeTruthy(), { timeout: 5000 });
+      // A second timer firing later must not throw or double-transition: the
+      // guard is `payState !== 'idle'`, so the second tap never armed a timer.
+      await new Promise((r) => setTimeout(r, 1400));
       expect(getByText('Paid')).toBeTruthy();
     });
   });
