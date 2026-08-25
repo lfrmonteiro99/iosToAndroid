@@ -7,7 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { hapticSelection } from '../utils/haptics';
 import type { NavItem } from './navigation/navItems';
 
-export interface CupertinoTabBarProps {
+export interface CupertinoSidebarProps {
   items: NavItem[];
   /** Currently selected item id. */
   activeId: string;
@@ -16,14 +16,12 @@ export interface CupertinoTabBarProps {
 }
 
 /**
- * Compact bottom tab bar for the "compact width" (phone) form factor (#633).
- *
- * Purely controlled — the parent owns `activeId` and the selection callback and
- * decides what navigation actually happens. This keeps it decoupled from any
- * specific React Navigation navigator so the SAME item list drives the tablet
- * sidebar (`CupertinoSidebar`) and this phone bar.
+ * Stable vertical sidebar for the "regular width" (tablet / large window) form
+ * factor. Replaces the phone tab bar with a persistent column that never hides
+ * the content (#633). It is purely controlled — parent owns `activeId` and the
+ * selection callback, so it never navigates on its own.
  */
-export function CupertinoTabBar({ items, activeId, onSelect }: CupertinoTabBarProps) {
+export function CupertinoSidebar({ items, activeId, onSelect }: CupertinoSidebarProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -35,19 +33,20 @@ export function CupertinoTabBar({ items, activeId, onSelect }: CupertinoTabBarPr
       style={[
         styles.container,
         {
-          paddingBottom: insets.bottom,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.separator,
+          paddingTop: insets.top,
+          borderRightWidth: StyleSheet.hairlineWidth,
+          borderRightColor: colors.separator,
         },
       ]}
     >
-      <View style={styles.tabRow}>
+      <View style={styles.list}>
         {items.map((item) => {
           const isActive = item.id === activeId;
           const color = isActive ? colors.systemBlue : colors.systemGray;
 
           const onPress = () => {
-            // Double-tap safety: re-selecting the active tab is a no-op.
+            // Double-tap safety: re-selecting the active item is a no-op (this
+            // mirrors the tab bar behaviour and avoids redundant re-selection).
             if (isActive) return;
             hapticSelection();
             onSelect(item.id);
@@ -56,20 +55,21 @@ export function CupertinoTabBar({ items, activeId, onSelect }: CupertinoTabBarPr
           return (
             <Pressable
               key={item.id}
-              testID={`tab-bar-item-${item.id}`}
+              testID={`side-bar-item-${item.id}`}
               onPress={onPress}
               accessibilityRole="tab"
               accessibilityLabel={item.label}
               accessibilityState={{ selected: isActive }}
-              style={styles.tab}
+              style={({ pressed }) => [
+                styles.item,
+                isActive && { backgroundColor: colors.systemFill },
+                pressed && { backgroundColor: colors.tertiarySystemFill ?? colors.systemFill },
+              ]}
             >
-              <Ionicons name={item.icon} size={25} color={color} />
+              <Ionicons name={item.icon} size={24} color={color} />
               <Text
                 numberOfLines={1}
-                style={[
-                  typography.tabLabel,
-                  { color, marginTop: 2 },
-                ]}
+                style={[typography.tabLabel, { color, marginTop: 4 }]}
               >
                 {item.label}
               </Text>
@@ -81,21 +81,24 @@ export function CupertinoTabBar({ items, activeId, onSelect }: CupertinoTabBarPr
   );
 }
 
+const SIDEBAR_WIDTH = 84;
+
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    width: SIDEBAR_WIDTH,
+    alignSelf: 'stretch',
   },
-  tabRow: {
-    flexDirection: 'row',
-    height: 49,
-  },
-  tab: {
+  list: {
     flex: 1,
     alignItems: 'center',
+    paddingVertical: 12,
+  },
+  item: {
+    width: SIDEBAR_WIDTH - 12,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginVertical: 2,
   },
 });
