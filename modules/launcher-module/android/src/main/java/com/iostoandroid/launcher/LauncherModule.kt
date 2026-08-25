@@ -2,7 +2,6 @@ package com.iostoandroid.launcher
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
-import android.app.ActivityOptions
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -45,6 +44,7 @@ import android.provider.Settings
 import android.provider.Telephony
 import android.telecom.TelecomManager
 import android.util.Base64
+import android.util.Log
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
@@ -240,10 +240,39 @@ class LauncherModule : Module() {
             // an alert on `false`, so the user gets an explicit outcome instead
             // of a sinkhole.
             val activity = appContext.currentActivity ?: return@AsyncFunction false
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            val options = ActivityOptions.makeCustomAnimation(activity, 0, 0)
-            activity.startActivity(intent, options.toBundle())
-            true
+
+            // Flags: what AOSP's Launcher3 uses to start an app from the home
+            // screen. NEW_TASK because the app gets its own task, and
+            // RESET_TASK_IF_NEEDED so tapping the icon for an app that is
+            // already running behaves like a launcher launch (the task is
+            // brought forward and reset to its root) rather than resuming
+            // whatever activity happened to be on top.
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+
+            // No ActivityOptions bundle.
+            //
+            // This used to pass ActivityOptions.makeCustomAnimation(activity, 0, 0)
+            // to suppress the system's app-open transition, because the launcher
+            // draws its own icon-expand animation. 0 is not a valid animation
+            // resource id, and the reported symptom of a third-party app that
+            // "just fails" — nothing opens, and NO error alert, which means this
+            // function returned true — points straight at an options bundle the
+            // system rejects while the start itself is dropped. Suppressing a
+            // transition is cosmetic; launching the app is not.
+            //
+            // try/catch so the outcome is never a silent success: startActivity
+            // can throw ActivityNotFoundException (the resolved intent went
+            // stale) or SecurityException (the target is not exported), and
+            // returning false makes the JS side collapse the overlay and show
+            // "Could not launch app" instead of leaving the user with an icon
+            // that does nothing.
+            return@AsyncFunction try {
+                activity.startActivity(intent)
+                true
+            } catch (e: Exception) {
+                Log.w("LauncherModule", "launchApp failed for $packageName", e)
+                false
+            }
         }
 
         AsyncFunction("getAppIcon") { packageName: String, maskArg: Map<String, Any?>? ->
