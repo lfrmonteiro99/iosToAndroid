@@ -13,7 +13,7 @@
 // 2) needs both columns, so it always drops to a fresh row; a large widget
 // (rowSpan 2) also reserves the next row beneath it.
 
-import type { WidgetType } from '../components/TodayWidgets';
+import type { WidgetType } from './TodayWidgets';
 
 export const GRID_COLUMNS = 2;
 

@@ -35,7 +35,7 @@ import {
   useWidgetConfig,
   useWidgetMap,
   type WidgetType,
-} from '../components/TodayWidgets';
+} from '../widgets/TodayWidgets';
 import {
   computeWidgetGrid,
 } from '../widgets/widgetGrid';

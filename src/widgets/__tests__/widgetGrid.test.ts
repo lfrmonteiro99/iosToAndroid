@@ -7,7 +7,7 @@ import {
   gridRowCount,
   type WidgetSize,
 } from '../widgetGrid';
-import type { WidgetType } from '../../components/TodayWidgets';
+import type { WidgetType } from '../TodayWidgets';
 
 const ALL: WidgetType[] = ['battery', 'storage', 'weather', 'upNext', 'messages', 'screenTime'];
 
