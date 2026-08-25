@@ -25,3 +25,24 @@ export const TABLET_NAV_ITEMS: NavItem[] = [
   { id: 'Contacts', label: 'Contacts', icon: 'people' },
   { id: 'Settings', label: 'Settings', icon: 'settings' },
 ];
+
+/**
+ * Maps a `TABLET_NAV_ITEMS` id to the stack route it opens (#651-B). Kept as
+ * the single source of truth alongside its inverse so the sidebar/tab bar
+ * selection and the stack's current route can never drift apart.
+ */
+export const NAV_ITEM_TO_ROUTE = {
+  Home: 'HomeMain',
+  Phone: 'Phone',
+  Messages: 'Messages',
+  Contacts: 'Contacts',
+  Settings: 'Settings',
+} as const;
+
+export const ROUTE_TO_NAV_ITEM = {
+  HomeMain: 'Home',
+  Phone: 'Phone',
+  Messages: 'Messages',
+  Contacts: 'Contacts',
+  Settings: 'Settings',
+} as const;

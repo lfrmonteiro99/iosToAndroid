@@ -21,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SystemAppIcon } from '../components/SystemAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -52,8 +52,15 @@ import {
   useAlert,
   useWidgetConfig,
   useWidgetMap,
+  ResponsiveNavShell,
 } from '../components';
 import type { BannerNotification } from '../components';
+import { useRegularWidth } from '../hooks/useRegularWidth';
+import {
+  TABLET_NAV_ITEMS,
+  NAV_ITEM_TO_ROUTE,
+  ROUTE_TO_NAV_ITEM,
+} from '../components/navigation/navItems';
 import type { RootStackParamList } from '../navigation/types';
 import {
   darkenHex,
@@ -944,6 +951,10 @@ export function NonAndroidFallback() {
 export function LauncherHomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<AppNavigationProp>();
+  const route = useRoute();
+  const isRegular = useRegularWidth();
+  const activeNavItem =
+    ROUTE_TO_NAV_ITEM[route.name as keyof typeof ROUTE_TO_NAV_ITEM] ?? 'Home';
 
   const {
     apps,
@@ -1814,7 +1825,7 @@ export function LauncherHomeScreen() {
       firstPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
-  return (
+  const tree = (
     <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture, lastPageRubberBandGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
@@ -2176,6 +2187,23 @@ export function LauncherHomeScreen() {
       </Animated.View>
     </GestureDetector>
   );
+
+  if (isRegular) {
+    return (
+      <ResponsiveNavShell
+        navItems={TABLET_NAV_ITEMS}
+        activeId={activeNavItem}
+        onSelect={(id) => {
+          const targetRoute = NAV_ITEM_TO_ROUTE[id as keyof typeof NAV_ITEM_TO_ROUTE];
+          if (targetRoute) navigation.navigate(targetRoute);
+        }}
+      >
+        {tree}
+      </ResponsiveNavShell>
+    );
+  }
+
+  return tree;
 }
 
 // ---------------------------------------------------------------------------
