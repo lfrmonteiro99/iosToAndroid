@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { LockScreen } from '../LockScreen';
 import { DeviceContext, DeviceContextValue } from '../../store/DeviceStore';
+import type { AppNavigationProp } from '../../navigation/types';
 import launcherModule from '../../../modules/launcher-module/src';
 
 jest.mock('expo-secure-store', () => ({
@@ -43,12 +44,14 @@ describe('LockScreen', () => {
 
   it('renders flashlight button', () => {
     const { getByLabelText } = render(<LockScreen />);
-    expect(getByLabelText('Flashlight')).toBeTruthy();
+    // Label is state-dependent: 'Turn on flashlight' when off (the default),
+    // 'Turn off flashlight' once toggled. Asserting the off-state label.
+    expect(getByLabelText('Turn on flashlight')).toBeTruthy();
   });
 
   it('renders camera button', () => {
     const { getByLabelText } = render(<LockScreen />);
-    expect(getByLabelText('Camera')).toBeTruthy();
+    expect(getByLabelText('Open camera')).toBeTruthy();
   });
 
   it('renders Use Passcode button', () => {
@@ -67,7 +70,7 @@ describe('LockScreen', () => {
     fireEvent.press(getByLabelText('Use passcode to unlock'));
     expect(getByLabelText('Digit 1')).toBeTruthy();
     expect(getByLabelText('Digit 0')).toBeTruthy();
-    expect(getByLabelText('Delete')).toBeTruthy();
+    expect(getByLabelText('Delete digit')).toBeTruthy();
   });
 
   it('calls onUnlock when correct PIN entered', async () => {
@@ -409,5 +412,102 @@ describe('LockScreen widget slots', () => {
     );
     // MockDeviceProvider's default weather condition is '' (unavailable) — no chip should render.
     expect(queryByLabelText(/Weather widget/)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lock Screen complication taps (issue #812): iOS-style small widgets above /
+// below the clock must open their corresponding app WITHOUT unlocking the
+// device. The widget slots were rendered by #656 but had no onPress, so a tap
+// did nothing — the acceptance criterion "toque abre o app correspondente sem
+// desbloquear" was unmet.
+// ---------------------------------------------------------------------------
+
+const mockNavigation: AppNavigationProp = {
+  navigate: jest.fn(),
+  goBack: jest.fn(),
+  push: jest.fn(),
+} as unknown as AppNavigationProp;
+
+describe('LockScreen complication taps', () => {
+  it('opens the Battery app when the battery complication is tapped, without unlocking', () => {
+    const onUnlock = jest.fn();
+    const { getByLabelText } = render(
+      <MockDeviceProvider notificationAccessGranted={false}>
+        <LockScreen navigation={mockNavigation} onUnlock={onUnlock} />
+      </MockDeviceProvider>
+    );
+    const battery = getByLabelText('Battery widget, 72%');
+    // A complication is an interactive control, not static text.
+    expect(battery.props.accessibilityRole).toBe('button');
+    fireEvent.press(battery);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Battery');
+    expect(onUnlock).not.toHaveBeenCalled();
+  });
+
+  it('opens the Storage app when the storage complication is tapped, without unlocking', () => {
+    const onUnlock = jest.fn();
+    const { getByLabelText } = render(
+      <MockDeviceProvider notificationAccessGranted={false}>
+        <LockScreen navigation={mockNavigation} onUnlock={onUnlock} />
+      </MockDeviceProvider>
+    );
+    const storage = getByLabelText('Storage widget, 0 GB of 0 GB used');
+    expect(storage.props.accessibilityRole).toBe('button');
+    fireEvent.press(storage);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Storage');
+    expect(onUnlock).not.toHaveBeenCalled();
+  });
+
+  it('opens the Weather app when the weather complication is tapped, without unlocking', () => {
+    const onUnlock = jest.fn();
+    const value: DeviceContextValue = {
+      battery: { level: 1, isCharging: false },
+      brightness: 0.5,
+      volume: 0.5,
+      wifi: { enabled: false, ssid: '', rssi: 0, linkSpeed: 0, ip: '', networks: [] },
+      wifiError: false,
+      bluetooth: { enabled: false, name: '', address: '', pairedDevices: [] },
+      bluetoothError: false,
+      storage: { totalGB: '0', usedGB: '0', freeGB: '0', usedPercentage: 0 },
+      storageError: false,
+      network: { isConnected: false, isWifi: false, isCellular: false },
+      messages: [],
+      contacts: [],
+      weather: { temp: 22, condition: 'Sunny', icon: 'sunny', city: 'Lisbon' },
+      notificationAccessGranted: false,
+      isReady: true,
+      refresh: async () => {},
+      setBrightness: async () => {},
+      setVolume: async () => {},
+      toggleWifi: async () => {},
+      toggleBluetooth: async () => {},
+      openSystemPanel: async () => {},
+      requestContactsPermission: async () => false,
+      requestSmsPermission: async () => false,
+      autoBrightness: true,
+      setAutoBrightness: async () => {},
+    };
+    const { getByLabelText } = render(
+      <DeviceContext.Provider value={value}>
+        <LockScreen navigation={mockNavigation} onUnlock={onUnlock} />
+      </DeviceContext.Provider>
+    );
+    const weather = getByLabelText('Weather widget, 22°C, Sunny');
+    expect(weather.props.accessibilityRole).toBe('button');
+    fireEvent.press(weather);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Weather');
+    expect(onUnlock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT unlock when a complication is tapped (no passcode prompt appears)', () => {
+    const { getByLabelText, queryByText } = render(
+      <MockDeviceProvider notificationAccessGranted={false}>
+        <LockScreen navigation={mockNavigation} />
+      </MockDeviceProvider>
+    );
+    fireEvent.press(getByLabelText('Battery widget, 72%'));
+    // Tapping a complication must not trigger the unlock flow / passcode UI.
+    expect(queryByText('Enter Passcode')).toBeNull();
   });
 });

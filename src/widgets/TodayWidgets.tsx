@@ -42,6 +42,22 @@ export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = 
   screenTime: 'hourglass-outline',
 };
 
+// iOS-style Today View grid: 2 columns. 'small' widgets take one column
+// (side-by-side pairs); 'medium'/'large' widgets span both columns, with
+// 'large' getting extra vertical room for denser content. Shared between
+// TodayViewScreen and the Smart Stack eligibility logic so the stack only
+// ever groups widgets that occupy a half-width cell.
+export type WidgetSize = 'small' | 'medium' | 'large';
+
+export const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
+  battery: 'small',
+  storage: 'small',
+  weather: 'medium',
+  upNext: 'large',
+  messages: 'small',
+  screenTime: 'small',
+};
+
 export async function loadWidgetConfig(): Promise<WidgetType[]> {
   try {
     const raw = await AsyncStorage.getItem(WIDGET_CONFIG_KEY);
@@ -58,6 +74,65 @@ export async function loadWidgetConfig(): Promise<WidgetType[]> {
 
 export async function saveWidgetConfig(config: WidgetType[]): Promise<void> {
   await AsyncStorage.setItem(WIDGET_CONFIG_KEY, JSON.stringify(config));
+}
+
+// ---------------------------------------------------------------------------
+// Smart Stack configuration (#810) — which widgets are grouped into the single
+// auto-rotating cell above the 2-column grid.
+//
+// The stack reuses the SAME grid defaults (small = one column). Only the
+// small-sized widgets are eligible to be stacked: a medium/large card spans
+// both columns and is conceptually one full-width item, so stacking it with
+// others would collide with the shared sizing. Stacking 2..4 small widgets
+// into one half-width cell is exactly the iOS behaviour the issue asks for.
+// ---------------------------------------------------------------------------
+
+export const SMART_STACK_KEY = '@iostoandroid/smart_stack';
+export const SMART_STACK_MIN = 2;
+export const SMART_STACK_MAX = 4;
+
+/** Small widgets that may be grouped into the stack (half-width cells). */
+export const SMART_STACK_ELIGIBLE: WidgetType[] = (['battery', 'storage', 'messages', 'screenTime'] as WidgetType[]).filter(
+  (t) => WIDGET_SIZES[t] === 'small',
+);
+
+export async function loadSmartStackConfig(): Promise<WidgetType[]> {
+  try {
+    const raw = await AsyncStorage.getItem(SMART_STACK_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as WidgetType[];
+      // Keep only known, eligible (small) widget types, in a valid count.
+      const valid = (parsed.filter((t) => SMART_STACK_ELIGIBLE.includes(t)) as WidgetType[]);
+      return valid;
+    }
+  } catch {
+    // fall through
+  }
+  return [];
+}
+
+export async function saveSmartStackConfig(config: WidgetType[]): Promise<void> {
+  const clamped = config.filter((t) => SMART_STACK_ELIGIBLE.includes(t));
+  await AsyncStorage.setItem(SMART_STACK_KEY, JSON.stringify(clamped));
+}
+
+export function useSmartStackConfig() {
+  const [stack, setStackState] = useState<WidgetType[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    loadSmartStackConfig().then((cfg) => {
+      setStackState(cfg);
+      setLoaded(true);
+    });
+  }, []);
+
+  const setStack = useCallback((next: WidgetType[]) => {
+    setStackState(next);
+    saveSmartStackConfig(next);
+  }, []);
+
+  return { stack, setStack, loaded };
 }
 
 export function useWidgetConfig() {

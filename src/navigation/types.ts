@@ -29,9 +29,11 @@ export type RootStackParamList = {
   FindMy: undefined;
   FindMyLocationHistory: undefined;
   Reminders: undefined;
+  Shortcuts: undefined;
   Browser: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
   Wallet: undefined;
+  CardEdit: undefined;
   PassDetail: { passId: string };
   PassEdit: { passId?: string; prefillCode?: string };
   PassScan: undefined;

@@ -142,10 +142,21 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           break;
         }
         reply = `Opening ${app.name}.`;
-        launchApp(app.packageName).catch((e) => {
-          logger.warn('SiriScreen', 'launchApp failed', e);
-          reply = `Couldn't open ${app.name}.`;
-        });
+        // The optimistic "Opening …" is already on screen, so both failure
+        // shapes have to correct it through setResponse: `reply` is long out
+        // of scope by the time this settles. A failed native launch resolves
+        // `false` (dispatchLaunchApp swallows the error and reports it via the
+        // store's alert) — only an unexpected throw reaches `.catch`, so
+        // checking just one of the two would leave the assistant claiming it
+        // opened an app it never opened.
+        launchApp(app.packageName)
+          .then((ok) => {
+            if (!ok) setResponse(`Couldn't open ${app.name}.`);
+          })
+          .catch((e) => {
+            logger.warn('SiriScreen', 'launchApp failed', e);
+            setResponse(`Couldn't open ${app.name}.`);
+          });
         break;
       }
       case 'CALL_CONTACT': {
@@ -191,6 +202,11 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         reply = NOT_SUPPORTED;
         break;
     }
+
+    // Every synchronous branch above lands here. The `speak` effect is bound to
+    // `response`, so setting it is what both shows and says the answer — the
+    // WHAT_TIME / SET_ALARM branches return early because they set it themselves.
+    setResponse(reply);
   }, [findApp, contacts, launchApp, navigation]);
 
   const handleSubmit = useCallback(() => {

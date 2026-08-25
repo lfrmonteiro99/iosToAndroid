@@ -855,7 +855,12 @@ describe('LauncherHomeScreen — Focus page visibility (#618)', () => {
     await waitFor(() => expect(filtered.getByTestId('launcher-page-grid-0')).toBeTruthy(), {
       timeout: 3000,
     });
-    expect(countDots(filtered)).toBe(dotsWithAllPages - 1);
+    // Retried rather than read once: the hidden-page filter lands a render
+    // after grid-0 mounts, so under CI load the count is still 3 at the moment
+    // the waitFor above resolves.
+    await waitFor(() => expect(countDots(filtered)).toBe(dotsWithAllPages - 1), {
+      timeout: 3000,
+    });
     filtered.unmount();
   });
 
