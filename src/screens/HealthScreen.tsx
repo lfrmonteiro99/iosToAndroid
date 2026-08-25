@@ -71,6 +71,8 @@ export function HealthScreen() {
   const navigation = useNavigation<AppNavigationProp>();
   const {
     todaySteps,
+    todayDistanceKm,
+    todayActiveEnergyKcal,
     isPedometerAvailable,
     permissionGranted,
     requestActivityPermission,
@@ -161,9 +163,40 @@ export function HealthScreen() {
     </CupertinoCard>
   );
 
+  // Estimated from the step count, never measured (#273): there is no height or
+  // weight input anywhere in the app. Gated by the same `showSteps` as the step
+  // count so "no permission" and "no data" print the same em dash — printing
+  // "0.0 km" would read as a measurement of a day spent standing still.
+  const renderEstimatesCard = () => (
+    <CupertinoCard title="Distance & Energy" subtitle="Estimated from steps today">
+      <View style={styles.stepsRow}>
+        <Ionicons name="map" size={22} color="#34C759" />
+        <Text
+          style={[typography.title2, { color: colors.label, marginLeft: spacing.sm }]}
+          accessibilityLabel="Estimated distance today"
+        >
+          {showSteps ? `${todayDistanceKm.toFixed(1)} km` : '—'}
+        </Text>
+      </View>
+      <View style={[styles.stepsRow, { marginTop: spacing.sm }]}>
+        <Ionicons name="flame" size={22} color="#FF9500" />
+        <Text
+          style={[typography.title2, { color: colors.label, marginLeft: spacing.sm }]}
+          accessibilityLabel="Estimated active energy today"
+        >
+          {showSteps ? `${Math.round(todayActiveEnergyKcal)} kcal` : '—'}
+        </Text>
+      </View>
+      <Text style={[typography.footnote, { color: colors.secondaryLabel, marginTop: spacing.sm }]}>
+        Estimated from your step count using population averages, not measured.
+      </Text>
+    </CupertinoCard>
+  );
+
   const renderSummary = () => (
     <>
       {renderStepCard()}
+      {renderEstimatesCard()}
       <CupertinoCard title="Trends" subtitle="Step history">
         <View style={{ marginBottom: spacing.sm }}>
           <CupertinoSegmentedControl

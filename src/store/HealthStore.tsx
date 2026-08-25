@@ -37,6 +37,21 @@ const healthConnectBridge: HealthConnectModuleType & {
 };
 
 /** One persisted day of steps. `date` is the LOCAL calendar day, 'YYYY-MM-DD'. */
+/**
+ * Average adult walking stride length in metres (~0.76 m). Population average
+ * used only to turn a step count into an ESTIMATED distance — there is no
+ * height or weight input anywhere in the app, so no user-specific refinement
+ * is possible and none is faked (#273).
+ */
+export const AVERAGE_STRIDE_METERS = 0.762;
+
+/**
+ * Average active energy burned per walking step in kcal (~0.04 kcal/step,
+ * i.e. roughly 100 kcal per mile for an average adult). Same caveat as the
+ * stride above: an estimate from a population average, not a measurement.
+ */
+export const AVERAGE_KCAL_PER_STEP = 0.04;
+
 export interface DailySteps {
   date: string;
   steps: number;
@@ -45,6 +60,10 @@ export interface DailySteps {
 export interface HealthContextValue {
   /** Steps accumulated for today's local date. 0 until permission is granted. */
   todaySteps: number;
+  /** Estimated, not measured: `todaySteps * AVERAGE_STRIDE_METERS / 1000`. */
+  todayDistanceKm: number;
+  /** Estimated, not measured: `todaySteps * AVERAGE_KCAL_PER_STEP`. */
+  todayActiveEnergyKcal: number;
   /** Whether the device actually exposes a step-counter sensor. */
   isPedometerAvailable: boolean;
   /** null = never asked yet. */
@@ -335,6 +354,8 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<HealthContextValue>(
     () => ({
       todaySteps,
+      todayDistanceKm: (todaySteps * AVERAGE_STRIDE_METERS) / 1000,
+      todayActiveEnergyKcal: todaySteps * AVERAGE_KCAL_PER_STEP,
       isPedometerAvailable,
       permissionGranted,
       requestActivityPermission,

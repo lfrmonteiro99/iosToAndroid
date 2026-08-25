@@ -12,6 +12,8 @@ const useHealthMock = useHealth as jest.Mock;
 
 const base = {
   todaySteps: 0,
+  todayDistanceKm: 0,
+  todayActiveEnergyKcal: 0,
   isPedometerAvailable: true,
   permissionGranted: null as boolean | null,
   requestActivityPermission: jest.fn(async () => false),
@@ -47,32 +49,32 @@ describe('HealthScreen', () => {
 
   it('shows an em dash instead of a number before permission is granted', () => {
     useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: null });
-    const { getByText, queryByText } = render(<HealthScreen />);
-    expect(getByText('—')).toBeTruthy();
+    const { getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(getByLabelText("Today's step count").props.children).toBe('—');
     expect(queryByText('1234')).toBeNull();
   });
 
   it('shows the real step count once permission is granted, and hides the button', () => {
     useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: true });
-    const { getByText, queryByText } = render(<HealthScreen />);
-    expect(getByText('1234')).toBeTruthy();
+    const { getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(getByLabelText("Today's step count").props.children).toBe('1234');
     expect(queryByText('Grant Activity Permission')).toBeNull();
     expect(queryByText('—')).toBeNull();
   });
 
   it('shows 0 (not an em dash) when granted and the user has not moved', () => {
     useHealthMock.mockReturnValue({ ...base, todaySteps: 0, permissionGranted: true });
-    const { getByText, queryByText } = render(<HealthScreen />);
-    expect(getByText('0')).toBeTruthy();
+    const { getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(getByLabelText("Today's step count").props.children).toBe('0');
     expect(queryByText('—')).toBeNull();
   });
 
   it('never offers a permission when the device has no pedometer', () => {
     useHealthMock.mockReturnValue({ ...base, isPedometerAvailable: false, permissionGranted: null });
-    const { getByText, queryByText } = render(<HealthScreen />);
+    const { getByText, getByLabelText, queryByText } = render(<HealthScreen />);
     expect(queryByText('Grant Activity Permission')).toBeNull();
     expect(getByText('Step counting is not available on this device')).toBeTruthy();
-    expect(getByText('—')).toBeTruthy();
+    expect(getByLabelText("Today's step count").props.children).toBe('—');
   });
 
   it('does not offer the permission before the store is ready', () => {
@@ -213,18 +215,20 @@ describe('HealthScreen Browse tab', () => {
 
   it('shows the real step count when Activity is tapped and permission is granted', () => {
     useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: true });
-    const { getByText } = render(<HealthScreen />);
+    const { getByText, getAllByText } = render(<HealthScreen />);
     fireEvent.press(getByText('Browse'));
     fireEvent.press(getByText('Activity'));
-    expect(getByText('1234')).toBeTruthy();
+    // The Browse tab's Activity card and the summary step card can both be
+    // mounted, so the count is expected at least once rather than exactly once.
+    expect(getAllByText('1234').length).toBeGreaterThan(0);
   });
 
   it('shows an em dash (never an invented number) for Activity when not granted', () => {
     useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: null });
-    const { getByText, queryByText } = render(<HealthScreen />);
+    const { getByText, getAllByText, queryByText } = render(<HealthScreen />);
     fireEvent.press(getByText('Browse'));
     fireEvent.press(getByText('Activity'));
-    expect(getByText('—')).toBeTruthy();
+    expect(getAllByText('—').length).toBeGreaterThan(0);
     expect(queryByText('1234')).toBeNull();
   });
 

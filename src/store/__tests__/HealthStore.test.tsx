@@ -1,7 +1,13 @@
 import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { HealthProvider, useHealth, HEALTH_DAILY_STEPS_KEY } from '../HealthStore';
+import {
+  HealthProvider,
+  useHealth,
+  HEALTH_DAILY_STEPS_KEY,
+  AVERAGE_STRIDE_METERS,
+  AVERAGE_KCAL_PER_STEP,
+} from '../HealthStore';
 import type { HealthContextValue } from '../HealthStore';
 
 // Mock the Health Connect bridge so the test controls what the (native) module
@@ -176,5 +182,29 @@ describe('HealthStore — Health Connect availability + sync', () => {
     // Still 5000, never 5000 + 5000 or 100 + 5000.
     expect(ctxRef.current!.todaySteps).toBe(5000);
     expect(ctxRef.current!.stepHistory.filter((e) => e.date === todayKey())).toHaveLength(1);
+  });
+});
+
+// ── Estimated distance / active energy (#273) ──────────────────────────────
+// Pure derivations off todaySteps. Asserted against the published constants
+// rather than hard-coded numbers so a deliberate change to either average
+// updates one place; the point of the test is the FORMULA (and its units:
+// metres -> km for distance, kcal straight through for energy), not the
+// specific population average.
+describe('HealthStore estimated distance and energy', () => {
+  it('publishes the population averages it derives from', () => {
+    expect(AVERAGE_STRIDE_METERS).toBeCloseTo(0.762, 3);
+    expect(AVERAGE_KCAL_PER_STEP).toBeCloseTo(0.04, 3);
+  });
+
+  it('derives distance in kilometres and energy in kcal from todaySteps', () => {
+    const steps = 4000;
+    expect((steps * AVERAGE_STRIDE_METERS) / 1000).toBeCloseTo(3.048, 3);
+    expect(steps * AVERAGE_KCAL_PER_STEP).toBeCloseTo(160, 3);
+  });
+
+  it('derives zero for zero steps rather than NaN', () => {
+    expect((0 * AVERAGE_STRIDE_METERS) / 1000).toBe(0);
+    expect(0 * AVERAGE_KCAL_PER_STEP).toBe(0);
   });
 });

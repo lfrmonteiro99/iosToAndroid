@@ -125,6 +125,7 @@ jest.mock('expo-sensors', () => ({
   Pedometer: {
     isAvailableAsync: jest.fn(() => Promise.resolve(true)),
     watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
+    getStepCountAsync: jest.fn(() => Promise.resolve({ steps: 0 })),
   },
 }));
 
