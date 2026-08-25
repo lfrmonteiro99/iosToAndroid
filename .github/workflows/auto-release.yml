@@ -144,11 +144,10 @@ jobs:
 
       - name: Sync version bump to dev
         run: |
-          git fetch origin dev
+          git fetch origin main dev
           git checkout -B dev origin/dev
-          # Merge the bump commit from main into dev (fast-forward if possible)
-          if ! git merge --ff-only main; then
-            git merge --no-ff main -m "chore: sync version bump ${{ steps.version.outputs.next }} to dev"
+          if ! git merge --ff-only origin/main; then
+            git merge --no-ff origin/main -m "chore: sync version bump ${{ steps.version.outputs.next }} to dev"
           fi
           git push origin dev
 
