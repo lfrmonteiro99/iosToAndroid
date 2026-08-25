@@ -111,6 +111,34 @@ describe('commitForSwitcher', () => {
       }),
     ).toBe('none');
   });
+
+  // #686: Multitask view shows the Android home screen instead of the iOS
+  // app switcher. Root cause: switcherProgressMax (0.58) capped the hold
+  // zone at the lower-middle of the drag. A natural iOS swipe-up-and-hold
+  // (drag most of the way up, pause) sits at progress ~0.8, which the
+  // predicate rejected as 'none' — so HomeIndicator.onEnd fell through to
+  // commitForHome (progress >= 0.52) and fired goHome(), dropping the user
+  // onto the Android launcher. The hold must be recognized for the full
+  // upward drag, so the upper bound is eliminated (max === 1.0).
+  it('returns hold when the user holds a near-full swipe-up (progress well above switcherProgressMax)', () => {
+    expect(
+      commitForSwitcher({
+        progress: 0.8,
+        velocity: 0,
+        holdMs: gestureConfig.switcherHoldMinMs,
+      }),
+    ).toBe('hold');
+  });
+
+  it('returns hold at the maximum possible progress (1.0) when held', () => {
+    expect(
+      commitForSwitcher({
+        progress: 1,
+        velocity: 0,
+        holdMs: gestureConfig.switcherHoldMinMs,
+      }),
+    ).toBe('hold');
+  });
 });
 
 describe('commitForQuickSwitch', () => {

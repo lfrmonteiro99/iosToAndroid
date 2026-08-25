@@ -75,10 +75,25 @@ function formatNotifTime(timestamp: number): string {
 
 import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
 import { hapticImpact, hapticNotification } from '../utils/haptics';
+import { isPasscodeRequired } from '../utils/passcodePolicy';
 
 const LOCK_PIN_KEY = 'lock_pin';
 const LOCK_PIN_STORAGE_KEY = '@iostoandroid/lock_pin';
 const LOCK_PIN_LEGACY_KEY = '@lock_pin';
+/** Epoch ms do último desbloqueio bem-sucedido — base do «Require Passcode» (#611). */
+const LAST_UNLOCK_KEY = '@iostoandroid/last_unlock_at';
+
+/** Lê o último desbloqueio; devolve null quando não existe ou está corrompido. */
+async function readLastUnlockAt(): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_UNLOCK_KEY);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -147,6 +162,80 @@ interface NotificationGroupData {
   appName: string;
   appIcon: string;
   notifications: RealNotification[];
+}
+
+// ---------------------------------------------------------------------------
+// Widget slots (complications) — compact chips above/below the clock
+// ---------------------------------------------------------------------------
+
+function LockWidgetSlot({
+  icon,
+  iconColor,
+  value,
+  label,
+  accessibilityLabel,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  value: string;
+  label: string;
+  accessibilityLabel: string;
+}) {
+  const { textScale } = useTheme();
+  return (
+    <View style={styles.widgetSlot} accessibilityLabel={accessibilityLabel} accessibilityRole="text">
+      <GlassSurface intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+      <Ionicons name={icon} size={16} color={iconColor} />
+      <Text style={[styles.widgetSlotValue, { fontSize: 13 * textScale }]}>{value}</Text>
+      <Text style={[styles.widgetSlotLabel, { fontSize: 11 * textScale }]}>{label}</Text>
+    </View>
+  );
+}
+
+function BatteryWidgetSlot({ level, isCharging }: { level: number; isCharging: boolean }) {
+  const pct = Math.round(level * 100);
+  const color = pct > 20 ? '#30D158' : '#FF453A';
+  const icon: keyof typeof Ionicons.glyphMap = isCharging
+    ? 'battery-charging-outline'
+    : pct > 50
+    ? 'battery-full-outline'
+    : pct > 20
+    ? 'battery-half-outline'
+    : 'battery-dead-outline';
+  return (
+    <LockWidgetSlot
+      icon={icon}
+      iconColor={color}
+      value={`${pct}%`}
+      label="Battery"
+      accessibilityLabel={`Battery widget, ${pct}%`}
+    />
+  );
+}
+
+function StorageWidgetSlot({ usedGB, totalGB }: { usedGB: string; totalGB: string }) {
+  return (
+    <LockWidgetSlot
+      icon="server-outline"
+      iconColor="rgba(255,255,255,0.8)"
+      value={`${usedGB} GB`}
+      label="Storage"
+      accessibilityLabel={`Storage widget, ${usedGB} GB of ${totalGB} GB used`}
+    />
+  );
+}
+
+function WeatherWidgetSlot({ temp, condition, icon }: { temp: number; condition: string; icon: string }) {
+  const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
+  return (
+    <LockWidgetSlot
+      icon={iconName}
+      iconColor="#FFD60A"
+      value={`${temp}°C`}
+      label={condition}
+      accessibilityLabel={`Weather widget, ${temp}°C, ${condition}`}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +401,7 @@ function NotificationGroupCard({
 export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigationProp; onUnlock?: () => void }) {
   const insets = useSafeAreaInsets();
   const device = useDevice();
-  const { settings } = useSettings();
+  const { settings, isReady: settingsReady } = useSettings();
   const { apps } = useApps();
   const { textScale } = useTheme();
 
@@ -539,7 +628,12 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   // Biometric unlock on mount
   const triggerBiometric = async () => {
     try {
-      const LocalAuth = await import('expo-local-authentication');
+      // require(), not `await import(...)`: Metro compiles both to the same
+      // synchronous module load, but a bare `import()` throws under Jest's
+      // CommonJS environment, which made this catch swallow every call and
+      // turned the biometric prompt into a permanent no-op in tests.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const LocalAuth = require('expo-local-authentication') as typeof import('expo-local-authentication');
       const hasHardware = await LocalAuth.hasHardwareAsync();
       const isEnrolled = await LocalAuth.isEnrolledAsync();
 
@@ -570,9 +664,28 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
   };
 
   useEffect(() => {
-    triggerBiometric();
+    // Esperar pelo AsyncStorage do SettingsStore: decidir antes disso usaria os
+    // defaults ('immediately' + Face ID ligado) em vez das escolhas do
+    // utilizador, e o «Require Passcode» nunca se aplicaria.
+    if (!settingsReady) return;
+    // #611 «Require Passcode»: dentro do intervalo escolhido desde o último
+    // desbloqueio, o ecrã de bloqueio aparece mas não exige autenticação — o
+    // swipe-up basta. Fora do intervalo (ou sem registo), exige.
+    let cancelled = false;
+    (async () => {
+      const lastUnlockAt = await readLastUnlockAt();
+      if (cancelled) return;
+      if (!isPasscodeRequired(settings.requirePasscodeAfter, lastUnlockAt, Date.now())) return;
+      // `biometricUnlock` é o master on/off; `faceIdForUnlock` a sub-opção.
+      if (!settings.biometricUnlock || !settings.faceIdForUnlock) {
+        setShowPasscode(true);
+        return;
+      }
+      triggerBiometric();
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [settingsReady]);
 
   // Swipe-up animation
   const translateY = useSharedValue(0);
@@ -590,6 +703,8 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
 
   const handleUnlock = () => {
     hapticNotification(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    // Registar o instante alimenta a decisão de #611 no próximo bloqueio.
+    AsyncStorage.setItem(LAST_UNLOCK_KEY, String(Date.now())).catch(() => {});
     if (onUnlock) {
       onUnlock();
     } else {
@@ -701,11 +816,34 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
         </View>
 
         {/* ---------------------------------------------------------------- */}
+        {/* Widget slots above the clock (iOS-style complications)            */}
+        {/* ---------------------------------------------------------------- */}
+        {!!device.weather.condition && (
+          <View style={styles.widgetRowAbove}>
+            <WeatherWidgetSlot
+              temp={device.weather.temp}
+              condition={device.weather.condition}
+              icon={device.weather.icon}
+            />
+          </View>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
         {/* Large clock                                                        */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.clockArea}>
           <Text style={[styles.fullDate, { fontSize: 20 * textScale }]}>{formatFullDate(now)}</Text>
           <Text style={styles.bigClock}>{formatLargeClock(now, settings.use24Hour)}</Text>
+        </View>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Widget slots below the clock (iOS-style complications)            */}
+        {/* ---------------------------------------------------------------- */}
+        <View style={styles.widgetRowBelow}>
+          <BatteryWidgetSlot level={device.battery.level} isCharging={device.battery.isCharging} />
+          {!device.storageError && (
+            <StorageWidgetSlot usedGB={device.storage.usedGB} totalGB={device.storage.totalGB} />
+          )}
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -958,6 +1096,42 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
     marginBottom: 2,
     letterSpacing: 0.2,
+  },
+
+  // Widget slots (complications)
+  widgetRowAbove: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  widgetRowBelow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  widgetSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  widgetSlotValue: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  widgetSlotLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '400',
   },
 
   // Notifications

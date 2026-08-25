@@ -14,10 +14,12 @@ import {
   NativeScrollEvent,
   TextInput,
   Modal,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SystemAppIcon } from '../components/SystemAppIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -33,11 +35,13 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
 
-import { addHomePressedListener } from '../../modules/launcher-module/src';
-import { useApps, InstalledApp } from '../store/AppsStore';
+import { addHomePressedListener, LauncherModuleType } from '../../modules/launcher-module/src';
+import { useApps, InstalledApp, HomeApp } from '../store/AppsStore';
 import { AppLibraryContent } from './AppLibraryScreen';
 import { useSettings } from '../store/SettingsStore';
+import { scrollDecelerationValue } from '../utils/motionIntensity';
 import { useTheme } from '../theme/ThemeContext';
+import { Shape } from '../theme/CupertinoTheme';
 import { useDevice } from '../store/DeviceStore';
 import { useFolders, AppFolder } from '../store/FoldersStore';
 import {
@@ -46,21 +50,39 @@ import {
   NotificationBanner,
   GlassSurface,
   useAlert,
+  useWidgetConfig,
+  useWidgetMap,
 } from '../components';
 import type { BannerNotification } from '../components';
 import type { RootStackParamList } from '../navigation/types';
-import { WALLPAPERS, darkenHex } from '../utils/wallpapers';
+import {
+  darkenHex,
+  clampWallpaperIndex,
+  wallpaperColorFor,
+  CUSTOM_WALLPAPER_INDEX,
+} from '../utils/wallpapers';
 import { withAutoLockSuppressed } from '../utils/permissions';
 import { ControlCenterOverlay } from '../components/ControlCenterOverlay';
 import { NotificationCenterOverlay } from '../components/NotificationCenterOverlay';
 import { SpotlightReveal } from '../components/SpotlightReveal';
-import { zones, gestureConfig, dpPerMsToPtPerSec } from '../utils/gestureConfig';
+import { AppLaunchOverlay } from '../components/AppLaunchOverlay';
+import type { LaunchBounds } from '../components/AppLaunchOverlay';
+import { zones, gestureConfig, dpPerMsToPtPerSec, springForAppLaunchDuration } from '../utils/gestureConfig';
 import { useVelocityBuffer, pushSample, sampledVelocity } from '../utils/gestureVelocity';
 import { commitForSpotlight, commitForTodayView } from '../utils/gestureMachine';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { launcherIconPress } from '../theme/springPresets';
+import { CUPERTINO_PRESS_SCALE } from '../hooks/useCupertinoPress';
+import { CupertinoPressable } from '../components/CupertinoPressable';
+import { markGridVisible, markWarmStartBegin } from '../utils/perfMetrics';
 import type { AppNavigationProp } from '../navigation/types';
 import type { SettingsState } from '../store/SettingsStore';
 import { hapticImpact, hapticSelection } from '../utils/haptics';
+import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
+import { hiddenPageIndicesForMode, filterVisiblePages } from '../utils/focusPageVisibility';
+import { dockOverrideForMode } from '../utils/focusDockOverride';
+import { clampWithRubberBand } from '../theme/motion';
+import { computeDragTargetIndex, computeEdgeScrollDirection } from '../utils/launcherDrag';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -68,13 +90,28 @@ import { hapticImpact, hapticSelection } from '../utils/haptics';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const COLS = Math.min(4, Math.floor(SCREEN_WIDTH / 90));
-const ROWS = 6;
-const APPS_PER_PAGE = COLS * ROWS; // 24
-const ICON_SIZE = 60;
-const GRID_HORIZONTAL_PADDING = 16;
-const CELL_WIDTH = (SCREEN_WIDTH - GRID_HORIZONTAL_PADDING * 2) / COLS;
+// Default geometry (4 cols, scale 1) — dock, folder-overlay icons, and this
+// module's own exports intentionally stay pinned to this regardless of the
+// user's grid density settings (issue #503). The actual home-screen grid
+// derives its live geometry from settings inside LauncherHomeScreen() below
+// via `gridGeometry` (computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale)).
+const GRID_GEOMETRY = computeLauncherGridGeometry(SCREEN_WIDTH);
+// Derivados da largura do ecrã (§2) — ver src/utils/launcherGridGeometry.ts.
+export const ICON_SIZE = GRID_GEOMETRY.iconSize;
+export const GRID_HORIZONTAL_PADDING = GRID_GEOMETRY.horizontalPadding;
+export const ICON_RADIUS = GRID_GEOMETRY.iconRadius;
 const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each side
+// #501: o dock não tem label por baixo do ícone (ao contrário da grelha), por
+// isso a sua altura visual é ICON_SIZE + este padding * 2, nunca um número
+// escolhido à parte — a 393dp dá 60 + 18*2 = 96, batendo com a §2 ("Dock:
+// altura ≈96") e escalando com o ícone em qualquer outra largura.
+export const DOCK_VERTICAL_PADDING = 18;
+// §2: "Dock: inset lateral" = 10.
+export const DOCK_HORIZONTAL_INSET = 10;
+// Home screen widget stack (#654): two cards per row, same 16px side padding
+// convention as the dock above, with a 12px gap between the pair.
+const HOME_WIDGET_GAP = 12;
+export const HOME_WIDGET_ITEM_WIDTH = (SCREEN_WIDTH - 32 - HOME_WIDGET_GAP) / 2;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -83,6 +120,17 @@ const DOCK_CELL_WIDTH = (SCREEN_WIDTH - 32) / 4; // dock has 16px padding each s
 // the layer can translate further than it was oversized and expose bare
 // background at the screen edge.
 export const PARALLAX_OVERHANG = 20;
+
+// Jiggle-mode drag-to-reorder (#761). How close to the pager's left/right
+// screen edge a dragged icon must be for the drag to page-scroll to the
+// adjacent page — same idea as a file-manager's drag-to-scroll near a list's
+// edge.
+export const DRAG_EDGE_THRESHOLD_DP = 40;
+// Minimum time between two edge-triggered page scrolls for the SAME drag, so
+// a finger held still in the edge zone (onUpdate fires on every pixel of
+// jitter, not just real movement) doesn't fire scrollTo() dozens of times a
+// second.
+const EDGE_SCROLL_THROTTLE_MS = 500;
 
 // Maps raw scroll progress (0 = first page, 1 = last page) to a horizontal
 // shift bounded by `overhang` in both directions, so the oversized layer never
@@ -101,6 +149,26 @@ export function computeWallpaperTranslateX(
   return overhang * (1 - 2 * progress);
 }
 
+// Rubber-band overscroll da paginação (#489, §3.3).
+//
+// A `ScrollView` do Android não reporta um offset proporcional ao arrasto para
+// além do limite (`View.overScrollBy` limita o desvio a
+// `ViewConfiguration.getScaledOverscrollDistance()`, uma constante pequena), por
+// isso a resistência elástica não pode vir de `onScroll`. Vem da distância real
+// do dedo (`translationX` de um `Gesture.Pan`) convertida pela fórmula pura de
+// `src/theme/motion.ts` (#488).
+//
+// `dimension` é a largura da página (cada página mede exactamente SCREEN_WIDTH),
+// o que dá o mesmo limite assimptótico (`dimension / RUBBER_C`) do UIScrollView.
+export function computePagerRubberBandOffset(
+  translationX: number,
+  dimension: number,
+): number {
+  // Corre dentro de `.onUpdate` / `useAnimatedStyle`, ou seja na thread de UI.
+  'worklet';
+  return clampWithRubberBand(translationX, 0, 0, dimension);
+}
+
 // Built-in app routing: packageName → navigation screen name
 export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.phone': 'Phone',
@@ -108,6 +176,7 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.contacts': 'Contacts',
   'com.iostoandroid.settings': 'Settings',
   'com.iostoandroid.weather': 'Weather',
+  'com.iostoandroid.health': 'Health',
   'com.iostoandroid.clock': 'Clock',
   'com.iostoandroid.camera': 'Camera',
   'com.iostoandroid.photos': 'Photos',
@@ -117,6 +186,7 @@ export const BUILT_IN_APPS: Record<string, keyof RootStackParamList> = {
   'com.iostoandroid.reminders': 'Reminders',
   'com.iostoandroid.mail': 'Mail',
   'com.iostoandroid.browser': 'Browser',
+  'com.iostoandroid.wallet': 'Wallet',
 };
 
 // Known Android packages that duplicate a built-in app (issue #438).
@@ -162,6 +232,7 @@ export const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.contacts': { icon: 'people', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
   'com.iostoandroid.settings': { icon: 'settings-sharp', bg: '#8E8E93', gradient: ['#8E8E93', '#636366'], iconSize: 34 },
   'com.iostoandroid.weather': { icon: 'partly-sunny', bg: '#5AC8FA', gradient: ['#64D2FF', '#30B0C7'], iconSize: 34 },
+  'com.iostoandroid.health': { icon: 'heart', bg: '#FF2D55', gradient: ['#FF5C7A', '#FF2D55'], iconSize: 34 },
   'com.iostoandroid.clock': { icon: 'time', bg: '#000000', gradient: ['#1C1C1E', '#000000'], iconSize: 34 },
   'com.iostoandroid.camera': { icon: 'camera', bg: '#8E8E93', gradient: ['#8E8E93', '#636366'], iconSize: 34 },
   'com.iostoandroid.photos': { icon: 'images', bg: '#FF9500', gradient: ['#FFA733', '#FF8800'], iconSize: 34 },
@@ -171,6 +242,7 @@ export const VIRTUAL_ICON_CONFIG: Record<string, {
   'com.iostoandroid.reminders': { icon: 'checkmark-circle', bg: '#5E5CE6', gradient: ['#7D7AFF', '#5E5CE6'], iconSize: 32 },
   'com.iostoandroid.mail': { icon: 'mail', bg: '#0A84FF', gradient: ['#409CFF', '#0071E3'], iconSize: 30 },
   'com.iostoandroid.browser': { icon: 'compass', bg: '#007AFF', gradient: ['#409CFF', '#0071E3'], iconSize: 34 },
+  'com.iostoandroid.wallet': { icon: 'wallet', bg: '#5856D6', gradient: ['#7D7AFF', '#5856D6'], iconSize: 32 },
 };
 
 // ---------------------------------------------------------------------------
@@ -246,21 +318,130 @@ function DynamicIsland({ device, settings, textScale = 1 }: { device: ReturnType
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// How long AppIcon's measure() waits for measureInWindow's callback before
+// giving up (no expand animation) — measureInWindow is a real native
+// round-trip and, unlike the spring below, has no completion guarantee baked
+// into the API, so a launch must never hang on it (§6.3 "cuidados").
+const MEASURE_FALLBACK_MS = 50;
+
+// AppIcon hands the caller a *function* to measure its own on-screen bounds,
+// rather than measuring eagerly on every press. Built-in routes (Phone,
+// Settings, ...) never call it and navigate synchronously exactly as before —
+// only a real external-app launch pays for the native round-trip, and only
+// once the caller has already decided it needs one (#442 regression: routing
+// through a measurement first added a ~50ms tap delay ahead of every
+// navigation, built-in or not).
+type MeasureBounds = () => Promise<LaunchBounds | undefined>;
+
 interface AppIconProps {
   app: InstalledApp;
   cellWidth: number;
-  onPress: () => void;
-  onLongPress: () => void;
+  onPress: (app: InstalledApp, measure: MeasureBounds) => void;
+  onLongPress: (app: InstalledApp) => void;
   isJiggling?: boolean;
-  onDelete?: () => void;
+  onDelete?: (app: InstalledApp) => void;
   badge?: number;
   textScale?: number;
+  /** Icon square side, in dp. Defaults to the fixed 393dp-reference size so
+   * dock and folder-overlay call sites (unaffected by grid density, #503)
+   * keep their existing look without passing this explicitly. */
+  iconSize?: number;
+  iconRadius?: number;
+  /** Whether the app name renders under the icon (issue #503). #501: the dock
+   * reuses AppIcon but has no name label under the icon. */
+  showLabel?: boolean;
+  /** Tinted Icons (#620): hex colour to render the icon artwork as a
+   * monochrome silhouette in, or undefined/null for the normal, untinted
+   * icon. Only the icon is affected — `showLabel`'s text is untouched. */
+  iconTint?: string | null;
+  /** Gloss sheen on built-in (virtual) icons — follows settings.iconGloss. */
+  gloss?: boolean;
+  /** Flat index of this icon within the current page's item array (#761 —
+   * drag-to-reorder needs to know where a drag started to compute the
+   * target cell from the gesture's translation). Ignored when isJiggling is
+   * false. */
+  pageItemIndex?: number;
+  /** Index of the page this icon currently renders on (#761 — so an edge
+   * scroll during the drag, and the eventual drop, resolve against the
+   * right page's item array even if the pager already advanced). */
+  pageIndex?: number;
+  /** Drag lifecycle (#761, jiggle-mode only). Mirrors onPress/onLongPress:
+   * the app is passed as an argument (not captured by closure) so the
+   * parent can hand every AppIcon the same useCallback-memoized function
+   * (#518) instead of a fresh arrow function per icon per render. */
+  onDragStart?: (app: InstalledApp, pageIndex: number, pageItemIndex: number) => void;
+  onDragUpdate?: (app: InstalledApp, translationX: number, translationY: number, absoluteX: number) => void;
+  onDragEnd?: (app: InstalledApp, translationX: number, translationY: number) => void;
 }
 
-function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, badge, textScale = 1 }: AppIconProps) {
+// React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
+// e voltava a chamar useAnimatedStyle/useSharedValue — sempre que
+// LauncherHomeScreen re-renderizava por qualquer motivo, incluindo um
+// simples avanço de página (setCurrentPage). `onPress`/`onLongPress`/`onDelete`
+// recebem agora `app` como argumento em vez de o capturarem por closure, para
+// que o pai possa passar a mesma referência de função (useCallback) a todas
+// as instâncias em vez de criar uma arrow function nova por ícone a cada render
+// — sem isso o memo não teria qualquer efeito, porque a prop `onPress` nunca
+// seria igual à do render anterior.
+const AppIcon = React.memo(function AppIcon({
+  app,
+  cellWidth,
+  onPress,
+  onLongPress,
+  isJiggling,
+  onDelete,
+  badge,
+  textScale = 1,
+  iconSize = ICON_SIZE,
+  iconRadius = ICON_RADIUS,
+  showLabel = true,
+  iconTint,
+  gloss = true,
+  pageItemIndex = 0,
+  pageIndex = 0,
+  onDragStart,
+  onDragUpdate,
+  onDragEnd,
+}: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
+  // Label block (margin + text line) measured at the 393dp reference so the
+  // default (cols=4, scale=1, labels on) cell height matches the historical
+  // fixed 88 exactly: 5 (paddingTop) + 60 (iconSize) + 23 = 88.
+  const wrapperHeight = 5 + iconSize + (showLabel ? 23 : 0);
+  const iconBoxSize = { width: iconSize, height: iconSize, borderRadius: iconRadius };
   const rotation = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const dragTranslateX = useSharedValue(0);
+  const dragTranslateY = useSharedValue(0);
+  const iconRef = useRef<View>(null);
+
+  const measureBounds = useCallback<MeasureBounds>(() => new Promise((resolve) => {
+    const node = iconRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') {
+      resolve(undefined);
+      return;
+    }
+    let settled = false;
+    const fallback = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(undefined);
+    }, MEASURE_FALLBACK_MS);
+    node.measureInWindow((x, y, width, height) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      resolve({ x, y, width, height });
+    });
+  }), []);
+
+  const handlePress = useCallback(() => {
+    onPress(app, measureBounds);
+  }, [onPress, app, measureBounds]);
+
+  const handleLongPress = useCallback(() => {
+    onLongPress(app);
+  }, [onLongPress, app]);
 
   useEffect(() => {
     if (isJiggling) {
@@ -281,55 +462,97 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
     transform: [
       { rotate: `${rotation.value}deg` },
       { scale: pressScale.value },
+      { translateX: dragTranslateX.value },
+      { translateY: dragTranslateY.value },
     ],
   }));
 
   const handlePressIn = useCallback(() => {
     if (isJiggling) return;
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(0.85, { damping: 12, stiffness: 200 });
+    // §3.2 shared press scale (issue #496). Was an ad hoc 0.85; the icon keeps
+    // its own shared value because the press scale is composed with the jiggle
+    // rotation in the same animated style.
+    pressScale.value = withSpring(CUPERTINO_PRESS_SCALE, launcherIconPress);
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [isJiggling, pressScale]);
 
   const handlePressOut = useCallback(() => {
     // eslint-disable-next-line react-hooks/immutability
-    pressScale.value = withSpring(1.0, { damping: 12, stiffness: 200 });
+    pressScale.value = withSpring(1.0, launcherIconPress);
   }, [pressScale]);
 
+  // Drag-to-reorder (#761). Built fresh every render, same convention as the
+  // screen-level pan gestures below (panGesture/todayViewGesture) — AppIcon
+  // is already React.memo'd, so this only re-runs when this icon's own props
+  // change. `.minDistance(10)`: the jiggle "✕" delete button is a nested
+  // Pressable rendered inside this same gesture's subtree, and a Pan with no
+  // minimum travel would win the responder race on a plain tap and swallow
+  // the delete press. 10dp of slack gives RNGH's native responder time to let
+  // the child Pressable's own tap-recognition claim a stationary touch first.
+  const dragGesture = Gesture.Pan()
+    .enabled(!!isJiggling)
+    .minDistance(10)
+    .onBegin(() => {
+      'worklet';
+      if (onDragStart) runOnJS(onDragStart)(app, pageIndex, pageItemIndex);
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragTranslateX.value = e.translationX;
+      dragTranslateY.value = e.translationY;
+      if (onDragUpdate) runOnJS(onDragUpdate)(app, e.translationX, e.translationY, e.absoluteX);
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (onDragEnd) runOnJS(onDragEnd)(app, e.translationX, e.translationY);
+    })
+    .onFinalize(() => {
+      'worklet';
+      dragTranslateX.value = withSpring(0);
+      dragTranslateY.value = withSpring(0);
+    });
+
   return (
+    <GestureDetector gesture={dragGesture}>
     <Pressable
-      style={[styles.appIconWrapper, { width: cellWidth }]}
-      onPress={isJiggling ? undefined : onPress}
+      ref={iconRef}
+      // O `appIconWrapperCompact` (height: ICON_SIZE estático, paddingTop 0)
+      // tem de vir ANTES do { height: wrapperHeight } dinâmico: se vier
+      // depois, sobrepõe a altura da célula e, com showIconLabels=false +
+      // iconSizeScale=1.2, o ícone (maior que ICON_SIZE) transborda para a
+      // linha seguinte da grelha. Com a ordem certa, o compact só contribui
+      // com o paddingTop 0 e a célula é sempre 5 + iconSize sem label.
+      style={[styles.appIconWrapper, !showLabel && styles.appIconWrapperCompact, { width: cellWidth, height: wrapperHeight }]}
+      onPress={isJiggling ? undefined : handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      onLongPress={onLongPress}
+      onLongPress={handleLongPress}
       accessibilityLabel={`Open ${app.name}`}
       accessibilityRole="button"
     >
       <Animated.View style={animatedStyle}>
         {virtualCfg ? (
-          virtualCfg.gradient ? (
-            <LinearGradient
-              colors={virtualCfg.gradient}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.appIconPlaceholder}
-            >
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </LinearGradient>
-          ) : (
-            <View style={[styles.appIconPlaceholder, { backgroundColor: virtualCfg.bg }]}>
-              <Ionicons name={virtualCfg.icon} size={virtualCfg.iconSize ?? 28} color="#fff" />
-            </View>
-          )
+          <SystemAppIcon
+            testID={`app-icon-box-${app.packageName}`}
+            icon={virtualCfg.icon}
+            size={iconSize}
+            gradient={virtualCfg.gradient}
+            bg={virtualCfg.bg}
+            gloss={gloss}
+            tint={iconTint}
+            iconSize={virtualCfg.iconSize ?? Math.round(iconSize * 0.57)}
+          />
         ) : app.icon ? (
           <Image
+            testID={`app-icon-box-${app.packageName}`}
             source={{ uri: app.icon }}
-            style={styles.appIconImage}
+            style={[styles.appIconImage, iconBoxSize, iconTint ? { tintColor: iconTint } : null]}
+            tintColor={iconTint ?? undefined}
             resizeMode="contain"
           />
         ) : (
-          <View style={styles.appIconPlaceholder}>
+          <View testID={`app-icon-box-${app.packageName}`} style={[styles.appIconPlaceholder, iconBoxSize]}>
             <Ionicons name="apps" size={28} color="#fff" />
           </View>
         )}
@@ -337,7 +560,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           <View style={{
             position: 'absolute',
             top: 0,
-            right: (cellWidth - ICON_SIZE) / 2 - 4,
+            right: (cellWidth - iconSize) / 2 - 4,
             backgroundColor: '#FF3B30',
             borderRadius: 9,
             minWidth: 18,
@@ -358,7 +581,7 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
             style={styles.jiggleDeleteBtn}
             onPress={(e) => {
               e.stopPropagation?.();
-              onDelete?.();
+              onDelete?.(app);
             }}
             hitSlop={4}
             accessibilityLabel={`Remove ${app.name}`}
@@ -368,20 +591,26 @@ function AppIcon({ app, cellWidth, onPress, onLongPress, isJiggling, onDelete, b
           </Pressable>
         )}
       </Animated.View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
-        {app.name}
-      </Text>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1} ellipsizeMode="tail">
+          {app.name}
+        </Text>
+      )}
     </Pressable>
+    </GestureDetector>
   );
-}
+});
 
 interface PageDotsProps {
   total: number;
   current: number;
+  show: boolean;
 }
 
-function PageDots({ total, current }: PageDotsProps) {
-  if (total <= 1) return null;
+function PageDots({ total, current, show }: PageDotsProps) {
+  // iOS «Home Screen & Dock → Show Page Dots»: escondido por setting mesmo
+  // quando há paginação, ou quando há só uma página.
+  if (total <= 1 || !show) return null;
   return (
     <View style={styles.pageDotsRow}>
       {Array.from({ length: total }).map((_, i) => (
@@ -401,56 +630,167 @@ function PageDots({ total, current }: PageDotsProps) {
 // Grid item type
 // ---------------------------------------------------------------------------
 
-type GridItem =
+export type GridItem =
   | { type: 'app'; app: InstalledApp }
-  | { type: 'folder'; folder: AppFolder };
+  | { type: 'folder'; folder: AppFolder }
+  | { type: 'empty'; key: string };
+
+/**
+ * Lays out the real (non-dock, non-folder, non-built-in-duplicate) home apps
+ * by their `homeApps[].position` (#762), instead of just their order in
+ * `eligibleApps`. Apps with no `homeApps` entry yet (never explicitly placed)
+ * are appended after every recorded position, in their existing order, so
+ * today's behaviour for an untouched layout is unchanged.
+ *
+ * A position only becomes an `'empty'` slot when **no `homeApps` entry claims
+ * it at all** — which is exactly what `removeFromHome` leaves behind, and the
+ * only real hole there is. That distinction is the whole point of this
+ * function: `assignHomePositions` (`AppsStore.tsx`) numbers the FULL app scan,
+ * so dock apps, folder members, built-in duplicates (#438) and hidden /
+ * library-only apps all own a position while never rendering in the grid.
+ * Treating "no eligible app at position i" as a hole invented a blank cell for
+ * every one of them — on a clean install, for every user. Those positions are
+ * skipped instead: no icon, no empty slot, nothing.
+ *
+ * The returned array never has trailing empty slots past the last real app —
+ * only interior gaps — so a hole can never manifest as a whole extra blank
+ * page at the end of the pager (#762 AC).
+ */
+export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: HomeApp[]): GridItem[] {
+  const eligiblePkgs = new Set(eligibleApps.map(a => a.packageName));
+  // Positions owned by an entry that never renders in the grid. They are not
+  // holes — they are somebody else's slot.
+  const reserved = new Set<number>();
+  for (const entry of homeApps) {
+    if (!eligiblePkgs.has(entry.packageName)) reserved.add(entry.position);
+  }
+
+  const positioned = new Map<number, InstalledApp>();
+  const unpositioned: InstalledApp[] = [];
+  for (const app of eligibleApps) {
+    const entry = homeApps.find(h => h.packageName === app.packageName);
+    if (entry && !positioned.has(entry.position)) {
+      positioned.set(entry.position, app);
+    } else {
+      unpositioned.push(app);
+    }
+  }
+  // Appended apps start past EVERY recorded position (not just the eligible
+  // ones), so they can never land on a reserved slot and silently swallow it.
+  let nextPos = homeApps.reduce(
+    (max, h) => Math.max(max, h.position),
+    positioned.size > 0 ? Math.max(...positioned.keys()) : -1,
+  ) + 1;
+  for (const app of unpositioned) {
+    positioned.set(nextPos, app);
+    nextPos += 1;
+  }
+
+  // maxPos is the last position held by a RENDERED app: anything beyond it is
+  // reserved-only tail, and padding it would spawn a blank page at the end.
+  const maxPos = positioned.size > 0 ? Math.max(...positioned.keys()) : -1;
+  const items: GridItem[] = [];
+  for (let i = 0; i <= maxPos; i++) {
+    const app = positioned.get(i);
+    if (app) {
+      items.push({ type: 'app', app });
+    } else if (!reserved.has(i)) {
+      items.push({ type: 'empty', key: `empty-${i}` });
+    }
+  }
+  return items;
+}
 
 // ---------------------------------------------------------------------------
 // FolderIcon
 // ---------------------------------------------------------------------------
 
-function FolderIcon({ folder, cellWidth, apps, onPress, onLongPress, textScale = 1 }: {
+// React.memo (#518): mesma razão que AppIcon acima. `onPress` recebe `folder`
+// como argumento em vez de o capturar por closure, para o pai poder passar
+// um useCallback estável a todas as instâncias.
+const FolderIcon = React.memo(function FolderIcon({
+  folder,
+  cellWidth,
+  apps,
+  onPress,
+  onLongPress,
+  textScale = 1,
+  iconSize = ICON_SIZE,
+  iconRadius = ICON_RADIUS,
+  showLabel = true,
+  iconTint,
+}: {
   folder: AppFolder;
   cellWidth: number;
   apps: InstalledApp[];
-  onPress: () => void;
+  onPress: (folder: AppFolder) => void;
   onLongPress: () => void;
   textScale?: number;
+  iconSize?: number;
+  iconRadius?: number;
+  showLabel?: boolean;
+  iconTint?: string | null;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean)
     .slice(0, 9) as InstalledApp[];
 
+  const handlePress = useCallback(() => {
+    onPress(folder);
+  }, [onPress, folder]);
+
+  const wrapperHeight = 5 + iconSize + (showLabel ? 23 : 0);
+  // Mini-icons scale with the folder icon so they never overflow it — the
+  // folder box itself always equals iconSize (issue #503: more grid columns
+  // shrink the cell, and a fixed 60dp folder icon would then overlap the
+  // next column).
+  const miniSize = Math.max(6, Math.round(iconSize * (14 / 60)));
+  const miniRadius = Math.max(1, Math.round(miniSize * (3 / 14)));
+
   return (
-    <Pressable
-      style={({ pressed }) => [styles.appIconWrapper, { width: cellWidth, opacity: pressed ? 0.6 : 1 }]}
-      onPress={onPress}
+    <CupertinoPressable
+      style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }]}
+      onPress={handlePress}
       onLongPress={onLongPress}
       accessibilityLabel={`Open ${folder.name} folder`}
       accessibilityRole="button"
     >
-      <View style={[styles.folderIcon, { backgroundColor: folder.color }]}>
+      <View
+        testID={`folder-icon-box-${folder.id}`}
+        style={[
+          styles.folderIcon,
+          { width: iconSize, height: iconSize, borderRadius: iconRadius, backgroundColor: folder.color },
+        ]}
+      >
         <View style={styles.folderGrid}>
           {folderApps.map((app, i) =>
             app?.icon ? (
-              <Image key={i} source={{ uri: app.icon }} style={styles.folderMiniIcon} />
+              <Image
+                key={i}
+                testID={`folder-mini-icon-${folder.id}-${i}`}
+                source={{ uri: app.icon }}
+                style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius }, iconTint ? { tintColor: iconTint } : null]}
+                tintColor={iconTint ?? undefined}
+              />
             ) : (
-              <View key={i} style={[styles.folderMiniIcon, { backgroundColor: 'rgba(255,255,255,0.3)' }]} />
+              <View key={i} style={[styles.folderMiniIcon, { width: miniSize, height: miniSize, borderRadius: miniRadius, backgroundColor: 'rgba(255,255,255,0.3)' }]} />
             )
           )}
         </View>
       </View>
-      <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
-    </Pressable>
+      {showLabel && (
+        <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
+      )}
+    </CupertinoPressable>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // FolderOverlay
 // ---------------------------------------------------------------------------
 
-function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1 }: {
+function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onRename, textScale = 1, iconTint }: {
   folder: AppFolder;
   apps: InstalledApp[];
   onClose: () => void;
@@ -458,7 +798,9 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
   onLongPressApp: (app: InstalledApp) => void;
   onRename: (newName: string) => void;
   textScale?: number;
+  iconTint?: string | null;
 }) {
+  const { settings } = useSettings();
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
     .filter(Boolean) as InstalledApp[];
@@ -504,6 +846,8 @@ function FolderOverlay({ folder, apps, onClose, onLaunchApp, onLongPressApp, onR
                   app={app}
                   cellWidth={70}
                   textScale={textScale}
+                  iconTint={iconTint}
+                  gloss={settings.iconGloss}
                   onPress={() => onLaunchApp(app)}
                   onLongPress={() => onLongPressApp(app)}
                 />
@@ -527,7 +871,7 @@ export function NonAndroidFallback() {
   const { settings } = useSettings();
   const device = useDevice();
 
-  const wallpaper = WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
+  const wallpaper = wallpaperColorFor(settings.wallpaperIndex);
   const wallpaperDark = darkenHex(wallpaper, 0.25);
 
   return (
@@ -605,6 +949,7 @@ export function LauncherHomeScreen() {
     apps,
     nonDockApps,
     dockApps,
+    homeApps,
     isLoading,
     launchApp,
     isDefaultLauncher,
@@ -612,13 +957,44 @@ export function LauncherHomeScreen() {
     addToDock,
     removeFromDock,
     removeFromHome,
+    swapHomeApps,
   } = useApps();
   const { settings } = useSettings();
   const device = useDevice();
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
-  const { theme: launcherTheme, textScale } = useTheme();
+  const { theme: launcherTheme, isDark, textScale } = useTheme();
   const colors = launcherTheme.colors;
   const alert = useAlert();
+
+  // Home screen widgets (#654): top of the first page, iOS-style — the same
+  // widgetMap/config the Today View sheet reads/writes, so a widget looks and
+  // behaves identically whether it's reached by swiping right into Today View
+  // or seen directly on the home page.
+  const { enabled: homeWidgetsEnabled, loaded: homeWidgetsLoaded } = useWidgetConfig();
+  const homeWidgetMap = useWidgetMap();
+
+  // Tap to Wake (#608): the HOME-press effect below is registered with deps
+  // [openFolder, currentPage] (it must not re-subscribe on every render), so
+  // its closure would otherwise capture a stale `settings.tapToWake`. Mirror
+  // the latest value into a ref so the handler always reads the live setting.
+  const tapToWakeRef = useRef(settings.tapToWake);
+  tapToWakeRef.current = settings.tapToWake;
+
+  // Grid density (issue #503): columns/icon-scale reshape the geometry, so
+  // they're derived per-render from settings instead of the module-level
+  // defaults above (which stay 4 cols / scale 1, for callers — dock, folder
+  // overlay, the geometry test module-export check — that intentionally
+  // don't follow user density preferences).
+  const gridGeometry = useMemo(
+    () => computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale),
+    [settings.gridColumns, settings.iconSizeScale],
+  );
+  const appsPerPage = gridGeometry.cols * settings.gridRows;
+
+  // Tinted Icons (#620): resolved once per render, shared by every AppIcon
+  // call site below (grid, dock, folder overlay) so a single setting change
+  // stays a single source of truth instead of three copies of the ternary.
+  const iconTint = settings.iconTintEnabled ? settings.iconTintColor : undefined;
 
   // Folder open state
   const [openFolder, setOpenFolder] = useState<AppFolder | null>(null);
@@ -644,17 +1020,80 @@ export function LauncherHomeScreen() {
     }
   }, [device.messages, navigation]);
 
-  // Unified app press handler — routes built-in apps to internal screens
-  const handleAppPress = useCallback((app: InstalledApp) => {
+  const reduceMotion = useGestureReduceMotion();
+
+  // Icon-expand transition state (#509, §6.3) — set when a non-built-in app is
+  // pressed with usable bounds; the overlay itself fires the real launch once
+  // its spring settles (see handleExpandComplete), never on a fixed timer.
+  const [launchTransition, setLaunchTransition] = useState<{
+    app: InstalledApp;
+    bounds: LaunchBounds;
+    phase: 'expand' | 'collapse';
+  } | null>(null);
+
+  // Spring physics for the icon-expand overlay, derived from the user's
+  // chosen appLaunchDurationMs (#512 §6.3) — still a spring at any duration.
+  const appLaunchSpringConfig = useMemo(
+    () => springForAppLaunchDuration(settings.appLaunchDurationMs),
+    [settings.appLaunchDurationMs],
+  );
+
+  // Fires exactly when the expand spring settles — this is the intent trigger
+  // point, not a setTimeout guess (§6.3). A failed launch collapses the
+  // overlay back to the icon instead of leaving it stuck full-screen.
+  const handleExpandComplete = useCallback(() => {
+    const pending = launchTransition;
+    if (!pending) return;
+    launchApp(pending.app.packageName).then((ok) => {
+      if (ok) {
+        setLaunchTransition(null);
+      } else {
+        setLaunchTransition((prev) => (prev ? { ...prev, phase: 'collapse' } : prev));
+      }
+    });
+  }, [launchTransition, launchApp]);
+
+  const handleCollapseComplete = useCallback(() => {
+    setLaunchTransition(null);
+  }, []);
+
+  // Unified app press handler — routes built-in apps to internal screens.
+  // `measure` is only invoked for a real external-app launch, never for a
+  // built-in route or a folder-modal launch (see AppIcon/MeasureBounds) — a
+  // built-in route stays exactly as synchronous as it always was.
+  const handleAppPress = useCallback((app: InstalledApp, measure?: MeasureBounds) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const internalRoute = BUILT_IN_APPS[app.packageName];
     if (internalRoute) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BUILT_IN_APPS routes all have undefined params; navigate overloads require params spec
       navigation.navigate(internalRoute as any);
-    } else {
-      launchApp(app.packageName);
+      return;
     }
-  }, [navigation, launchApp]);
+    // No measure fn (folder icons open inside a Modal — a separate native
+    // window that can't host a screen-spanning overlay), reduceMotion, or
+    // appLaunchAnimation off: launch immediately, no expand, no measurement
+    // round-trip at all.
+    //
+    // Precedence (#512 §6.3): reduceMotion — the stand-in for the future
+    // `motionIntensity: 'off'` (epic #467, not yet in SettingsStore) — always
+    // wins and disables the expand regardless of appLaunchAnimation.
+    // appLaunchAnimation: false only disables this one animation and leaves
+    // everything else reduceMotion also gates untouched. Either condition
+    // alone is enough to skip the overlay; both route through launchApp,
+    // which is where LauncherModule.kt's Android transition suppression
+    // lives (unconditional there), so it is never affected by this choice.
+    if (!measure || reduceMotion || !settings.appLaunchAnimation) {
+      launchApp(app.packageName);
+      return;
+    }
+    measure().then((bounds) => {
+      if (bounds) {
+        setLaunchTransition({ app, bounds, phase: 'expand' });
+      } else {
+        launchApp(app.packageName);
+      }
+    });
+  }, [navigation, launchApp, reduceMotion, settings.appLaunchAnimation]);
 
   // Standalone navigation wrappers for runOnJS (can't call navigation.navigate directly from worklet)
   const navigateTo = useCallback((screen: keyof RootStackParamList) => {
@@ -679,7 +1118,6 @@ export function LauncherHomeScreen() {
   const spotlightProgress = useSharedValue(0);
   const spotlightBuf = useVelocityBuffer();
   const spotlightT = useSharedValue(0);
-  const reduceMotion = useGestureReduceMotion();
   const reduceMotionShared = useSharedValue(reduceMotion);
   useEffect(() => {
     reduceMotionShared.value = reduceMotion;
@@ -689,11 +1127,48 @@ export function LauncherHomeScreen() {
   // worklets can gate the gesture without touching JS state.
   const canSpotlightShared = useSharedValue(true);
 
+  // Rubber-band overscroll das bordas do pager (#489). Dois SharedValues, um por
+  // borda: o conteúdo da página activa desloca-se pela curva da §3.3 enquanto o
+  // dedo arrasta para fora dos limites, e volta a 0 com mola ao soltar.
+  const firstPageOverscrollX = useSharedValue(0);
+  const lastPageOverscrollX = useSharedValue(0);
+
+  const firstPageOverscrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: firstPageOverscrollX.value }],
+  }));
+  const lastPageOverscrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: lastPageOverscrollX.value }],
+  }));
+
+
+  // Tracks where a pan gesture began (absolute Y) so the *down-swipe →
+  // Spotlight* gesture can be suppressed when the finger starts in the top
+  // strip — that strip is claimed by the Control Center / Notification Center
+  // overlays, and a down-swipe there must open the iOS Notification Center,
+  // never the Spotlight frame. React Native Gesture Handler runs a parent
+  // (this pan) and a nested child (the CC/NC overlay) *simultaneously* when
+  // nothing excludes the other, so without this guard both the Spotlight
+  // reveal frame and the Android-style notification panel preview fire at
+  // once (issue #687).
+  const panStartY = useSharedValue(0);
+  // Height of the top strip reserved for CC/NC (mirrors zones().topStripHeight).
+  const topStripHeight = gestureConfig.topZoneHeightDp + 20;
+
   const panGesture = Gesture.Pan()
     .activeOffsetY([-20, 20])
+    .onBegin((e) => {
+      'worklet';
+      panStartY.value = e.absoluteY;
+    })
     .onUpdate((e) => {
       'worklet';
       if (!canSpotlightShared.value) return;
+      // Suppress the Spotlight reveal when the gesture started in the top strip
+      // that belongs to the Control Center / Notification Center overlays.
+      if (panStartY.value <= topStripHeight) {
+        spotlightProgress.value = 0;
+        return;
+      }
       if (e.translationY <= 0) {
         spotlightProgress.value = 0;
         return;
@@ -723,7 +1198,9 @@ export function LauncherHomeScreen() {
       }
 
       // Down-swipe → Spotlight (commit check)
-      if (canSpotlightShared.value && translationY > 0) {
+      // Suppressed when the gesture started in the top strip (CC/NC zone) so a
+      // down-swipe there opens the iOS Notification Center instead (#687).
+      if (canSpotlightShared.value && translationY > 0 && panStartY.value > topStripHeight) {
         spotlightT.value = Date.now();
         pushSample(spotlightBuf.value, event.translationX, event.translationY, spotlightT.value);
         const { vy } = sampledVelocity(spotlightBuf.value, spotlightT.value);
@@ -806,6 +1283,24 @@ export function LauncherHomeScreen() {
     openActionSheet(app);
   }, [isJiggling, openActionSheet]);
 
+  // Stable across renders (#518) — passadas directamente a AppIcon/FolderIcon
+  // em vez de uma arrow function nova por ícone a cada render, para que
+  // React.memo consiga mesmo evitar o re-render em transições de página.
+  const handleDeleteApp = useCallback((app: InstalledApp) => {
+    removeFromHome(app.packageName);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, [removeFromHome]);
+
+  const handleOpenFolder = useCallback((folder: AppFolder) => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setOpenFolder(folder);
+  }, []);
+
+  const handleFolderLongPress = useCallback(() => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsJiggling(true);
+  }, []);
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -857,8 +1352,30 @@ export function LauncherHomeScreen() {
   // pressing HOME resets a real launcher: close whatever's open, land on the
   // first page. Also lives above the early returns, for the same
   // rules-of-hooks reason as canSpotlight above.
+  // Warm start (#517): a janela de medição abre quando o launcher volta a
+  // primeiro plano — quer por AppState (a Activity foi retomada) quer pela
+  // re-entrega do intent HOME — e fecha no próximo layout da grelha
+  // (markGridVisible). Não há aqui nenhuma alteração de comportamento: só
+  // marcas de tempo.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') markWarmStartBegin();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     return addHomePressedListener(() => {
+      markWarmStartBegin();
+      // Tap to Wake (#608): when enabled, a tap on the (app-dimmed) screen
+      // wakes it. The native HOME intent only arrives while the app is in the
+      // foreground — i.e. the screen is dimmed by the app, not powered off by
+      // the system — so this is the realistic envelope (documented in the PR).
+      if (tapToWakeRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- mirror SettingsStore.syncFromDevice: require() (not await import()) resolves through Jest's moduleNameMapper and is mockable in tests
+        const launcher = require('../../modules/launcher-module/src') as { default: LauncherModuleType };
+        launcher.default.wakeScreen().catch(() => {});
+      }
       const action = resolveHomePressAction({
         isFolderOpen: openFolder !== null,
         isOnFirstPage: currentPage === 0,
@@ -872,43 +1389,13 @@ export function LauncherHomeScreen() {
     });
   }, [openFolder, currentPage]);
 
-  // Non-Android fallback
-  if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
-    return <NonAndroidFallback />;
-  }
-
-  // Loading
-  if (isLoading) {
-    return (
-      <View style={[styles.root, styles.centered, { backgroundColor: '#1C1C1E' }]}>
-        <CupertinoActivityIndicator />
-      </View>
-    );
-  }
-
-  // Wallpaper gradient
-  const wallpaperColor =
-    WALLPAPERS[Math.min(settings.wallpaperIndex, WALLPAPERS.length - 1)] as string;
-  const wallpaperDark = darkenHex(wallpaperColor, 0.28);
-
-  const WallpaperContent =
-    settings.wallpaperIndex === 6 && customWallpaperUri ? (
-      <ImageBackground
-        source={{ uri: customWallpaperUri }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-      </ImageBackground>
-    ) : (
-      <LinearGradient
-        colors={[wallpaperColor, wallpaperDark]}
-        style={StyleSheet.absoluteFillObject}
-      />
-    );
-
-  // Build display items: virtual built-in apps + real apps + folders
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Build display items: virtual built-in apps + real apps + folders.
+  // Moved ABOVE the early returns deliberately (#503 reviewer follow-up):
+  // this useMemo — together with `pages` and the clamp effect below — used to
+  // sit after the isLoading return, so on a render that took the loading path
+  // the hooks were skipped while on the loaded path they ran. That's a
+  // different hook count between renders → "Rendered more hooks than during
+  // the previous render". Same house rule as canSpotlight above.
   const gridItems = useMemo((): GridItem[] => {
     const items: GridItem[] = [];
     const appsInFolders = new Set(folders.flatMap(f => f.apps));
@@ -932,29 +1419,190 @@ export function LauncherHomeScreen() {
       items.push({ type: 'folder', folder });
     }
 
-    // Add real installed apps (not in dock, not in folders, and not an Android
+    // Real installed apps (not in dock, not in folders, and not an Android
     // duplicate of a built-in app — see BUILT_IN_APP_ANDROID_ALIASES / #438)
-    for (const app of nonDockApps) {
-      if (BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName)) continue;
-      if (!appsInFolders.has(app.packageName)) {
-        items.push({ type: 'app', app });
-      }
-    }
+    // are laid out by homeApps[].position, gaps included (#762) — dock,
+    // folders and the virtual built-ins above are untouched by this and stay
+    // contiguous.
+    //
+    // Supersedes the plain position sort that landed in main for #760:
+    // layoutHomeAppsWithGaps orders by the same homeApps.position and keeps
+    // main's fallback for apps with no recorded position (appended after the
+    // highest known position, in scan order), but additionally materialises
+    // unclaimed positions as 'empty' slots instead of letting the next app
+    // pull up into the hole.
+    const eligibleApps = nonDockApps.filter(
+      app => !BUILT_IN_DUPLICATE_PACKAGES.has(app.packageName) && !appsInFolders.has(app.packageName),
+    );
+    items.push(...layoutHomeAppsWithGaps(eligibleApps, homeApps));
     return items;
-  }, [nonDockApps, dockApps, folders]);
+  }, [nonDockApps, dockApps, folders, homeApps]);
 
-  // Paginate grid items
-  const pages: GridItem[][] = [];
-  for (let i = 0; i < gridItems.length; i += APPS_PER_PAGE) {
-    pages.push(gridItems.slice(i, i + APPS_PER_PAGE));
-  }
-  // Ensure at least one page
-  if (pages.length === 0) {
-    pages.push([]);
-  }
+  // Paginate grid items — memoizado (#518): sem isto, este array era
+  // recriado em TODO o render (incluindo o causado por um simples avanço de
+  // página via setCurrentPage), o que por si só invalidava qualquer
+  // memoização de AppIcon/FolderIcon a jusante — `pages.map` produzia
+  // sempre uma árvore de elementos nova, mesmo quando gridItems não mudou.
+  // Slicing the same flat, order-stable `gridItems` list at a different chunk
+  // size (appsPerPage derives from settings, issue #503) re-packs pages
+  // without ever reordering an app — there is no per-page stored position to
+  // migrate (issue #503).
+  const allPages: GridItem[][] = useMemo(() => {
+    const out: GridItem[][] = [];
+    for (let i = 0; i < gridItems.length; i += appsPerPage) {
+      out.push(gridItems.slice(i, i + appsPerPage));
+    }
+    // Ensure at least one page
+    if (out.length === 0) {
+      out.push([]);
+    }
+    return out;
+  }, [gridItems, appsPerPage]);
+
+  // Focus filters (#618): com um modo de Focus activo, as páginas cujo índice
+  // está em `focusPageVisibility[focusMode]` não renderizam. O índice é o da
+  // paginação completa (`allPages`), por isso esconder a página 1 não renumera
+  // a configuração das restantes. `off` nunca esconde nada.
+  const hiddenPageIndices = useMemo(
+    () => hiddenPageIndicesForMode(settings.focusPageVisibility, settings.focusMode),
+    [settings.focusPageVisibility, settings.focusMode],
+  );
+  const pages: GridItem[][] = useMemo(
+    () => filterVisiblePages(allPages, hiddenPageIndices),
+    [allPages, hiddenPageIndices],
+  );
+
+  // Focus dock override (#619, filho de #617): com um modo de Focus activo,
+  // `focusDockOverride[focusMode]` pode substituir os 4 ícones do dock por
+  // outros pacotes. `dockOverrideForMode` já trata 'off', chave ausente e
+  // lista vazia como "sem override" (devolve null), por isso o fallback para
+  // o `dockApps` normal cobre esses três casos de uma vez. Os package names
+  // resolvem contra `apps` (todos os instalados) e o `dockApps` real (cobre
+  // apps virtuais já resolvidos, ex.: Phone/Messages, que só existem como
+  // InstalledApp dentro do dock persistido) — um package que já não existe em
+  // nenhum dos dois é descartado, nunca renderiza um ícone vazio/quebrado.
+  const dockOverridePkgs = useMemo(
+    () => dockOverrideForMode(settings.focusDockOverride, settings.focusMode),
+    [settings.focusDockOverride, settings.focusMode],
+  );
+  const effectiveDockApps: InstalledApp[] = useMemo(() => {
+    if (!dockOverridePkgs) return dockApps;
+    const byPackageName = new Map<string, InstalledApp>();
+    for (const app of apps) byPackageName.set(app.packageName, app);
+    for (const app of dockApps) byPackageName.set(app.packageName, app);
+    return dockOverridePkgs
+      .map((pkg) => byPackageName.get(pkg))
+      .filter((app): app is InstalledApp => !!app);
+  }, [dockOverridePkgs, dockApps, apps]);
 
   // +1 for the App Library page appended at the end
   const totalPages = pages.length + 1;
+
+  // Reviewer follow-up (#503): mudar a densidade (colunas/linhas) encolhe o
+  // número de páginas, e `currentPage` só mudava em handleScroll — ficava
+  // para além de totalPages, os dots perdiam a página activa e o offset do
+  // pager ficava além do conteúdo até ao próximo scroll. Clampar página e
+  // offset juntos. Sem apps suficientes para encolher, currentPage (0) <
+  // totalPages e o efeito é no-op.
+  useEffect(() => {
+    if (currentPage >= totalPages) {
+      const lastPage = Math.max(0, totalPages - 1);
+      setCurrentPage(lastPage);
+      scrollViewRef.current?.scrollTo({ x: lastPage * SCREEN_WIDTH, animated: false });
+    }
+  }, [currentPage, totalPages]);
+
+  // Jiggle-mode drag-to-reorder (#761). A ref, not state: onDragStart/onDragUpdate
+  // fire on every pixel of finger movement (via runOnJS from the worklet), and
+  // routing that through setState would re-render the whole screen (and every
+  // AppIcon under it, defeating the #518 memoization) dozens of times per
+  // second for a value nothing renders from.
+  const dragOriginRef = useRef<{ app: InstalledApp; pageIndex: number; pageItemIndex: number } | null>(null);
+  const lastEdgeScrollAtRef = useRef(0);
+
+  const handleDragStart = useCallback((app: InstalledApp, pageIndex: number, pageItemIndex: number) => {
+    dragOriginRef.current = { app, pageIndex, pageItemIndex };
+  }, []);
+
+  const handleDragUpdate = useCallback((_app: InstalledApp, _translationX: number, _translationY: number, absoluteX: number) => {
+    const origin = dragOriginRef.current;
+    if (!origin) return;
+    const direction = computeEdgeScrollDirection(absoluteX, SCREEN_WIDTH, DRAG_EDGE_THRESHOLD_DP);
+    if (!direction) return;
+    if (Date.now() - lastEdgeScrollAtRef.current < EDGE_SCROLL_THROTTLE_MS) return;
+    const targetPage = direction === 'prev' ? origin.pageIndex - 1 : origin.pageIndex + 1;
+    // totalPages includes the App Library page at the end, which has no
+    // homeApps grid to drop into — an edge-scroll during a home-icon drag
+    // must never land there.
+    if (targetPage < 0 || targetPage >= pages.length) return;
+    lastEdgeScrollAtRef.current = Date.now();
+    dragOriginRef.current = { ...origin, pageIndex: targetPage };
+    setCurrentPage(targetPage);
+    scrollViewRef.current?.scrollTo({ x: targetPage * SCREEN_WIDTH, animated: true });
+  }, [pages.length]);
+
+  const handleDragEnd = useCallback((app: InstalledApp, translationX: number, translationY: number) => {
+    const origin = dragOriginRef.current;
+    dragOriginRef.current = null;
+    if (!origin) return;
+    const pageItems = pages[origin.pageIndex];
+    if (!pageItems || pageItems.length === 0) return;
+    const targetIndex = computeDragTargetIndex({
+      startIndex: origin.pageItemIndex,
+      translationX,
+      translationY,
+      cellWidth: gridGeometry.cellWidth,
+      cellHeight: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+      cols: gridGeometry.cols,
+      itemCount: pageItems.length,
+    });
+    const targetItem = pageItems[targetIndex];
+    // #761 scope: only a drop onto ANOTHER app icon swaps positions. Dropping
+    // on an empty cell (holes/compaction) and dropping on a folder are both
+    // explicitly out of scope for this issue.
+    if (targetItem && targetItem.type === 'app' && targetItem.app.packageName !== app.packageName) {
+      swapHomeApps?.(app.packageName, targetItem.app.packageName);
+    }
+  }, [pages, gridGeometry, settings.showIconLabels, swapHomeApps]);
+
+  // Non-Android fallback
+  if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
+    return <NonAndroidFallback />;
+  }
+
+  // Loading
+  if (isLoading) {
+    return (
+      <View style={[styles.root, styles.centered, { backgroundColor: '#1C1C1E' }]}>
+        <CupertinoActivityIndicator />
+      </View>
+    );
+  }
+
+  // Wallpaper gradient
+  // clampWallpaperIndex saneia settings.wallpaperIndex (lido de AsyncStorage,
+  // fonte não confiável — #674): um blob corrompido com índice não-numérico
+  // daria WALLPAPERS[NaN] === undefined e faria darkenHex rebentar no render.
+  const wallpaperIndex = clampWallpaperIndex(settings.wallpaperIndex);
+  const wallpaperColor = wallpaperColorFor(wallpaperIndex);
+  const wallpaperDark = darkenHex(wallpaperColor, 0.28);
+
+  const WallpaperContent =
+    wallpaperIndex === CUSTOM_WALLPAPER_INDEX && customWallpaperUri ? (
+      <ImageBackground
+        testID="wallpaper-custom-image"
+        source={{ uri: customWallpaperUri }}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode="cover"
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.15)' }} />
+      </ImageBackground>
+    ) : (
+      <LinearGradient
+        colors={[wallpaperColor, wallpaperDark]}
+        style={StyleSheet.absoluteFillObject}
+      />
+    );
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -1116,6 +1764,22 @@ export function LauncherHomeScreen() {
     return options;
   })();
 
+  // Borda da última página (App Library) — #489. Direcção/página que nenhum
+  // outro gesto reclama: `activeOffsetX([-20, Infinity])` activa só para
+  // arrastos para a ESQUERDA, e só na última página, por isso a paginação
+  // normal do `ScrollView` fica intacta em todas as outras páginas.
+  const lastPageRubberBandGesture = Gesture.Pan()
+    .enabled(currentPage === totalPages - 1)
+    .activeOffsetX([-20, Infinity])
+    .onUpdate((event) => {
+      'worklet';
+      lastPageOverscrollX.value = computePagerRubberBandOffset(event.translationX, SCREEN_WIDTH);
+    })
+    .onFinalize(() => {
+      'worklet';
+      lastPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
+    });
+
   // Right-swipe on the first home page → Today View (#455).
   //
   // TodayViewScreen was registered in RootStackParamList and given a
@@ -1130,16 +1794,28 @@ export function LauncherHomeScreen() {
   const todayViewGesture = Gesture.Pan()
     .enabled(canSpotlight && currentPage === 0)
     .activeOffsetX([-Infinity, 20])
+    .onUpdate((event) => {
+      'worklet';
+      // Resistência elástica na borda esquerda (#489). O gesto não tinha
+      // `.onUpdate`: arrastar para a direita na página 0 não dava feedback
+      // nenhum durante o arrasto. O deslocamento é sub-linear desde o primeiro
+      // pixel e satura em `SCREEN_WIDTH / RUBBER_C`.
+      firstPageOverscrollX.value = computePagerRubberBandOffset(event.translationX, SCREEN_WIDTH);
+    })
     .onEnd((event) => {
       'worklet';
       const progress = Math.max(0, event.translationX) / gestureConfig.todayViewCommitDp;
       if (commitForTodayView({ progress, velocity: 0, holdMs: 0 }) !== 'none') {
         runOnJS(navigateTo)('TodayView');
       }
+    })
+    .onFinalize(() => {
+      'worklet';
+      firstPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
   return (
-    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture)}>
+    <GestureDetector gesture={Gesture.Race(panGesture, todayViewGesture, lastPageRubberBandGesture)}>
       <Animated.View style={[styles.root, { overflow: 'hidden' }]}>
         {/* Parallax wallpaper — absolute layer, slightly oversized to allow horizontal shift */}
         <Animated.View
@@ -1153,7 +1829,20 @@ export function LauncherHomeScreen() {
           {WallpaperContent}
         </Animated.View>
 
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={
+            settings.statusBarStyle === 'light'
+              ? 'light-content'
+              : settings.statusBarStyle === 'dark'
+              ? 'dark-content'
+              : isDark
+              ? 'light-content'
+              : 'dark-content'
+          }
+          hidden={!settings.statusBarVisible}
+        />
 
       {/* ---------------------------------------------------------------- */}
       {/* Jiggle-mode background tap target (exits edit mode)               */}
@@ -1173,14 +1862,14 @@ export function LauncherHomeScreen() {
       {!isDefaultLauncher && !isJiggling && (
         <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
-          <Pressable
-            style={({ pressed }) => [styles.defaultBannerButton, { backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 }]}
+          <CupertinoPressable
+            style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
             onPress={openLauncherSettings}
             accessibilityLabel="Set as default launcher"
             accessibilityRole="button"
           >
             <Text style={[styles.defaultBannerButtonText, { fontSize: 12 * textScale }]}>Set Now</Text>
-          </Pressable>
+          </CupertinoPressable>
         </View>
       )}
 
@@ -1250,9 +1939,11 @@ export function LauncherHomeScreen() {
       {/* Swipeable app pages                                                */}
       {/* ---------------------------------------------------------------- */}
       <ScrollView
+        testID="launcher-pager"
         ref={scrollViewRef}
         horizontal
         pagingEnabled
+        decelerationRate={scrollDecelerationValue(settings.scrollDeceleration)}
         showsHorizontalScrollIndicator={false}
         onScroll={handlePageScroll}
         scrollEventThrottle={16}
@@ -1262,19 +1953,61 @@ export function LauncherHomeScreen() {
         scrollEnabled={!isJiggling}
       >
         {pages.map((pageItems, pageIndex) => (
-          <View key={pageIndex} style={styles.page}>
-            <View style={styles.pageGrid}>
-              {pageItems.map((item) => {
+          <Animated.View
+            key={pageIndex}
+            style={[styles.page, { paddingHorizontal: gridGeometry.horizontalPadding }, pageIndex === 0 ? firstPageOverscrollStyle : null]}
+          >
+            {pageIndex === 0 && homeWidgetsLoaded && homeWidgetsEnabled.length > 0 && (
+              <View testID="launcher-home-widgets" style={styles.homeWidgetRow}>
+                {homeWidgetsEnabled.map((type) => (
+                  <View key={type} testID={`launcher-home-widget-${type}`} style={styles.homeWidgetItem}>
+                    {homeWidgetMap[type]}
+                  </View>
+                ))}
+              </View>
+            )}
+            <View
+              testID={`launcher-page-grid-${pageIndex}`}
+              style={styles.pageGrid}
+              // Cold/warm start (#517) fecham AQUI, no primeiro layout da
+              // grelha da primeira página — o primeiro instante em que a
+              // grelha está de facto pintada. Medir no mount do ecrã daria um
+              // número falso: nesse momento o que se vê é o spinner do ramo
+              // `isLoading` acima. markGridVisible() é idempotente para o cold
+              // start, por isso re-layouts (rotação, duplo layout) não produzem
+              // segundas medições.
+              onLayout={pageIndex === 0 ? markGridVisible : undefined}
+            >
+              {pageItems.map((item, pageItemIndex) => {
+                if (item.type === 'empty') {
+                  // #762: a position with no app renders a blank cell instead
+                  // of letting the next app slide up into it — no Pressable,
+                  // no accessibility role, nothing tappable here.
+                  return (
+                    <View
+                      key={item.key}
+                      testID={`grid-empty-slot-${item.key}`}
+                      style={{
+                        width: gridGeometry.cellWidth,
+                        height: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+                      }}
+                    />
+                  );
+                }
                 if (item.type === 'folder') {
                   return (
                     <FolderIcon
                       key={`folder-${item.folder.id}`}
                       folder={item.folder}
-                      cellWidth={CELL_WIDTH}
+                      cellWidth={gridGeometry.cellWidth}
+                      iconSize={gridGeometry.iconSize}
+                      iconRadius={gridGeometry.iconRadius}
+                      showLabel={settings.showIconLabels}
                       apps={apps}
                       textScale={textScale}
-                      onPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setOpenFolder(item.folder); }}
-                      onLongPress={() => { hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setIsJiggling(true); }}
+                      iconTint={iconTint}
+                      onPress={handleOpenFolder}
+                      onLongPress={handleFolderLongPress}
                     />
                   );
                 }
@@ -1282,35 +2015,45 @@ export function LauncherHomeScreen() {
                   <AppIcon
                     key={item.app.packageName}
                     app={item.app}
-                    cellWidth={CELL_WIDTH}
+                    cellWidth={gridGeometry.cellWidth}
+                    iconSize={gridGeometry.iconSize}
+                    iconRadius={gridGeometry.iconRadius}
+                    showLabel={settings.showIconLabels}
                     textScale={textScale}
-                    onPress={() => handleAppPress(item.app)}
-                    onLongPress={() => handleLongPress(item.app)}
+                    iconTint={iconTint}
+                    gloss={settings.iconGloss}
+                    onPress={handleAppPress}
+                    onLongPress={handleLongPress}
                     isJiggling={isJiggling}
                     badge={badgeCounts[item.app.packageName]}
-                    onDelete={() => {
-                      removeFromHome(item.app.packageName);
-                      hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    }}
+                    onDelete={handleDeleteApp}
+                    pageIndex={pageIndex}
+                    pageItemIndex={pageItemIndex}
+                    onDragStart={handleDragStart}
+                    onDragUpdate={handleDragUpdate}
+                    onDragEnd={handleDragEnd}
                   />
                 );
               })}
             </View>
-          </View>
+          </Animated.View>
         ))}
 
         {/* App Library page — the App Library IS the last swipeable page
             (#434), rendered inline via the shared AppLibraryContent instead
             of a tap-through placeholder. */}
-        <View key="app-library" style={[styles.page, styles.appLibraryPage]}>
+        <Animated.View
+          key="app-library"
+          style={[styles.page, styles.appLibraryPage, lastPageOverscrollStyle]}
+        >
           <AppLibraryContent />
-        </View>
+        </Animated.View>
       </ScrollView>
 
       {/* ---------------------------------------------------------------- */}
       {/* Page dots + Search label (iOS 16/17 style)                         */}
       {/* ---------------------------------------------------------------- */}
-      <PageDots total={totalPages} current={currentPage} />
+      <PageDots total={totalPages} current={currentPage} show={settings.showPageDots} />
       <Pressable
         style={styles.searchLabel}
         onPress={isJiggling ? exitJiggle : () => navigation.navigate('SpotlightSearch')}
@@ -1323,31 +2066,31 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Dock                                                               */}
       {/* ---------------------------------------------------------------- */}
-      <View style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
+      <View testID="launcher-dock" style={[styles.dockOuter, { paddingBottom: insets.bottom + 16 }]}>
         <GlassSurface
           intensity={90}
           tint="dark"
           style={styles.dockBlur}
         >
           <View style={styles.dockRow}>
-            {dockApps.slice(0, 4).map((app) => (
+            {effectiveDockApps.slice(0, 4).map((app) => (
               <AppIcon
                 key={app.packageName}
                 app={app}
                 cellWidth={DOCK_CELL_WIDTH}
                 textScale={textScale}
-                onPress={() => handleAppPress(app)}
-                onLongPress={() => handleLongPress(app)}
+                showLabel={false}
+                iconTint={iconTint}
+                gloss={settings.iconGloss}
+                onPress={handleAppPress}
+                onLongPress={handleLongPress}
                 isJiggling={isJiggling}
                 badge={badgeCounts[app.packageName]}
-                onDelete={() => {
-                  removeFromHome(app.packageName);
-                  hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                }}
+                onDelete={handleDeleteApp}
               />
             ))}
             {/* Fill empty dock slots */}
-            {Array.from({ length: Math.max(0, 4 - dockApps.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 4 - effectiveDockApps.length) }).map((_, i) => (
               <View key={`empty-${i}`} style={{ width: DOCK_CELL_WIDTH }} />
             ))}
           </View>
@@ -1362,6 +2105,7 @@ export function LauncherHomeScreen() {
           folder={openFolder}
           apps={apps}
           textScale={textScale}
+          iconTint={iconTint}
           onClose={() => setOpenFolder(null)}
           onLaunchApp={(app) => {
             setOpenFolder(null);
@@ -1414,6 +2158,21 @@ export function LauncherHomeScreen() {
         notification={activeBanner}
         onDismiss={() => setActiveBanner(null)}
       />
+
+      {/* ---------------------------------------------------------------- */}
+      {/* App-icon expand transition (#509, §6.3)                            */}
+      {/* ---------------------------------------------------------------- */}
+      {launchTransition && (
+        <AppLaunchOverlay
+          key={launchTransition.app.packageName}
+          icon={launchTransition.app.icon}
+          bounds={launchTransition.bounds}
+          phase={launchTransition.phase}
+          onExpandComplete={handleExpandComplete}
+          onCollapseComplete={handleCollapseComplete}
+          springConfig={appLaunchSpringConfig}
+        />
+      )}
       </Animated.View>
     </GestureDetector>
   );
@@ -1515,6 +2274,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
 
+  // Home screen widgets (#654)
+  homeWidgetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: HOME_WIDGET_GAP,
+    marginBottom: 16,
+  },
+  homeWidgetItem: {
+    width: HOME_WIDGET_ITEM_WIDTH,
+  },
+
   // App icons
   appIconWrapper: {
     alignItems: 'center',
@@ -1522,30 +2292,36 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 5,
   },
+  // #501: dock variant (showLabel=false) — no label below the icon, so the
+  // wrapper is exactly the icon's own height instead of the grid's 88.
+  appIconWrapperCompact: {
+    height: ICON_SIZE,
+    paddingTop: 0,
+  },
   appIconImage: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 13.5,
+    borderRadius: ICON_RADIUS,
     overflow: 'hidden',
   },
   appIconPlaceholder: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: 13.5,
+    borderRadius: ICON_RADIUS,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   appIconLabel: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 11,
     fontWeight: '500',
     color: '#ffffff',
     textAlign: 'center',
     width: '90%',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 3,
   },
 
@@ -1555,28 +2331,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
-    gap: 4,
+    gap: 9,
   },
   pageDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   pageDotFilled: {
     backgroundColor: '#ffffff',
   },
   pageDotEmpty: {
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
   // Dock
   dockOuter: {
-    paddingHorizontal: 12,
+    paddingHorizontal: DOCK_HORIZONTAL_INSET,
   },
   dockBlur: {
     overflow: 'hidden',
-    borderRadius: 22,
-    paddingVertical: 10,
+    borderRadius: Shape.dock.radius,
+    paddingVertical: DOCK_VERTICAL_PADDING,
     paddingHorizontal: 16,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },

@@ -155,7 +155,7 @@ Many settings screens appear functional but immediately open Android's native se
 
 9. **No FaceTime Equivalent**: Video call explicitly blocked with an error message.
 
-10. **No Siri/Voice Assistant**: No voice interaction capability.
+10. **Siri (limited)**: Voice + text assistant in `SiriScreen`, reached from AssistiveTouch. Recognises Open/Call/Message/What Time; SET_ALARM parses but is not wired to the alarm store.
 
 ### Feature Parity Gaps vs Real iOS
 
@@ -172,7 +172,7 @@ Many settings screens appear functional but immediately open Android's native se
 | Mail app | Missing entirely |
 | Safari browser | Missing entirely |
 | App Store | Missing entirely |
-| Siri/voice assistant | Missing entirely |
+| Siri/voice assistant | Partial — voice + text via AssistiveTouch; small command grammar |
 | FaceTime | Blocked with error |
 | iMessage features (reactions, typing) | Missing |
 | Widgets (configurable) | Missing - static widgets only |

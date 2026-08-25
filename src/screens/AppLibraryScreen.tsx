@@ -14,12 +14,23 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
 
 import { useApps, InstalledApp } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { useSettings } from '../store/SettingsStore';
+import { useDevice } from '../store/DeviceStore';
+import {
+  buildCategorySections,
+  recategorizeApp,
+  STABLE_KEY_TO_NAME,
+  DEFAULT_CATEGORY_OVERRIDES,
+} from '../utils/categoryOverrides';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
+import { launchBuiltInOrExternal } from '../utils/launchBuiltIn';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
 
@@ -34,25 +45,84 @@ const CATEGORY_KEYWORDS: { name: string; keywords: string[] }[] = [
   },
   {
     name: 'Entertainment',
-    keywords: ['youtube', 'netflix', 'spotify', 'disney', 'twitch', 'gaming', 'game', 'prime', 'hbo', 'hulu', 'music', 'podcast', 'radio', 'player'],
+    keywords: ['youtube', 'netflix', 'spotify', 'disney', 'twitch', 'prime', 'hbo', 'hulu', 'music', 'podcast', 'radio', 'player'],
   },
   {
-    name: 'Productivity',
-    keywords: ['gmail', 'drive', 'docs', 'sheets', 'calendar', 'slack', 'teams', 'office', 'word', 'excel', 'outlook', 'notion', 'trello', 'asana', 'zoom', 'meet'],
+    name: 'Games',
+    keywords: ['game', 'gaming', 'games', 'roblox', 'minecraft', 'fortnite', 'pubg', 'candy crush'],
+  },
+  {
+    name: 'Productivity & Finance',
+    keywords: ['gmail', 'drive', 'docs', 'sheets', 'calendar', 'slack', 'teams', 'office', 'word', 'excel', 'outlook', 'notion', 'trello', 'asana', 'zoom', 'meet', 'bank', 'banking', 'finance', 'wallet', 'paypal', 'venmo', 'crypto', 'invest', 'budget', 'tax'],
   },
   {
     name: 'Utilities',
-    keywords: ['calculator', 'clock', 'camera', 'files', 'settings', 'weather', 'maps', 'compass', 'flashlight', 'scanner', 'notes', 'reminder', 'translate', 'browser', 'chrome', 'firefox'],
+    keywords: ['calculator', 'clock', 'camera', 'files', 'settings', 'weather', 'compass', 'flashlight', 'scanner', 'notes', 'reminder', 'translate', 'browser', 'chrome', 'firefox'],
   },
   {
-    name: 'Shopping',
-    keywords: ['amazon', 'ebay', 'aliexpress', 'wish', 'shop', 'store', 'market', 'etsy', 'shein', 'zalando'],
+    name: 'Shopping & Food',
+    keywords: ['amazon', 'ebay', 'aliexpress', 'wish', 'shop', 'store', 'market', 'etsy', 'shein', 'zalando', 'food', 'restaurant', 'delivery', 'recipe', 'grocery', 'ubereats', 'doordash', 'foodpanda', 'wolt', 'glovo'],
+  },
+  {
+    name: 'Creativity',
+    keywords: ['photoshop', 'lightroom', 'canva', 'illustrator', 'procreate', 'sketch', 'draw', 'paint', 'capcut', 'premiere', 'figma'],
+  },
+  {
+    name: 'Information & Reading',
+    keywords: ['news', 'reader', 'kindle', 'book', 'magazine', 'rss', 'medium', 'wikipedia', 'flipboard'],
+  },
+  {
+    name: 'Travel',
+    keywords: ['uber', 'lyft', 'booking', 'airbnb', 'flight', 'trip', 'travel', 'transit', 'taxi', 'expedia', 'hotel', 'maps'],
+  },
+  {
+    name: 'Health & Fitness',
+    keywords: ['fitness', 'health', 'workout', 'gym', 'strava', 'fitbit', 'yoga', 'sleep', 'step', 'calorie', 'diet'],
+  },
+  {
+    name: 'Education',
+    keywords: ['education', 'learn', 'course', 'duolingo', 'khan', 'school', 'university', 'study', 'quiz', 'flashcard'],
   },
 ];
 
-function categorizeApp(app: InstalledApp): string {
-  const nameLower = app.name.toLowerCase();
-  const pkgLower = app.packageName.toLowerCase();
+// ApplicationInfo.category (exposed as InstalledApp.category by LauncherModule,
+// see modules/launcher-module/src/index.ts) mapped to our category names.
+// Not 1:1 — decisions documented in the PR body:
+//   - AUDIO and VIDEO both collapse into Entertainment (no separate Music bucket).
+//   - IMAGE maps to Creativity (image editors/viewers read closer to creative
+//     tools than to any other iOS bucket).
+//   - ACCESSIBILITY maps to Utilities (assistive tools are utility-like; iOS's
+//     14 categories have no dedicated accessibility bucket).
+//   - Health & Fitness and Education have no native ApplicationInfo constant —
+//     they're only reachable via keywords below.
+const NATIVE_CATEGORY_MAP: Record<string, string> = {
+  game: 'Games',
+  social: 'Social',
+  news: 'Information & Reading',
+  maps: 'Travel',
+  productivity: 'Productivity & Finance',
+  audio: 'Entertainment',
+  video: 'Entertainment',
+  image: 'Creativity',
+  accessibility: 'Utilities',
+};
+
+export function categorizeApp(app: InstalledApp): string {
+  const native = app.category;
+  if (native && native !== 'undefined' && NATIVE_CATEGORY_MAP[native]) {
+    return NATIVE_CATEGORY_MAP[native];
+  }
+  // `category` é normalizado para 'undefined' pelo helper nativo `withCategory`,
+  // mas o `name` NÃO — um payload nativo corrompido ou um índice em cache
+  // antigo pode entregar uma app sem `name` (undefined/null). Sem a guarda,
+  // `app.name.toLowerCase()` rebentaria e, como a AppLibraryContent é a última
+  // página do pager da home (montada inline em LauncherHomeScreen), o throw
+  // derrubava o launcher inteiro e a página da App Library aparecia em branco
+  // (#696 / #699). Trata-se como string vazia, à semelhança do packageName.
+  const nameLower = (app.name ?? '').toLowerCase();
+  // packageName pode ser undefined (apps virtuais sem packageName real) — não
+  // deixar que isso rebente a cascata; trata-se como string vazia.
+  const pkgLower = (app.packageName ?? '').toLowerCase();
   for (const cat of CATEGORY_KEYWORDS) {
     for (const kw of cat.keywords) {
       if (nameLower.includes(kw) || pkgLower.includes(kw)) {
@@ -70,34 +140,61 @@ function categorizeApp(app: InstalledApp): string {
 const ICON_SIZE = 50;
 const ICON_RADIUS = 12;
 
-const AppIcon = React.memo(function AppIcon({ app, size = ICON_SIZE }: { app: InstalledApp; size?: number }) {
+const AppIcon = React.memo(function AppIcon({
+  app,
+  size = ICON_SIZE,
+  badge,
+}: {
+  app: InstalledApp;
+  size?: number;
+  /** Contagem de notificações não lidas a mostrar como dot vermelho (gateado por settings). */
+  badge?: number;
+}) {
   const radius = (size / ICON_SIZE) * ICON_RADIUS;
-  if (app.icon) {
-    return (
-      <Image
-        source={{ uri: app.icon }}
-        style={{ width: size, height: size, borderRadius: radius }}
-        resizeMode="cover"
-      />
-    );
-  }
-  // Fallback letter icon
-  const letter = app.name.charAt(0).toUpperCase();
-  const hue = app.name.charCodeAt(0) % 360;
+  const icon = app.icon ? (
+    <Image
+      source={{ uri: app.icon }}
+      style={{ width: size, height: size, borderRadius: radius }}
+      resizeMode="cover"
+    />
+  ) : (
+    (() => {
+      // Fallback letter icon. `app.name` pode estar ausente (payload nativo
+      // corrompido / índice em cache antigo — o helper `withCategory` só
+      // normaliza `category`, não `name`), e a AppLibraryContent é a última
+      // página do pager da home; um `app.name.charAt(0)` sobre undefined/null
+      // derrubaria o launcher inteiro e mostraria o ecrã em branco (#696 / #699).
+      // Usa a inicial do packageName como 2ª linha de defesa, e um '?' se também
+      // não houver packageName — nunca rebenta.
+      const fallbackName = app.name ?? app.packageName ?? '';
+      const letter = (fallbackName.charAt(0) || '?').toUpperCase();
+      const hue = (fallbackName.charCodeAt(0) || 0) % 360;
+      return (
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: radius,
+            backgroundColor: `hsl(${hue}, 55%, 55%)`,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: size * 0.4, fontWeight: '600' }}>
+            {letter}
+          </Text>
+        </View>
+      );
+    })()
+  );
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius,
-        backgroundColor: `hsl(${hue}, 55%, 55%)`,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: size * 0.4, fontWeight: '600' }}>
-        {letter}
-      </Text>
+    <View style={{ width: size, height: size, position: 'relative' }}>
+      {icon}
+      {badge != null && badge > 0 && (
+        <View testID={`app-badge-${app.packageName}`} style={styles.appIconBadge}>
+          <Text style={styles.appIconBadgeText}>{badge > 99 ? '99+' : String(badge)}</Text>
+        </View>
+      )}
     </View>
   );
 });
@@ -112,6 +209,10 @@ interface CategoryCardProps {
   onPress: () => void;
   onLaunchApp: (packageName: string) => void;
   cardWidth: number;
+  /** Contagem de notificações não lidas por packageName (passada ao AppIcon). */
+  badgeCounts: Record<string, number>;
+  /** Se os badges devem ser exibidos (gateado por settings). */
+  showNotifications: boolean;
 }
 
 // From this many apps onward, the 4th grid cell becomes a 2x2 "more apps"
@@ -131,26 +232,45 @@ function touchHitSlop(size: number) {
   return { top: pad, bottom: pad, left: pad, right: pad };
 }
 
-export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, onLaunchApp, cardWidth }: CategoryCardProps) {
+export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPress, onLaunchApp, cardWidth, badgeCounts, showNotifications }: CategoryCardProps) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const iconSize = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
-  const iconHitSlop = touchHitSlop(iconSize);
-  const miniSize = (iconSize - MINI_GAP) / 2;
-
+  const iconSize2x2 = (cardWidth - 24 - 6) / 2; // 2 columns with gap inside padding
   const hasQuadrant = apps.length >= QUADRANT_MIN_APPS;
+  // 1-3 apps can't fill a 2x2 grid, and an empty 4th cell reads as a white hole
+  // (issue #679). Collapse them to a single row so no empty trailing cell is
+  // reserved. 4 apps keep the 2x2 grid; 5+ keep the mini-icon quadrant.
+  const isSingleRow = !hasQuadrant && apps.length > 0 && apps.length <= 3;
+  const iconSize = isSingleRow
+    ? (cardWidth - 24 - (apps.length - 1) * 3) / apps.length
+    : iconSize2x2;
+  const iconHitSlop = touchHitSlop(iconSize);
+  const miniSize = (iconSize2x2 - MINI_GAP) / 2;
+
   const largeApps = hasQuadrant ? apps.slice(0, 3) : apps.slice(0, 4);
   const miniApps = hasQuadrant ? apps.slice(3, 3 + MAX_QUADRANT_MINIS) : [];
 
+  // DEVIATION from the scale+dim primitive: the category card keeps the
+  // pressed-background convention (§3.2 convention 4), now using the shared
+  // token. Two reasons — a large tile that shrinks reads wrong next to the
+  // launcher grid, and the App Library is mounted inside the launcher pager,
+  // where an animated style per card would make a page transition's
+  // useAnimatedStyle cost grow with the number of categories (the exact
+  // invariant #518 protects). The ad hoc 0.8 opacity is gone either way.
+  // iOS App Library categories are NOT closed white cards: a title sits above a
+  // translucent cluster of icons laid directly on the blurred wallpaper. The
+  // category container therefore carries no card background and no rounded
+  // corners (the preset card chrome belongs to list rows / sheets, not here).
+  // Only the width + inset padding are kept; the pressed state is dropped too
+  // because there is no painted surface to darken — the whole card opens the
+  // category anyway, so a pressed backdrop would be pure card chrome.
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.categoryCard,
+      style={[
+        styles.categoryCluster,
         {
           width: cardWidth,
-          backgroundColor: colors.secondarySystemGroupedBackground,
-          opacity: pressed ? 0.8 : 1,
         },
       ]}
       accessibilityLabel={`${title} category, ${apps.length} app${apps.length !== 1 ? 's' : ''}`}
@@ -158,7 +278,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
     >
       {/* 3 large icons (each opens its app directly) plus, once there are
           more apps than fit, a mini-icon quadrant that opens the category */}
-      <View style={styles.iconGrid}>
+      <View style={[styles.iconGrid, { flexWrap: isSingleRow ? 'nowrap' : 'wrap' }]} testID="category-icon-grid">
         {largeApps.map((a) => (
           <Pressable
             key={a.packageName}
@@ -168,7 +288,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
             accessibilityLabel={`Open ${a.name}, App Library`}
             accessibilityRole="button"
           >
-            <AppIcon app={a} size={iconSize} />
+            <AppIcon app={a} size={iconSize} badge={showNotifications ? badgeCounts[a.packageName] : undefined} />
           </Pressable>
         ))}
         {hasQuadrant && (
@@ -181,7 +301,7 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
           >
             {miniApps.map((a) => (
               <View key={a.packageName} style={{ width: miniSize, height: miniSize }}>
-                <AppIcon app={a} size={miniSize} />
+                <AppIcon app={a} size={miniSize} badge={showNotifications ? badgeCounts[a.packageName] : undefined} />
               </View>
             ))}
           </Pressable>
@@ -207,12 +327,19 @@ export const CategoryCard = React.memo(function CategoryCard({ title, apps, onPr
 interface CategoryDetailProps {
   visible: boolean;
   title: string;
+  /** Chave estável da categoria atual (para recategorizar com base nela). */
+  categoryKey: string;
   apps: InstalledApp[];
   onClose: () => void;
   onLaunch: (pkg: string) => void;
+  onRequestRecategorize: (packageName: string, currentKey: string) => void;
+  /** Contagem de notificações não lidas por packageName (passada ao AppIcon). */
+  badgeCounts: Record<string, number>;
+  /** Se os badges devem ser exibidos (gateado por settings). */
+  showNotifications: boolean;
 }
 
-function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: CategoryDetailProps) {
+function CategoryDetailModal({ visible, title, categoryKey, apps, onClose, onLaunch, onRequestRecategorize, badgeCounts, showNotifications }: CategoryDetailProps) {
   const { theme, isDark, typography, textScale } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
@@ -246,11 +373,13 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
           renderItem={({ item }) => (
             <Pressable
               onPress={() => { onLaunch(item.packageName); onClose(); }}
+              onLongPress={() => onRequestRecategorize(item.packageName, categoryKey)}
+              delayLongPress={350}
               style={[styles.modalAppCell, { width: cellW }]}
               accessibilityLabel={`Open ${item.name}, App Library`}
               accessibilityRole="button"
             >
-              <AppIcon app={item} size={iconSize} />
+              <AppIcon app={item} size={iconSize} badge={showNotifications ? badgeCounts[item.packageName] : undefined} />
               <Text style={[typography.caption2, styles.modalAppLabel, { color: colors.label }]} numberOfLines={2}>
                 {item.name}
               </Text>
@@ -263,19 +392,94 @@ function CategoryDetailModal({ visible, title, apps, onClose, onLaunch }: Catego
 }
 
 // ---------------------------------------------------------------------------
-// Horizontal app strip (Recently Added / Suggestions)
+// Recategorize sheet (long-press num ícone dentro do modal de categoria)
 // ---------------------------------------------------------------------------
+// Onde se recategoriza uma app (#516): um long-press no ícone dentro do modal
+// de detalhe da categoria abre este sheet. Decisão justificada no PR — não é um
+// ecrã de definições com 200 apps; é contextual, no sítio onde o utilizador já
+// vê a app, e reaproveita o modal que já lista as apps da categoria.
+
+interface RecategorizeSheetProps {
+  visible: boolean;
+  currentKey: string;
+  onCancel: () => void;
+  onSelect: (targetKey: string) => void;
+  /** #606: esconder a app (App Library only). Fica no mesmo sheet do long-press
+   * porque é a mesma acção contextual do iOS ("long-press → Hide App"). */
+  onHide: () => void;
+}
+
+function RecategorizeSheet({ visible, currentKey, onCancel, onSelect, onHide }: RecategorizeSheetProps) {
+  const { theme, typography } = useTheme();
+  const { colors } = theme;
+  const insets = useSafeAreaInsets();
+  // Todas as categorias conhecidas, pela ordem canónica do mapa.
+  const allKeys = Object.keys(STABLE_KEY_TO_NAME);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <Pressable style={styles.sheetBackdrop} onPress={onCancel}>
+        <View style={[styles.sheetRoot, { backgroundColor: colors.secondarySystemGroupedBackground, paddingBottom: insets.bottom + 16 }]}>
+          <Text style={[typography.title3, styles.sheetTitle, { color: colors.label }]}>
+            Mover para a categoria
+          </Text>
+          <FlatList
+            data={allKeys}
+            keyExtractor={(k) => k}
+            renderItem={({ item: key }) => (
+              <Pressable
+                onPress={() => onSelect(key)}
+                style={[styles.sheetRow, { borderBottomColor: colors.separator }]}
+                accessibilityLabel={`Mover para ${STABLE_KEY_TO_NAME[key]}`}
+                accessibilityRole="button"
+              >
+                <Text style={[typography.body, { color: colors.label }]}>{STABLE_KEY_TO_NAME[key]}</Text>
+                {key === currentKey && (
+                  <Ionicons name="checkmark" size={20} color={colors.systemBlue} />
+                )}
+              </Pressable>
+            )}
+          />
+          <Pressable
+            onPress={onHide}
+            style={[styles.sheetRow, { borderBottomColor: colors.separator }]}
+            accessibilityLabel="Hide App"
+            accessibilityRole="button"
+          >
+            <Text style={[typography.body, { color: colors.systemBlue }]}>Hide App</Text>
+            <Ionicons name="eye-off-outline" size={20} color={colors.systemBlue} />
+          </Pressable>
+          <Pressable
+            onPress={onCancel}
+            style={[styles.sheetCancel, { borderTopColor: colors.separator }]}
+            accessibilityLabel="Cancelar"
+            accessibilityRole="button"
+          >
+            <Text style={[typography.body, { color: colors.systemBlue, fontWeight: '600' }]}>Cancelar</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 
 const AppStrip = React.memo(function AppStrip({
   apps,
   onLaunch,
+  badgeCounts,
+  showNotifications,
 }: {
   apps: InstalledApp[];
   onLaunch: (pkg: string) => void;
+  badgeCounts: Record<string, number>;
+  showNotifications: boolean;
 }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
-  const stripIconSize = 62;
+  // iOS App Library: ícones de faixa horizontal alinhados aos ~60px da grelha
+  // densa (4 por linha). 62px exagerava e forçava scroll horizontal (#678).
+  const stripIconSize = 60;
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stripContent}>
@@ -287,7 +491,11 @@ const AppStrip = React.memo(function AppStrip({
           accessibilityLabel={`Open ${app.name}, App Library`}
           accessibilityRole="button"
         >
-          <AppIcon app={app} size={stripIconSize} />
+          <AppIcon
+            app={app}
+            size={stripIconSize}
+            badge={showNotifications ? badgeCounts[app.packageName] : undefined}
+          />
           <Text style={[typography.caption2, styles.stripLabel, { color: colors.label }]} numberOfLines={2}>
             {app.name}
           </Text>
@@ -304,9 +512,13 @@ const AppStrip = React.memo(function AppStrip({
 const SearchResults = React.memo(function SearchResults({
   apps,
   onLaunch,
+  badgeCounts,
+  showNotifications,
 }: {
   apps: InstalledApp[];
   onLaunch: (pkg: string) => void;
+  badgeCounts: Record<string, number>;
+  showNotifications: boolean;
 }) {
   const { theme, typography } = useTheme();
   const { colors } = theme;
@@ -328,15 +540,15 @@ const SearchResults = React.memo(function SearchResults({
         />
       }
       renderItem={({ item }) => (
-        <Pressable
+        <CupertinoPressable
           onPress={() => onLaunch(item.packageName)}
-          style={({ pressed }) => [styles.searchRow, { opacity: pressed ? 0.7 : 1 }]}
+          style={styles.searchRow}
           accessibilityLabel={`Open ${item.name}, App Library`}
           accessibilityRole="button"
         >
-          <AppIcon app={item} size={46} />
+          <AppIcon app={item} size={46} badge={showNotifications ? badgeCounts[item.packageName] : undefined} />
           <Text style={[typography.callout, styles.searchRowLabel, { color: colors.label }]}>{item.name}</Text>
-        </Pressable>
+        </CupertinoPressable>
       )}
     />
   );
@@ -366,71 +578,123 @@ function SectionHeader({ title, colors }: { title: string; colors: CupertinoColo
 export function AppLibraryContent() {
   const { theme } = useTheme();
   const { colors } = theme;
-  const { apps, launchApp, recentApps } = useApps();
+  const navigation = useNavigation<AppNavigationProp>();
+  // `apps` é a lista completa (usada só pela procura, para que uma app
+  // escondida continue lançável) e `visibleApps` é a lista sem as escondidas
+  // (#606), usada nas categorias e nos strips.
+  const { apps: allInstalledApps, visibleApps: nonHiddenApps, launchApp, recentApps, hideApp } = useApps();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState('');
-  const [categoryModal, setCategoryModal] = useState<{ title: string; apps: InstalledApp[] } | null>(null);
-
+  const [categoryModal, setCategoryModal] = useState<{ title: string; key: string; apps: InstalledApp[] } | null>(null);
+  // Estado do long-press "recategorizar app": qual app e se o sheet está visível.
+  const [recatSheet, setRecatSheet] = useState<{ packageName: string; currentKey: string } | null>(null);
   // Card layout — 2 columns with gap
   const CARD_GAP = 12;
   const SIDE_PAD = 16;
   const cardWidth = (width - SIDE_PAD * 2 - CARD_GAP) / 2;
 
-  // Categorise all apps
+  // Categorias da grelha, com overrides do utilizador aplicados
+  // (ocultar / renomear / reordenar / appOverrides). Usa chaves estáveis, por
+  // isso renomear não parte a atribuição.
+  const { settings, update } = useSettings();
+  const device = useDevice();
+  // Siri & Search → «Show Apps in App Library» (#610). Quando desligado a App
+  // Library não mostra nenhuma app: nem strips, nem categorias, nem resultados
+  // da sua própria procura. As apps continuam instaladas e lançáveis a partir
+  // da home. Filtra-se aqui, à entrada, para que os dois consumidores da lista
+  // (browse e procura) não possam divergir.
+  const visibleApps = useMemo(
+    () => (settings.searchShowInLibrary ? nonHiddenApps : []),
+    [nonHiddenApps, settings.searchShowInLibrary],
+  );
+  const apps = useMemo(
+    () => (settings.searchShowInLibrary ? allInstalledApps : []),
+    [allInstalledApps, settings.searchShowInLibrary],
+  );
   const categories = useMemo(() => {
-    const map: Record<string, InstalledApp[]> = {};
-    for (const app of apps) {
-      const cat = categorizeApp(app);
-      if (!map[cat]) map[cat] = [];
-      map[cat].push(app);
-    }
-    // Sort categories — Other last
-    const keys = Object.keys(map).sort((a, b) => {
-      if (a === 'Other') return 1;
-      if (b === 'Other') return -1;
-      return a.localeCompare(b);
-    });
-    return keys.map((name) => ({ name, apps: map[name] }));
-  }, [apps]);
+    // Defesa em camada: settings.categoryOverrides é normalizado na leitura
+    // (SettingsStore), mas garantimos aqui que nunca passamos um objecto
+    // inválido a buildCategorySections — um null/partial rebentaria em
+    // `new Set(overrides.hidden)` e crasharia o launcher (#688).
+    const overrides =
+      settings.categoryOverrides && typeof settings.categoryOverrides === 'object'
+        ? settings.categoryOverrides
+        : DEFAULT_CATEGORY_OVERRIDES;
+    return buildCategorySections(visibleApps, overrides, categorizeApp);
+  }, [visibleApps, settings.categoryOverrides]);
+
+  // Badge counts — mesma fonte da home (LauncherHomeScreen.tsx:1113): SMS não
+  // lidas do device mapeiam para a app Messages. Gateado por
+  // appLibraryShowNotifications: só contam quando o toggle está ligado.
+  const badgeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const unread = device.messages.filter((m) => !m.isRead).length;
+    if (unread > 0) counts['com.iostoandroid.messages'] = unread;
+    return counts;
+  }, [device.messages]);
+
+  // Toggles da App Library (#602).
+  const showSuggestions = settings.appLibraryShowSuggestions;
+  const showNotifications = settings.appLibraryShowNotifications;
+
+  // Grava um appOverrides (recategorização via long-press).
+  const handleRecategorize = useCallback((packageName: string, targetKey: string) => {
+    const next = recategorizeApp(settings.categoryOverrides, packageName, targetKey);
+    update('categoryOverrides', next);
+    setRecatSheet(null);
+  }, [settings.categoryOverrides, update]);
 
   // Recently Added — most recently launched apps (by launchedAt timestamp)
   const recentlyAddedApps = useMemo(() => {
     const recentPkgs = [...recentApps]
       .sort((a, b) => b.launchedAt - a.launchedAt)
       .slice(0, 4)
-      .map(r => apps.find(a => a.packageName === r.packageName))
+      .map(r => visibleApps.find(a => a.packageName === r.packageName))
       .filter((a): a is InstalledApp => !!a);
     if (recentPkgs.length > 0) return recentPkgs;
-    // Fallback: newest-named apps when no launch history exists
-    return [...apps].sort((a, b) => b.name.localeCompare(a.name)).slice(0, 4);
-  }, [apps, recentApps]);
+    // Fallback: newest-named apps when no launch history exists. Comparador
+    // seguro: um `name` ausente (payload nativo corrompido — #696 / #699) não
+    // pode rebentar a grelha; ordena-se como string vazia.
+    return [...visibleApps]
+      .sort((a, b) => (b.name ?? '').localeCompare(a.name ?? ''))
+      .slice(0, 4);
+  }, [visibleApps, recentApps]);
 
   // Suggestions — next 4 most-recently-launched apps after Recently Added
   const suggestedApps = useMemo(() => {
+    // Siri & Search → «Show Suggestions» (#610): sem sugestões, sem strip.
+    if (!settings.searchShowSuggestions) return [];
     const recentSorted = [...recentApps]
       .sort((a, b) => b.launchedAt - a.launchedAt)
       .slice(4, 8)
-      .map(r => apps.find(a => a.packageName === r.packageName))
+      .map(r => visibleApps.find(a => a.packageName === r.packageName))
       .filter((a): a is InstalledApp => !!a);
     if (recentSorted.length > 0) return recentSorted;
-    return [...apps].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 4);
-  }, [apps, recentApps]);
+    // Comparador seguro: `name` ausente não rebenta (payload nativo corrompido
+    // — #696 / #699).
+    return [...visibleApps]
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+      .slice(0, 4);
+  }, [visibleApps, recentApps, settings.searchShowSuggestions]);
 
   // Filtered apps for search
   const filteredApps = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.trim().toLowerCase();
     return apps
-      .filter((a) => a.name.toLowerCase().includes(q) || a.packageName.toLowerCase().includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .filter((a) => (a.name ?? '').toLowerCase().includes(q) || (a.packageName ?? '').toLowerCase().includes(q))
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
   }, [apps, query]);
 
   const handleLaunch = useCallback((packageName: string) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    launchApp(packageName);
-  }, [launchApp]);
+    // Built-in virtual apps (Weather, Calculator, …) must open the in-app
+    // iOS-style screen via navigation, not the native launcher bridge — see
+    // launchBuiltInOrExternal.
+    launchBuiltInOrExternal(packageName, navigation, launchApp);
+  }, [launchApp, navigation]);
 
   const isSearching = query.trim().length > 0;
 
@@ -441,35 +705,51 @@ export function AppLibraryContent() {
         <CupertinoSearchBar
           value={query}
           onChangeText={setQuery}
-          placeholder="App Library"
+          placeholder="Search"
           autoFocus={false}
         />
       </View>
 
       {isSearching ? (
         /* Search results */
-        <SearchResults apps={filteredApps} onLaunch={handleLaunch} />
+        <SearchResults
+          apps={filteredApps}
+          onLaunch={handleLaunch}
+          badgeCounts={badgeCounts}
+          showNotifications={showNotifications}
+        />
       ) : (
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Recently Added */}
-          {recentlyAddedApps.length > 0 && (
+          {/* Recently Added — faixa de sugestões do iOS, oculta quando
+              appLibraryShowSuggestions está desligado. */}
+          {showSuggestions && recentlyAddedApps.length > 0 && (
             <View style={styles.stripSection}>
               <SectionHeader title="Recently Added" colors={colors} />
               <View style={[styles.stripCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-                <AppStrip apps={recentlyAddedApps} onLaunch={handleLaunch} />
+                <AppStrip
+                  apps={recentlyAddedApps}
+                  onLaunch={handleLaunch}
+                  badgeCounts={badgeCounts}
+                  showNotifications={showNotifications}
+                />
               </View>
             </View>
           )}
 
-          {/* Suggestions */}
-          {suggestedApps.length > 0 && (
+          {/* Suggestions — mesma faixa de sugestões do iOS. */}
+          {showSuggestions && suggestedApps.length > 0 && (
             <View style={styles.stripSection}>
               <SectionHeader title="Suggestions" colors={colors} />
               <View style={[styles.stripCard, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-                <AppStrip apps={suggestedApps} onLaunch={handleLaunch} />
+                <AppStrip
+                  apps={suggestedApps}
+                  onLaunch={handleLaunch}
+                  badgeCounts={badgeCounts}
+                  showNotifications={showNotifications}
+                />
               </View>
             </View>
           )}
@@ -479,12 +759,14 @@ export function AppLibraryContent() {
           <View style={styles.categoryGrid}>
             {categories.map((cat) => (
               <CategoryCard
-                key={cat.name}
-                title={cat.name}
+                key={cat.key}
+                title={cat.displayName}
                 apps={cat.apps}
                 cardWidth={cardWidth}
-                onPress={() => setCategoryModal({ title: cat.name, apps: cat.apps })}
+                onPress={() => setCategoryModal({ title: cat.displayName, key: cat.key, apps: cat.apps })}
                 onLaunchApp={handleLaunch}
+                badgeCounts={badgeCounts}
+                showNotifications={showNotifications}
               />
             ))}
           </View>
@@ -496,11 +778,30 @@ export function AppLibraryContent() {
         <CategoryDetailModal
           visible
           title={categoryModal.title}
+          categoryKey={categoryModal.key}
           apps={categoryModal.apps}
           onClose={() => setCategoryModal(null)}
           onLaunch={handleLaunch}
+          onRequestRecategorize={(pkg, currentKey) => setRecatSheet({ packageName: pkg, currentKey })}
+          badgeCounts={badgeCounts}
+          showNotifications={showNotifications}
         />
       )}
+
+      {/* Recategorize sheet (long-press dentro do modal de categoria) */}
+      <RecategorizeSheet
+        visible={recatSheet !== null}
+        currentKey={recatSheet?.currentKey ?? ''}
+        onCancel={() => setRecatSheet(null)}
+        onSelect={(targetKey) => {
+          if (recatSheet) handleRecategorize(recatSheet.packageName, targetKey);
+        }}
+        onHide={() => {
+          if (recatSheet) hideApp(recatSheet.packageName);
+          setRecatSheet(null);
+          setCategoryModal(null);
+        }}
+      />
     </View>
   );
 }
@@ -529,6 +830,16 @@ export function AppLibraryScreen({ navigation }: { navigation: AppNavigationProp
             <Text style={[typography.body, styles.backLabel, { color: colors.systemBlue }]}>Back</Text>
           </Pressable>
         }
+        rightButton={
+          <Pressable
+            onPress={() => navigation.navigate('AppStore')}
+            style={styles.storeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="App Store"
+          >
+            <Ionicons name="bag-outline" size={22} color={colors.systemBlue} />
+          </Pressable>
+        }
       />
       <AppLibraryContent />
     </View>
@@ -554,6 +865,11 @@ const styles = StyleSheet.create({
   },
   backLabel: {
     fontWeight: '400',
+  },
+  storeBtn: {
+    minWidth: 70,
+    alignItems: 'flex-end',
+    paddingHorizontal: 4,
   },
   searchBarWrap: {
     paddingHorizontal: 12,
@@ -600,10 +916,10 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
-  categoryCard: {
-    borderRadius: 20,
+  categoryCluster: {
+    // No card: iOS lays the icon cluster directly on the wallpaper. Only the
+    // inset padding + column width are kept so the icons don't touch the edges.
     padding: 12,
-    overflow: 'hidden',
   },
   iconGrid: {
     flexDirection: 'row',
@@ -670,5 +986,58 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'center',
     marginTop: 5,
+  },
+
+  // App Icon badge (dot de notificações não lidas) — #602
+  appIconBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.3)',
+  },
+  appIconBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // Recategorize sheet
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheetRoot: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 16,
+    maxHeight: '70%',
+  },
+  sheetTitle: {
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sheetCancel: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 8,
   },
 });

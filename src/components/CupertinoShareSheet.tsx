@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { BorderRadius } from '../theme/CupertinoTheme';
+import { BorderRadius, Shape } from '../theme/CupertinoTheme';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,14 @@ interface CupertinoShareSheetProps {
   title?: string;
   url?: string;
   text?: string;
+  /**
+   * When provided, a "Add to Reading List" option is shown — but only if a
+   * `url` is also present (a browser-only concept). The callback receives the
+   * current URL and title so the caller (e.g. BrowserScreen) can persist the
+   * page. Usages that don't pass a `url` (ProfileScreen) render exactly as
+   * before, with no Reading List option.
+   */
+  onAddToReadingList?: (url: string, title: string) => void;
 }
 
 // ─── Share Options ───────────────────────────────────────────────────────────
@@ -44,12 +52,23 @@ const SHARE_OPTIONS: ShareOption[] = [
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CupertinoShareSheet({ visible, onClose, title, url, text }: CupertinoShareSheetProps) {
+export function CupertinoShareSheet({ visible, onClose, title, url, text, onAddToReadingList }: CupertinoShareSheetProps) {
   const { theme, typography } = useTheme();
   const { colors, dark } = theme;
   const insets = useSafeAreaInsets();
 
   const sharePayload = text || url || title || '';
+
+  // The Reading List is a browser-only concept: only surface the option when a
+  // URL is present AND the caller wired up a handler. Guarded so ProfileScreen
+  // (which passes no url) and other non-browser shares are unaffected.
+  const showReadingList = Boolean(url) && Boolean(onAddToReadingList);
+
+  const handleReadingList = () => {
+    // Close the sheet, then hand the current page to the caller.
+    onClose();
+    if (url && onAddToReadingList) onAddToReadingList(url, title || '');
+  };
 
   const handleOption = async (option: ShareOption) => {
     onClose();
@@ -95,7 +114,7 @@ export function CupertinoShareSheet({ visible, onClose, title, url, text }: Cupe
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
+        <View testID="share-sheet" style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
           <GlassSurface
             intensity={85}
             tint={dark ? 'dark' : 'light'}
@@ -141,6 +160,21 @@ export function CupertinoShareSheet({ visible, onClose, title, url, text }: Cupe
                 <Text style={[typography.caption2, styles.optionLabel, { color: colors.label }]}>{option.label}</Text>
               </Pressable>
             ))}
+
+            {showReadingList && (
+              <Pressable
+                key="reading-list"
+                style={styles.optionItem}
+                onPress={handleReadingList}
+                accessibilityLabel="Add to Reading List"
+                accessibilityRole="button"
+              >
+                <View style={[styles.optionIconWrap, { backgroundColor: '#FF9500' }]}>
+                  <Ionicons name="book-outline" size={24} color="#fff" />
+                </View>
+                <Text style={[typography.caption2, styles.optionLabel, { color: colors.label }]}>Add to Reading List</Text>
+              </Pressable>
+            )}
           </ScrollView>
 
           {/* Divider */}
@@ -170,8 +204,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: Shape.sheet.radius,
+    borderTopRightRadius: Shape.sheet.radius,
     overflow: 'hidden',
     paddingTop: 8,
   },

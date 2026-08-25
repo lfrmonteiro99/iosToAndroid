@@ -14,7 +14,8 @@
  * named `addHomePressedListener` export.
  */
 import React from 'react';
-import { render } from '../../test-utils';
+import { render, waitFor, act } from '../../test-utils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Names must start with "mock" (case-insensitive) — jest.mock factories are
 // hoisted above imports/const, and jest only allows writing to out-of-scope
@@ -36,6 +37,8 @@ jest.mock('../../../modules/launcher-module/src', () => ({
     launchApp: jest.fn(() => Promise.resolve(true)),
     getAppIcon: jest.fn(() => Promise.resolve('')),
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
+    // #517: a instrumentação de cold start chama isto no arranque de App.tsx.
+    getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
     openLauncherSettings: jest.fn(() => Promise.resolve(true)),
     getWifiInfo: jest.fn(() => Promise.resolve({ enabled: true, ssid: 'TestWiFi', rssi: -50, ip: '192.168.1.100' })),
     setWifiEnabled: jest.fn(() => Promise.resolve(true)),
@@ -85,6 +88,8 @@ jest.mock('../../../modules/launcher-module/src', () => ({
     openUsageAccessSettings: jest.fn(() => Promise.resolve(true)),
     getScreenTimeStats: jest.fn(() => Promise.resolve([])),
     getTodayScreenTime: jest.fn(() => Promise.resolve({ totalMinutes: 0, topApps: [] })),
+    // #608 Tap to Wake
+    wakeScreen: jest.fn(() => Promise.resolve()),
   },
 }));
 
@@ -117,5 +122,58 @@ describe('LauncherHomeScreen HOME button wiring (#508)', () => {
   it('does not throw when the native HOME event fires against a mounted screen', () => {
     render(<LauncherHomeScreen />);
     expect(() => mockCapturedHomePressedCb!()).not.toThrow();
+  });
+});
+
+describe('LauncherHomeScreen Tap to Wake wiring (#608)', () => {
+  // Reuse the homePress mock's addHomePressedListener capture, but drive the
+  // LauncherModule default (incl. wakeScreen) so we can assert the gate.
+  beforeEach(() => {
+    mockCapturedHomePressedCb = null;
+    // jest.setup.js provides a wakeScreen mock on the default module; ensure it
+    // is present for the require() inside the screen's HOME handler.
+  });
+
+  function loadHome(tapToWake: boolean) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      key === '@iostoandroid/settings'
+        ? Promise.resolve(JSON.stringify({ tapToWake }))
+        : Promise.resolve(null),
+    );
+    render(<LauncherHomeScreen />);
+  }
+
+  it('calls mod.wakeScreen() when the HOME event fires and settings.tapToWake is enabled', async () => {
+    loadHome(true);
+    await waitFor(() => expect(mockCapturedHomePressedCb).toEqual(expect.any(Function)));
+
+    const { default: launcher } = jest.requireMock('../../../modules/launcher-module/src') as {
+      default: { wakeScreen: jest.Mock };
+    };
+    launcher.wakeScreen.mockClear();
+    expect(launcher.wakeScreen).not.toHaveBeenCalled();
+
+    act(() => { mockCapturedHomePressedCb!(); });
+
+    await waitFor(() => expect(launcher.wakeScreen).toHaveBeenCalledTimes(1));
+  });
+
+  it('does NOT call mod.wakeScreen() when settings.tapToWake is disabled', async () => {
+    loadHome(false);
+    await waitFor(() => expect(mockCapturedHomePressedCb).toEqual(expect.any(Function)));
+
+    const { default: launcher } = jest.requireMock('../../../modules/launcher-module/src') as {
+      default: { wakeScreen: jest.Mock };
+    };
+
+    // The shared module-level mock may carry calls from the enabled test above;
+    // clear before firing so we assert only this test's HOME press.
+    launcher.wakeScreen.mockClear();
+
+    act(() => { mockCapturedHomePressedCb!(); });
+
+    // The wakeScreen gate must stay closed: even after firing HOME, no call.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(launcher.wakeScreen).not.toHaveBeenCalled();
   });
 });

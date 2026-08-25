@@ -133,6 +133,167 @@ describe('SettingsStore', () => {
   });
 });
 
+describe('SettingsStore fontChoice (#477: Inter or system typeface)', () => {
+  it('defaults to inter when nothing is stored', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.fontChoice).toBe('inter');
+    expect(DEFAULT_SETTINGS.fontChoice).toBe('inter');
+  });
+
+  it('update() switches fontChoice to system', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('fontChoice', 'system');
+    });
+
+    expect(result.current.settings.fontChoice).toBe('system');
+    // Unrelated defaults preserved
+    expect(result.current.settings.boldText).toBe(DEFAULT_SETTINGS.boldText);
+  });
+
+  it('persists fontChoice to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('fontChoice', 'system');
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"fontChoice":"system"'),
+    );
+  });
+
+  it('hydrates a persisted fontChoice from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, fontChoice: 'system' });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.fontChoice).toBe('system');
+  });
+});
+
+describe('SettingsStore iconTreatment (#486: icon mask treatment + cache rebuild)', () => {
+  it('defaults to mask-adaptive-only when nothing is stored', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.iconTreatment).toBe('mask-adaptive-only');
+    expect(DEFAULT_SETTINGS.iconTreatment).toBe('mask-adaptive-only');
+  });
+
+  it('update() switches iconTreatment to mask-all', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('iconTreatment', 'mask-all');
+    });
+
+    expect(result.current.settings.iconTreatment).toBe('mask-all');
+    // Unrelated defaults preserved
+    expect(result.current.settings.wallpaperIndex).toBe(DEFAULT_SETTINGS.wallpaperIndex);
+  });
+
+  it('update() switches iconTreatment to none', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.update('iconTreatment', 'none');
+    });
+
+    expect(result.current.settings.iconTreatment).toBe('none');
+  });
+
+  it('persists iconTreatment to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('iconTreatment', 'mask-all');
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"iconTreatment":"mask-all"'),
+    );
+  });
+
+  it('hydrates a persisted iconTreatment from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, iconTreatment: 'none' });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.iconTreatment).toBe('none');
+  });
+});
+
+describe('SettingsStore pressFeedback (#497: touch feedback intensity)', () => {
+  it('defaults to scale-opacity when nothing is stored', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.pressFeedback).toBe('scale-opacity');
+    expect(DEFAULT_SETTINGS.pressFeedback).toBe('scale-opacity');
+  });
+
+  it.each(['scale-opacity', 'opacity', 'none'] as const)(
+    'update() switches pressFeedback to %s',
+    async (mode) => {
+      const { result } = renderHook(() => useSettings(), { wrapper });
+      await act(async () => {});
+
+      await act(async () => {
+        result.current.update('pressFeedback', mode);
+      });
+
+      expect(result.current.settings.pressFeedback).toBe(mode);
+      // Unrelated defaults preserved
+      expect(result.current.settings.fontChoice).toBe(DEFAULT_SETTINGS.fontChoice);
+    },
+  );
+
+  it('persists pressFeedback to AsyncStorage like every other setting', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.update('pressFeedback', 'none');
+    });
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@iostoandroid/settings',
+      expect.stringContaining('"pressFeedback":"none"'),
+    );
+  });
+
+  it('hydrates a persisted pressFeedback from AsyncStorage on mount', async () => {
+    const saved = JSON.stringify({ ...DEFAULT_SETTINGS, pressFeedback: 'opacity' });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(saved);
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {});
+
+    expect(result.current.settings.pressFeedback).toBe('opacity');
+  });
+});
+
 describe('SettingsProvider device sync gate (M10: no stale first render)', () => {
   it('renders nothing until the first device sync completes, then paints the synced SSID — never the seed value', async () => {
     // Capture the resolver up front — the Promise (and its resolve fn) must

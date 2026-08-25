@@ -2,19 +2,32 @@ package com.iostoandroid.launcher
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.app.ActivityOptions
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.database.Cursor
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Shader
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -22,7 +35,9 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
+import android.os.SystemClock
 import android.telephony.TelephonyManager
 import android.provider.CallLog
 import android.provider.ContactsContract
@@ -43,7 +58,20 @@ import java.util.Locale
 class LauncherModule : Module() {
     companion object {
         var flashlightState = false
-@Volatile private var instance: LauncherModule? = null
+        @Volatile private var instance: LauncherModule? = null
+        @Volatile var activeRecognizer: SpeechRecognizer? = null
+
+        // Live Activities (#626): one shared low-importance channel for every
+        // ongoing notification posted via postLiveActivity.
+        private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
+
+        /**
+         * Protected-app set pushed from JS (AppsStore) so the foreground monitor
+         * can gate apps launched OUTSIDE the launcher (recent apps / share sheet /
+         * deep link) — the JS gate in launchApp only covers in-launcher opens.
+         * Read by ForegroundMonitorService on every foreground transition.
+         */
+        @Volatile var protectedApps: Set<String> = emptySet()
 
         /**
          * Called by [NotificationService] and by MainActivity.onNewIntent (#508, injected
@@ -65,14 +93,25 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
+
+        // Native view that reserves its own bounds against the Android system
+        // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
+        // left-edge catcher; no props, geometry comes from layout.
+        View(SystemGestureExclusionView::class) {}
 
         // Register this module instance so NotificationService can route events through it.
         instance = this@LauncherModule
 
         // ── Apps ─────────────────────────────────────────────────────────
 
-        AsyncFunction("getInstalledApps") {
+        AsyncFunction("getInstalledApps") { maskArg: Map<String, Any?>?, treatmentArg: String? ->
+            // #482: a forma da máscara vem de JS. #486: o tratamento (quem é
+            // mascarado) também. Ambos entram na chave da cache
+            // (IconCache.fileName), por isso mudar qualquer um deixa os PNGs
+            // antigos órfãos e força um redesenho — sem passo extra.
+            val mask = IconMaskSpec.from(maskArg)
+            val treatment = treatmentArg ?: IconTreatment.DEFAULT
             val pm = context.packageManager
             val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
@@ -97,21 +136,34 @@ class LauncherModule : Module() {
                 val packageName = resolveInfo.activityInfo.packageName
                 val icon = try {
                     val versionCode = getVersionCode(pm, packageName)
-                    val fileName = IconCache.fileName(packageName, versionCode)
+                    val fileName = IconCache.fileName(packageName, versionCode, mask.cacheKey, treatment)
                     validIconFileNames.add(fileName)
                     val iconFile = File(iconsDir, fileName)
                     if (!iconFile.exists()) {
-                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile)
+                        writeIconToFile(resolveInfo.loadIcon(pm), iconFile, mask, treatment)
                     }
                     "file://" + iconFile.absolutePath
                 } catch (e: Exception) { "" }
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                // GUARDA DE API, e não é defensiva por hábito: `ApplicationInfo.category`
+                // só existe a partir da API 26 e este módulo declara minSdkVersion 24
+                // (modules/launcher-module/android/build.gradle:13). Em API 24/25 o
+                // acesso ao campo lança NoSuchFieldError, o que rejeita a promise
+                // inteira do getInstalledApps — AppsStore.tsx apanha, alerta
+                // "Could not load apps", e o launcher fica sem uma única aplicação.
+                // O resto deste ficheiro usa a mesma guarda 15 vezes.
+                val category = if (CategoryMapper.isCategoryReadable(Build.VERSION.SDK_INT)) {
+                    CategoryMapper.categoryToString(appInfo.category)
+                } else {
+                    CategoryMapper.UNDEFINED
+                }
 
                 mapOf(
                     "name" to label,
                     "packageName" to packageName,
                     "icon" to icon,
-                    "isSystem" to isSystem
+                    "isSystem" to isSystem,
+                    "category" to category
                 )
             }.sortedBy { (it["name"] as String).lowercase() }
 
@@ -126,6 +178,44 @@ class LauncherModule : Module() {
             apps
         }
 
+        AsyncFunction("getAppInfo") { packageName: String, maskArg: Map<String, Any?>?, treatmentArg: String? ->
+            val mask = IconMaskSpec.from(maskArg)
+            // Single-package equivalent of getInstalledApps: used to refresh only
+            // the package a PACKAGE_* broadcast named (#485) instead of rescanning
+            // every installed app. Returns null when the package is gone or has no
+            // launcher activity, so JS can drop the event. Also the redraw step
+            // rebuildIconCache() (#486) calls once per package after clearIconCache.
+            val treatment = treatmentArg ?: IconTreatment.DEFAULT
+            try {
+                val pm = context.packageManager
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setPackage(packageName)
+                }
+                val resolveInfo = pm.queryIntentActivities(mainIntent, 0).firstOrNull()
+                if (resolveInfo == null) {
+                    null
+                } else {
+                    val appInfo = resolveInfo.activityInfo.applicationInfo
+                    val iconsDir = File(context.filesDir, "icons").apply { mkdirs() }
+                    val icon = try {
+                        val fileName = IconCache.fileName(packageName, getVersionCode(pm, packageName), mask.cacheKey, treatment)
+                        val iconFile = File(iconsDir, fileName)
+                        if (!iconFile.exists()) {
+                            writeIconToFile(resolveInfo.loadIcon(pm), iconFile, mask, treatment)
+                        }
+                        "file://" + iconFile.absolutePath
+                    } catch (e: Exception) { "" }
+                    mapOf(
+                        "name" to resolveInfo.loadLabel(pm).toString(),
+                        "packageName" to packageName,
+                        "icon" to icon,
+                        "isSystem" to ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0)
+                    )
+                }
+            } catch (e: Exception) { null }
+        }
+
         AsyncFunction("launchApp") { packageName: String ->
             // Shape regex first, then whitelist via PackageManager: malformed names
             // never reach the resolver, and non-installed / non-launchable packages
@@ -136,16 +226,31 @@ class LauncherModule : Module() {
             if (intent == null) {
                 return@AsyncFunction false  // malformed, not installed, or not launchable
             }
+
+            // Must go through the current Activity so Android 10+ BAL (background
+            // activity launch) restrictions treat this as user-initiated.
+            // Starting from the Expo module's Application context is a background
+            // start and the system silently drops or defers it: the icon-expand
+            // overlay finishes and unmounts while the target activity never
+            // reaches the foreground.
+            //
+            // If currentActivity is null the fix is not to fall back to the
+            // Application context — that just re-plays the same silent drop — but
+            // to fail loudly. JS side already collapses the overlay and surfaces
+            // an alert on `false`, so the user gets an explicit outcome instead
+            // of a sinkhole.
+            val activity = appContext.currentActivity ?: return@AsyncFunction false
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            val options = ActivityOptions.makeCustomAnimation(activity, 0, 0)
+            activity.startActivity(intent, options.toBundle())
             true
         }
 
-        AsyncFunction("getAppIcon") { packageName: String ->
+        AsyncFunction("getAppIcon") { packageName: String, maskArg: Map<String, Any?>? ->
             try {
                 val pm = context.packageManager
                 val icon = pm.getApplicationIcon(packageName)
-                drawableToBase64(icon)
+                drawableToBase64(icon, IconMaskSpec.from(maskArg))
             } catch (e: Exception) { "" }
         }
 
@@ -165,6 +270,22 @@ class LauncherModule : Module() {
             } catch (e: Exception) { false }
         }
 
+        // Manual escape hatch (#486) for when the versionCode/treatment cache key
+        // doesn't invalidate a stale icon on its own. Deletes every cached PNG;
+        // callers (AppsStore.rebuildIconCache) redraw them via getInstalledApps /
+        // getAppInfo afterwards. Returns the number of files actually deleted.
+        AsyncFunction("clearIconCache") {
+            val iconsDir = File(context.filesDir, "icons")
+            val files = iconsDir.listFiles() ?: emptyArray()
+            files.count { it.delete() }
+        }
+
+        AsyncFunction("getIconCacheSizeBytes") {
+            val iconsDir = File(context.filesDir, "icons")
+            val files = iconsDir.listFiles() ?: emptyArray()
+            IconCache.totalSizeBytes(files.map { it.length() })
+        }
+
         AsyncFunction("openLauncherSettings") {
             val intent = Intent(Settings.ACTION_HOME_SETTINGS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -182,6 +303,26 @@ class LauncherModule : Module() {
             }
             context.startActivity(intent)
             true
+        }
+
+        // ── Performance (§7, #517) ───────────────────────────────────────
+
+        /**
+         * Idade do processo em milissegundos: quanto tempo passou desde que o
+         * Android começou a arrancar ESTE processo. É a base honesta do cold
+         * start — inclui o arranque do processo e do runtime, que uma marca
+         * feita em JS já não consegue ver.
+         *
+         * Devolve -1.0 quando a API não está disponível (< API 24), para o lado
+         * JS poder distinguir "sem medição" de "medição zero".
+         */
+        AsyncFunction("getProcessStartAgeMs") {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val age = SystemClock.uptimeMillis() - Process.getStartUptimeMillis()
+                if (age >= 0) age.toDouble() else -1.0
+            } else {
+                -1.0
+            }
         }
 
         // ── Wi-Fi ────────────────────────────────────────────────────────
@@ -313,19 +454,35 @@ class LauncherModule : Module() {
         AsyncFunction("getBluetoothInfo") {
             val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val adapter = btManager?.adapter
+            // On Android 12+ (API 31) BluetoothAdapter.getName()/getAddress()
+            // require the runtime BLUETOOTH_CONNECT permission; without it they
+            // throw SecurityException (#675). The safe-call (?.) only guards a
+            // null adapter — it does NOT catch a thrown exception — so reading
+            // name/address outside a try would reject the whole promise and
+            // surface a LogBox toast on every launch. Read each field under its
+            // own guard and fall back to the same values the issue expected
+            // ("Unknown" / "") instead of letting the call fail.
+            val isEnabled = adapter?.isEnabled ?: false
+            val name = try {
+                adapter?.name ?: "Unknown"
+            } catch (e: SecurityException) { "Unknown" }
+            val address = try {
+                adapter?.address ?: ""
+            } catch (e: SecurityException) { "" }
+            val paired = try {
+                adapter?.bondedDevices?.map { device ->
+                    mapOf(
+                        "name" to (device.name ?: "Unknown"),
+                        "address" to device.address,
+                        "type" to device.type
+                    )
+                } ?: emptyList()
+            } catch (e: SecurityException) { emptyList<Map<String, Any>>() }
             mapOf(
-                "enabled" to (adapter?.isEnabled ?: false),
-                "name" to (adapter?.name ?: "Unknown"),
-                "address" to (adapter?.address ?: ""),
-                "pairedDevices" to (try {
-                    adapter?.bondedDevices?.map { device ->
-                        mapOf(
-                            "name" to (device.name ?: "Unknown"),
-                            "address" to device.address,
-                            "type" to device.type
-                        )
-                    } ?: emptyList()
-                } catch (e: SecurityException) { emptyList<Map<String, Any>>() })
+                "enabled" to isEnabled,
+                "name" to name,
+                "address" to address,
+                "pairedDevices" to paired
             )
         }
 
@@ -480,6 +637,15 @@ class LauncherModule : Module() {
                 "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
                 "notification" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
                 "privacy" -> Settings.ACTION_PRIVACY_SETTINGS
+                // ACTION_PRIVACY_DASHBOARD (the native Privacy Dashboard / App Privacy
+                // Report) only exists on API 31+ (Android 12). On older APIs the
+                // constant is absent, so we guard the SDK level and fall back to the
+                // general privacy settings — a crash here would surface as a dead tile.
+                "privacy_dashboard" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    "android.settings.PRIVACY_DASHBOARD_SETTINGS"
+                } else {
+                    Settings.ACTION_PRIVACY_SETTINGS
+                }
                 "security" -> Settings.ACTION_SECURITY_SETTINGS
                 "cast" -> "android.settings.CAST_SETTINGS"
                 "hotspot" -> "android.settings.TETHER_SETTINGS"
@@ -625,6 +791,29 @@ class LauncherModule : Module() {
             flashlightState
         }
 
+        // ── Wake Screen (Tap to Wake, #608) ──────────────────────────────
+        // Acorda o ecrã quando está apenas "dimmed" pela app (não apagado do
+        // SO). Expo RN não tem API para isto; precisa de native module.
+        //
+        // Limitação documentada: capturar um toque com o ecrã APAGADO do
+        // sistema exigiria um receiver de toque a nível de framework
+        // (fora do âmbito de um Expo module simples). Este método só é
+        // chamado quando a app já recebe o toque (ecrã dimmed/locked pela
+        // app), portanto acorda nesse caso — não o SO.
+        AsyncFunction("wakeScreen") {
+            try {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                @Suppress("DEPRECATION")
+                val wakeLock = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "iostoandroid:tapToWake"
+                )
+                wakeLock.setReferenceCounted(false)
+                wakeLock.acquire(500L)
+                wakeLock.release()
+            } catch (e: Exception) { /* falha silenciosa: o wake é best-effort */ }
+        }
+
         // ── Call Log ─────────────────────────────────────────────────────
 
         AsyncFunction("getCallLog") { limit: Int ->
@@ -721,6 +910,49 @@ class LauncherModule : Module() {
         AsyncFunction("openNotificationAccessSettings") {
             val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        }
+
+        // ── Live Activities (#626) ──────────────────────────────────────
+        // Android has no single equivalent of iOS Live Activities; the closest
+        // native primitive is an ongoing (non-swipeable), low-priority
+        // notification whose content is replaced in place. postLiveActivity is
+        // an upsert: calling it again with the same id updates the existing
+        // notification (NotificationManagerCompat.notify keyed by a stable id
+        // derived from it) instead of creating a duplicate.
+
+        AsyncFunction("postLiveActivity") { id: String, title: String, text: String, percent: Int, indeterminate: Boolean ->
+            postOrUpdateLiveActivity(id, title, text, percent, indeterminate)
+        }
+
+        AsyncFunction("cancelLiveActivity") { id: String ->
+            cancelLiveActivity(id)
+        }
+
+        // ── Foreground monitor + Protected-Apps gate (#627 child issue) ──
+
+        AsyncFunction("setProtectedApps") { packageNames: List<String>? ->
+            // A null payload (careless caller / older JS) means "nothing
+            // protected", not a crash — normalize to an immutable empty set.
+            LauncherModule.protectedApps = (packageNames ?: emptyList()).toSet()
+            true
+        }
+
+        AsyncFunction("isForegroundMonitorEnabled") {
+            // The AccessibilityService exposes its own enabled state to the
+            // system; querying Settings is the canonical way to read it
+            // (#627 — we cannot enable it programmatically).
+            val svc = Context.ACCESSIBILITY_SERVICE
+            val am = context.getSystemService(svc) as? android.view.accessibility.AccessibilityManager
+            am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                ?.any { it.resolveInfo.serviceInfo.packageName == context.packageName && it.resolveInfo.serviceInfo.name == ForegroundMonitorService::class.java.name }
+                ?: false
+        }
+
+        AsyncFunction("openAccessibilitySettings") {
+            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             true
         }
@@ -987,6 +1219,7 @@ class LauncherModule : Module() {
                 android.Manifest.permission.CALL_PHONE,
                 android.Manifest.permission.READ_SMS,
                 android.Manifest.permission.SEND_SMS,
+                android.Manifest.permission.RECORD_AUDIO,
                 android.Manifest.permission.CAMERA,
                 android.Manifest.permission.ACCESS_FINE_LOCATION,
                 android.Manifest.permission.READ_PHONE_STATE,
@@ -1078,22 +1311,233 @@ class LauncherModule : Module() {
             } catch (e: Exception) { false }
         }
 
+        // ── Speech recognition (Siri / voice-to-text) ────────────────────
+
+        // Reference to the in-flight recognizer so stopSpeechRecognition can
+        // tear it down. Guarded with @Volatile + synchronized because the
+        // recognition listener callbacks arrive on the main looper thread.
+        AsyncFunction("startSpeechRecognition") {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                val bundle = Bundle().apply {
+                    putString("error", "Speech recognition unavailable on this device")
+                }
+                sendEvent("onSpeechError", bundle)
+                return@AsyncFunction false
+            }
+            synchronized(this@LauncherModule) {
+                activeRecognizer?.destroy()
+                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                activeRecognizer = recognizer
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+                        val text = matches?.firstOrNull() ?: return
+                        val bundle = Bundle().apply { putString("text", text) }
+                        sendEvent("onSpeechPartialResult", bundle)
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+                        val text = matches?.firstOrNull() ?: return
+                        val bundle = Bundle().apply { putString("text", text) }
+                        sendEvent("onSpeechResult", bundle)
+                    }
+
+                    override fun onError(error: Int) {
+                        val bundle = Bundle().apply { putString("error", "SpeechRecognizer error $error") }
+                        sendEvent("onSpeechError", bundle)
+                    }
+                })
+            }
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            // startListening must run on the main looper; the bridge call may
+            // arrive on a different thread.
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                activeRecognizer?.startListening(intent)
+            } else {
+                Handler(Looper.getMainLooper()).post {
+                    activeRecognizer?.startListening(intent)
+                }
+            }
+            true
+        }
+
+        AsyncFunction("stopSpeechRecognition") {
+            synchronized(this@LauncherModule) {
+                val recognizer = activeRecognizer
+                activeRecognizer = null
+                if (recognizer == null) return@AsyncFunction false
+                try {
+                    recognizer.stopListening()
+                    recognizer.destroy()
+                } catch (_: Exception) {}
+                true
+            }
+        }
+
+        AsyncFunction("isSpeechRecognitionAvailable") {
+            SpeechRecognizer.isRecognitionAvailable(context)
+        }
+
+        AsyncFunction("startTapDetection") {
+            // #636: start the foreground sensor service that detects double/triple
+            // back taps via accelerometer + gyroscope and emits `onBackTap`.
+            // Best-effort: on a device without the sensors or the foreground
+            // permission the service simply won't start, and callers should not
+            // reject the whole promise over it.
+            try {
+                TapSensorService.start(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopTapDetection") {
+            try {
+                TapSensorService.stop(context)
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isTapDetectionRunning") {
+            // #636: report whether the back-tap sensor service is currently active,
+            // sourced from the static flag maintained by TapSensorService itself
+            // (set in onCreate/onDestroy).
+            TapSensorService.isRunning
+        }
+
+        // ── App access (sensor usage) — issue #634 ────────────────────────
+        //
+        // A foreground service (AccessEventsService) polls the UsageStats event
+        // stream + AppOps "last access" timestamps every 15s and emits onAppAccess
+        // for genuinely NEW camera/mic/location use by a foreground app. These
+        // three methods are the RN surface for it. There is no universal broadcast
+        // for sensor access, so this is a heuristic over the usage-access data the
+        // app already requests for Screen Time — see AccessEventsService.kt for
+        // the per-OEM limitations.
+
+        AsyncFunction("getRecentAccessEvents") { limit: Int ->
+            try {
+                val svc = AccessEventsService.instance
+                val events = svc?.getRecentEvents(limit) ?: emptyList()
+                events.map { e ->
+                    mapOf(
+                        "packageName" to e.packageName,
+                        "appName" to e.appName,
+                        "accessType" to e.accessType,
+                        "timestamp" to e.timestamp,
+                    )
+                }
+            } catch (e: Exception) { emptyList<Map<String, Any>>() }
+        }
+
+        AsyncFunction("startAccessTrackingService") {
+            try {
+                val intent = Intent(context, AccessEventsService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.startService(intent)
+                }
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("stopAccessTrackingService") {
+            try {
+                context.stopService(Intent(context, AccessEventsService::class.java))
+                true
+            } catch (e: Exception) { false }
+        }
+
+        AsyncFunction("isAccessTrackingServiceRunning") {
+            AccessEventsService.instance != null
+        }
         // ── Lifecycle ────────────────────────────────────────────────────
+
+        OnCreate {
+            // Dynamic registration is mandatory: since API 26 the implicit
+            // PACKAGE_ADDED/REMOVED/REPLACED broadcasts are not delivered to
+            // receivers declared in the manifest.
+            try {
+                PackageChangeReceiver.register(appContext.reactContext ?: return@OnCreate)
+            } catch (_: Exception) {}
+        }
 
         OnDestroy {
             // Best-effort cleanup: unregister any lingering BroadcastReceivers and
             // clear the companion-object back-reference so NotificationService stops
             // routing events to a stale module instance.
             try {
-                BluetoothDiscoveryReceiver.unregister(
-                    appContext.reactContext ?: return@OnDestroy
-                )
+                val ctx = appContext.reactContext ?: return@OnDestroy
+                BluetoothDiscoveryReceiver.unregister(ctx)
+                PackageChangeReceiver.unregister(ctx)
             } catch (_: Exception) {}
             instance = null
+            try { activeRecognizer?.destroy() } catch (_: Exception) {}
+            activeRecognizer = null
         }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    // Live Activities (#626). id.hashCode() collisions are astronomically
+    // unlikely for the small number of concurrent live activities a real
+    // caller would ever run, and even a collision only means two activities
+    // share one notification slot — not a crash.
+    private fun liveActivityNotificationId(id: String): Int = id.hashCode()
+
+    private fun ensureLiveActivityChannel() {
+        val manager = androidx.core.app.NotificationManagerCompat.from(context)
+        if (manager.getNotificationChannel(LIVE_ACTIVITY_CHANNEL_ID) != null) return
+        val channel = androidx.core.app.NotificationChannelCompat.Builder(
+            LIVE_ACTIVITY_CHANNEL_ID,
+            android.app.NotificationManager.IMPORTANCE_LOW
+        ).setName("Live Activities").build()
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun postOrUpdateLiveActivity(
+        id: String,
+        title: String,
+        text: String,
+        percent: Int,
+        indeterminate: Boolean,
+    ): Boolean {
+        if (id.isBlank()) return false
+        ensureLiveActivityChannel()
+        val notification = androidx.core.app.NotificationCompat.Builder(context, LIVE_ACTIVITY_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(100, percent.coerceIn(0, 100), indeterminate)
+            .build()
+        androidx.core.app.NotificationManagerCompat.from(context).notify(liveActivityNotificationId(id), notification)
+        return true
+    }
+
+    private fun cancelLiveActivity(id: String): Boolean {
+        if (id.isBlank()) return false
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(liveActivityNotificationId(id))
+        return true
+    }
 
     private fun hasPermission(permission: String): Boolean {
         return androidx.core.content.ContextCompat.checkSelfPermission(
@@ -1138,8 +1582,13 @@ class LauncherModule : Module() {
         }
     }
 
-    private fun writeIconToFile(drawable: Drawable, file: File) {
-        val bitmap = drawableToBitmap(drawable)
+    private fun writeIconToFile(
+        drawable: Drawable,
+        file: File,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        treatment: String = IconTreatment.DEFAULT
+    ) {
+        val bitmap = renderIcon(drawable, mask, treatment)
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         FileOutputStream(file).use { out ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
@@ -1147,8 +1596,12 @@ class LauncherModule : Module() {
         if (bitmap != scaledBitmap) scaledBitmap.recycle()
     }
 
-    private fun drawableToBase64(drawable: Drawable): String {
-        val bitmap = drawableToBitmap(drawable)
+    private fun drawableToBase64(
+        drawable: Drawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        treatment: String = IconTreatment.DEFAULT
+    ): String {
+        val bitmap = renderIcon(drawable, mask, treatment)
         val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 128, 128, true)
         val outputStream = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream)
@@ -1157,16 +1610,228 @@ class LauncherModule : Module() {
         return "data:image/png;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
-    private fun drawableToBitmap(drawable: Drawable): Bitmap {
+    /**
+     * Renders [drawable] to a square bitmap, honouring [treatment] (#486 — see
+     * [IconTreatment.shouldMask] for the adaptive/non-adaptive distinction) and
+     * [mask] (#482 — the shape/exponent applied to the result).
+     */
+    private fun renderIcon(
+        drawable: Drawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        treatment: String = IconTreatment.DEFAULT
+    ): Bitmap {
+        val isAdaptive = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable
+        val shouldMask = IconTreatment.shouldMask(isAdaptive, treatment)
+        val square = drawableToBitmap(drawable, mask, shouldMask)
+        return if (shouldMask) maskIcon(square, mask) else square
+    }
+
+    private fun drawableToBitmap(
+        drawable: Drawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        shouldMask: Boolean = true
+    ): Bitmap {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             return drawable.bitmap
         }
-        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
-        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        // AdaptiveIconDrawable.draw() composites background+foreground using
+        // whatever mask the OS (or OEM launcher) has configured, so drawing it
+        // directly here would still yield a device-dependent shape — the exact
+        // inconsistency #484 exists to fix. Compose it ourselves instead; only
+        // fall back to the generic path below when the icon is malformed
+        // (composeAdaptiveIcon returns null, e.g. no background layer).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && drawable is AdaptiveIconDrawable) {
+            // Este caminho ja devolve o bitmap mascarado pelo compositor do #484,
+            // e o call site volta a passar tudo pelo applySquircleMask do #480.
+            // Aplicar duas vezes e' idempotente NA FORMA: os dois usam o mesmo
+            // expoente (AdaptiveIconCompositor.DEFAULT_SQUIRCLE_EXPONENT = 5.0 e o
+            // n = 5.0 do applySquircleMask) e o mesmo gerador de pontos, portanto a
+            // segunda mascara recorta exactamente a mesma regiao. Se algum dia os
+            // expoentes divergirem, isto passa a cortar duas formas diferentes —
+            // e a razao pela qual ambos os sitios citam a constante.
+            composeAdaptiveIcon(drawable, mask, shouldMask)?.let { return it }
+        }
+        // Center-crop para quadrado (#480): pega no maior quadrado centrado da
+        // origem e escala-o. Nunca distorce nem mete barras transparentes, por
+        // isso um icone-banner mantem as proporcoes e e' so cortado antes da
+        // mascara. Um icone redondo continua a ficar com cantos vazios — o #480
+        // diz explicitamente que nao resolve isso.
+        val srcW = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
+        val srcH = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
+        val side = srcW.coerceAtMost(srcH)
+        val src = Bitmap.createBitmap(srcW, srcH, Bitmap.Config.ARGB_8888)
+        Canvas(src).apply {
+            drawable.setBounds(0, 0, srcW, srcH)
+            drawable.draw(this)
+        }
+        val left = (srcW - side) / 2
+        val top = (srcH - side) / 2
+        val square = Bitmap.createBitmap(src, left, top, side, side)
+        if (square != src) src.recycle()
+        // Circular/banner icons would show transparent corners after the
+        // squircle mask; backfill them with the icon's edge colour so the
+        // silhouette stays solid (#465/#480, now addressed).
+        return backfillTransparentCorners(square)
+    }
+
+    /**
+     * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
+     * our own squircle mask, foreground layer scaled to
+     * [AdaptiveIconCompositor.FOREGROUND_SCALE] and centered on top. Returns
+     * null for a malformed icon with no background layer, so the caller falls
+     * back to the generic drawable-to-bitmap path.
+     *
+     * AdaptiveIconDrawable also exposes getMonochrome() (API 33+, used for
+     * themed/monochrome icons) — out of scope for #484, not handled here.
+     */
+    /**
+     * Clip [src] to a 4.7-exponent superellipse (iOS-style squircle) and return
+     * the masked bitmap. Applied to every icon emitted by getInstalledApps and
+     * getAppIcon, so the launcher grid and the dock share one silhouette.
+     *
+     * Masking strategy:
+     *  - Output is a square of the smallest source dimension, so non-square
+     *    icons are center-cropped (drawableToBitmap) and the mask never sees a
+     *    rectangle.
+     *  - The clip path is built from [SuperellipsePath.points] — the SAME
+     *    generator that drives the TS/SVG reference in src/theme/squircle.ts —
+     *    so the native mask cannot drift from the reference geometry.
+     *  - Anti-aliasing uses a BitmapShader painted through the superellipse
+     *    Path via Canvas.drawPath(..., ANTI_ALIAS_FLAG). Path fills are
+     *    anti-aliased by drawPath (unlike clipPath, which is not), so the edge
+     *    stays smooth at 60pt instead of serrated.
+     *  - A circular source icon will still show empty (transparent) corners
+     *    after masking; that is the known-incomplete "dominant color" item of
+     *    epic #465 and is explicitly out of scope here (#480 does not fix it).
+     */
+    /**
+     * Applies [mask] to [src]: the superellipse mask at the requested exponent,
+     * or the bitmap untouched when the mask is 'original'. This is the single
+     * place where "no mask" is honoured — the drawable then reaches the caller
+     * exactly as the system gave it.
+     */
+    private fun maskIcon(src: Bitmap, mask: IconMaskSpec): Bitmap {
+        val exponent = mask.exponent ?: return src
+        return applySquircleMask(src, exponent)
+    }
+
+    private fun applySquircleMask(src: Bitmap, n: Double = 5.0): Bitmap {
+        val size = src.width.coerceAtMost(src.height)
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
+        Canvas(out).drawPath(buildSuperellipsePath(size, n), paint)
+        return out
+    }
+
+    /**
+     * Average the four edge-midpoint pixels of [src] — a cheap "dominant colour"
+     * for backfilling transparent mask corners on circular/banner icons so they
+     * don't show holes (the known-incomplete item of #465 / #480). Good enough
+     * because the mask only clips the four squircle corners, which sit on the
+     * icon's own edge colour.
+     */
+    private fun edgeMidpointColor(src: Bitmap): Int {
+        val w = src.width
+        val h = src.height
+        val cx = w / 2
+        val cy = h / 2
+        var r = 0
+        var g = 0
+        var b = 0
+        var n = 0
+        for ((x, y) in listOf(Pair(cx, 0), Pair(cx, h - 1), Pair(0, cy), Pair(w - 1, cy))) {
+            val c = src.getPixel(x, y)
+            if (Color.alpha(c) == 0) continue
+            r += Color.red(c); g += Color.green(c); b += Color.blue(c); n++
+        }
+        if (n == 0) return Color.BLACK
+        return Color.rgb(r / n, g / n, b / n)
+    }
+
+    /**
+     * Backfill transparent corners of [src] with the edge-midpoint colour so a
+     * circular/banner icon keeps a solid silhouette after masking. Returns the
+     * original bitmap when it already fills its bounds.
+     */
+    private fun backfillTransparentCorners(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        // Quick reject: if the centre pixel is opaque, the icon fills its box
+        // (square/adaptive) and masking can't expose a hole.
+        if (Color.alpha(src.getPixel(w / 2, h / 2)) != 0) return src
+        val fill = edgeMidpointColor(src)
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(fill)
+        Canvas(out).drawBitmap(src, 0f, 0f, null)
+        return out
+    }
+
+    /** Build an android.graphics.Path for the superellipse in a [size]×[size] box. */
+    private fun buildSuperellipsePath(size: Int, n: Double): Path {
+        val pts = SuperellipsePath.points(size, n, 64)
+        return Path().apply {
+            if (pts.isEmpty()) return@apply
+            val first = pts[0]
+            moveTo(first.first.toFloat(), first.second.toFloat())
+            for (i in 1 until pts.size) {
+                val p = pts[i]
+                lineTo(p.first.toFloat(), p.second.toFloat())
+            }
+            close()
+        }
+    }
+
+    private fun composeAdaptiveIcon(
+        drawable: AdaptiveIconDrawable,
+        mask: IconMaskSpec = IconMaskSpec.DEFAULT,
+        shouldMask: Boolean = true
+    ): Bitmap? {
+        val background = drawable.background ?: return null
+        val foreground = drawable.foreground
+
+        val size = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 108
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
+
+        // shouldMask=false (#486 'none') ou mask 'original' (exponent null) não
+        // recortam nada: o fundo é desenhado inteiro e o resultado é o composite
+        // do sistema sem silhueta imposta.
+        val exponent = if (shouldMask) mask.exponent else null
+        if (exponent != null) {
+            // Clip por drawPath (Paths são anti-alias em drawPath, ao contrário
+            // de clipPath) — igual ao applySquircleMask dos ícones não-adaptivos,
+            // para a borda não serrilhar a grandes tamanhos (#480/AA).
+            val maskPoints = AdaptiveIconCompositor.squirclePoints(size.toFloat(), exponent)
+            val maskPath = Path().apply {
+                if (maskPoints.isNotEmpty()) {
+                    moveTo(maskPoints[0].first, maskPoints[0].second)
+                    maskPoints.drop(1).forEach { (x, y) -> lineTo(x, y) }
+                    close()
+                }
+            }
+            // Fundo desenhado num bitmap à parte e pintado através do maskPath
+            // com um shader + ANTI_ALIAS_FLAG, para a silhueta sair suave.
+            val bgBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            Canvas(bgBitmap).apply {
+                background.setBounds(0, 0, size, size)
+                background.draw(this)
+            }
+            Canvas(bitmap).drawPath(maskPath, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.shader = BitmapShader(bgBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            })
+        } else {
+            background.setBounds(0, 0, size, size)
+            background.draw(canvas)
+        }
+
+        if (foreground != null) {
+            val bounds = AdaptiveIconCompositor.foregroundBounds(size)
+            foreground.setBounds(bounds.offset, bounds.offset, bounds.offset + bounds.scaledSize, bounds.offset + bounds.scaledSize)
+            foreground.draw(canvas)
+        }
+
         return bitmap
     }
 

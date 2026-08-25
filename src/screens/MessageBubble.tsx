@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { reactionPickerPop } from '../theme/springPresets';
 import { Ionicons } from '@expo/vector-icons';
 import type { DeviceSms } from '../store/DeviceStore';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
+import type { ResolvedTypography } from '../theme/ThemeContext';
+import { CupertinoPressable } from '../components/CupertinoPressable';
 
 export interface LocalImageMessage {
   id: string;
@@ -29,7 +31,7 @@ export interface BubbleProps {
   message: DeviceSms | LocalImageMessage;
   isDark: boolean;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
   reactions?: string[];
   onLongPress?: () => void;
   showReactionPicker?: boolean;
@@ -52,7 +54,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const pickerScale = useSharedValue(showReactionPicker ? 1 : 0);
 
   useEffect(() => {
-    pickerScale.value = withSpring(showReactionPicker ? 1 : 0, { damping: 18, stiffness: 400 });
+    pickerScale.value = withSpring(showReactionPicker ? 1 : 0, reactionPickerPop);
   }, [showReactionPicker, pickerScale]);
 
   const pickerStyle = useAnimatedStyle(() => ({
@@ -91,9 +93,9 @@ export const MessageBubble = React.memo(function MessageBubble({
             ))}
           </View>
           <View style={[styles.reactionActionDivider, { backgroundColor: isDark ? '#48484A' : '#E5E5EA' }]} />
-          <Pressable
+          <CupertinoPressable
             onPress={onCopy}
-            style={({ pressed }) => [styles.reactionActionBtn, { opacity: pressed ? 0.6 : 1 }]}
+            style={styles.reactionActionBtn}
             accessibilityLabel="Copy message"
             accessibilityRole="button"
           >
@@ -101,7 +103,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             <Text style={[typography.subhead, { color: isDark ? '#EBEBF5' : '#3C3C43', marginLeft: 6 }]}>
               Copy
             </Text>
-          </Pressable>
+          </CupertinoPressable>
         </Animated.View>
       )}
       <Pressable onLongPress={onLongPress} delayLongPress={400} accessibilityLabel="Message" accessibilityHint="Long press for options" accessibilityRole="button">

@@ -34,6 +34,7 @@ import { HotspotScreen } from '../screens/settings/HotspotScreen';
 import { NotificationsScreen } from '../screens/settings/NotificationsScreen';
 import { SoundsHapticsScreen } from '../screens/settings/SoundsHapticsScreen';
 import { FocusScreen } from '../screens/settings/FocusScreen';
+import { SiriSearchScreen } from '../screens/settings/SiriSearchScreen';
 import { ScreenTimeScreen } from '../screens/settings/ScreenTimeScreen';
 import { StorageScreen } from '../screens/settings/StorageScreen';
 import { SoftwareUpdateScreen } from '../screens/settings/SoftwareUpdateScreen';
@@ -46,24 +47,36 @@ import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { WallpaperScreen } from '../screens/settings/WallpaperScreen';
 import { AccessibilityScreen } from '../screens/settings/AccessibilityScreen';
 import { AssistiveTouchSettingsScreen } from '../screens/settings/AssistiveTouchSettingsScreen';
+import { BackTapSettingsScreen } from '../screens/settings/BackTapSettingsScreen';
 import { BackupRestoreScreen } from '../screens/settings/BackupRestoreScreen';
 import { ComponentsGalleryScreen } from '../screens/ComponentsGalleryScreen';
 import { AppLibraryScreen } from '../screens/AppLibraryScreen';
+import { AppStoreScreen } from '../screens/AppStoreScreen';
+import { AppStoreDetailScreen } from '../screens/AppStoreDetailScreen';
 import { SpotlightSearchScreen } from '../screens/SpotlightSearchScreen';
 import { SiriScreen } from '../screens/SiriScreen';
 import { TodayViewScreen } from '../screens/TodayViewScreen';
 import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
 import { LauncherSettingsScreen } from '../screens/LauncherSettingsScreen';
+import { ProtectedAppsScreen } from '../screens/ProtectedAppsScreen';
+import { PerformanceProfileScreen } from '../screens/settings/PerformanceProfileScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
+import { HealthScreen } from '../screens/HealthScreen';
 import { ClockScreen } from '../screens/ClockScreen';
 import { CameraScreen } from '../screens/CameraScreen';
 import { PhotosScreen } from '../screens/PhotosScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { NotesScreen } from '../screens/NotesScreen';
 import { MapsScreen } from '../screens/MapsScreen';
+import { FindMyScreen } from '../screens/FindMyScreen';
+import { FindMyLocationHistoryScreen } from '../screens/FindMyLocationHistoryScreen';
 import { RemindersScreen } from '../screens/RemindersScreen';
 import { MailScreen } from '../screens/MailScreen';
 import { BrowserScreen } from '../screens/BrowserScreen';
+import { WalletScreen } from '../screens/WalletScreen';
+import { PassDetailScreen } from '../screens/PassDetailScreen';
+import { PassEditScreen } from '../screens/PassEditScreen';
+import { PassScanScreen } from '../screens/PassScanScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -99,15 +112,22 @@ export function TabNavigator() {
       <Stack.Screen name="ContactDetail" component={ContactDetailScreen} options={{ animation }} />
       <Stack.Screen name="ContactEdit" component={ContactEditScreen} options={{ animation }} />
       <Stack.Screen name="Weather" component={WeatherScreen} options={{ animation }} />
+      <Stack.Screen name="Health" component={HealthScreen} options={{ animation }} />
       <Stack.Screen name="Clock" component={ClockScreen} options={{ animation }} />
       <Stack.Screen name="Camera" component={CameraScreen} options={{ animation, gestureEnabled: false }} />
       <Stack.Screen name="Photos" component={PhotosScreen} options={{ animation }} />
       <Stack.Screen name="Calendar" component={CalendarScreen} options={{ animation }} />
       <Stack.Screen name="Notes" component={NotesScreen} options={{ animation }} />
       <Stack.Screen name="Maps" component={MapsScreen} options={{ animation }} />
+      <Stack.Screen name="FindMy" component={FindMyScreen} options={{ animation }} />
+      <Stack.Screen name="FindMyLocationHistory" component={FindMyLocationHistoryScreen} options={{ animation }} />
       <Stack.Screen name="Reminders" component={RemindersScreen} options={{ animation }} />
       <Stack.Screen name="Mail" component={MailScreen} options={{ animation }} />
       <Stack.Screen name="Browser" component={BrowserScreen} options={{ animation }} />
+      <Stack.Screen name="Wallet" component={WalletScreen} options={{ animation }} />
+      <Stack.Screen name="PassDetail" component={PassDetailScreen} options={{ animation }} />
+      <Stack.Screen name="PassEdit" component={PassEditScreen} options={{ animation }} />
+      <Stack.Screen name="PassScan" component={PassScanScreen} options={{ animation, gestureEnabled: false }} />
 
       {/* Settings app — zoom up on entry, push for sub-screens like iOS */}
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation }} />
@@ -118,6 +138,7 @@ export function TabNavigator() {
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SoundsHaptics" component={SoundsHapticsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Focus" component={FocusScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="SiriSearch" component={SiriSearchScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="ScreenTime" component={ScreenTimeScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="General" component={GeneralScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="About" component={AboutScreen} options={{ animation: slideAnimation }} />
@@ -125,6 +146,7 @@ export function TabNavigator() {
       <Stack.Screen name="Wallpaper" component={WallpaperScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Accessibility" component={AccessibilityScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="AssistiveTouchSettings" component={AssistiveTouchSettingsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="BackTapSettings" component={BackTapSettingsScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Battery" component={BatteryScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="Storage" component={StorageScreen} options={{ animation: slideAnimation }} />
@@ -138,10 +160,19 @@ export function TabNavigator() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: slideAnimation }} />
       {__DEV__ && <Stack.Screen name="ComponentsGallery" component={ComponentsGalleryScreen} options={{ animation: slideAnimation }} />}
       <Stack.Screen name="AppLibrary" component={AppLibraryScreen} />
+      <Stack.Screen name="AppStore" component={AppStoreScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="AppStoreDetail" component={AppStoreDetailScreen} options={{ animation: slideAnimation }} />
       <Stack.Screen name="SpotlightSearch" component={SpotlightSearchScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
       <Stack.Screen name="Siri" component={SiriScreen} options={{ animation: fadeAnimation, presentation: 'transparentModal' }} />
-      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left' }} />
+      {/* Today View is a translucent overlay (translucent root + tap-to-dismiss
+          backdrop + swipe-to-dismiss), so it must float over the home, not
+          replace it. Registered as a transparentModal like its overlay siblings
+          (SpotlightSearch, Siri, ControlCenter, NotificationCenter, Multitask) —
+          #712. */}
+      <Stack.Screen name="TodayView" component={TodayViewScreen} options={{ animation: settings.reduceMotion ? 'none' : 'slide_from_left', presentation: 'transparentModal' }} />
       <Stack.Screen name="LauncherSettings" component={LauncherSettingsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="ProtectedApps" component={ProtectedAppsScreen} options={{ animation: slideAnimation }} />
+      <Stack.Screen name="PerformanceProfile" component={PerformanceProfileScreen} options={{ animation: slideAnimation }} />
     </Stack.Navigator>
   );
 }

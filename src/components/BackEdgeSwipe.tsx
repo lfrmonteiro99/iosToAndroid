@@ -14,6 +14,7 @@ import { pushSample, sampledVelocity, useVelocityBuffer } from '../utils/gesture
 import { commitForBack } from '../utils/gestureMachine';
 import { hapticSelection } from '../utils/haptics';
 import { settle, useGestureReduceMotion } from '../utils/useGestureReduceMotion';
+import { GestureExclusionView } from './GestureExclusionView';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -101,7 +102,7 @@ export function BackEdgeSwipe({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ flex: 1 }}>
       <GestureDetector gesture={pan}>
-        <View
+        <GestureExclusionView
           style={styles.edgeCatch}
           collapsable={false}
           accessible={false}

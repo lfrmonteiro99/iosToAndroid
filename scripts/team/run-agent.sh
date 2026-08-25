@@ -15,7 +15,13 @@
 #   AGENT_ADD_DIRS      colon-separated extra --add-dir paths
 #   CLAUDE_MODEL        default: sonnet
 #   FALLBACK_MODEL      default: deepseek-v4-flash:cloud
-#   AGENT_FORCE_FALLBACK=1  skip the subscription entirely (for testing)
+#   AGENT_ENGINE=hermes|alibaba  dedicated engine (peer mode, no fall-through)
+#   AGENT_FORCE_FALLBACK=1  skip the subscription entirely (for testing).
+#                       Note: the alibaba rung sits BETWEEN the subscription and
+#                       the ollama fallback, so with a configured alibaba pool it
+#                       is offered first; TEAM_USE_ALIBABA=0 reaches ollama
+#                       directly, as before.
+#   AGENT_FORCE_ALIBABA=1  skip the subscription, offer the alibaba pool first
 set -uo pipefail
 
 PROMPT_FILE="${1:?ficheiro de prompt obrigatorio}"
@@ -153,6 +159,9 @@ run_harness() {
   local -a cmd=("$@")
 
   echo "[run-agent] motor=$kind modelo=$model workdir=$WORKDIR timeout=${TIMEOUT_S}s" >&2
+  # Um motor ARRANCOU. É este o evento que faltava para distinguir "1069 despachos"
+  # de "1069 agentes" — hoje foram a primeira coisa e nenhuma da segunda.
+  health_stamp agent-ran
 
   local out_file
   out_file=$(mktemp "/tmp/run-agent-$AGENT_SLOT.XXXXXX.out")
@@ -207,6 +216,11 @@ run_harness() {
   # tee may still be flushing after the agent exits.
   sleep 1
   AGENT_OUTPUT=$(cat "$out_file" 2>/dev/null || echo "")
+  # Persistir o output para diagnóstico quando não há veredicto: o ficheiro
+  # temporário ia abaixo com o rm seguinte e o log do caller só mostra o tee.
+  if [ -s "$out_file" ]; then
+    cp "$out_file" "$LOCK_PREFIX.$AGENT_SLOT.lastout" 2>/dev/null || true
+  fi
   rm -f "$out_file"
   return $rc
 }
@@ -238,6 +252,56 @@ diz isso explicitamente no veredicto em vez de a inventares.
 EOF
 }
 
+# ── Alibaba (Bailian Token Plan) — terceiro pool, mesmo binário claude ─────
+#
+# ENV POR INVOCAÇÃO, NUNCA export. Uma fuga de ANTHROPIC_BASE_URL para o degrau
+# seguinte faria o claude/ollama correr contra o endpoint alibaba em silêncio.
+# E nunca tocar em ANTHROPIC_API_KEY — não se mexe em auth que não é nossa.
+#
+# Pré-requisito estrutural (sonda P0, 2026-08-23): o bloco `env` de
+# ~/.claude/settings.json GANHA ao env de processo. Se esse bloco voltar a
+# definir ANTHROPIC_*, tudo o que injectamos aqui é ignorado em silêncio e o
+# pool passa a correr contra o endpoint que o settings definir. Ver lib.sh.
+run_alibaba() {
+  local model="$1" key
+  key=$(alibaba_api_key) || {
+    echo "[run-agent] pool alibaba sem chave sk-sp- válida — não corro" >&2
+    return 1
+  }
+  local -a ALIBABA_ENV=(
+    "ANTHROPIC_BASE_URL=$TEAM_ALIBABA_BASE_URL"
+    "ANTHROPIC_AUTH_TOKEN=$key"
+    "ANTHROPIC_MODEL=$model"
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL=$TEAM_ALIBABA_MODEL_LOW"
+    "ANTHROPIC_DEFAULT_SONNET_MODEL=$TEAM_ALIBABA_MODEL_MED"
+    "ANTHROPIC_DEFAULT_OPUS_MODEL=$TEAM_ALIBABA_MODEL_STRONG"
+    # SUBAGENT = MED (qwen3.7-plus, com visão): o default do vendor para
+    # subagentes, qwen3.7-max, é só-texto e um subagente a ler um PNG do issue
+    # dava 400 e matava a corrida.
+    "CLAUDE_CODE_SUBAGENT_MODEL=$TEAM_ALIBABA_MODEL_MED"
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS=983616"
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1"
+  )
+  run_harness "alibaba" "$model" \
+    env "${ALIBABA_ENV[@]}" "$CLAUDE_BIN" -p "$PROMPT" \
+      --model "$model" \
+      "${ADD_DIR_ARGS[@]}" \
+      --permission-mode acceptEdits \
+      --allowedTools "$ALLOWED_TOOLS" \
+      --strict-mcp-config --mcp-config '{"mcpServers":{}}'
+}
+
+# Escolhe o nível do cooldown conforme o erro (ver comentário em lib.sh):
+# rate limit → minutos; janela esgotada → horas.
+alibaba_cooldown_for() {
+  local out="$1"
+  if grep -qiE 'rate.?limit' <<<"$out"; then
+    echo $(( $(date +%s) + TEAM_ALIBABA_RATE_COOLDOWN_M * 60 ))
+  else
+    echo $(( $(date +%s) + TEAM_ALIBABA_COOLDOWN_H * 3600 ))
+  fi
+}
+
 # ── 0. Hermes (Nous) — motor alternativo, escolhido explicitamente ─────────
 #
 # NÃO é um degrau da ladder: é um motor à parte, pedido por AGENT_ENGINE=hermes.
@@ -251,29 +315,81 @@ EOF
 # produzir veredicto — o mesmo modo de falha que o `< /dev/null` do ollama
 # resolveu. Não há --allowedTools equivalente; o isolamento vem do worktree.
 if [ "${AGENT_ENGINE:-}" = "hermes" ]; then
-  if ! command -v hermes >/dev/null 2>&1; then
-    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas o hermes não está no PATH" >&2
+  # Pelo caminho, não pelo PATH: ver hermes_bin em lib.sh. O PATH do servidor
+  # tmux não tem de incluir ~/.local/bin, e a versão anterior lia essa ausência
+  # como "não está instalado".
+  HERMES_BIN=$(hermes_bin) || {
+    echo "[run-agent] ERRO: AGENT_ENGINE=hermes mas não encontrei o binário do hermes" >&2
     exit 1
-  fi
+  }
   HERMES_MODEL="${HERMES_MODEL:-${AGENT_HERMES_MODEL:-}}"
   USED="hermes/${HERMES_MODEL:-default}"
   if [ -n "$HERMES_MODEL" ]; then
     run_harness "hermes" "$HERMES_MODEL" \
-      hermes -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
+      "$HERMES_BIN" -z "$PROMPT" --model "$HERMES_MODEL" --yolo --cli
   else
     run_harness "hermes" "default" \
-      hermes -z "$PROMPT" --yolo --cli
+      "$HERMES_BIN" -z "$PROMPT" --yolo --cli
   fi
   RC=$?
   echo "$USED" > "$LOCK_PREFIX.$AGENT_SLOT.engine" 2>/dev/null || true
   exit "$RC"
 fi
 
+# ── 0b. Alibaba (Token Plan) — motor dedicado, pedido explicitamente ───────
+#
+# PEER, como o hermes: slot próprio, quota própria, pedido por
+# AGENT_ENGINE=alibaba. Metê-lo como degrau único faria dele um substituto em
+# vez de um par; como par dá separação real de pools (o requisito duro: o
+# pipeline tem de continuar a funcionar quando qualquer um secar).
+#
+# DUAS diferenças para o hermes, as duas deliberadas:
+#
+# 1. NÃO sai inline. O hermes sai antes do marker (L das secções finais) e do
+#    salvage do veredicto; um PEER alibaba a copiar esse padrão perdia
+#    veredictos escritos no stdout (o caso #486). Define USED/RC e FLUI para a
+#    cauda partilhada (marker + salvage + exit).
+#
+# 2. NÃO faz fall-through. Esgotamento à entrada ou a meio → exit 77, nunca
+#    cair para o claude: no momento de escassez é exactamente o pool que se
+#    está a poupar que seria queimado (precedente hermes, run-agent.sh §0).
+if [ "${AGENT_ENGINE:-}" = "alibaba" ]; then
+  CLAUDE_BIN=$(claude_bin || true)
+  if [ -z "$CLAUDE_BIN" ] || ! alibaba_configured; then
+    echo "[run-agent] ERRO: AGENT_ENGINE=alibaba mas o pool não está configurado (binário claude ou chave sk-sp- em falta)" >&2
+    exit 1
+  fi
+  if alibaba_exhausted; then
+    echo "[run-agent] pool alibaba em cooldown (~$(( $(alibaba_cooldown_remaining) / 60 ))min) — não corro (exit 77)" >&2
+    exit 77
+  fi
+  ALIBABA_MODEL=$(alibaba_model_for "$CLAUDE_MODEL")
+  USED="alibaba/$ALIBABA_MODEL"
+  run_alibaba "$ALIBABA_MODEL"
+  RC=$?
+  if [ "$RC" -ne 0 ] && is_usage_exhausted "${AGENT_OUTPUT:-}"; then
+    alibaba_cooldown_for "${AGENT_OUTPUT:-}" > "$ALIBABA_COOLDOWN_FILE"
+    echo "[run-agent] pool alibaba SEM QUOTA — pausa escrita, exit 77 (PEER não cai para outro pool)" >&2
+    RC=77
+  fi
+  # Flui para a cauda partilhada: marker + salvage do veredicto + exit.
+  # (USED já está definido, portanto os degraus seguintes não disparam.)
+fi
+
 # ── 1. Subscription (claude CLI) ───────────────────────────────────────────
-if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && command -v claude >/dev/null 2>&1; then
+CLAUDE_BIN="${CLAUDE_BIN:-$(claude_bin || true)}"
+if [ -z "$CLAUDE_BIN" ]; then
+  # RUÍDO DE PROPÓSITO. Esta linha faltar é o que fez uma noite inteira parecer
+  # "os agentes não conseguem" quando na verdade nenhum agente correu.
+  echo "[run-agent] ATENÇÃO: não encontrei o binário do claude (PATH=$PATH). Define TEAM_CLAUDE_BIN." >&2
+  health_bump engine-missing
+fi
+
+if [ -z "$USED" ] && [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] \
+   && [ "${AGENT_FORCE_ALIBABA:-0}" != "1" ] && ! in_cooldown && [ -n "$CLAUDE_BIN" ]; then
   USED="claude/$CLAUDE_MODEL"
   run_harness "claude" "$CLAUDE_MODEL" \
-    claude -p "$PROMPT" \
+    "$CLAUDE_BIN" -p "$PROMPT" \
       --model "$CLAUDE_MODEL" \
       "${ADD_DIR_ARGS[@]}" \
       --permission-mode acceptEdits \
@@ -289,6 +405,33 @@ if [ "${AGENT_FORCE_FALLBACK:-0}" != "1" ] && ! in_cooldown && command -v claude
   fi
 else
   if in_cooldown; then echo "[run-agent] subscrição em cooldown — fallback directo" >&2; fi
+fi
+
+# ── 1b. Alibaba (Token Plan) — degrau de overflow quando o claude seca ─────
+#
+# Ordem dos guards: claude → alibaba → guard(fallback esgotado) →
+# guard(fallback desligado) → ollama. Deixar os guards ANTES deste degrau
+# reintroduzia a redescoberta de 3 minutos do ollama morto quando o alibaba
+# ainda podia correr — o mesmo padrão que o cooldown do fallback criou.
+#
+# Com a subscrição saudável este degrau NUNCA dispara: só entra com USED vazio
+# (claude seco, binário em falta, ou AGENT_FORCE_ALIBABA/AGENT_FORCE_FALLBACK).
+#
+# Esgotamento a meio → cooldown (nível conforme o erro) e segue para os guards:
+# o trabalho não pode morrer aqui. Falha NÃO-quota é falha de tarefa: marker
+# escrito e sai com o mesmo rc — cair para o ollama transformaria um erro de
+# código numa corrida de fallback.
+if [ -z "$USED" ] && alibaba_available; then
+  ALIBABA_MODEL=$(alibaba_model_for "$CLAUDE_MODEL")
+  USED="alibaba/$ALIBABA_MODEL"
+  run_alibaba "$ALIBABA_MODEL"
+  RC=$?
+  if [ "$RC" -ne 0 ] && is_usage_exhausted "${AGENT_OUTPUT:-}"; then
+    alibaba_cooldown_for "${AGENT_OUTPUT:-}" > "$ALIBABA_COOLDOWN_FILE"
+    echo "[run-agent] pool alibaba sem quota — a passar para os guards/fallback" >&2
+    USED=""
+    RC=1
+  fi
 fi
 
 # ── 2. Fallback (Ollama Cloud model behind the same harness) ───────────────
@@ -357,5 +500,20 @@ echo "[run-agent] fim: motor=${USED:-nenhum} rc=$RC" >&2
 # genuine failure. Without this marker "no verdict" reads as "this issue defeated
 # the pipeline" and a temporary quota outage permanently consumes real work items.
 echo "$USED" > "$LOCK_PREFIX.$AGENT_SLOT.engine" 2>/dev/null || true
+
+# ── Salvaguarda de veredicto no stdout ──────────────────────────────────────
+# O hermes/deepseek termina a conversa sem executar a última acção (Write do
+# ficheiro em __VERDICT_PATH__) e imprime o JSON no stdout; o claude/ollama
+# escrevem o ficheiro. Se o caller indicou AGENT_VERDICT_FILE e o ficheiro não
+# existe/não parseia, recupera o JSON do output gravado e escreve-o. Medido no
+# #486: 8 corridas "SEM VEREDICTO" com o JSON completo perdido no log.
+if [ -n "${AGENT_VERDICT_FILE:-}" ] && [ -n "${AGENT_OUTPUT:-}" ]; then
+  if [ ! -s "$AGENT_VERDICT_FILE" ] \
+     || ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$AGENT_VERDICT_FILE" 2>/dev/null; then
+    if python3 "$SCRIPT_DIR/extract-verdict.py" "$AGENT_VERDICT_FILE" "$LOCK_PREFIX.$AGENT_SLOT.lastout" 2>/dev/null; then
+      echo "[run-agent] veredicto recuperado do stdout do agente -> $AGENT_VERDICT_FILE" >&2
+    fi
+  fi
+fi
 
 exit "$RC"

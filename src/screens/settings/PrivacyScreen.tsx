@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import LauncherModule from '../../../modules/launcher-module/src';
+import type { ScreenTimeStat } from '../../../modules/launcher-module/src';
 import { withAutoLockSuppressed } from '../../utils/permissions';
 import {
   CupertinoNavigationBar,
@@ -23,6 +24,19 @@ const PERMISSION_CATEGORIES = [
   { key: 'callLog', title: 'Phone', icon: 'call', bg: '#34C759' },
 ] as const;
 
+/**
+ * Formats total foreground time (ms) as reported by getScreenTimeStats
+ * (UsageStatsManager) into a short "usage time" label. Never say "access" —
+ * this is aggregate time-on-screen, not a sensor/permission access event.
+ */
+function formatUsageTime(totalTimeMs: number): string {
+  const minutes = Math.round(totalTimeMs / 60000);
+  if (minutes < 1) return '< 1 min';
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours > 0 ? `${hours}h ${remainder}m` : `${minutes} min`;
+}
+
 export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
   const { colors } = theme;
@@ -30,6 +44,25 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
   const { settings, update } = useSettings();
 
   const alert = useAlert();
+
+  // Android 12 (API 31) exposes Settings.ACTION_PRIVACY_DASHBOARD — the real
+  // system Privacy Dashboard, powered by the OS's own app-ops data (no invented
+  // counts). Below that, or on iOS, there is no native panel, so we explain the
+  // requirement instead of opening a dead or wrong screen.
+  const isPrivacyDashboardAvailable =
+    Platform.OS === 'android' && parseInt(String(Platform.Version), 10) >= 31;
+
+  const handleOpenPrivacyReport = useCallback(() => {
+    if (isPrivacyDashboardAvailable) {
+      LauncherModule.openSystemSettings('privacy_dashboard');
+    } else {
+      alert(
+        'App Privacy Report Unavailable',
+        'The system Privacy Dashboard is available on Android 12 or later. ' +
+          'Your device does not provide it, so there is no native report to open.'
+      );
+    }
+  }, [isPrivacyDashboardAvailable, alert]);
 
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [loadingPermissions, setLoadingPermissions] = useState(false);
@@ -49,6 +82,28 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
   useEffect(() => {
     checkPermissions();
   }, [checkPermissions]);
+
+  const [screenTimeStats, setScreenTimeStats] = useState<ScreenTimeStat[]>([]);
+  const [loadingScreenTime, setLoadingScreenTime] = useState(false);
+
+  const loadScreenTime = useCallback(async () => {
+    if (Platform.OS !== 'android') return;
+    setLoadingScreenTime(true);
+    try {
+      const stats = await LauncherModule.getScreenTimeStats(1);
+      setScreenTimeStats(stats);
+    } catch { /* ignore */ } finally {
+      setLoadingScreenTime(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScreenTime();
+  }, [loadScreenTime]);
+
+  const topScreenTimeApps = [...screenTimeStats]
+    .sort((a, b) => b.totalTimeMs - a.totalTimeMs)
+    .slice(0, 5);
 
   const handleRequestPermissions = useCallback(async () => {
     setRequestingPermissions(true);
@@ -153,7 +208,9 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
               )}
             </Pressable>
           </View>
-          <CupertinoListSection>
+          <CupertinoListSection
+            footer="Android does not let third-party apps count how many times other apps access the camera, microphone or location — that data requires a signature-only system permission. The 'App Privacy Report' button below opens the native Android 12+ panel, which shows those access counts when your device provides it."
+          >
             {PERMISSION_CATEGORIES.map((item) => {
               // Location row is gated by the Location Services toggle above
               const locationDisabled = item.key === 'location' && !settings.locationServices;
@@ -230,6 +287,66 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
           </CupertinoListSection>
         </View>
 
+        {/* Screen Time — real usage time from getScreenTimeStats (UsageStatsManager).
+            This is time-on-screen, not sensor access, so the section never appears
+            on iOS (there is no equivalent native data source here) and the label
+            always says "usage time" / "Screen Time", never "access". */}
+        {Platform.OS === 'android' && (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16, paddingBottom: 6, paddingTop: 22 }]}>
+              <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase' }]}>
+                Screen Time
+              </Text>
+            </View>
+            <CupertinoListSection footer="Usage time today, per app.">
+              {loadingScreenTime ? (
+                <View style={styles.screenTimeLoading}>
+                  <ActivityIndicator size="small" color={colors.systemBlue} />
+                </View>
+              ) : topScreenTimeApps.length === 0 ? (
+                <CupertinoListTile title="No usage data yet" showChevron={false} />
+              ) : (
+                topScreenTimeApps.map((app) => (
+                  <CupertinoListTile
+                    key={app.packageName}
+                    title={app.appName}
+                    trailing={
+                      <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                        {formatUsageTime(app.totalTimeMs)}
+                      </Text>
+                    }
+                    showChevron={false}
+                  />
+                ))
+              )}
+            </CupertinoListSection>
+          </View>
+        )}
+
+        {/* App Privacy Report — opens the real system Privacy Dashboard (API 31+).
+            We never build our own counts; below Android 12 the tap explains the
+            requirement instead of opening a dead screen. */}
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <CupertinoListSection
+            footer={
+              isPrivacyDashboardAvailable
+                ? 'Opens the system Privacy Dashboard showing real app access to your camera, microphone and location.'
+                : 'Requires Android 12 or later. Your device does not expose the system Privacy Dashboard.'
+            }
+          >
+            <CupertinoListTile
+              title="App Privacy Report"
+              leading={{
+                name: 'shield-checkmark',
+                color: '#FFFFFF',
+                backgroundColor: colors.systemBlue,
+              }}
+              showChevron
+              onPress={handleOpenPrivacyReport}
+            />
+          </CupertinoListSection>
+        </View>
+
         {/* Footer */}
         <Text style={[typography.footnote, styles.footer, { color: colors.secondaryLabel }]}>
           Tap &quot;Request&quot; to prompt the system for any denied permissions. Use &quot;Refresh&quot; to re-check current status.
@@ -270,6 +387,10 @@ const styles = StyleSheet.create({
     minWidth: 64,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  screenTimeLoading: {
+    alignItems: 'center',
+    paddingVertical: 16,
   },
   sectionHeaderRow: {
     flexDirection: 'row',

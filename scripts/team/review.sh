@@ -22,7 +22,10 @@ PROMPT="/tmp/ios2a-review-prompt-$PR.txt"
 # (modelo resolvido mais abaixo, a partir do issue ligado)
 WT=""
 
-cleanup() { [ -n "$WT" ] && wt_remove "$WT"; }
+# inflight_register: ver o comentário em implement.sh. Mesmo motivo, mesma janela
+# (o lock do run-agent.sh só é tomado no fim), mesma consequência.
+inflight_register "review-$PR" "${TEAM_SLOT:-main}"
+cleanup() { [ -n "$WT" ] && wt_remove "$WT"; inflight_release "review-$PR"; }
 trap cleanup EXIT
 
 PR_INFO=$(gh pr view "$PR" --repo "$REPO" \
@@ -124,10 +127,19 @@ diz numa chamada.
 neste branch antes de arrancar e resolve os marcadores por intencao — percebendo o
 que cada lado queria e preservando as duas intencoes. Depois disso volto a olhar." >/dev/null 2>&1 || true
   if [ -n "$ISSUE" ]; then
-    comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
+    # NÃO repetir o comentário em cada ciclo: o reviewer volta aqui a cada ~45s
+    # enquanto o PR estiver em conflito, e cada repetição engorda o prompt do
+    # implementador (que inclui os comentários do issue) — #486 chegou a 118KB
+    # só de "PR #587 em conflito" repetidos e rebentou o argv (E2BIG).
+    if ! gh issue view "$ISSUE" --repo "$REPO" --json comments \
+      --jq "[.comments[].body // \"\"] | any(test(\"PR #$PR em conflito\"))" 2>/dev/null | grep -q true; then
+      comment_issue "$ISSUE" "## Reviewer: PR #$PR em conflito com \`$BASE\`
 
 Devolvido ao implementador para resolver os conflitos. O trabalho no branch
 mantem-se — nao e para refazer."
+    else
+      log "conflito do PR #$PR já comunicado no issue #$ISSUE — sem repetir"
+    fi
     set_state "$ISSUE" "$L_BLOCKED_IMPL"
   fi
   exit 0
@@ -148,7 +160,11 @@ git -C "$TEAM_ROOT" fetch origin "$BASE" >/dev/null 2>&1 || true
 DIFF=$(git -C "$WT" --no-pager diff "origin/$BASE...HEAD" 2>/dev/null || true)
 FILES=$(git -C "$WT" --no-pager diff "origin/$BASE...HEAD" --name-only 2>/dev/null || true)
 DIFF_BYTES=${#DIFF}
-DIFF="${DIFF:0:60000}"
+# O prompt vai em argv do hermes (MAX_ARG_STRLEN ~128KB): 60KB de diff + template
+# + issue com comentários rebentava o setsid com E2BIG (medido no #587: 68KB de
+# diff, "Lista de argumentos muito longa", agente nunca arrancava). O agente tem
+# o worktree e git: o diff completo está a um comando, por isso trunca-se aqui.
+DIFF="${DIFF:0:30000}"
 
 if [ -z "${DIFF//[[:space:]]/}" ]; then
   log "DIFF VAZIO — não se revê um PR pelo título"
@@ -170,7 +186,14 @@ if [ -n "$ISSUE" ]; then
   ISSUE_JSON=$(gh issue view "$ISSUE" --repo "$REPO" --json title,body,comments --jq '
     "# " + .title + "\n\n" + (.body // "") + "\n\n## Comentários\n\n" +
     (if (.comments | length) > 0 then
-       ([.comments[] | "- **@" + (.author.login // "anon") + "**: " + (.body // "")] | join("\n\n"))
+       # Dedupe de repetidos consecutivos + cauda de 20: o implementador comenta
+       # "corrida sem veredicto" a cada tentativa e o prompt (que leva o issue
+       # inteiro) rebentava o argv — mesmo E2BIG do implement.sh (#486).
+       ([.comments[] | {a: (.author.login // "anon"), b: (.body // "")}]
+        | reduce .[] as $c ([]; if length > 0 and .[-1].a == $c.a and .[-1].b == $c.b then . else . + [$c] end)
+        | .[-20:]
+        | map("- **@" + .a + "**: " + .b)
+        | join("\n\n"))
      else "(sem comentários)" end)' 2>/dev/null || echo "")
 fi
 
@@ -196,11 +219,15 @@ fi
   echo ""
   printf '%s\n' "$FILES"
   echo ""
-  echo "## Diff (${DIFF_BYTES} bytes no total)"
+  echo "## Diff (${DIFF_BYTES} bytes no total — truncado no prompt a 30000)"
+  echo ""
+  echo "Para o diff COMPLETO, corre no worktree:"
+  echo "  git -C $WT --no-pager diff origin/$BASE...HEAD"
   echo ""
   printf '%s\n' "$DIFF"
 } | sed -e "s|__VERDICT_PATH__|$VERDICT_FILE|g" \
-        -e "s|__WORKDIR__|$WT|g" > "$PROMPT"
+        -e "s|__WORKDIR__|$WT|g" \
+        -e "s|__TEST_CMD__|$(test_cmd)|g" > "$PROMPT"
 
 rm -f "$VERDICT_FILE"
 agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
@@ -212,7 +239,41 @@ agent_log_header "$LOG_DIR/review-$PR.log" "review PR #$PR modelo=$MODEL"
 #
 # CADA REVIEWER TEM DE APANHAR UM PR DIFERENTE. Dois reviewers no mesmo PR tentam
 # ambos fazer o merge; quem despacha e responsavel por nao repetir o numero.
-AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" \
+#
+# MOTOR DO REVIEWER: o mesmo que os implementadores. Por omissao e' Claude. Mas
+# quando a subscripcao Claude esta esgotada (cooldown) OU o binario do claude nem
+# se resolve, o reviewer cai no fallback Ollama — que em 2026-08-21 provou NAO
+# devolver veredicto, deixando os PRs acumularem abertos (16 PRs parados). O
+# Hermes e' um motor com quota propria e capaz de julgar, logo assume o reviewer
+# exactamente como assume os implementadores (ver impl_engine_now no
+# orchestrator.sh). Sem isto, o reviewer so' volta a correr quando o Claude
+# regressa; com isto, a fila de reviews escoa durante o cooldown.
+# HERMES NO REVIEWER: OPT-IN, e por decisao do utilizador.
+#
+# O reviewer e o UNICO portao antes do main. O hermes implementa pior do que o
+# claude (avaliacao do utilizador, 2026-08-21), e um portao pior nao atrasa
+# trabalho — deixa passar codigo mau para o main, que e irreversivel na pratica.
+# Um PR que espera pela quota e recuperavel; um merge errado nao.
+#
+# Com TEAM_REVIEW_HERMES=1 assume mesmo assim, para quem preferir escoar a fila.
+#
+# ALIBABA NO REVIEWER: tambem OPT-IN (TEAM_REVIEW_ALIBABA, omissao 0), pela mesma
+# razao — o pool nao esta medido neste papel e o reviewer e o unico portao antes
+# do main. Verificado ANTES do bloco hermes e sem fall-through: com ambos a 1 e o
+# pool alibaba disponivel, a review vai em alibaba (decisao explicita, nao cascata).
+REVIEW_ENGINE="claude"
+if [ "${TEAM_REVIEW_ALIBABA:-0}" = "1" ] \
+   && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && alibaba_available; then
+  REVIEW_ENGINE="alibaba"
+  log "subscricao indisponivel e TEAM_REVIEW_ALIBABA=1 — a julgar no pool alibaba"
+elif [ "${TEAM_REVIEW_HERMES:-0}" = "1" ] \
+   && { [ "$(cooldown_remaining)" -gt 0 ] || ! claude_available; } && hermes_available; then
+  REVIEW_ENGINE="hermes"
+  log "subscricao indisponivel e TEAM_REVIEW_HERMES=1 — a julgar em hermes"
+fi
+
+AGENT_SLOT="${TEAM_SLOT:-main}" CLAUDE_MODEL="$MODEL" AGENT_ENGINE="$REVIEW_ENGINE" \
+  AGENT_VERDICT_FILE="$VERDICT_FILE" \
   bash "$SCRIPT_DIR/run-agent.sh" "$PROMPT" "$WT" "${REVIEW_TIMEOUT:-1800}" \
   >> "$LOG_DIR/review-$PR.log" 2>&1; AGENT_RC=$?
 
@@ -246,7 +307,9 @@ de um motor que consiga julgá-lo." >/dev/null 2>&1 || true
 }
 
 if ! verdict_readable "$VERDICT_FILE"; then
-  if ! no_verdict_is_real_failure main "$AGENT_RC"; then
+  # F6: o marker é escrito em ${TEAM_SLOT:-main} (rev1..N) — ler "main" aqui era
+  # ler o ficheiro do slot errado e escalar corridas degradadas indevidamente.
+  if ! no_verdict_is_real_failure "${TEAM_SLOT:-main}" "$AGENT_RC"; then
     log "SEM VEREDICTO (corrida degradada ou não arrancada) — PR fica para nova review"
     gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: corrida degradada, sem veredicto
 
@@ -268,6 +331,84 @@ da corrida, não do PR — será revisto de novo." >/dev/null 2>&1 || true
 fi
 
 clear_noverdict "pr-$PR"   # judged: the streak is over
+
+# ── MARCAR A SHA REVISTA É TRABALHO DO REVIEWER, e passou a ser feito aqui ──
+#
+# Era o orquestrador que o fazia, DEPOIS de a review terminar, e isso obrigava a
+# review do slot principal a ser BLOQUEANTE: o ciclo não podia avançar sem saber
+# se houve veredicto. Medido: 2 ciclos em 7 minutos, com 9GB de memória livre e 5
+# slots de implementação vazios à espera de uma review de 6 minutos.
+#
+# Quem sabe se julgou é quem julgou. Chegar aqui significa veredicto lido e
+# parseado — as duas saídas sem veredicto acima fazem `exit 78` e nunca marcam
+# nada, que é o invariante que impede as 184 reviews do mesmo commit.
+#
+# E marca a sha QUE FOI REVISTA (a do worktree), não a que estiver na cabeça do
+# branch quando a review acabar: se o implementador empurrou entretanto, essa
+# nunca foi vista por ninguém e marcá-la esconderia trabalho novo.
+REVIEWED_SHA=$(git -C "$WT" rev-parse HEAD 2>/dev/null || echo "")
+if [ -n "$REVIEWED_SHA" ]; then
+  echo "$PR $REVIEWED_SHA" >> "$STATE_DIR/reviewed-shas"
+  log "PR #$PR marcado como revisto na sha $REVIEWED_SHA"
+else
+  warn "não consegui ler a sha revista do PR #$PR — não marco (volta na próxima)"
+fi
+
+# ── PORTÃO INDEPENDENTE DE MERGE ──────────────────────────────────────────
+#
+# O veredicto vem do agente (Claude ou Hermes). O Hermes em modo free não é
+# fiável: pode escrever "approved" + tests_pass:true sem ter corrido os testes
+# a sério. Confiar no JSON do agente para decidir o merge é confiar na palavra
+# de quem está a ser avaliado. Por isso o merge NUNCA é decidido pelo veredicto:
+# este portão corre lint + tsc + jest ELE PRÓPRIO no worktree.
+#
+# O critério é REGRESSÃO, não perfeição (ver baseline_block em lib.sh): o main
+# já está vermelho por uma causa conhecida, logo exigir jest=0 bloquearia TUDO.
+# O portão compara com a baseline do repo e só BLOQUEIA se o PR introduzir
+# regressão — mais testes a falhar do que a baseline, lint/tsc a piorar, ou
+# falhas novas fora dos ficheiros que o PR toca. Sem baseline, o portão é
+# estrito (exige os três verdes). O agente pode mentir à vontade — o main fica
+# protegido contra regressões reais.
+gate_independent() {
+  local wt="$1" le tsc ft
+  [ -d "$wt" ] || return 1
+  log "PORTÃO: a correr lint + tsc + jest no worktree (independente do agente)"
+  ( cd "$wt" && npm run lint --silent >/dev/null 2>&1 ); le=$?
+  ( cd "$wt" && npx tsc --noEmit >/dev/null 2>&1 ); tsc=$?
+  ft=$( ( cd "$wt" && $(test_cmd) --json 2>/dev/null \
+          | jq -r '([.testResults[]?.assertionResults[]? | select(.status=="failed")] | length) // 0' \
+        ) 2>/dev/null ) || ft=0
+  ft=${ft:-0}
+
+  # Sem baseline: portão estrito.
+  if [ ! -s "$BASELINE_FILE" ]; then
+    if [ "$le" = "0" ] && [ "$tsc" = "0" ] && [ "$ft" = "0" ]; then
+      log "PORTÃO: sem baseline, tudo verde — merge autorizado"
+      return 0
+    fi
+    log "PORTÃO: REPROVADO (sem baseline, estrito) lint=$le tsc=$tsc falhas=$ft — PR NÃO integrado"
+    return 1
+  fi
+
+  # Com baseline: critério de regressão.
+  local b_le b_tsc b_ft
+  b_le=$(jqv "$BASELINE_FILE" '.lint_errors' '0')
+  b_tsc=$(jqv "$BASELINE_FILE" '.tsc_ok' 'true')
+  b_ft=$(jqv "$BASELINE_FILE" '.totals.failed_tests' '0')
+  b_le=${b_le:-0}; b_ft=${b_ft:-0}
+
+  local regr=0 motivo=""
+  if [ "$tsc" != "0" ] && [ "$b_tsc" = "true" ]; then regr=1; motivo="tsc limpo na baseline, agora falha"; fi
+  if [ "$le" != "0" ] && [ "${b_le:-0}" = "0" ]; then regr=1; motivo="lint limpo na baseline, agora falha"; fi
+  if [ "$ft" -gt "$b_ft" ]; then regr=1; motivo="testes a falhar subiram ($ft > $b_ft baseline)"; fi
+
+  if [ "$regr" = "1" ]; then
+    log "PORTÃO: REPROVADO por REGRESSÃO ($motivo) — PR NÃO integrado"
+    return 1
+  fi
+  log "PORTÃO: OK (sem regressão vs baseline le=$le tsc=$tsc falhas=$ft vs b_le=$b_le b_tsc=$b_tsc b_ft=$b_ft) — merge autorizado"
+  return 0
+}
 
 VERDICT=$(jqv "$VERDICT_FILE" '.verdict' 'blocked-impl')
 SUMMARY=$(jqv "$VERDICT_FILE" '.summary' '(sem resumo)'); SUMMARY="${SUMMARY:0:1500}"
@@ -301,7 +442,32 @@ log "verdict=$VERDICT"
 
 case "$VERDICT" in
   approved)
-    gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: aprovado
+    # PORTÃO INDEPENDENTE: o veredicto do agente (Claude ou Hermes) NÃO decide o
+    # merge. Corremos lint+tsc+jest nós mesmos. Só integramos se o portão passar.
+    # Isto protege o main de um "approved" mentiroso do Hermes (ou de qualquer
+    # motor): o código tem de passar a sério, não na palavra do agente.
+    if ! gate_independent "$WT"; then
+      gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: aprovado pelo agente, mas o PORTÃO independente reprovou
+
+O agente declarou o PR aprovado, mas o portão próprio (lint + tsc + jest
+corridos pelo orquestrador, não pelo agente) falhou. Por regra, um PR só
+integra em \`$BASE\` se o portão passar — um veredicto favorável do agente não
+chega.
+
+Devolvido ao implementador para corrigir o que o portão detetou." >/dev/null 2>&1 || true
+      [ -n "$ISSUE" ] && {
+        comment_issue "$ISSUE" "## Reviewer: portão independente reprovou
+
+O agente aprovou, mas lint/tsc/jest corridos pelo orquestrador falharam. O
+trabalho volta para correção."
+        set_state "$ISSUE" "$L_BLOCKED_IMPL"
+      }
+      # Não marcamos como revisto: o portão pode passar numa próxima passagem se
+      # o implementador corrigir, e não queremos um ciclo de adiamento por isso.
+      exit 0
+    fi
+
+    gh pr comment "$PR" --repo "$REPO" --body "## Reviewer: aprovado (portão independente OK)
 
 $SUMMARY" >/dev/null 2>&1 || true
 
@@ -318,6 +484,7 @@ $SUMMARY" >/dev/null 2>&1 || true
     gh pr merge "$PR" --repo "$REPO" --squash --delete-branch >/dev/null 2>&1 || true
     if merge_landed; then
       MERGE_OK=1
+      health_stamp merge
     else
       MSTATUS=$(gh pr view "$PR" --repo "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null || echo "")
       log "merge recusado (mergeStateStatus=$MSTATUS)"

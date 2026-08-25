@@ -14,9 +14,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
-import { Typography } from '../theme/CupertinoTheme';
 import {
   CupertinoNavigationBar,
   CupertinoSearchBar,
@@ -96,7 +95,7 @@ interface NoteRowProps {
   onPress: () => void;
   onDelete: () => void;
   colors: CupertinoColors;
-  typography: typeof Typography;
+  typography: ResolvedTypography;
 }
 
 const NoteRow = React.memo(function NoteRow({

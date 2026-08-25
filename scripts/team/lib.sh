@@ -249,6 +249,111 @@ on_fallback() {
   [ "$(cooldown_remaining)" -gt 0 ]
 }
 
+# ── Terceiro pool: Alibaba Cloud (Bailian Token Plan) ─────────────────────
+#
+# Pool independente através do MESMO binário claude, com override de ambiente
+# por invocação (ANTHROPIC_BASE_URL + chave sk-sp-). Não partilha quota com a
+# subscrição: Team subscription = facturação Anthropic; Token Plan = créditos
+# Alibaba. Qualquer um dos três pode secar sem parar o pipeline.
+#
+# Achado 2026-08-23 (sonda P0): o bloco `env` de ~/.claude/settings.json GANHA
+# ao env de processo — enquanto esse bloco definiu ANTHROPIC_BASE_URL, todos os
+# overrides por invocação foram ignorados em silêncio. O bloco foi removido
+# (backup: settings.json.bak-2026-08-23-token-plan) e a partir daí o env por
+# invocação ganha (provado com um servidor HTTP local a receber os POSTs).
+# NUNCA reintroduzir ANTHROPIC_* nesse bloco — matava este pool em silêncio.
+#
+# COOLDOWN DE DOIS NÍVEIS. Os erros documentados do Token Plan são dois:
+#   * "429 Allocated quota exceeded"  — janela esgotada (o plano pessoal tem
+#     janela de 7 dias; não volta em minutos) → cooldown longo;
+#   * "429 Requests rate limit exceeded" — limite de concorrência, passa
+#     depressa → cooldown curto.
+# Tratar os dois por igual ou martela um pool seco durante uma semana a cada
+# ciclo, ou espera 6h por um soluço de 2 minutos. A lição do fallback Ollama
+# (TEAM_FALLBACK_COOLDOWN_H=6, "limite semanal não limpa em minutos") aplica-se
+# ao caso longo.
+TEAM_USE_ALIBABA="${TEAM_USE_ALIBABA:-1}"
+# Base URL: env ganha; senão o ficheiro de credenciais da pipeline (mesma fonte
+# da chave — quem reutiliza a chave desta máquina precisa do endpoint
+# ap-southeast-1, e o override vive ao lado da chave, não no ps do processo);
+# senão o default da documentação (cn-beijing).
+TEAM_ALIBABA_BASE_URL="${TEAM_ALIBABA_BASE_URL:-}"
+if [ -z "$TEAM_ALIBABA_BASE_URL" ] && [ -f "$HOME/.config/ios2android-team/env" ]; then
+  TEAM_ALIBABA_BASE_URL=$(grep -E '^TEAM_ALIBABA_BASE_URL=' "$HOME/.config/ios2android-team/env" 2>/dev/null | head -1 | cut -d= -f2-)
+fi
+TEAM_ALIBABA_BASE_URL="${TEAM_ALIBABA_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic}"
+
+# qwen3.8-max e qwen3.7-plus têm raciocínio+visão; qwen3.6-flash também.
+# qwen3.7-max é SÓ TEXTO — de fora dos defaults (subagentes lêem screenshots).
+TEAM_ALIBABA_MODEL_LOW="${TEAM_ALIBABA_MODEL_LOW:-qwen3.6-flash}"
+TEAM_ALIBABA_MODEL_MED="${TEAM_ALIBABA_MODEL_MED:-qwen3.7-plus}"
+TEAM_ALIBABA_MODEL_STRONG="${TEAM_ALIBABA_MODEL_STRONG:-qwen3.8-max}"
+
+ALIBABA_COOLDOWN_FILE="$STATE_DIR/alibaba-usage-cooldown"
+TEAM_ALIBABA_COOLDOWN_H="${TEAM_ALIBABA_COOLDOWN_H:-6}"
+TEAM_ALIBABA_RATE_COOLDOWN_M="${TEAM_ALIBABA_RATE_COOLDOWN_M:-2}"
+
+# Chave do pool: env ALIBABA_API_KEY, senão o ficheiro de credenciais da
+# pipeline. SÓ aceita prefixo sk-sp- (chave Token Plan): outro prefixo
+# (sk- pay-as-you-go) daria 401, que não casa com is_usage_exhausted e
+# escaparia como falha de tarefa — trata-se como pool ausente. O aviso alto
+# vive nos callers de arranque (roster do orchestrator, PEER no run-agent),
+# não aqui, porque isto corre dentro de $( ) a cada ciclo e um aviso aqui
+# seria spam a cada 45s.
+alibaba_api_key() {
+  local key="" src
+  if [ -n "${ALIBABA_API_KEY:-}" ]; then
+    key="$ALIBABA_API_KEY"
+  else
+    for src in "$HOME/.config/ios2android-team/env"; do
+      [ -f "$src" ] || continue
+      key=$(grep -E '^ALIBABA_API_KEY=' "$src" 2>/dev/null | head -1 | cut -d= -f2-)
+      [ -n "$key" ] && break
+    done
+  fi
+  [ -n "$key" ] || return 1
+  case "$key" in
+    sk-sp-*) printf '%s' "$key"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+alibaba_configured() {
+  [ "${TEAM_USE_ALIBABA:-1}" = "1" ] || return 1
+  alibaba_api_key >/dev/null 2>&1
+}
+
+alibaba_cooldown_remaining() {
+  [ -f "$ALIBABA_COOLDOWN_FILE" ] || { echo 0; return; }
+  local until_ts now
+  until_ts=$(cat "$ALIBABA_COOLDOWN_FILE" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  if [ "$now" -lt "$until_ts" ]; then echo $(( until_ts - now )); else echo 0; fi
+}
+
+alibaba_exhausted() { [ "$(alibaba_cooldown_remaining)" -gt 0 ]; }
+
+# Disponível = configurado + sem cooldown + binário claude resolúvel (o pool
+# corre no mesmo harness que a subscrição).
+alibaba_available() {
+  alibaba_configured || return 1
+  alibaba_exhausted && return 1
+  claude_available
+}
+
+# Tier do agente que vai correr: os callers recebem CLAUDE_MODEL
+# (haiku/sonnet/opus) e o pool responde com o qwen correspondente, para a
+# classe de dificuldade não mudar só porque o motor mudou (mesma regra dos
+# tiers claude/ollama acima).
+alibaba_model_for() {
+  local m="$1"
+  case "$m" in
+    *haiku*) echo "$TEAM_ALIBABA_MODEL_LOW" ;;
+    *opus*)  echo "$TEAM_ALIBABA_MODEL_STRONG" ;;
+    *)       echo "$TEAM_ALIBABA_MODEL_MED" ;;
+  esac
+}
+
 is_deferred() {
   local issue="$1" until_ts now
   [ -f "$DEFER_DIR/$issue" ] || return 1
@@ -307,6 +412,293 @@ cooldown_remaining() {
 
 mkdir -p "$VERDICT_DIR" "$LOG_DIR" "$STATE_DIR" "$WT_ROOT" 2>/dev/null || true
 
+# ── Registo de agentes VIVOS (in-flight) ───────────────────────────────────
+#
+# O flock do run-agent.sh não serve para saber se um role está vivo, e essa
+# confusão custou trabalho real. O lock só é tomado LÁ DENTRO, no fim do
+# implement.sh: antes disso há set_state, comentário no issue, criação do
+# worktree e `npm ci` — minutos em que o slot parece livre. O cleanup_stale do
+# ciclo seguinte lia essa liberdade como "não há ninguém", apagava os veredictos
+# de implement e removia o worktree DEBAIXO do agente. É o #442: o agente
+# reportou que o worktree foi "recriado pelo menos 2 vezes", perdeu os edits, e o
+# issue voltou a qa:ready num ciclo infinito.
+#
+# Com dois implementadores isso era uma janela; com N é o caso normal, porque há
+# sempre alguém a aquecer. Logo o registo tem de ser do PROCESSO, não do lock:
+# cada role escreve o seu PID à cabeça e apaga-o no trap EXIT. Um agente morto a
+# SIGKILL deixa um ficheiro obsoleto, e `kill -0` a esse PID desmascara-o — não é
+# preciso limpar nada.
+#
+# A tag é o NOME DO WORKTREE (implement-142, review-517, curator-99), para que o
+# cleanup possa decidir worktree a worktree em vez de por role.
+INFLIGHT_DIR="$STATE_DIR/inflight"
+mkdir -p "$INFLIGHT_DIR" 2>/dev/null || true
+
+# "<pid> <slot>". O slot vem no MESMO ficheiro (e não numa tag própria) porque
+# duas tags por agente fariam o inflight_young_count contar cada agente duas
+# vezes e duplicar o orçamento de memória.
+inflight_register() {
+  local tag="$1" slot="${2:-${TEAM_SLOT:-main}}"
+  echo "$$ $slot" > "$INFLIGHT_DIR/$tag" 2>/dev/null || true
+}
+
+inflight_release() {
+  local tag="$1"
+  rm -f "$INFLIGHT_DIR/$tag" 2>/dev/null || true
+}
+
+# 0 = há um processo vivo com esta tag.
+inflight_active() {
+  local tag="$1" pid
+  pid=$(awk '{print $1; exit}' "$INFLIGHT_DIR/$tag" 2>/dev/null || echo "")
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+# 0 = este SLOT tem um role vivo. É isto, e não o flock do run-agent.sh, que diz
+# se um slot está ocupado: o lock só é tomado no fim do implement.sh, depois do
+# worktree e do `npm ci`, e nessa janela de minutos o slot parece livre e o
+# despachante lança-lhe outro agente por cima.
+inflight_slot_active() {
+  local slot="$1" f tag
+  for f in "$INFLIGHT_DIR"/*; do
+    [ -f "$f" ] || continue
+    [ "$(awk '{print $2; exit}' "$f" 2>/dev/null)" = "$slot" ] || continue
+    tag=$(basename "$f")
+    inflight_active "$tag" && return 0
+  done
+  return 1
+}
+
+# Tags vivas, uma por linha. Aceita um prefixo opcional (`implement`).
+inflight_list() {
+  local prefix="${1:-}" f tag
+  for f in "$INFLIGHT_DIR"/${prefix}*; do
+    [ -f "$f" ] || continue
+    tag=$(basename "$f")
+    inflight_active "$tag" || continue
+    echo "$tag"
+  done
+}
+
+inflight_count() { inflight_list "${1:-}" | grep -c . || true; }
+
+# Tags vivas há MENOS de $2 segundos (default: TEAM_AGENT_WARMUP_S).
+#
+# Existe por causa do orçamento de memória: um agente lançado agora ainda não
+# gastou o que vai gastar (o pico é o `npm ci` e depois o jest), portanto contar
+# só o MemAvailable actual autoriza lançar cinco agentes seguidos que só depois
+# colidem. Os jovens contam como memória já comprometida.
+inflight_young_count() {
+  local prefix="${1:-}" window="${2:-${TEAM_AGENT_WARMUP_S:-300}}" tag now age n=0
+  now=$(date +%s)
+  while IFS= read -r tag; do
+    [ -n "$tag" ] || continue
+    age=$(( now - $(stat -c %Y "$INFLIGHT_DIR/$tag" 2>/dev/null || echo "$now") ))
+    [ "$age" -lt "$window" ] && n=$((n + 1))
+  done < <(inflight_list "$prefix")
+  echo "$n"
+}
+
+# ── Orçamento de memória para agentes em paralelo ──────────────────────────
+#
+# O tecto do paralelismo nesta máquina é a MEMÓRIA, não a CPU e não a quota. Um
+# agente não é só o processo do harness (~0.5 GB): é o `npm ci`, e sobretudo o
+# `npm test`, que é jest e por omissão abre `cores-1` workers. Nesta máquina são
+# 11 workers de React Native por agente — cinco agentes seriam ~55 processos node
+# e um OOM garantido em 15 GB. Daí duas defesas, e são precisas as duas:
+#
+#   * TEAM_JEST_WORKERS, injectado nos prompts (ver __TEST_CMD__), que limita o
+#     jest de CADA agente;
+#   * este orçamento, que recusa lançar mais um quando não há folga.
+#
+# TEAM_AGENT_MEM_MB é o custo estimado de um agente NO PICO, com o jest limitado.
+# TEAM_MEM_FLOOR_MB é o que fica para o resto da máquina (o utilizador está a
+# trabalhar nela) e nunca é emprestado.
+#
+# NÃO é medido por processo de propósito: o que interessa é a folga do sistema, e
+# somar RSS de árvores de processos conta memória partilhada várias vezes.
+TEAM_AGENT_MEM_MB="${TEAM_AGENT_MEM_MB:-2000}"
+TEAM_MEM_FLOOR_MB="${TEAM_MEM_FLOOR_MB:-2048}"
+TEAM_AGENT_WARMUP_S="${TEAM_AGENT_WARMUP_S:-300}"
+
+# MemAvailable, não `free`: é a estimativa do próprio kernel do que pode ser
+# entregue sem swap, já descontando o que da cache não é recuperável.
+mem_available_mb() {
+  awk '/^MemAvailable:/ { print int($2 / 1024); exit }' /proc/meminfo 2>/dev/null || echo 0
+}
+
+# Quanto é preciso ter livre para lançar mais um agente: o chão, mais o agente
+# novo, mais os que ainda estão a aquecer e portanto ainda não aparecem no
+# MemAvailable.
+mem_required_mb() {
+  local young; young=$(inflight_young_count)
+  echo $(( TEAM_MEM_FLOOR_MB + TEAM_AGENT_MEM_MB * (young + 1) ))
+}
+
+# 0 = há memória para mais um agente. Silencioso; quem chama é que decide logar.
+mem_room_for_agent() {
+  local avail req
+  avail=$(mem_available_mb)
+  req=$(mem_required_mb)
+  [ "$avail" -ge "$req" ]
+}
+
+# Uma linha legível para o log do orquestrador.
+mem_status() {
+  printf 'mem %sMB livres, preciso de %sMB (chão %s + %s por agente x %s a aquecer +1)' \
+    "$(mem_available_mb)" "$(mem_required_mb)" "$TEAM_MEM_FLOOR_MB" \
+    "$TEAM_AGENT_MEM_MB" "$(inflight_young_count)"
+}
+
+# ── Saúde: medir RESULTADOS, não actividade ────────────────────────────────
+#
+# As duas falhas de 2026-08-21 eram invisíveis do lado de fora porque tudo o que
+# a pipeline mostrava era ACTIVIDADE: ciclos, despachos, "sem memória", worktrees
+# a serem limpos. Havia 1069 despachos e zero agentes a correr; havia seis slots
+# a serem preenchidos e zero PRs. Um monitor que conta despachos diz que está
+# tudo bem nos dois casos.
+#
+# Portanto o que se marca aqui são só resultados que ninguém pode fingir: um
+# agente arrancou de facto, um veredicto foi lido, um PR foi aberto, um merge
+# aterrou. O watchdog compara ISSO com o tempo.
+HEALTH_DIR="$STATE_DIR/health"
+mkdir -p "$HEALTH_DIR" 2>/dev/null || true
+
+health_stamp() { date +%s > "$HEALTH_DIR/$1" 2>/dev/null || true; }
+
+# Segundos desde o último evento deste tipo. Sem registo -> um número enorme, para
+# que "nunca aconteceu" conte como "há muito tempo" em qualquer comparação.
+health_age() {
+  local f="$HEALTH_DIR/$1" t
+  [ -f "$f" ] || { echo 999999; return; }
+  t=$(cat "$f" 2>/dev/null || echo 0)
+  echo $(( $(date +%s) - t ))
+}
+
+health_bump() {
+  local f="$HEALTH_DIR/$1.count"
+  echo $(( $(cat "$f" 2>/dev/null || echo 0) + 1 )) > "$f" 2>/dev/null || true
+}
+
+health_count() { cat "$HEALTH_DIR/$1.count" 2>/dev/null || echo 0; }
+health_reset() { rm -f "$HEALTH_DIR/$1.count" 2>/dev/null || true; }
+
+# Ledger de acções de recuperação: cada uma corre UMA vez por chave (ou depois de
+# um TTL). É isto que impede o watchdog de se tornar o problema — desencalhar um
+# PR em ciclo é o caminho para as 184 reviews do mesmo commit.
+LEDGER_DIR="$STATE_DIR/health/ledger"
+mkdir -p "$LEDGER_DIR" 2>/dev/null || true
+
+ledger_once() {
+  # DECLARAÇÕES SEPARADAS, e não por estilo. O `local` é um builtin: a linha toda
+  # é expandida ANTES de as atribuições acontecerem, portanto
+  # `local key="$1" f="...$key..."` vê o $key VAZIO. O ficheiro do ledger ficava
+  # a ser o próprio directório, o write falhava, e o ledger autorizava sempre —
+  # ou seja, a guarda que existe para impedir reparações em ciclo não guardava
+  # nada. Apanhado pelo teste do PR encalhado, não por leitura.
+  local key="$1"
+  local ttl="${2:-0}"
+  local safe; safe=$(printf '%s' "$key" | tr -c 'a-zA-Z0-9._-' '_')
+  local f="$LEDGER_DIR/$safe"
+  local t now
+  [ -n "$safe" ] || return 1
+  now=$(date +%s)
+  if [ -f "$f" ]; then
+    t=$(cat "$f" 2>/dev/null || echo 0)
+    [ "$ttl" = "0" ] && return 1
+    [ $(( now - t )) -lt "$ttl" ] && return 1
+  fi
+  echo "$now" > "$f" 2>/dev/null || true
+  return 0
+}
+
+# ── Onde estão os binários dos motores ─────────────────────────────────────
+#
+# ISTO CUSTOU UMA NOITE INTEIRA. 383 ciclos, 1069 despachos, ZERO PRs.
+#
+# O `command -v claude` do run-agent.sh falhava porque a pipeline foi arrancada
+# de uma shell cujo PATH não tinha `~/.local/bin` (uma sessão de agente, não um
+# terminal com o profile do utilizador). E a falha é SILENCIOSA por construção:
+# o `if ... && command -v claude` simplesmente não entra, não imprime nada, e o
+# fluxo cai no fallback Ollama — que estava sem quota semanal. Do lado de fora
+# vê-se "sem veredicto, issue adiado" 1069 vezes e parece que os agentes não
+# conseguem fazer o trabalho. Nunca correu nenhum.
+#
+# O mesmo bug existia para o hermes e foi corrigido primeiro; corrigir só metade
+# foi pior que não corrigir nenhum, porque deixou o failover a depender de um
+# sinal ("o Claude reportou esgotamento") que nunca podia chegar.
+#
+# Regra: NENHUM motor é resolvido por PATH sozinho, e a ausência de um binário
+# NUNCA é silenciosa.
+TEAM_CLAUDE_BIN="${TEAM_CLAUDE_BIN:-}"
+
+claude_bin() {
+  if [ -n "$TEAM_CLAUDE_BIN" ]; then
+    [ -x "$TEAM_CLAUDE_BIN" ] || return 1
+    echo "$TEAM_CLAUDE_BIN"; return 0
+  fi
+  local p
+  # Caminho fixado pelo watchdog depois de ver o run-agent falhar a encontrá-lo.
+  # Sem isto a "reparação" dele era decorativa.
+  if [ -s "$HEALTH_DIR/claude-bin.resolved" ]; then
+    p=$(cat "$HEALTH_DIR/claude-bin.resolved" 2>/dev/null || echo "")
+    [ -n "$p" ] && [ -x "$p" ] && { echo "$p"; return 0; }
+  fi
+  p=$(command -v claude 2>/dev/null) && { echo "$p"; return 0; }
+  for p in "$HOME/.local/bin/claude" "$HOME/bin/claude" /usr/local/bin/claude; do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  # nvm: qualquer versão instalada serve, a mais recente primeiro.
+  for p in $(ls -d "$HOME"/.nvm/versions/node/*/bin/claude 2>/dev/null | sort -rV); do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+claude_available() { claude_bin >/dev/null 2>&1; }
+
+# ── Onde está o hermes ─────────────────────────────────────────────────────
+#
+# `command -v hermes` NÃO SERVE, e a resposta errada é silenciosa: o binário está
+# em `~/.local/bin`, que entra no PATH pelo profile do utilizador — e o servidor
+# tmux onde a pipeline corre pode ter sido arrancado sem ele. O código dizia
+# então "o hermes não está no PATH", punha tudo em claude, e ficava assim durante
+# horas sem que nada parecesse avariado.
+#
+# Resolvido por caminho: PATH primeiro (se lá estiver, é o que o utilizador quer),
+# e depois os sítios onde de facto está instalado.
+TEAM_HERMES_BIN="${TEAM_HERMES_BIN:-}"
+
+hermes_bin() {
+  if [ -n "$TEAM_HERMES_BIN" ]; then
+    [ -x "$TEAM_HERMES_BIN" ] || return 1
+    echo "$TEAM_HERMES_BIN"; return 0
+  fi
+  local p
+  p=$(command -v hermes 2>/dev/null) && { echo "$p"; return 0; }
+  for p in "$HOME/.local/bin/hermes" "$HOME/bin/hermes" /usr/local/bin/hermes; do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+hermes_available() { hermes_bin >/dev/null 2>&1; }
+
+# Workers de jest por agente. Com N agentes em paralelo o default do jest
+# (cores-1) é o caminho mais curto para o OOM — ver o comentário do orçamento.
+TEAM_JEST_WORKERS="${TEAM_JEST_WORKERS:-2}"
+
+# O comando de testes que vai NOS PROMPTS. Um valor vazio de TEAM_JEST_WORKERS
+# devolve `npm test` puro, para quem quiser o comportamento antigo.
+test_cmd() {
+  if [ -n "${TEAM_JEST_WORKERS:-}" ] && [ "$TEAM_JEST_WORKERS" != "0" ]; then
+    echo "npm test -- --maxWorkers=$TEAM_JEST_WORKERS"
+  else
+    echo "npm test"
+  fi
+}
+
 # ── Labels: the pipeline state machine ─────────────────────────────────────
 # Exactly one qa:* label is the authoritative state of an issue. Comments are
 # the audit trail; the label is what the orchestrator dispatches on.
@@ -326,7 +718,20 @@ ALL_QA_LABELS="$L_TRIAGE,$L_READY,$L_WIP,$L_REVIEW,$L_DONE,$L_BLOCKED_IMPL,$L_BL
 # these; the curator may re-grade.
 ALL_PRIO_LABELS="P0,P1,P2,P3"
 
-log() { echo "[${ROLE:-team}] $(date +%H:%M:%S) $*"; }
+# O LOG VAI PARA STDERR, e não é cosmética.
+#
+# Escrevia para stdout, e isso envenena qualquer `x=$(funcao_que_loga)`. Custou
+# uma hora de pipeline parada: o pick_impl_target chama o escalate_if_stuck (que
+# loga), dentro de `i=$(pick_impl_target ...)` — e o `$i` passou a ser a LINHA DE
+# LOG mais o número. Daí três slots despachados para o mesmo "issue"
+# `[orchestrator] 12:12 #475: rejeições... 475`, tags de agente vivo com esse
+# nome (que nunca morrem, logo contam para sempre como "a aquecer"), o orçamento
+# de memória esgotado por fantasmas, e nenhuma review despachada durante uma
+# hora com dois PRs à espera.
+#
+# Diagnósticos pertencem ao stderr. Quem quer o log num ficheiro já usa `2>&1`
+# (o start.sh e os despachos dos roles fazem-no), portanto nada se perde.
+log() { echo "[${ROLE:-team}] $(date +%H:%M:%S) $*" >&2; }
 warn() { echo "[${ROLE:-team}] $(date +%H:%M:%S) WARN $*" >&2; }
 
 # ── Issue state transitions ────────────────────────────────────────────────
@@ -398,6 +803,27 @@ add_label_api() {
     -f "labels[]=$label" >/dev/null 2>&1
 }
 
+# Actualizar titulo/corpo de um PR pela REST API, pela MESMA razao do add_label_api
+# — e esta faltava, com consequencias piores.
+#
+# `gh pr edit --body` falha inteiro com o erro de deprecacao dos Projects classic
+# (`repository.pullRequest.projectCards`). No implement.sh essa chamada estava com
+# `|| true`, portanto TODOS os retrabalhos falhavam a actualizar o corpo, em
+# silencio, e o PR ficava a descrever a ronda anterior. Foi assim que o #524 levou
+# tres bloqueios seguidos por "a descricao do PR nao corresponde ao diff": o
+# implementador escrevia o corpo novo, a chamada morria, o reviewer bloqueava pelo
+# texto velho, e o implementador respondia a isso reescrevendo CODIGO — 12
+# ficheiros ao terceiro ciclo, com o codigo ja aprovado desde o primeiro.
+#
+# Devolve 0 so quando o PATCH passa, para que quem chama possa avisar em vez de
+# assumir.
+update_pr_api() {
+  local number="$1" title="$2" body="$3" payload
+  payload=$(jq -n --arg t "$title" --arg b "$body" '{title: $t, body: $b}') || return 1
+  printf '%s' "$payload" \
+    | gh api -X PATCH "repos/$REPO/pulls/$number" --input - >/dev/null 2>&1
+}
+
 # Open a PR via the REST API. Same reason as add_label_api: `gh pr create` can die
 # on Projects-classic resolution, so the branch is pushed and the PR never opens —
 # which in the sibling project stranded two fully-implemented issues for hours.
@@ -461,13 +887,14 @@ comment_issue() {
 # `VERDICT=$(jq ... "$VERDICT")` overwrites the path with the value, and the next
 # jq call then tries to open a file named "blocked".
 
-# True when the last agent on this slot ran on the FALLBACK engine rather than the
-# subscription. A role that produced no verdict on the fallback must not be treated
-# as "this issue defeated the pipeline": the fallback model is materially weaker, so
-# a temporary quota outage would otherwise park real work permanently.
+# True when the last agent on this slot ran on a NON-SUBSCRIPTION engine (the
+# ollama fallback or the alibaba pool) rather than the subscription. A role that
+# produced no verdict there must not be treated as "this issue defeated the
+# pipeline": those engines are not measured on this repo's work in the same way,
+# so a temporary quota outage would otherwise park real work permanently.
 agent_used_fallback() {
   local slot="${1:-main}"
-  grep -q '^ollama/' "$LOCK_PREFIX.$slot.engine" 2>/dev/null
+  grep -qE '^(ollama|alibaba)/' "$LOCK_PREFIX.$slot.engine" 2>/dev/null
 }
 
 # Standard handling for "the agent produced no verdict". Returns 0 when the caller

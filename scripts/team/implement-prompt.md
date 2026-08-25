@@ -132,7 +132,7 @@ Corre isto no worktree (`__WORKDIR__`):
 ```bash
 npm run lint
 npx tsc --noEmit
-npm test
+__TEST_CMD__
 ```
 
 Não há CI em pull requests neste repositório — se deixares algo vermelho, entra
