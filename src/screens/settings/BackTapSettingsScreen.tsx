@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import {
@@ -7,6 +7,7 @@ import {
   CupertinoListSection,
   CupertinoListTile,
   CupertinoSwitch,
+  CupertinoTextField,
   useAlert,
 } from '../../components';
 import { useSettings } from '../../store/SettingsStore';
@@ -17,6 +18,7 @@ import {
   type BackTapAssignment,
   type BackTapGesture,
   type BackTapDeps,
+  type BackTapResult,
   resolveBackTap,
   executeBackTap,
 } from '../../utils/backTap';
@@ -27,8 +29,11 @@ const ACTION_OPTIONS: { id: BackTapAction; label: string }[] = [
   { id: 'flash', label: 'Flashlight' },
   { id: 'toggleWifi', label: 'Toggle Wi-Fi' },
   { id: 'openApp', label: 'Open App' },
+  { id: 'openCamera', label: 'Open Camera' },
   { id: 'shortcut', label: 'Shortcut' },
   { id: 'screenshot', label: 'Screenshot' },
+  { id: 'startRecording', label: 'Screen Recording' },
+  { id: 'sendMessage', label: 'Send Message' },
 ];
 
 /**
@@ -53,6 +58,9 @@ function summaryFor(assignment: BackTapAssignment, apps: { packageName: string; 
   }
   if (assignment.action === 'shortcut' && assignment.shortcutId) {
     return SHORTCUT_OPTIONS.find((o) => o.id === assignment.shortcutId)?.label ?? 'Shortcut';
+  }
+  if (assignment.action === 'sendMessage' && assignment.smsAddress) {
+    return assignment.smsAddress;
   }
   return labelForAction(assignment.action);
 }
@@ -115,12 +123,23 @@ export function BackTapSettingsScreen({ navigation }: { navigation: AppNavigatio
           onPress: () => {
             if (opt.id === 'openApp') { pickApp(gesture); return; }
             if (opt.id === 'shortcut') { pickShortcut(gesture); return; }
+            if (opt.id === 'sendMessage') {
+              // Precisa de destinatário: mantém o que já estivesse configurado
+              // e revela o formulário abaixo (a acção só dispara com address).
+              const previous = backTap[gesture];
+              setAssignment(gesture, {
+                action: 'sendMessage',
+                smsAddress: previous.action === 'sendMessage' ? (previous.smsAddress ?? '') : '',
+                smsBody: previous.action === 'sendMessage' ? (previous.smsBody ?? '') : '',
+              });
+              return;
+            }
             setAssignment(gesture, { action: opt.id });
           },
         })),
       );
     },
-    [alert, pickApp, pickShortcut, setAssignment],
+    [alert, backTap, pickApp, pickShortcut, setAssignment],
   );
 
   const deps: BackTapDeps = useMemo(() => ({
@@ -129,14 +148,48 @@ export function BackTapSettingsScreen({ navigation }: { navigation: AppNavigatio
     isFlashlightOn: () => LauncherModule.isFlashlightOn(),
     getWifiEnabled: async () => (await LauncherModule.getWifiInfo())?.enabled ?? false,
     setWifiEnabled: (on: boolean) => LauncherModule.setWifiEnabled(on),
-    // Sem API de captura de ecrã fiável — mesmo placeholder que
-    // components/AssistiveTouch.tsx usa para a mesma acção.
-    screenshot: async () => {},
+    // A câmara é in-app (CameraScreen), como no LockScreen — o launcher não
+    // salta para a app de câmara do sistema.
+    openCamera: () => { navigation.navigate('Camera' as never); },
+    // Screenshot e gravação de ecrã exigem MediaProjection, com consentimento
+    // explícito por sessão (impossível silenciosamente desde Android 5.0). Não
+    // existe bridge de MediaProjection em modules/launcher-module e android/
+    // está fora do alcance deste issue, por isso o executor reporta
+    // 'unavailable' e a UI diz o porquê, em vez de fingir sucesso.
+    screenshot: async () => 'unavailable' as const,
+    startRecording: async () => 'unavailable' as const,
+    // ACTION_SENDTO (smsto:) abre o compositor da app de mensagens com
+    // destinatário e texto — não precisa da permissão SEND_SMS.
+    sendMessage: async (address: string, body: string) => {
+      const url = `smsto:${encodeURIComponent(address)}${body ? `?body=${encodeURIComponent(body)}` : ''}`;
+      await Linking.openURL(url);
+    },
     openShortcut: (id: string) => {
       const opt = SHORTCUT_OPTIONS.find((o) => o.id === id);
       if (opt) navigation.navigate(opt.route as never);
     },
   }), [navigation]);
+
+  const reportResult = useCallback(
+    (result: BackTapResult) => {
+      if (result.status === 'ok' || result.status === 'noop') return;
+      if (result.status === 'unavailable') {
+        alert(
+          'Not Available',
+          result.action === 'startRecording'
+            ? 'Screen recording needs screen-capture consent, which this device build does not provide.'
+            : 'Screenshots need screen-capture consent, which this device build does not provide.',
+        );
+        return;
+      }
+      if (result.status === 'denied') {
+        alert('Permission Denied', 'Screen capture was not allowed, so nothing was captured.');
+        return;
+      }
+      alert('Action Failed', 'The assigned action could not be completed.');
+    },
+    [alert],
+  );
 
   const testGesture = useCallback(
     (gesture: BackTapGesture) => {
@@ -145,10 +198,59 @@ export function BackTapSettingsScreen({ navigation }: { navigation: AppNavigatio
         alert('Nothing to Test', 'This gesture has no action assigned.');
         return;
       }
-      executeBackTap(assignment, deps);
+      if (assignment.action === 'sendMessage' && !assignment.smsAddress?.trim()) {
+        alert('No Recipient', 'Add a recipient before testing Send Message.');
+        return;
+      }
+      executeBackTap(assignment, deps).then(reportResult);
     },
-    [backTap, deps, alert],
+    [backTap, deps, alert, reportResult],
   );
+
+  const renderMessageFields = (gesture: BackTapGesture) => {
+    const assignment = backTap[gesture];
+    if (assignment.action !== 'sendMessage') return null;
+    const title = gesture === 'double' ? 'Double Tap Message' : 'Triple Tap Message';
+    return (
+      <View style={{ paddingHorizontal: spacing.md }}>
+        <CupertinoListSection
+          header={title}
+          footer="The message app opens with the recipient and text filled in; you still press send."
+        >
+          <CupertinoListTile
+            title="To"
+            showChevron={false}
+            trailing={
+              <CupertinoTextField
+                testID={`backtap-${gesture}-address`}
+                value={assignment.smsAddress ?? ''}
+                placeholder="Phone number"
+                keyboardType="phone-pad"
+                onChangeText={(text) =>
+                  setAssignment(gesture, { ...assignment, smsAddress: text })
+                }
+                containerStyle={styles.field}
+              />
+            }
+          />
+          <CupertinoListTile
+            title="Message"
+            showChevron={false}
+            isLast
+            trailing={
+              <CupertinoTextField
+                testID={`backtap-${gesture}-body`}
+                value={assignment.smsBody ?? ''}
+                placeholder="On my way"
+                onChangeText={(text) => setAssignment(gesture, { ...assignment, smsBody: text })}
+                containerStyle={styles.field}
+              />
+            }
+          />
+        </CupertinoListSection>
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemGroupedBackground }]}>
@@ -186,7 +288,10 @@ export function BackTapSettingsScreen({ navigation }: { navigation: AppNavigatio
         {backTap.enabled && (
           <>
             <View style={{ paddingHorizontal: spacing.md }}>
-              <CupertinoListSection header="Gestures">
+              <CupertinoListSection
+                header="Gestures"
+                footer="On Android 10 and later, Toggle Wi-Fi opens the system Wi-Fi panel instead of switching Wi-Fi directly — Android no longer lets apps do it silently."
+              >
                 <CupertinoListTile
                   title="Double Tap"
                   trailing={
@@ -209,6 +314,9 @@ export function BackTapSettingsScreen({ navigation }: { navigation: AppNavigatio
               </CupertinoListSection>
             </View>
 
+            {renderMessageFields('double')}
+            {renderMessageFields('triple')}
+
             <View style={{ paddingHorizontal: spacing.md }}>
               <CupertinoListSection footer="Runs the assigned action once, the same way an actual back tap would.">
                 <CupertinoListTile title="Test Double Tap" onPress={() => testGesture('double')} showChevron={false} />
@@ -224,4 +332,5 @@ export function BackTapSettingsScreen({ navigation }: { navigation: AppNavigatio
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  field: { minWidth: 180, marginVertical: 0 },
 });

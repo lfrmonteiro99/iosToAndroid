@@ -291,6 +291,12 @@ export interface SettingsState {
    */
   iconShapeExponent: number;
   /**
+   * Glassy top-sheen on the launcher's built-in (system) app icons — the
+   * subtle white highlight real iOS icons have. Restyled in SystemAppIcon.
+   * Default true (iOS look); off gives a flat tint tile.
+   */
+  iconGloss: boolean;
+  /**
    * Overrides de categorias da App Library (#516): ocultar, renomear, reordenar
    * categorias e recategorizar apps individualmente. Toda a lógica opera sobre
    * chaves estáveis (ex.: 'social'), nunca sobre o nome exibido, para que
@@ -474,7 +480,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   perAppDelivery: {},
   reduceInterruptions: false,
   fontChoice: 'inter',
-  iconTreatment: 'mask-adaptive-only',
+  iconTreatment: 'mask-all',
   pressFeedback: 'scale-opacity',
   gridColumns: 4,
   gridRows: 6,
@@ -487,6 +493,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   appLaunchDurationMs: 280,
   iconShape: 'squircle',
   iconShapeExponent: DEFAULT_ICON_SHAPE_EXPONENT,
+  iconGloss: true,
   categoryOverrides: DEFAULT_CATEGORY_OVERRIDES,
   newAppsToHome: true,
   appLibraryShowNotifications: true,
@@ -558,6 +565,9 @@ export function SettingsProvider({
             // uma máscara indefinida, por isso normaliza-se na leitura.
             iconShape: normalizeIconShape(parsed?.iconShape),
             iconShapeExponent: clampIconShapeExponent(parsed?.iconShapeExponent),
+            // iconGloss é um booleano simples; um valor corrompido (string,
+            // null) cai para o default true via coerção.
+            iconGloss: typeof parsed?.iconGloss === 'boolean' ? parsed.iconGloss : DEFAULT_SETTINGS.iconGloss,
             // whitePointLevel tem de ficar na gama 0.25–1.0; um valor
             // corrompido (NaN, fora da gama) faria um overlay com opacidade
             // inválida, por isso normaliza-se na leitura.
