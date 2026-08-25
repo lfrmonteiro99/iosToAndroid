@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../components';
 import { logger } from '../utils/logger';
@@ -874,6 +874,43 @@ export function AppsProvider({
       return { ...prev, dockApps };
     });
   }, [persist]);
+
+  // Re-check "am I the default launcher?" whenever the app comes back to the
+  // foreground.
+  //
+  // `isDefault` was only ever written inside loadApps(), which runs on mount.
+  // So the flow that matters most got it wrong: you tap "Set Now", Android's
+  // home-launcher picker opens, you choose this app, you come back — and
+  // nothing re-reads the status. The "Set as default launcher" banner stayed up
+  // even though the launcher WAS now the default, until something else happened
+  // to re-run loadApps or the app was restarted.
+  //
+  // A foreground transition is exactly the moment the answer can have changed,
+  // because changing it requires leaving the app for the system picker.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let cancelled = false;
+
+    const recheck = async () => {
+      try {
+        const LauncherModule = await getLauncherModule();
+        const status = await LauncherModule?.isDefaultLauncher();
+        if (!cancelled && typeof status === 'boolean') setIsDefault(status);
+      } catch (e) {
+        // Never surface this: it is a background refresh of a banner's
+        // visibility, not something the user asked for.
+        logger.warn('AppsStore', 'default-launcher re-check failed', e);
+      }
+    };
+
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') recheck();
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, []);
 
   const openLauncherSettings = useCallback(async () => {
     if (Platform.OS !== 'android') return;

@@ -78,7 +78,21 @@ function seedSettings(partial: Record<string, unknown>) {
   );
 }
 
-const BUILT_IN_COUNT = Object.keys(BUILT_IN_APPS).length; // 14 virtual apps, no real device apps mocked
+const BUILT_IN_COUNT = Object.keys(BUILT_IN_APPS).length;
+
+/**
+ * Pages needed to hold every built-in at a given density.
+ *
+ * Derived, never hard-coded. Every assertion here used to assume a page count
+ * for "14 built-in apps", and BUILT_IN_APPS has grown twice since (Safari and
+ * Shortcuts, then Maps / Find My / App Store). The last growth broke
+ * `re-packs pages without reordering` in CI: at 3x2 the test read pages 0..2,
+ * which is 18 slots, and there were 20 built-ins — so it reported 18 of 20 and
+ * looked like a packing bug rather than a stale fixture.
+ */
+function pagesFor(columns: number, rows: number): number {
+  return Math.ceil(BUILT_IN_COUNT / (columns * rows));
+}
 
 /** Achata um style (array de objectos) com precedência da última entrada. */
 function flattenStyle(element: { props: { style: unknown } }): Record<string, number> {
@@ -97,11 +111,14 @@ afterEach(() => {
 
 describe('LauncherHomeScreen grid density settings (#503)', () => {
   it('paginates using gridColumns x gridRows from settings, not a fixed 24/page', async () => {
-    // 3 cols x 2 rows = 6 apps/page; 14 built-in apps need 3 pages (6+6+2).
+    // 3 cols x 2 rows = 6 apps/page, so the built-ins span several pages — the
+    // point being that the page size follows the setting rather than a constant.
     seedSettings({ gridColumns: 3, gridRows: 2 });
+    const lastPage = pagesFor(3, 2) - 1;
+    expect(lastPage).toBeGreaterThan(0);
     const { getByTestId, queryByTestId } = render(<LauncherHomeScreen />);
 
-    await waitFor(() => expect(getByTestId('launcher-page-grid-2')).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => expect(getByTestId(`launcher-page-grid-${lastPage}`)).toBeTruthy(), { timeout: 3000 });
     expect(queryByTestId('launcher-page-grid-1')).toBeTruthy();
   });
 
@@ -110,8 +127,11 @@ describe('LauncherHomeScreen grid density settings (#503)', () => {
     const { getByTestId, queryByTestId } = render(<LauncherHomeScreen />);
 
     await waitFor(() => expect(getByTestId('launcher-page-grid-0')).toBeTruthy(), { timeout: 3000 });
-    // 14 built-in apps < 24/page: only one app page (plus the App Library
-    // page, which isn't a launcher-page-grid-* testID).
+    // The built-ins fit on one page at 4x6 = 24/page (plus the App Library
+    // page, which isn't a launcher-page-grid-* testID). Asserted rather than
+    // assumed, so this fails loudly the day a 25th built-in is added instead of
+    // failing obscurely somewhere else.
+    expect(pagesFor(4, 6)).toBe(1);
     await waitFor(() => expect(queryByTestId('launcher-page-grid-1')).toBeNull(), { timeout: 3000 });
   });
 
@@ -126,9 +146,15 @@ describe('LauncherHomeScreen grid density settings (#503)', () => {
     wide.unmount();
 
     seedSettings({ gridColumns: 3, gridRows: 2 });
+    const narrowPages = pagesFor(3, 2);
     const narrow = render(<LauncherHomeScreen />);
-    await waitFor(() => expect(narrow.getByTestId('launcher-page-grid-2')).toBeTruthy(), { timeout: 3000 });
-    const narrowOrder = [0, 1, 2].flatMap((i) =>
+    await waitFor(
+      () => expect(narrow.getByTestId(`launcher-page-grid-${narrowPages - 1}`)).toBeTruthy(),
+      { timeout: 3000 },
+    );
+    // Every page, derived from the density — reading a fixed 0..2 silently
+    // dropped the apps that spilled onto page 3 once BUILT_IN_APPS grew.
+    const narrowOrder = Array.from({ length: narrowPages }, (_, i) => i).flatMap((i) =>
       within(narrow.getByTestId(`launcher-page-grid-${i}`))
         .getAllByRole('button')
         .map((n) => n.props.accessibilityLabel)

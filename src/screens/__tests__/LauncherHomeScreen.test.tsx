@@ -22,6 +22,16 @@ function flattenStyle(style: unknown): Record<string, unknown>[] {
 }
 
 describe('LauncherHomeScreen', () => {
+  // This block mocks AppsStore inside a test body. Without an afterEach the
+  // mock outlived any test that threw before reaching its inline
+  // restoreAllMocks() — and the dock-radius test below did exactly that, which
+  // left `useApps` mocked for the remaining 49 tests in the file and hung the
+  // whole suite (a jest worker pinned at 100% CPU indefinitely, which on CI
+  // means the shard runs to its 25-minute timeout).
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('renders without crashing', () => {
     const { toJSON } = render(<LauncherHomeScreen />);
     expect(toJSON()).toBeTruthy();
@@ -59,16 +69,19 @@ describe('LauncherHomeScreen', () => {
       rebuildIconCache: jest.fn(() => Promise.resolve()),
     } as ReturnType<typeof AppsStore.useApps>);
 
-    const { UNSAFE_getByType } = render(<LauncherHomeScreen />);
-    const dockBlur = UNSAFE_getByType('BlurView' as never);
+    // Scoped to the dock, not the whole tree. Since #434 the App Library is the
+    // pager's last page and is therefore always mounted, so it contributes its
+    // own blurred surfaces: a tree-wide UNSAFE_getByType('BlurView') threw
+    // "Expected 1 but found 2" and this test had been failing ever since — and
+    // taking the other 50 with it, per the afterEach note above.
+    const { getByTestId } = render(<LauncherHomeScreen />);
+    const dockBlur = within(getByTestId('launcher-dock')).UNSAFE_getByType('BlurView' as never);
     const flat = flattenStyle(dockBlur.props.style);
     const radiusStyle = flat.find((s) => 'borderRadius' in s) as { borderRadius: number } | undefined;
 
     expect(radiusStyle).toBeDefined();
     expect(radiusStyle?.borderRadius).toBe(Shape.dock.radius);
     expect(radiusStyle?.borderRadius).toBe(34);
-
-    jest.restoreAllMocks();
   });
 
   it('renders the home screen container', () => {

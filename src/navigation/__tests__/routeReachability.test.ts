@@ -70,21 +70,10 @@ function hasEntryPoint(corpus: string, route: string): boolean {
 }
 
 describe('every registered route has a discoverable entry point (#455)', () => {
-  // Known gaps with the same shape, both explicitly out of scope here.
+  // Known gaps, explicitly out of scope here.
   // Documented rather than silently excluded so this allowlist can't grow
   // without a comment naming who owns each entry.
   //
-  //  - 'Maps': MapsScreen is registered and typed but has no caller anywhere
-  //    (confirmed by hand — the only "Maps" text in the app is a
-  //    `title="Maps"` JSX prop and code comments, not a navigation call).
-  //    Pre-existing, unrelated to #455, no owning issue yet.
-  //  - 'FindMy': FindMyScreen (#263) is registered and typed in the stack
-  //    navigator only, matching the Maps convention. The launch grid's app
-  //    list is populated from real installed packages via the native
-  //    getInstalledApps() (LauncherModule.kt), and retrofitting a virtual
-  //    FindMy entry into that path is explicitly out of scope for #263. So it
-  //    has no in-app caller; the screen is reachable only via the registered
-  //    route. Documented gap, owned by #263.
   //  - 'AppLibrary': became a gap on main, not here. #434/#458 turned the last
   //    home page into the App Library rendered *inline* via the shared
   //    `AppLibraryContent`, so nothing navigates to the `AppLibrary` stack
@@ -96,7 +85,16 @@ describe('every registered route has a discoverable entry point (#455)', () => {
   // 'TodayView' used to be on this list (added by #442 when the work was
   // re-scoped out of it). #455 is that owning issue, and it has now landed —
   // hence its removal from the allowlist and the dedicated case below.
-  const KNOWN_PRE_EXISTING_GAPS = ['AppLibrary', 'Maps', 'FindMy'];
+  //
+  // 'Maps' and 'FindMy' came off it the same way. Both were parked here for the
+  // same reason — registered and typed in the stack navigator but with nothing
+  // navigating to them, because the home grid was populated purely from real
+  // installed packages and retrofitting virtual entries was out of scope at the
+  // time. #911 added exactly those virtual entries (BUILT_IN_APPS in
+  // utils/builtInAppRoutes.ts, plus VIRTUAL_APPS_MAP in AppsStore), so both
+  // routes now have a real caller and the allowlist was one merge stale — the
+  // test failing on an entry that is no longer a gap is it working.
+  const KNOWN_PRE_EXISTING_GAPS = ['AppLibrary'];
 
   const registeredRoutes = readRegisteredRoutes();
   const corpus = buildUsageCorpus();

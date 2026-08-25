@@ -937,6 +937,18 @@ export function NonAndroidFallback() {
 
 export function LauncherHomeScreen() {
   const insets = useSafeAreaInsets();
+  // How far down the first thing in the flow has to start to clear the notch or
+  // camera cutout.
+  //
+  // Android is in immersive mode here (App.tsx hides the system bars), so
+  // useSafeAreaInsets() reports 0 on top and the inset alone would put content
+  // under the cutout. StatusBar.currentHeight is the fallback, with a floor of
+  // 24 for devices that report neither.
+  //
+  // ONE value, used by whichever element happens to be first: the banner used
+  // raw insets.top and the status row used this expression, so the two
+  // disagreed about where the top of the screen was.
+  const topClearance = Math.max(insets.top, StatusBar.currentHeight ?? 0, 24);
   const navigation = useNavigation<AppNavigationProp>();
 
   // #651-B: the sidebar shown on regular-width windows (ResponsiveNavShell)
@@ -975,7 +987,7 @@ export function LauncherHomeScreen() {
   const { settings } = useSettings();
   const device = useDevice();
   const { folders, createFolder, renameFolder, addToFolder, getFolderForApp } = useFolders();
-  const { theme: launcherTheme, isDark, textScale } = useTheme();
+  const { theme: launcherTheme, textScale } = useTheme();
   const colors = launcherTheme.colors;
   const alert = useAlert();
 
@@ -1878,6 +1890,23 @@ export function LauncherHomeScreen() {
       firstPageOverscrollX.value = settle(0, 'fastSettle', reduceMotionShared.value);
     });
 
+  // Named because three places have to agree on them: the elements themselves,
+  // the top-clearance arithmetic, and the fallback spacer.
+  const bannerVisible = !isDefaultLauncher && !isJiggling;
+  const statusRowVisible = settings.statusBarVisible;
+
+  // "Status Bar Style" (Settings > Display & Brightness) used to drive
+  // Android's status bar. The launcher no longer shows that one, so the setting
+  // would have become dead here; it drives the launcher's own row instead,
+  // which is the only status bar visible on this screen.
+  //
+  // 'auto' stays white rather than following the theme: what this text sits on
+  // is the wallpaper, not the theme background, and a light theme over a dark
+  // wallpaper would render it invisible.
+  const statusTint = settings.statusBarStyle === 'dark' ? '#000000' : '#FFFFFF';
+  const statusTintMuted =
+    settings.statusBarStyle === 'dark' ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)';
+
   return (
     <ResponsiveNavShell
       navItems={TABLET_NAV_ITEMS}
@@ -1898,20 +1927,18 @@ export function LauncherHomeScreen() {
           {WallpaperContent}
         </Animated.View>
 
-        <StatusBar
-          translucent
-          backgroundColor="transparent"
-          barStyle={
-            settings.statusBarStyle === 'light'
-              ? 'light-content'
-              : settings.statusBarStyle === 'dark'
-              ? 'dark-content'
-              : isDark
-              ? 'light-content'
-              : 'dark-content'
-          }
-          hidden={!settings.statusBarVisible}
-        />
+        {/* Always hidden. The launcher draws its OWN iOS status row below, so
+            showing Android's as well stacked two status bars on top of each
+            other — the reported "too much space between the top and where the
+            icons start", and the reason it did not go away with the banner.
+            App.tsx hides the system bars globally for exactly this reason; this
+            screen was the one place that turned them back on.
+
+            `settings.statusBarVisible` now gates the launcher's own row (which
+            is what the "Show Status Bar" toggle sits next to in Launcher
+            Settings, between "Show Page Dots" and "Show App Names") instead of
+            Android's. */}
+        <StatusBar translucent backgroundColor="transparent" hidden />
 
       {/* ---------------------------------------------------------------- */}
       {/* Jiggle-mode background tap target (exits edit mode)               */}
@@ -1928,8 +1955,8 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Set-as-default banner                                             */}
       {/* ---------------------------------------------------------------- */}
-      {!isDefaultLauncher && !isJiggling && (
-        <View style={[styles.defaultBanner, { marginTop: insets.top }]}>
+      {bannerVisible && (
+        <View testID="launcher-default-banner" style={[styles.defaultBanner, { marginTop: topClearance }]}>
           <Text style={[styles.defaultBannerText, { fontSize: 13 * textScale }]}>Set as default launcher</Text>
           <CupertinoPressable
             style={[styles.defaultBannerButton, { backgroundColor: colors.accent }]}
@@ -1945,44 +1972,45 @@ export function LauncherHomeScreen() {
       {/* ---------------------------------------------------------------- */}
       {/* Status bar row                                                     */}
       {/* ---------------------------------------------------------------- */}
+      {statusRowVisible && (
       <View
+        testID="launcher-status-row"
         style={[
           styles.statusRow,
-          {
-            // Android hides the system status bar in immersive mode, so
-            // useSafeAreaInsets() returns 0 on top. Use StatusBar.currentHeight
-            // as a fallback so the row clears the notch/camera cutout. The
-            // default-launcher banner (above) already absorbs insets.top when
-            // visible, so we only pad when the banner isn't shown.
-            marginTop:
-              (!isDefaultLauncher ? 0 : Math.max(insets.top, StatusBar.currentHeight ?? 0, 24)) + 4,
-          },
+          // Only the FIRST element in the flow pays for the cutout: the banner
+          // above already did when it is showing.
+          //
+          // The old expression keyed off `!isDefaultLauncher` rather than off
+          // whether the banner was actually rendered, so in jiggle mode — where
+          // the banner is hidden too — the row was left with 4dp and sat inside
+          // the cutout.
+          { marginTop: (bannerVisible ? 0 : topClearance) + 4 },
         ]}
       >
         <Pressable onPress={() => navigateTo('NotificationCenter')} accessibilityLabel="Open Notification Center" accessibilityRole="button">
-          <Text style={[styles.statusTime, { fontSize: 15 * textScale }]}>{formatTime(now)}</Text>
+          <Text style={[styles.statusTime, { fontSize: 15 * textScale, color: statusTint }]}>{formatTime(now)}</Text>
         </Pressable>
         <Pressable style={styles.statusRight} onPress={() => navigateTo('ControlCenter')} accessibilityLabel="Open Control Center" accessibilityRole="button">
           {settings.focusMode !== 'off' && (
-            <Ionicons name="moon" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
+            <Ionicons name="moon" size={14} color={statusTintMuted} style={{ marginRight: 6 }} />
           )}
           {device.network?.isCellular && (
-            <Ionicons name="cellular" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
+            <Ionicons name="cellular" size={14} color={statusTintMuted} style={{ marginRight: 6 }} />
           )}
           {device.wifi.enabled && (
-            <Ionicons name="wifi" size={14} color="rgba(255,255,255,0.85)" style={{ marginRight: 6 }} />
+            <Ionicons name="wifi" size={14} color={statusTintMuted} style={{ marginRight: 6 }} />
           )}
           {settings.batteryPercentage && (
             <View style={styles.batteryPill}>
               {device.battery.isCharging && (
-                <Ionicons name="flash" size={12} color="rgba(255,255,255,0.85)" />
+                <Ionicons name="flash" size={12} color={statusTintMuted} />
               )}
               <Ionicons
                 name="battery-half-outline"
                 size={14}
-                color="rgba(255,255,255,0.85)"
+                color={statusTintMuted}
               />
-              <Text style={[styles.batteryText, { fontSize: 11 * textScale }]}>
+              <Text style={[styles.batteryText, { fontSize: 11 * textScale, color: statusTint }]}>
                 {Math.round(device.battery.level * 100)}%
               </Text>
             </View>
@@ -2012,6 +2040,14 @@ export function LauncherHomeScreen() {
           )}
         </Pressable>
       </View>
+      )}
+
+      {/* With neither the banner nor the status row on screen, nothing else in
+          the flow clears the cutout, so the first row of icons would start
+          under it. */}
+      {!bannerVisible && !statusRowVisible && (
+        <View testID="launcher-top-clearance" style={{ height: topClearance }} />
+      )}
 
       {/* Dynamic Island placeholder */}
       <DynamicIsland device={device} settings={settings} textScale={textScale} />

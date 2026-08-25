@@ -26,7 +26,18 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ground, Disc, Bar, Hand, Glyph, PolarGlyph, type ArtworkProps } from './primitives';
+import {
+  Ground,
+  Disc,
+  GradientDisc,
+  Bar,
+  Hand,
+  Stroke,
+  Needle,
+  Glyph,
+  PolarGlyph,
+  type ArtworkProps,
+} from './primitives';
 
 // ─── Shared colours, taken from the real icons rather than the UI palette ────
 // The system palette (colors.systemGreen etc.) is tuned for CONTROLS on a
@@ -152,30 +163,39 @@ function FaceTimeIcon({ size }: ArtworkProps) {
 // White ground, a blue ring, a dial of tick marks, and the two-tone needle
 // (red leading half, white trailing half) at the canonical NE/SW angle.
 function SafariIcon({ size }: ArtworkProps) {
-  const ticks = Array.from({ length: 16 }, (_, i) => i * (360 / 16));
+  // 32 ticks, not 16: the real dial's graduations are fine and dense, and at 16
+  // they read as a starburst. Every fourth one (the 8 compass points) is heavier.
+  const ticks = Array.from({ length: 32 }, (_, i) => i * (360 / 32));
   return (
     <>
       <Ground size={size} color="#FFFFFF" />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.9} color="#0A84FF" />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.78} color="#F2F7FF" />
-      {ticks.map((a) => (
+      {/* The rim is a gradient, cyan at the top-left to deep blue at the
+          bottom-right, not the flat #0A84FF this used to be. */}
+      <GradientDisc size={size} cx={0.5} cy={0.5} d={0.9} gradient={['#31CCFF', '#0A62EF']} />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.79} color="#EAF1FA" />
+      {ticks.map((a, i) => (
         <Hand
           key={a}
           size={size}
           cx={0.5}
           cy={0.5}
-          length={0.39}
-          thickness={a % 90 === 0 ? 0.028 : 0.016}
+          length={0.395}
+          thickness={i % 4 === 0 ? 0.024 : 0.011}
           angle={a}
-          color="#9CC7F5"
+          color="#9FC4EA"
           radius={0}
         />
       ))}
-      <Disc size={size} cx={0.5} cy={0.5} d={0.62} color="#F2F7FF" />
-      {/* Needle: two halves pinned at the centre, 45° apart from vertical. */}
-      <Hand size={size} cx={0.5} cy={0.5} length={0.3} thickness={0.085} angle={45} color="#FFFFFF" radius={0.01} />
-      <Hand size={size} cx={0.5} cy={0.5} length={0.3} thickness={0.085} angle={225} color={IOS.red} radius={0.01} />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.075} color="#FFFFFF" />
+      <Disc size={size} cx={0.5} cy={0.5} d={0.63} color="#EAF1FA" />
+      {/* The needle is two TAPERED halves meeting at the centre — widest where
+          they meet, pointed at the tips. Built from two constant-width bars it
+          read as a plus sign with one red arm.
+          Red points north-east and white south-west, which is the orientation
+          on the real icon; this had them the other way round. */}
+      <Needle size={size} cx={0.5} cy={0.5} length={0.3} base={0.155} angle={45} color={IOS.red} />
+      <Needle size={size} cx={0.5} cy={0.5} length={0.3} base={0.155} angle={225} color="#FFFFFF" />
+      {/* Hides the seam where the two bases meet. */}
+      <Disc size={size} cx={0.5} cy={0.5} d={0.05} color="#FFFFFF" />
     </>
   );
 }
@@ -380,27 +400,41 @@ function RemindersIcon({ size }: ArtworkProps) {
 // orange operator column on the right, which is what makes the icon readable
 // at grid size.
 function CalculatorIcon({ size }: ArtworkProps) {
+  // The keypad fills the tile on the real icon — a thin margin and hairline
+  // gaps. The previous values (0.14 margin, 0.035 gaps) left keys at 0.154 x
+  // 0.116 of the tile, so at a 4-column grid size they were a few pixels of
+  // grey confetti on a black square.
   const cols = 4;
   const rows = 5;
-  const pad = 0.14;
-  const gap = 0.035;
+  const pad = 0.085;
+  const gap = 0.026;
   const keyW = (1 - pad * 2 - gap * (cols - 1)) / cols;
   const keyH = (1 - pad * 2 - gap * (rows - 1)) / rows;
+  const radius = keyH * 0.36;
+
   const keys: React.ReactNode[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const isTopRow = r === 0;
-      const isOperatorCol = c === cols - 1 && !isTopRow;
+      // The bottom-left key is the double-width "0", as on the real keypad, so
+      // it is drawn once spanning two columns and column 1 is skipped.
+      const isZero = r === rows - 1 && c === 0;
+      if (r === rows - 1 && c === 1) continue;
+
+      // Right column is the operator stack (orange, top to bottom); the top row
+      // is the light-grey clear/sign/percent keys; everything else is dark grey.
+      const color =
+        c === cols - 1 ? IOS.calcAccent : r === 0 ? IOS.calcTopKey : IOS.calcKey;
+
       keys.push(
         <Bar
           key={`${r}-${c}`}
           size={size}
           x={pad + c * (keyW + gap)}
           y={pad + r * (keyH + gap)}
-          w={keyW}
+          w={isZero ? keyW * 2 + gap : keyW}
           h={keyH}
-          radius={keyW * 0.3}
-          color={isOperatorCol ? IOS.calcAccent : isTopRow ? IOS.calcTopKey : IOS.calcKey}
+          radius={radius}
+          color={color}
         />,
       );
     }
@@ -564,13 +598,17 @@ function FindMyIcon({ size }: ArtworkProps) {
 // Blue gradient with the three-stroke "A" built from crossed bars, which is
 // what the real mark is: a stylised A drawn as an ice-lolly-stick assembly.
 function AppStoreIcon({ size }: ArtworkProps) {
+  // The mark is an "A" drawn as three crossed sticks: the two legs cross a
+  // little BELOW their tips so each pokes out past the apex, and the crossbar
+  // runs past both legs. Drawn as four mismatched pieces (two pivoted hands, a
+  // bar, and a stray rotated stub) it came out as a filled triangle instead.
+  const stick = 0.085;
   return (
     <>
-      <Ground size={size} gradient={['#3FB6FF', '#0A6CF5']} />
-      <Hand size={size} cx={0.385} cy={0.72} length={0.4} thickness={0.075} angle={22} color="#FFFFFF" />
-      <Hand size={size} cx={0.615} cy={0.72} length={0.4} thickness={0.075} angle={-22} color="#FFFFFF" />
-      <Bar size={size} x={0.245} y={0.585} w={0.51} h={0.072} color="#FFFFFF" />
-      <Bar size={size} x={0.6} y={0.66} w={0.17} h={0.072} color="#FFFFFF" rotate={-22} />
+      <Ground size={size} gradient={['#2CC0FE', '#0A6CF5']} />
+      <Stroke size={size} x1={0.295} y1={0.775} x2={0.534} y2={0.308} thickness={stick} color="#FFFFFF" />
+      <Stroke size={size} x1={0.705} y1={0.775} x2={0.466} y2={0.308} thickness={stick} color="#FFFFFF" />
+      <Stroke size={size} x1={0.305} y1={0.6} x2={0.695} y2={0.6} thickness={stick} color="#FFFFFF" />
     </>
   );
 }

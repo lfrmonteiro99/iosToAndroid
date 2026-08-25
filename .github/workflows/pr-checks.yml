@@ -1,0 +1,120 @@
+name: PR checks
+
+# Runs on EVERY pull request into dev, and on dev itself. Companion to
+# pr-native-check.yml, which is path-filtered to the native inputs; this one has
+# no filter, so a PR that only touches src/** still gets checked.
+#
+# Until this existed, NOTHING ran on a pull request into dev: auto-release fires
+# on close, build-dev-apk on push, build-apk on dispatch, and enforce-pr-base is
+# scoped to `branches: [main]`. Agent PRs merged into dev with zero CI.
+#
+# EVERY STEP HERE IS BLOCKING. That is a deliberate change from the first
+# version of this file, which ran lint/tsc/jest with continue-on-error because
+# dev carried 1 tsc error and 13 failing suites at the time — making them
+# blocking then would have failed every PR on breakage it did not cause. Those
+# were driven to zero (#891) and the baseline was then measured across the whole
+# repo: 293 suites, 2939 tests, 0 failures. There is no longer a reason to let
+# a red check through.
+#
+# Why each step is worth a runner minute:
+#
+#   npm ci  — fails on a package.json/lockfile mismatch. That broke dev once
+#             (#887) and cost three follow-up builds. `npm install` would
+#             silently repair the lockfile in the runner and hide it.
+#   lint    — 0 errors on dev. Warnings do not fail eslint, so this catches
+#             errors only, which is the intent.
+#   tsc     — the single tsc error dev carried was a test mock that had drifted
+#             from the store's interface. Cheap to catch, invisible otherwise.
+#   jest    — the 13 suites that were red on dev were red for weeks because
+#             nothing ran them on a PR.
+#
+# WHY JEST IS SHARDED: the first version of this file ran the whole suite in one
+# job with `-w 2`. Measured on a runner, that was still going at 25 minutes and
+# heading for the 40-minute timeout — too slow to sit in front of every PR. The
+# `-w 2` was also a constraint imported from the wrong environment: workers were
+# being OOM-killed in the dev container this was written in, not on a runner, and
+# throttling to two workers to fix that made every PR pay for it. Four shards on
+# four runners, each with jest's default worker count, turns ~2939 tests into
+# ~735 per job and runs them at the same time.
+#
+# What this gate CANNOT see: anything below JavaScript. Kotlin compilation,
+# manifest merging, Gradle configuration and dex/packaging are all invisible
+# here — #738 passed jest and tsc and still broke dev three times. That is
+# pr-native-check.yml's job, and neither workflow substitutes for the other.
+
+on:
+  pull_request:
+    branches: [dev]
+  # Also on dev itself: a merge queue of one still merges things, and a
+  # post-merge signal on dev is what tells us the baseline is still clean
+  # rather than assuming the PR runs covered it.
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  # PR number when it exists, ref otherwise, so the push-on-dev runs do not
+  # cancel each other's PR runs or vice versa.
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Lint and types are fast and shared, so they run once rather than per shard.
+  static:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (fails on a desynced lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+  tests:
+    name: Tests (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    # Backstop against a hung worker burning a six-hour job, not a target: a
+    # healthy shard is a few minutes.
+    timeout-minutes: 25
+    strategy:
+      # Do not cancel the other shards on the first failure — seeing every
+      # failing suite in one run beats re-running to discover the second one.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (fails on a desynced lockfile)
+        run: npm ci
+
+      # jest's own sharding (>=28) splits by test FILE, so a shard is always a
+      # whole number of suites and no suite is ever half-run. Default worker
+      # count: the runner has 4 vCPU and 16GB, and each shard now carries a
+      # quarter of the suite, so there is nothing to throttle for.
+      - name: Tests
+        run: npx jest --ci --shard=${{ matrix.shard }}/4

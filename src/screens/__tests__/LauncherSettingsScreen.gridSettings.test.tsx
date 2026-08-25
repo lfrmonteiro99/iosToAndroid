@@ -4,6 +4,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { LauncherSettingsScreen } from '../LauncherSettingsScreen';
 import { CupertinoSegmentedControl, CupertinoSlider, CupertinoSwitch } from '../../components';
+import { Dimensions } from 'react-native';
+import { maxColumnsFor, maxIconScaleFor } from '../../utils/launcherGridGeometry';
+
+// The Columns control only offers what actually fits: the grid silently shrank
+// the icon when it didn't, so 6 columns at a large icon size gave ~93% icons
+// with nothing saying the request was impossible. The expectations below are
+// DERIVED from maxColumnsFor at the test window's width rather than hard-coded,
+// because a hard-coded ['3','4','5','6'] is what this suite asserted before and
+// it now depends on the width jest reports.
+const WINDOW_WIDTH = Dimensions.get('window').width;
+const DEFAULT_SCALE = 1;
 
 // issue #503: gridColumns, gridRows, iconSizeScale and showIconLabels must be
 // exposed and editable from Launcher Settings, with immediate persistence —
@@ -64,10 +75,45 @@ describe('LauncherSettingsScreen grid density controls (#503)', () => {
     }, { timeout: 3000 });
 
     const [columnsControl, rowsControl] = controls;
-    expect(columnsControl.props.values).toEqual(['3', '4', '5', '6']);
-    expect(columnsControl.props.selectedIndex).toBe(1); // 4 is index 1
+    const limit = maxColumnsFor(WINDOW_WIDTH, DEFAULT_SCALE);
+    const expectedColumns = [3, 4, 5, 6].filter((c) => c <= limit).map(String);
+    expect(columnsControl.props.values).toEqual(expectedColumns);
+    expect(columnsControl.props.selectedIndex).toBe(expectedColumns.indexOf('4'));
+    // Rows are unconstrained by width — only columns compete with icon size.
     expect(rowsControl.props.values).toEqual(['4', '5', '6', '7']);
     expect(rowsControl.props.selectedIndex).toBe(2); // 6 is index 2
+  });
+
+  it('only offers the column counts that fit at the current icon size', async () => {
+    const { UNSAFE_getAllByType } = render(<LauncherSettingsScreen />);
+    let columnsControl: ReturnType<typeof UNSAFE_getAllByType>[number];
+    await waitFor(() => {
+      [columnsControl] = UNSAFE_getAllByType(CupertinoSegmentedControl);
+      expect(columnsControl).toBeTruthy();
+    }, { timeout: 3000 });
+
+    const offered: number[] = columnsControl!.props.values.map(Number);
+    const limit = maxColumnsFor(WINDOW_WIDTH, DEFAULT_SCALE);
+    expect(offered.length).toBeGreaterThan(0);
+    // Every offered count fits, and nothing that fits is withheld.
+    for (const c of offered) expect(c).toBeLessThanOrEqual(limit);
+    expect(Math.max(...offered)).toBe(Math.min(6, limit));
+  });
+
+  it('caps the icon-size slider at what the chosen column count allows', async () => {
+    const { UNSAFE_getAllByType } = render(<LauncherSettingsScreen />);
+    let slider: ReturnType<typeof UNSAFE_getAllByType>[number];
+    await waitFor(() => {
+      [slider] = UNSAFE_getAllByType(CupertinoSlider);
+      expect(slider).toBeTruthy();
+    }, { timeout: 3000 });
+
+    // Default is 4 columns. The ceiling is the smaller of the UI range top and
+    // what the cell can hold, so the slider can never reach a scale the grid
+    // would have to shrink back down.
+    const ceiling = maxIconScaleFor(WINDOW_WIDTH, 4);
+    expect(slider!.props.maximumValue).toBeLessThanOrEqual(Math.max(ceiling, 1.2));
+    expect(slider!.props.maximumValue).toBeGreaterThan(slider!.props.minimumValue);
   });
 
   it('changing the Columns control persists gridColumns', async () => {
@@ -80,10 +126,15 @@ describe('LauncherSettingsScreen grid density controls (#503)', () => {
       expect(columnsControl).toBeTruthy();
     }, { timeout: 3000 });
 
-    columnsControl!.props.onChange(3); // index 3 -> value 6
+    // The LAST offered option, whatever that is at this width — index 3 used to
+    // be hard-coded as "value 6", and 6 is no longer offered when it would not
+    // fit, so the index silently pointed at nothing.
+    const offered: number[] = columnsControl!.props.values.map(Number);
+    const target = offered[offered.length - 1];
+    columnsControl!.props.onChange(offered.length - 1);
 
-    const persisted = await waitForPersisted(store, (s) => s.gridColumns === 6);
-    expect(persisted.gridColumns).toBe(6);
+    const persisted = await waitForPersisted(store, (s) => s.gridColumns === target);
+    expect(persisted.gridColumns).toBe(target);
   });
 
   it('changing the Rows control persists gridRows', async () => {
