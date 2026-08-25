@@ -23,11 +23,13 @@ object AdaptiveIconCompositor {
     const val FOREGROUND_SCALE = 0.72f
 
     /**
-     * Default squircle exponent for the background mask. Matches the default
-     * that issue #482 (icon-shape settings) will expose as a user-configurable
-     * value once shipped — kept here as a fixed default until then.
+     * Default squircle exponent for the background mask. 5.0 is the commonly
+     * cited superellipse approximation of Apple's continuous corner (the true
+     * iOS silhouette is a variable-radius curve, not a pure superellipse, but
+     * n=5 lands closest). Matches the default that issue #482 (icon-shape
+     * settings) exposes as a user-configurable value.
      */
-    const val DEFAULT_SQUIRCLE_EXPONENT = 4.7
+    const val DEFAULT_SQUIRCLE_EXPONENT = 5.0
 
     private const val DEFAULT_SAMPLES = 64
 
