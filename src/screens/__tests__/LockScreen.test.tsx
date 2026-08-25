@@ -44,12 +44,14 @@ describe('LockScreen', () => {
 
   it('renders flashlight button', () => {
     const { getByLabelText } = render(<LockScreen />);
-    expect(getByLabelText('Flashlight')).toBeTruthy();
+    // Label is state-dependent: 'Turn on flashlight' when off (the default),
+    // 'Turn off flashlight' once toggled. Asserting the off-state label.
+    expect(getByLabelText('Turn on flashlight')).toBeTruthy();
   });
 
   it('renders camera button', () => {
     const { getByLabelText } = render(<LockScreen />);
-    expect(getByLabelText('Camera')).toBeTruthy();
+    expect(getByLabelText('Open camera')).toBeTruthy();
   });
 
   it('renders Use Passcode button', () => {
@@ -68,7 +70,7 @@ describe('LockScreen', () => {
     fireEvent.press(getByLabelText('Use passcode to unlock'));
     expect(getByLabelText('Digit 1')).toBeTruthy();
     expect(getByLabelText('Digit 0')).toBeTruthy();
-    expect(getByLabelText('Delete')).toBeTruthy();
+    expect(getByLabelText('Delete digit')).toBeTruthy();
   });
 
   it('calls onUnlock when correct PIN entered', async () => {

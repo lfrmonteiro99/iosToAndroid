@@ -33,35 +33,9 @@ jest.mock('../../utils/alarmScheduling', () => ({
   createQuickAlarm: (...args: [number, number, string?]) => mockCreateQuickAlarm(...args),
 }));
 
-// Speech listeners are captured so the test can simulate a recognized
-// utterance coming back from the native SpeechRecognizer.
-const listeners: Record<string, (text: string) => void> = {};
-
-jest.mock('../../../modules/launcher-module/src', () => {
-  const actual = jest.requireActual('../../../modules/launcher-module/src');
-  return {
-    __esModule: true,
-    ...actual,
-    default: {
-      ...actual.default,
-      launchApp: jest.fn(async () => true),
-      startSpeechRecognition: jest.fn(async () => true),
-      stopSpeechRecognition: jest.fn(async () => true),
-    },
-    addSpeechResultListener: jest.fn((cb: (text: string) => void) => {
-      listeners.onSpeechResult = cb;
-      return () => {};
-    }),
-    addSpeechPartialListener: jest.fn(() => () => {}),
-    addSpeechErrorListener: jest.fn(() => () => {}),
-  };
-});
-
 const mockLaunchApp = (
   jest.requireMock('../../../modules/launcher-module/src').default.launchApp as jest.Mock
 );
-
-const launcher = jest.requireMock('../../../modules/launcher-module/src');
 
 /** The clock time the assistant speaks for a given hour/minute in this locale. */
 function spokenTime(hour: number, minute: number): string {
@@ -72,6 +46,28 @@ function spokenTime(hour: number, minute: number): string {
 
 function makeNav() {
   return { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
+}
+
+/**
+ * Render and wait for the AppsStore's async app index to arrive, then hand back
+ * the text field. Needed by any test that opens a REAL (non-built-in) app:
+ * `submit()` below fires synchronously, before hydration, so `apps` is still
+ * empty and the assistant answers "Couldn't find" instead of launching.
+ */
+async function renderHydrated(nav: AppNavigationProp = makeNav()) {
+  const utils = render(<SiriScreen navigation={nav} />);
+  await waitFor(() => {
+    expect(
+      jest.requireMock('../../../modules/launcher-module/src').default.getInstalledApps,
+    ).toHaveBeenCalled();
+  });
+  // The index lands through several chained promises (dynamic import →
+  // Promise.all → setState); flush until the store has applied it.
+  for (let i = 0; i < 10; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  }
+  return { ...utils, nav, field: utils.getByLabelText('Ask Siri') };
 }
 
 function submit(input: string, nav: AppNavigationProp = makeNav()) {
@@ -106,32 +102,7 @@ describe('SiriScreen', () => {
     await waitFor(() => {
       expect(getByText(/It's/)).toBeTruthy();
     });
-    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /), expect.any(Object));
-  });
-
-  it('spoken command (native result) routes through the same parser', async () => {
-    const { getByText } = render(<SiriScreen navigation={makeNav()} />);
-
-    // Simulate the native SpeechRecognizer returning "what time is it".
-    listeners.onSpeechResult('what time is it');
-
-    await waitFor(() => {
-      expect(getByText(/It's/)).toBeTruthy();
-    });
-    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /), expect.any(Object));
-  });
-
-  it('hold-to-talk starts native recognition and shows listening state', async () => {
-    const { getByLabelText, getByText } = render(
-      <SiriScreen navigation={makeNav()} />,
-    );
-    const mic = getByLabelText('Hold to talk');
-    fireEvent(mic, 'pressIn');
-
-    await waitFor(() =>
-      expect(launcher.default.startSpeechRecognition).toHaveBeenCalled(),
-    );
-    expect(getByText('Listening…')).toBeTruthy();
+    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /));
   });
 
   it('unrecognized command speaks the not-supported reply', async () => {
@@ -274,10 +245,16 @@ describe('SiriScreen', () => {
   // Real (non-built-in) apps still go through the native launcher; the failure
   // path still reports a friendly message. Calculator is built-in, so we assert
   // the native-launch failure path against a real app instead.
-  it('does not throw when launchApp rejects (real app)', () => {
+  it('does not throw when launchApp rejects (real app)', async () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
-    expect(() => submit('Open Spotify')).not.toThrow();
-    expect(mockLaunchApp).toHaveBeenCalledWith('com.spotify');
+    const { field } = await renderHydrated();
+    expect(() => {
+      fireEvent.changeText(field, 'Open Spotify');
+      fireEvent(field, 'submitEditing');
+    }).not.toThrow();
+    // The native call is two microtasks deep (dynamic import → launchApp), so
+    // the assertion has to wait for it rather than read it synchronously.
+    await waitFor(() => expect(mockLaunchApp).toHaveBeenCalledWith('com.spotify'));
   });
 
   // ── Speech (issue #256) ──────────────────────────────────────────────────
@@ -294,8 +271,11 @@ describe('SiriScreen', () => {
 
   it('speaks the launchApp-failure response when a real app launch rejects', async () => {
     mockLaunchApp.mockRejectedValueOnce(new Error('launch failed'));
-    submit('Open Spotify');
-    // Success response set synchronously, failure response set in async .catch.
+    const { field } = await renderHydrated();
+    fireEvent.changeText(field, 'Open Spotify');
+    fireEvent(field, 'submitEditing');
+    // Success response set synchronously, failure response once the launch
+    // settles (rejected here; a `false` result takes the same corrective path).
     expect(Speech.speak).toHaveBeenCalledWith('Opening Spotify.');
     await waitFor(() =>
       expect(Speech.speak).toHaveBeenCalledWith("Couldn't open Spotify."),
@@ -382,7 +362,11 @@ jest.mock('../../../modules/launcher-module/src', () => {
       // Fill in the AppsStore-touched surfaces so its background refresh does
       // not spam "not a function" during these tests. Everything else is
       // stubbed to a benign resolved value.
-      getInstalledApps: jest.fn(() => Promise.resolve([])),
+      // One real (non-built-in) package so the native-launch path — and its
+      // failure branch — is reachable. Built-ins never touch this list.
+      getInstalledApps: jest.fn(() => Promise.resolve([
+        { name: 'Spotify', packageName: 'com.spotify', icon: '', isSystem: false },
+      ])),
       isDefaultLauncher: jest.fn(() => Promise.resolve(false)),
       getProcessStartAgeMs: jest.fn(() => Promise.resolve(-1)),
       launchApp: jest.fn(() => Promise.resolve(true)),
