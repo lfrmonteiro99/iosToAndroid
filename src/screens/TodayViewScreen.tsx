@@ -35,7 +35,7 @@ import {
   useWidgetConfig,
   useWidgetMap,
   type WidgetType,
-} from '../components/TodayWidgets';
+} from '../widgets/TodayWidgets';
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
 // (side-by-side pairs); 'medium'/'large' widgets span both columns, with
