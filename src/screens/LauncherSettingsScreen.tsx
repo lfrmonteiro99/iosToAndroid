@@ -106,7 +106,10 @@ export function LauncherSettingsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update, updateMany, reset: resetSettings } = useSettings();
-  const { dockApps, apps, hiddenApps, unhideApp, protectedApps = [], compactHomeLayout } = useApps();
+  const {
+    dockApps, apps, hiddenApps, unhideApp, protectedApps = [], compactHomeLayout,
+    isDefaultLauncher, openLauncherSettings,
+  } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
@@ -343,6 +346,34 @@ export function LauncherSettingsScreen() {
       rightButton={doneButton}
       contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
     >
+      {/* ── Default launcher ───────────────────────────────────── */}
+      {/*
+        Always present, whichever way the answer currently goes.
+
+        The only route to Android's home-launcher picker used to be the "Set
+        Now" button on the home screen's banner, and that banner is hidden once
+        this app IS the default. So the moment it worked, it disappeared — and
+        there was no way left to go BACK to the stock launcher without digging
+        through Android Settings by hand. Same intent opens the picker in both
+        directions; only the wording changes.
+      */}
+      <CupertinoListSection
+        header="Default Launcher"
+        footer={
+          isDefaultLauncher
+            ? 'This app is your home screen. Opening the picker lets you switch back to another launcher.'
+            : 'Android opens the launcher you pick here when you press Home.'
+        }
+      >
+        <CupertinoListTile
+          title={isDefaultLauncher ? 'Change Default Launcher' : 'Set as Default Launcher'}
+          subtitle={isDefaultLauncher ? 'Currently this app' : 'Currently another launcher'}
+          leading={{ name: 'home', color: '#fff', backgroundColor: colors.accent }}
+          showChevron
+          onPress={openLauncherSettings}
+        />
+      </CupertinoListSection>
+
       {/* ── Appearance ─────────────────────────────────────────── */}
       <CupertinoListSection header="Appearance">
         <CupertinoListTile
