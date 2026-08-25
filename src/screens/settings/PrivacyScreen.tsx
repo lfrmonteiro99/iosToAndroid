@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import LauncherModule from '../../../modules/launcher-module/src';
+import type { ScreenTimeStat } from '../../../modules/launcher-module/src';
 import { withAutoLockSuppressed } from '../../utils/permissions';
 import {
   CupertinoNavigationBar,
@@ -22,6 +23,19 @@ const PERMISSION_CATEGORIES = [
   { key: 'sms', title: 'Messages', icon: 'chatbubble', bg: '#34C759' },
   { key: 'callLog', title: 'Phone', icon: 'call', bg: '#34C759' },
 ] as const;
+
+/**
+ * Formats total foreground time (ms) as reported by getScreenTimeStats
+ * (UsageStatsManager) into a short "usage time" label. Never say "access" —
+ * this is aggregate time-on-screen, not a sensor/permission access event.
+ */
+function formatUsageTime(totalTimeMs: number): string {
+  const minutes = Math.round(totalTimeMs / 60000);
+  if (minutes < 1) return '< 1 min';
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours > 0 ? `${hours}h ${remainder}m` : `${minutes} min`;
+}
 
 export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp }) {
   const { theme, typography, spacing } = useTheme();
@@ -68,6 +82,28 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
   useEffect(() => {
     checkPermissions();
   }, [checkPermissions]);
+
+  const [screenTimeStats, setScreenTimeStats] = useState<ScreenTimeStat[]>([]);
+  const [loadingScreenTime, setLoadingScreenTime] = useState(false);
+
+  const loadScreenTime = useCallback(async () => {
+    if (Platform.OS !== 'android') return;
+    setLoadingScreenTime(true);
+    try {
+      const stats = await LauncherModule.getScreenTimeStats(1);
+      setScreenTimeStats(stats);
+    } catch { /* ignore */ } finally {
+      setLoadingScreenTime(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScreenTime();
+  }, [loadScreenTime]);
+
+  const topScreenTimeApps = [...screenTimeStats]
+    .sort((a, b) => b.totalTimeMs - a.totalTimeMs)
+    .slice(0, 5);
 
   const handleRequestPermissions = useCallback(async () => {
     setRequestingPermissions(true);
@@ -249,6 +285,42 @@ export function PrivacyScreen({ navigation }: { navigation: AppNavigationProp })
           </CupertinoListSection>
         </View>
 
+        {/* Screen Time — real usage time from getScreenTimeStats (UsageStatsManager).
+            This is time-on-screen, not sensor access, so the section never appears
+            on iOS (there is no equivalent native data source here) and the label
+            always says "usage time" / "Screen Time", never "access". */}
+        {Platform.OS === 'android' && (
+          <View style={{ paddingHorizontal: spacing.md }}>
+            <View style={[styles.sectionHeaderRow, { paddingHorizontal: 16, paddingBottom: 6, paddingTop: 22 }]}>
+              <Text style={[typography.footnote, { color: colors.secondaryLabel, textTransform: 'uppercase' }]}>
+                Screen Time
+              </Text>
+            </View>
+            <CupertinoListSection footer="Usage time today, per app.">
+              {loadingScreenTime ? (
+                <View style={styles.screenTimeLoading}>
+                  <ActivityIndicator size="small" color={colors.systemBlue} />
+                </View>
+              ) : topScreenTimeApps.length === 0 ? (
+                <CupertinoListTile title="No usage data yet" showChevron={false} />
+              ) : (
+                topScreenTimeApps.map((app) => (
+                  <CupertinoListTile
+                    key={app.packageName}
+                    title={app.appName}
+                    trailing={
+                      <Text style={[typography.body, { color: colors.secondaryLabel }]}>
+                        {formatUsageTime(app.totalTimeMs)}
+                      </Text>
+                    }
+                    showChevron={false}
+                  />
+                ))
+              )}
+            </CupertinoListSection>
+          </View>
+        )}
+
         {/* App Privacy Report — opens the real system Privacy Dashboard (API 31+).
             We never build our own counts; below Android 12 the tap explains the
             requirement instead of opening a dead screen. */}
@@ -313,6 +385,10 @@ const styles = StyleSheet.create({
     minWidth: 64,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  screenTimeLoading: {
+    alignItems: 'center',
+    paddingVertical: 16,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
