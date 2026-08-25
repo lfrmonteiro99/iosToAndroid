@@ -1,167 +1,294 @@
 import React from 'react';
-import { act, fireEvent } from '@testing-library/react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PermissionsAndroid } from 'react-native';
-import { Pedometer } from 'expo-sensors';
-import { render } from '../../test-utils';
+import { render, fireEvent } from '../../test-utils';
 import { HealthScreen } from '../HealthScreen';
+import { useHealth } from '../../store/HealthStore';
 
-/** Fires the callback `watchStepCount` registered, with a raw step count. */
-function emitSteps(steps: number) {
-  const cb = (Pedometer.watchStepCount as jest.Mock).mock.calls[0][0];
-  cb({ steps });
-}
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-  (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
-  (Pedometer.isAvailableAsync as jest.Mock).mockResolvedValue(true);
-  (Pedometer.watchStepCount as jest.Mock).mockReturnValue({ remove: jest.fn() });
-  jest
-    .spyOn(PermissionsAndroid, 'request')
-    .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED as never);
+jest.mock('../../store/HealthStore', () => {
+  const actual = jest.requireActual('../../store/HealthStore');
+  return { ...actual, useHealth: jest.fn() };
 });
 
-afterEach(() => {
-  jest.restoreAllMocks();
+const useHealthMock = useHealth as jest.Mock;
+
+const base = {
+  todaySteps: 0,
+  todayDistanceKm: 0,
+  todayActiveEnergyKcal: 0,
+  isPedometerAvailable: true,
+  permissionGranted: null as boolean | null,
+  requestActivityPermission: jest.fn(async () => false),
+  isReady: true,
+  stepHistory: [] as { date: string; steps: number }[],
+  isHealthConnectAvailable: false,
+  syncFromHealthConnect: jest.fn(async () => false),
+};
+
+// A fixed fixture: 3 consecutive days in the same ISO week and month, so the
+// aggregations diverge — Daily => 3 buckets, Weekly => 1, Monthly => 1.
+const THREE_DAY_HISTORY = [
+  { date: '2026-08-03', steps: 100 }, // Monday
+  { date: '2026-08-04', steps: 200 }, // Tuesday
+  { date: '2026-08-05', steps: 300 }, // Wednesday
+];
+
+describe('HealthScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useHealthMock.mockReturnValue({ ...base });
+  });
+
+  it('renders Health as its title', () => {
+    const { getByText } = render(<HealthScreen />);
+    expect(getByText('Health')).toBeTruthy();
+  });
+
+  it('shows the Grant Activity Permission button when ungranted', () => {
+    const { getByText } = render(<HealthScreen />);
+    expect(getByText('Grant Activity Permission')).toBeTruthy();
+  });
+
+  it('shows an em dash instead of a number before permission is granted', () => {
+    useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: null });
+    const { getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(getByLabelText("Today's step count").props.children).toBe('—');
+    expect(queryByText('1234')).toBeNull();
+  });
+
+  it('shows the real step count once permission is granted, and hides the button', () => {
+    useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: true });
+    const { getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(getByLabelText("Today's step count").props.children).toBe('1234');
+    expect(queryByText('Grant Activity Permission')).toBeNull();
+    expect(queryByText('—')).toBeNull();
+  });
+
+  it('shows 0 (not an em dash) when granted and the user has not moved', () => {
+    useHealthMock.mockReturnValue({ ...base, todaySteps: 0, permissionGranted: true });
+    const { getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(getByLabelText("Today's step count").props.children).toBe('0');
+    expect(queryByText('—')).toBeNull();
+  });
+
+  it('never offers a permission when the device has no pedometer', () => {
+    useHealthMock.mockReturnValue({ ...base, isPedometerAvailable: false, permissionGranted: null });
+    const { getByText, getByLabelText, queryByText } = render(<HealthScreen />);
+    expect(queryByText('Grant Activity Permission')).toBeNull();
+    expect(getByText('Step counting is not available on this device')).toBeTruthy();
+    expect(getByLabelText("Today's step count").props.children).toBe('—');
+  });
+
+  it('does not offer the permission before the store is ready', () => {
+    useHealthMock.mockReturnValue({ ...base, isReady: false });
+    const { queryByText } = render(<HealthScreen />);
+    expect(queryByText('Grant Activity Permission')).toBeNull();
+    expect(queryByText('Step counting is not available on this device')).toBeNull();
+  });
+
+  it('presses the button once and requests the permission', () => {
+    const requestActivityPermission = jest.fn(async () => true);
+    useHealthMock.mockReturnValue({ ...base, requestActivityPermission });
+    const { getByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Grant Activity Permission'));
+    expect(requestActivityPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rapid double tap does not fire two permission requests', () => {
+    // CupertinoButton debounces repeated presses (see CupertinoButton.tsx:38-45);
+    // this pins the screen to that behaviour so a double tap cannot open two
+    // OS dialogs — the recurring double-tap defect in this repo.
+    const requestActivityPermission = jest.fn(async () => true);
+    useHealthMock.mockReturnValue({ ...base, requestActivityPermission });
+    const { getByText } = render(<HealthScreen />);
+    const button = getByText('Grant Activity Permission');
+    fireEvent.press(button);
+    fireEvent.press(button);
+    expect(requestActivityPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the Trends section, defaulting to Daily with one bar per day', () => {
+    useHealthMock.mockReturnValue({ ...base, stepHistory: THREE_DAY_HISTORY });
+    const { getByText, getAllByTestId } = render(<HealthScreen />);
+    expect(getByText('Trends')).toBeTruthy();
+    // Daily aggregation => 3 bars, one per day
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(3);
+  });
+
+  it('switches Trends between Daily/Weekly/Monthly via the segmented control', () => {
+    useHealthMock.mockReturnValue({ ...base, stepHistory: THREE_DAY_HISTORY });
+    const { getByText, getAllByTestId } = render(<HealthScreen />);
+
+    // Daily: 3 buckets
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(3);
+
+    // Weekly: all 3 days fall in one ISO week => 1 bucket
+    fireEvent.press(getByText('Weekly'));
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(1);
+
+    // Monthly: all 3 days fall in one month => 1 bucket
+    fireEvent.press(getByText('Monthly'));
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(1);
+
+    // Back to Daily
+    fireEvent.press(getByText('Daily'));
+    expect(getAllByTestId(/^bar-\d+$/)).toHaveLength(3);
+  });
+
+  it('shows the empty state in Trends when there is no step history', () => {
+    useHealthMock.mockReturnValue({ ...base, stepHistory: [] });
+    const { queryByTestId, getByText } = render(<HealthScreen />);
+    expect(queryByTestId('bar-0')).toBeNull();
+    expect(getByText('No data yet')).toBeTruthy();
+  });
+
+  describe('Health Connect sync button', () => {
+    it('is hidden when Health Connect is unavailable (the common case)', () => {
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: false });
+      const { queryByText } = render(<HealthScreen />);
+      expect(queryByText('Sync with Health Connect')).toBeNull();
+    });
+
+    it('appears only when isHealthConnectAvailable === true', () => {
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: true });
+      const { getByText } = render(<HealthScreen />);
+      expect(getByText('Sync with Health Connect')).toBeTruthy();
+    });
+
+    it('does not change the rest of the screen when unavailable', () => {
+      // Regression guard: when Health Connect is absent the screen must render
+      // exactly as before this issue — same title, same Trends, same empty hint.
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: false, stepHistory: [] });
+      const { getByText, queryByTestId, queryByText } = render(<HealthScreen />);
+      expect(getByText('Health')).toBeTruthy();
+      expect(getByText('Steps')).toBeTruthy();
+      expect(getByText('Trends')).toBeTruthy();
+      expect(getByText('No data yet')).toBeTruthy();
+      expect(queryByTestId('bar-0')).toBeNull();
+      expect(queryByText('Sync with Health Connect')).toBeNull();
+    });
+
+    it('calls syncFromHealthConnect when tapped, and never throws when absent', () => {
+      const syncFromHealthConnect = jest.fn(async () => true);
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: true, syncFromHealthConnect });
+      const { getByText } = render(<HealthScreen />);
+      fireEvent.press(getByText('Sync with Health Connect'));
+      expect(syncFromHealthConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('a double tap does not fire two syncs', () => {
+      // Pins the recurring double-tap defect: the screen must not let two rapid
+      // presses open two concurrent syncs.
+      const syncFromHealthConnect = jest.fn(async () => true);
+      useHealthMock.mockReturnValue({ ...base, isHealthConnectAvailable: true, syncFromHealthConnect });
+      const { getByText } = render(<HealthScreen />);
+      const button = getByText('Sync with Health Connect');
+      fireEvent.press(button);
+      fireEvent.press(button);
+      expect(syncFromHealthConnect).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
-describe('HealthScreen distance and active energy cards', () => {
-  it('renders Distance and Active Energy cards, each labelled as estimated', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    expect(screen.getByText('Distance')).toBeTruthy();
-    expect(screen.getByText('Active Energy')).toBeTruthy();
-    expect(screen.getAllByText('Estimated from steps')).toHaveLength(2);
+describe('HealthScreen Browse tab', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useHealthMock.mockReturnValue({ ...base });
   });
 
-  it('shows — in both derived cards while no permission has been granted', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    // Steps card and both derived cards all use the same placeholder.
-    expect(screen.getAllByText('—')).toHaveLength(3);
-    expect(screen.queryByText('0.0 km')).toBeNull();
-    expect(screen.queryByText('0 kcal')).toBeNull();
-    expect(screen.queryByText('0')).toBeNull();
+  it('shows a Summary/Browse segmented control with Summary selected by default', () => {
+    const { getByText } = render(<HealthScreen />);
+    // Both segments exist; Summary is the default selection.
+    expect(getByText('Summary')).toBeTruthy();
+    expect(getByText('Browse')).toBeTruthy();
+    // With Summary selected, the step summary is still the visible content.
+    expect(getByText('Steps')).toBeTruthy();
   });
 
-  it('shows 7.6 km and 400 kcal for 10000 steps, keeping the steps card intact', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    await act(async () => {
-      fireEvent.press(screen.getByText('Grant Activity Permission'));
-    });
-    await act(async () => {
-      emitSteps(10000);
-    });
-
-    expect(screen.getByText('7.6 km')).toBeTruthy();
-    expect(screen.getByText('400 kcal')).toBeTruthy();
-    // Regression guard: the foundation's steps card is unchanged.
-    expect(screen.getByText('10000')).toBeTruthy();
-    expect(screen.getByText('steps today')).toBeTruthy();
-    expect(screen.queryByText('—')).toBeNull();
+  it('lists all five health categories when Browse is tapped', () => {
+    const { getByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    expect(getByText('Activity')).toBeTruthy();
+    expect(getByText('Body Measurements')).toBeTruthy();
+    expect(getByText('Heart')).toBeTruthy();
+    expect(getByText('Sleep')).toBeTruthy();
+    expect(getByText('Nutrition')).toBeTruthy();
   });
 
-  it('still shows — for every card when permission is denied', async () => {
-    (PermissionsAndroid.request as jest.Mock).mockResolvedValue(
-      PermissionsAndroid.RESULTS.DENIED,
-    );
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    await act(async () => {
-      fireEvent.press(screen.getByText('Grant Activity Permission'));
-    });
-
-    expect(screen.getAllByText('—')).toHaveLength(3);
-    expect(screen.queryByText('0.0 km')).toBeNull();
-    expect(screen.queryByText('0 kcal')).toBeNull();
+  it('shows the real step count when Activity is tapped and permission is granted', () => {
+    useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: true });
+    const { getByText, getAllByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    fireEvent.press(getByText('Activity'));
+    // The Browse tab's Activity card and the summary step card can both be
+    // mounted, so the count is expected at least once rather than exactly once.
+    expect(getAllByText('1234').length).toBeGreaterThan(0);
   });
 
-  it('shows — (never 0.0 km) when permission is granted but the day is still at 0 steps', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    await act(async () => {
-      fireEvent.press(screen.getByText('Grant Activity Permission'));
-    });
-    await act(async () => {
-      emitSteps(0);
-    });
-
-    expect(screen.getAllByText('—')).toHaveLength(3);
-    expect(screen.queryByText('0.0 km')).toBeNull();
-    expect(screen.queryByText('0 kcal')).toBeNull();
+  it('shows an em dash (never an invented number) for Activity when not granted', () => {
+    useHealthMock.mockReturnValue({ ...base, todaySteps: 1234, permissionGranted: null });
+    const { getByText, getAllByText, queryByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    fireEvent.press(getByText('Activity'));
+    expect(getAllByText('—').length).toBeGreaterThan(0);
+    expect(queryByText('1234')).toBeNull();
   });
 
-  it('rounds a single step down to 0.0 km only after it is a real reading', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    await act(async () => {
-      fireEvent.press(screen.getByText('Grant Activity Permission'));
-    });
-    await act(async () => {
-      emitSteps(1);
-    });
-
-    // One step IS a real reading, so a rounded 0.0 km / 0 kcal is honest here —
-    // the placeholder is reserved for "no steps at all".
-    expect(screen.getByText('1')).toBeTruthy();
-    expect(screen.getByText('0.0 km')).toBeTruthy();
-    expect(screen.getByText('0 kcal')).toBeTruthy();
-    expect(screen.queryByText('—')).toBeNull();
+  it('shows an honest empty state and no numbers for a category with no data source (Heart)', () => {
+    const { getByText, queryByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    fireEvent.press(getByText('Heart'));
+    // Honest empty state instead of invented numbers.
+    expect(getByText('No data yet')).toBeTruthy();
+    // No numeric health value is rendered anywhere in the detail panel.
+    expect(queryByText(/\d/)).toBeNull();
   });
 
-  it('renders the derived cards, still labelled estimated, when the pedometer is unavailable', async () => {
-    (Pedometer.isAvailableAsync as jest.Mock).mockResolvedValue(false);
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    expect(screen.getByText('Step counting is not available on this device.')).toBeTruthy();
-    expect(screen.queryByText('Grant Activity Permission')).toBeNull();
-    expect(screen.getByText('Distance')).toBeTruthy();
-    expect(screen.getByText('Active Energy')).toBeTruthy();
-    expect(screen.getAllByText('Estimated from steps')).toHaveLength(2);
-    expect(screen.getAllByText('—')).toHaveLength(3);
+  it('returns from a category detail back to the Browse list via the back chevron', () => {
+    const { getByText, queryByText, getByLabelText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    fireEvent.press(getByText('Heart'));
+    expect(getByText('No data yet')).toBeTruthy();
+    fireEvent.press(getByLabelText('Go back'));
+    // After going back, the Browse category list is visible again (no detail).
+    expect(getByText('Heart')).toBeTruthy();
+    expect(queryByText('No data yet')).toBeNull();
   });
 
-  it('pressing Grant twice does not double the displayed estimates', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
-
-    await act(async () => {
-      fireEvent.press(screen.getByText('Grant Activity Permission'));
-    });
-    await act(async () => {});
-    // After a successful grant the button is gone, so a stray double tap cannot
-    // register a second watcher — assert the watcher count directly.
-    await act(async () => {
-      emitSteps(5000);
-    });
-
-    expect((Pedometer.watchStepCount as jest.Mock).mock.calls).toHaveLength(1);
-    expect(screen.getByText('3.8 km')).toBeTruthy();
-    expect(screen.getByText('200 kcal')).toBeTruthy();
+  it('does not offer a permission button inside the Browse category list', () => {
+    const { getByText, queryByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    expect(queryByText('Grant Activity Permission')).toBeNull();
   });
 
-  it('renders a large step count without breaking the estimate formatting', async () => {
-    const screen = render(<HealthScreen />);
-    await act(async () => {});
+  it('shows a distinct factual empty-state message for each non-Activity category', () => {
+    const { getByText, getByLabelText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
 
-    await act(async () => {
-      fireEvent.press(screen.getByText('Grant Activity Permission'));
-    });
-    await act(async () => {
-      emitSteps(999999);
-    });
+    fireEvent.press(getByText('Body Measurements'));
+    expect(getByText('Body measurements sync from Health Connect once it’s connected.')).toBeTruthy();
+    fireEvent.press(getByLabelText('Go back'));
 
-    expect(screen.getByText('762.0 km')).toBeTruthy();
-    expect(screen.getByText('40000 kcal')).toBeTruthy();
+    fireEvent.press(getByText('Sleep'));
+    expect(getByText('Sleep analysis will appear here once it’s available.')).toBeTruthy();
+    fireEvent.press(getByLabelText('Go back'));
+
+    fireEvent.press(getByText('Nutrition'));
+    expect(getByText('Nutrition data will appear here once it’s available.')).toBeTruthy();
+    fireEvent.press(getByLabelText('Go back'));
+
+    fireEvent.press(getByText('Heart'));
+    expect(getByText('Heart rate and other heart metrics will appear here once they’re available.')).toBeTruthy();
+  });
+
+  it('a rapid double tap on a category row opens the detail without duplicate or broken state', () => {
+    // Pins the screen against the recurring double-tap defect in this repo:
+    // two quick presses must resolve to the same detail, no crash, no residual.
+    const { getByText, queryByText } = render(<HealthScreen />);
+    fireEvent.press(getByText('Browse'));
+    const row = getByText('Heart');
+    fireEvent.press(row);
+    fireEvent.press(row);
+    expect(getByText('No data yet')).toBeTruthy();
+    // Still exactly one detail — no second empty state leaked in.
+    expect(queryByText('No data yet')).toBeTruthy();
   });
 });

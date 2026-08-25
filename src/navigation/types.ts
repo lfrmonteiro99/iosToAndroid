@@ -29,9 +29,12 @@ export type RootStackParamList = {
   FindMy: undefined;
   FindMyLocationHistory: undefined;
   Reminders: undefined;
+  Shortcuts: undefined;
   Browser: undefined;
   Mail: { composeTo?: string; composeSubject?: string; composeBody?: string } | undefined;
   Wallet: undefined;
+  CardDetail: { passId: string };
+  CardEdit: undefined;
   PassDetail: { passId: string };
   PassEdit: { passId?: string; prefillCode?: string };
   PassScan: undefined;
@@ -53,8 +56,10 @@ export type RootStackParamList = {
   Wallpaper: undefined;
   Accessibility: undefined;
   AssistiveTouchSettings: undefined;
+  BackTapSettings: undefined;
   Battery: undefined;
   Privacy: undefined;
+  PrivacyMonitor: undefined;
   Storage: undefined;
   SoftwareUpdate: undefined;
   DateTime: undefined;
@@ -72,6 +77,8 @@ export type RootStackParamList = {
   Siri: undefined;
   TodayView: undefined;
   LauncherSettings: undefined;
+  ProtectedApps: undefined;
+  PerformanceProfile: undefined;
 };
 
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;

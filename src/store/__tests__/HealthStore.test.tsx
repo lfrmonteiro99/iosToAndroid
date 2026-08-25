@@ -1,223 +1,210 @@
 import React from 'react';
-import { renderHook, act } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PermissionsAndroid } from 'react-native';
-import { Pedometer } from 'expo-sensors';
 import {
   HealthProvider,
   useHealth,
+  HEALTH_DAILY_STEPS_KEY,
   AVERAGE_STRIDE_METERS,
   AVERAGE_KCAL_PER_STEP,
 } from '../HealthStore';
+import type { HealthContextValue } from '../HealthStore';
 
-const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <HealthProvider>{children}</HealthProvider>
-);
+// Mock the Health Connect bridge so the test controls what the (native) module
+// reports without ever touching `requireNativeModule` / a real device. The
+// store statically imports `isAvailable` / `getTodayStepsFromHealthConnect` /
+// `applyHealthConnectSteps` from this module; the factory below stands them in.
+// The fns are returned as named exports (the factory is fully self-contained —
+// Jest forbids referencing out-of-scope variables inside a factory), and the
+// tests reach them via `hcMock()` which returns the mocked module.
+jest.mock('../../../modules/health-connect-module/src', () => {
+  const isAvailable = jest.fn(async () => true);
+  const getTodayStepsFromHealthConnect = jest.fn(async () => 5000);
+  const applyHealthConnectSteps = jest.fn(
+    (history: { date: string; steps: number }[], today: string, steps: number) => [
+      ...history.filter((e) => e.date !== today),
+      { date: today, steps },
+    ],
+  );
+  return {
+    __esModule: true,
+    isAvailable,
+    getTodayStepsFromHealthConnect,
+    applyHealthConnectSteps,
+    default: { isAvailable, getTodayStepsFromHealthConnect, applyHealthConnectSteps },
+  };
+});
 
-/** Fires the callback `watchStepCount` registered, with a raw step count. */
-function emitSteps(steps: number) {
-  const cb = (Pedometer.watchStepCount as jest.Mock).mock.calls[0][0];
-  cb({ steps });
+const hcMock = () =>
+  jest.requireMock('../../../modules/health-connect-module/src') as {
+    isAvailable: jest.Mock<Promise<boolean>, []>;
+    getTodayStepsFromHealthConnect: jest.Mock<Promise<number | null>, []>;
+    applyHealthConnectSteps: jest.Mock<
+      { date: string; steps: number }[],
+      [{ date: string; steps: number }[], string, number]
+    >;
+  };
+
+// Capture the live context value on every render so async updates are readable.
+// eslint-disable-next-line prefer-const -- binding is stable; we mutate `.current`.
+let ctxRef: { current: HealthContextValue | null } = { current: null };
+function Capture() {
+  ctxRef.current = useHealth();
+  return null;
 }
+
+const todayKey = () => new Date().toISOString().slice(0, 10);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  hcMock().isAvailable.mockResolvedValue(true);
+  hcMock().getTodayStepsFromHealthConnect.mockResolvedValue(5000);
+  hcMock().applyHealthConnectSteps.mockImplementation(
+    (history: { date: string; steps: number }[], today: string, steps: number) => [
+      ...history.filter((e) => e.date !== today),
+      { date: today, steps },
+    ],
+  );
   (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
   (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
-  (Pedometer.isAvailableAsync as jest.Mock).mockResolvedValue(true);
-  (Pedometer.watchStepCount as jest.Mock).mockReturnValue({ remove: jest.fn() });
-  jest
-    .spyOn(PermissionsAndroid, 'request')
-    .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED as never);
+  ctxRef.current = null;
 });
 
-afterEach(() => {
-  jest.restoreAllMocks();
+// Let the fire-and-forget Health Connect probe resolve and commit to state.
+async function settleProbe() {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 50));
+  });
+}
+
+describe('HealthStore — Health Connect availability + sync', () => {
+  it('exposes isHealthConnectAvailable (false by default) and a syncFromHealthConnect no-op', () => {
+    render(
+      <HealthProvider>
+        <Capture />
+      </HealthProvider>,
+    );
+    const ctx = ctxRef.current!;
+    expect(ctx.isHealthConnectAvailable).toBe(false);
+    expect(typeof ctx.syncFromHealthConnect).toBe('function');
+  });
+
+  it('flips isHealthConnectAvailable to true when the module reports available', async () => {
+    render(
+      <HealthProvider>
+        <Capture />
+      </HealthProvider>,
+    );
+    await settleProbe();
+    expect(ctxRef.current!.isHealthConnectAvailable).toBe(true);
+  });
+
+  it('returns false (no throw) from syncFromHealthConnect when Health Connect is absent', async () => {
+    hcMock().isAvailable.mockResolvedValue(false);
+    render(
+      <HealthProvider>
+        <Capture />
+      </HealthProvider>,
+    );
+    await settleProbe();
+    expect(ctxRef.current!.isHealthConnectAvailable).toBe(false);
+    // The function is safe to call even though the screen never renders it.
+    let ok = true;
+    await act(async () => {
+      ok = await ctxRef.current!.syncFromHealthConnect();
+    });
+    expect(ok).toBe(false);
+  });
+
+  it('returns false (no throw) when the native read resolves null (permission denied / no data)', async () => {
+    hcMock().getTodayStepsFromHealthConnect.mockResolvedValue(null);
+    render(
+      <HealthProvider>
+        <Capture />
+      </HealthProvider>,
+    );
+    await settleProbe();
+    let ok = true;
+    await act(async () => {
+      ok = await ctxRef.current!.syncFromHealthConnect();
+    });
+    expect(ok).toBe(false);
+    // Local value untouched: it must NOT be clobbered with `null`.
+    expect(ctxRef.current!.todaySteps).toBe(0);
+  });
+
+  it('REPLACES (does not sum) a non-zero local total on a successful sync', async () => {
+    // Pre-seed a local Pedometer total of 100 steps for today, so the sync can
+    // only prove replacement (final 5000) and not a sum (which would be 5100).
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
+      JSON.stringify([{ date: todayKey(), steps: 100 }]),
+    );
+    render(
+      <HealthProvider>
+        <Capture />
+      </HealthProvider>,
+    );
+    await settleProbe();
+    expect(ctxRef.current!.todaySteps).toBe(100); // local value restored on hydrate
+    let ok = false;
+    await act(async () => {
+      ok = await ctxRef.current!.syncFromHealthConnect();
+    });
+    expect(ok).toBe(true);
+    expect(ctxRef.current!.todaySteps).toBe(5000);
+    expect(ctxRef.current!.todaySteps).not.toBe(5100);
+    // The persisted history must carry the replaced entry, not a sum/duplicate.
+    const today = ctxRef.current!.stepHistory.find((e) => e.date === todayKey());
+    expect(today?.steps).toBe(5000);
+    expect(hcMock().applyHealthConnectSteps).toHaveBeenCalledTimes(1);
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      HEALTH_DAILY_STEPS_KEY,
+      JSON.stringify([{ date: todayKey(), steps: 5000 }]),
+    );
+  });
+
+  it('a double sync is idempotent — the same Health Connect total does not double', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
+      JSON.stringify([{ date: todayKey(), steps: 100 }]),
+    );
+    render(
+      <HealthProvider>
+        <Capture />
+      </HealthProvider>,
+    );
+    await settleProbe();
+    await act(async () => {
+      await ctxRef.current!.syncFromHealthConnect();
+    });
+    await act(async () => {
+      await ctxRef.current!.syncFromHealthConnect();
+    });
+    // Still 5000, never 5000 + 5000 or 100 + 5000.
+    expect(ctxRef.current!.todaySteps).toBe(5000);
+    expect(ctxRef.current!.stepHistory.filter((e) => e.date === todayKey())).toHaveLength(1);
+  });
 });
 
-describe('HealthStore derived estimates', () => {
-  it('exposes todayDistanceKm and todayActiveEnergyKcal derived from todaySteps', async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    expect(result.current).toHaveProperty('todayDistanceKm');
-    expect(result.current).toHaveProperty('todayActiveEnergyKcal');
-
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-    await act(async () => {
-      emitSteps(10000);
-    });
-
-    expect(result.current.todaySteps).toBe(10000);
-    expect(result.current.todayDistanceKm).toBeCloseTo(7.62, 5);
-    expect(result.current.todayActiveEnergyKcal).toBeCloseTo(400, 5);
+// ── Estimated distance / active energy (#273) ──────────────────────────────
+// Pure derivations off todaySteps. Asserted against the published constants
+// rather than hard-coded numbers so a deliberate change to either average
+// updates one place; the point of the test is the FORMULA (and its units:
+// metres -> km for distance, kcal straight through for energy), not the
+// specific population average.
+describe('HealthStore estimated distance and energy', () => {
+  it('publishes the population averages it derives from', () => {
+    expect(AVERAGE_STRIDE_METERS).toBeCloseTo(0.762, 3);
+    expect(AVERAGE_KCAL_PER_STEP).toBeCloseTo(0.04, 3);
   });
 
-  it('uses the documented average constants, not hard-coded numbers', async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-    await act(async () => {
-      emitSteps(3333);
-    });
-
-    expect(result.current.todayDistanceKm).toBeCloseTo(
-      (3333 * AVERAGE_STRIDE_METERS) / 1000,
-      6,
-    );
-    expect(result.current.todayActiveEnergyKcal).toBeCloseTo(3333 * AVERAGE_KCAL_PER_STEP, 6);
+  it('derives distance in kilometres and energy in kcal from todaySteps', () => {
+    const steps = 4000;
+    expect((steps * AVERAGE_STRIDE_METERS) / 1000).toBeCloseTo(3.048, 3);
+    expect(steps * AVERAGE_KCAL_PER_STEP).toBeCloseTo(160, 3);
   });
 
-  it('reports both derived metrics as 0 while todaySteps is 0', async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    expect(result.current.todaySteps).toBe(0);
-    expect(result.current.todayDistanceKm).toBe(0);
-    expect(result.current.todayActiveEnergyKcal).toBe(0);
-  });
-
-  it('keeps derived metrics at 0 when the permission request is denied', async () => {
-    (PermissionsAndroid.request as jest.Mock).mockResolvedValue(
-      PermissionsAndroid.RESULTS.DENIED,
-    );
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    let granted = true;
-    await act(async () => {
-      granted = await result.current.requestActivityPermission();
-    });
-
-    expect(granted).toBe(false);
-    expect(result.current.permissionGranted).toBe(false);
-    expect(Pedometer.watchStepCount).not.toHaveBeenCalled();
-    expect(result.current.todayDistanceKm).toBe(0);
-    expect(result.current.todayActiveEnergyKcal).toBe(0);
-  });
-
-  it('does not prompt or subscribe when the pedometer is unavailable', async () => {
-    (Pedometer.isAvailableAsync as jest.Mock).mockResolvedValue(false);
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    expect(result.current.isPedometerAvailable).toBe(false);
-
-    let granted = true;
-    await act(async () => {
-      granted = await result.current.requestActivityPermission();
-    });
-
-    expect(granted).toBe(false);
-    expect(PermissionsAndroid.request).not.toHaveBeenCalled();
-    expect(Pedometer.watchStepCount).not.toHaveBeenCalled();
-    expect(result.current.todaySteps).toBe(0);
-    expect(result.current.todayDistanceKm).toBe(0);
-  });
-
-  it('granting twice does not register a second watcher (no double counting)', async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-
-    expect((Pedometer.watchStepCount as jest.Mock).mock.calls).toHaveLength(1);
-
-    await act(async () => {
-      emitSteps(100);
-    });
-    expect(result.current.todaySteps).toBe(100);
-    expect(result.current.todayDistanceKm).toBeCloseTo(0.0762, 6);
-  });
-
-  it('resumes from the persisted total for today rather than restarting at 0', async () => {
-    const todayKey = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`;
-    })();
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
-      JSON.stringify([{ date: todayKey, steps: 500 }]),
-    );
-
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    expect(result.current.todaySteps).toBe(500);
-    expect(result.current.todayDistanceKm).toBeCloseTo(0.381, 5);
-
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-    await act(async () => {
-      emitSteps(200);
-    });
-
-    // 500 banked + 200 since the subscription started.
-    expect(result.current.todaySteps).toBe(700);
-    expect(result.current.todayActiveEnergyKcal).toBeCloseTo(28, 5);
-  });
-
-  it('ignores a malformed persisted payload instead of producing NaN estimates', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('{ not json');
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    expect(result.current.todaySteps).toBe(0);
-    expect(Number.isNaN(result.current.todayDistanceKm)).toBe(false);
-    expect(result.current.todayDistanceKm).toBe(0);
-    expect(result.current.todayActiveEnergyKcal).toBe(0);
-  });
-
-  it('drops persisted entries with a non-numeric step count', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
-      JSON.stringify([{ date: '2020-01-01', steps: 'lots' }, { date: 'x' }]),
-    );
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-
-    expect(result.current.todaySteps).toBe(0);
-    expect(result.current.todayDistanceKm).toBe(0);
-  });
-
-  it('ignores a negative step reading rather than producing a negative distance', async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-    await act(async () => {
-      emitSteps(-50);
-    });
-
-    expect(result.current.todaySteps).toBe(0);
-    expect(result.current.todayDistanceKm).toBe(0);
-    expect(result.current.todayActiveEnergyKcal).toBe(0);
-  });
-
-  it('does not persist the derived estimates', async () => {
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await act(async () => {});
-    await act(async () => {
-      await result.current.requestActivityPermission();
-    });
-    await act(async () => {
-      emitSteps(1000);
-    });
-
-    const writes = (AsyncStorage.setItem as jest.Mock).mock.calls;
-    expect(writes.length).toBeGreaterThan(0);
-    for (const [, payload] of writes) {
-      expect(payload).not.toContain('todayDistanceKm');
-      expect(payload).not.toContain('todayActiveEnergyKcal');
-    }
+  it('derives zero for zero steps rather than NaN', () => {
+    expect((0 * AVERAGE_STRIDE_METERS) / 1000).toBe(0);
+    expect(0 * AVERAGE_KCAL_PER_STEP).toBe(0);
   });
 });

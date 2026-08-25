@@ -14,12 +14,16 @@ import { ContactsProvider } from './src/store/ContactsStore';
 import { ProfileProvider } from './src/store/ProfileStore';
 import { AppsProvider } from './src/store/AppsStore';
 import { DeviceProvider, useDevice } from './src/store/DeviceStore';
+import { LocationProvider } from './src/store/LocationStore';
 import { FoldersProvider } from './src/store/FoldersStore';
 import { BookmarksProvider } from './src/store/BookmarksStore';
 import { ReadingListProvider } from './src/store/ReadingListStore';
-import { HealthProvider } from './src/store/HealthStore';
 import { WalletProvider } from './src/store/WalletStore';
+import { CardProvider } from './src/store/CardStore';
+import { HealthProvider } from './src/store/HealthStore';
+import { ShortcutsProvider } from './src/store/ShortcutsStore';
 import { TabNavigator } from './src/navigation/TabNavigator';
+import { linking } from './src/navigation/linking';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AlertProvider } from './src/components/AlertProvider';
 import { NotificationBanner, BannerNotification } from './src/components/NotificationBanner';
@@ -36,8 +40,15 @@ import { suppressAutoLock } from './src/utils/permissions';
 import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
 import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
+import { releaseBatched } from './src/utils/scheduledSummaryBuffer';
+import {
+  createScheduledSummaryTracker,
+  runScheduledSummaryCheck,
+  SCHEDULED_SUMMARY_CHECK_MS,
+} from './src/utils/scheduledSummaryScheduler';
 import { markProcessStartFromAge } from './src/utils/perfMetrics';
 import { useFocusSchedule } from './src/hooks/useFocusSchedule';
+import { useContextEngine } from './src/hooks/useContextEngine';
 
 // Cold start (#517): a marca de origem é a idade do processo lida do lado
 // nativo, não o instante em que este módulo é avaliado — assim o número inclui
@@ -61,6 +72,11 @@ function AppContent() {
   // do intervalo definido em Settings. Montado aqui — um único ponto de verdade
   // para toda a app, independente de qual ecrã está montado.
   useFocusSchedule();
+
+  // Context Engine (#628): regras Wi-Fi/Bluetooth/localização/hora compostas
+  // (AND/OR) que ativam um Focus mode automaticamente. Aditivo ao Focus
+  // Schedule acima — mesmo ponto único de montagem, coexiste sem o substituir.
+  useContextEngine();
 
   // Inter / Inter Display (#474, sub-issue de #464 — substituto sancionado da
   // SF Pro, cuja licença restringe o uso a mocks para SO Apple). Uma falha no
@@ -128,6 +144,24 @@ function AppContent() {
   // callback (registered once) always reads the current value without stale closure.
   const focusModeRef = useRef(settings.focusMode);
   useEffect(() => { focusModeRef.current = settings.focusMode; }, [settings.focusMode]);
+
+  // Contexto de routing por-app das notificações (#630): allow-list imediata,
+  // política por app e Reduce Interruptions. Espelhado num ref para o listener
+  // (registado uma vez) ler o valor corrente sem closure obsoleta.
+  const routingRef = useRef({
+    focusMode: settings.focusMode,
+    allowListImmediate: settings.allowListImmediate,
+    perAppDelivery: settings.perAppDelivery,
+    reduceInterruptions: settings.reduceInterruptions,
+  });
+  useEffect(() => {
+    routingRef.current = {
+      focusMode: settings.focusMode,
+      allowListImmediate: settings.allowListImmediate,
+      perAppDelivery: settings.perAppDelivery,
+      reduceInterruptions: settings.reduceInterruptions,
+    };
+  }, [settings.focusMode, settings.allowListImmediate, settings.perAppDelivery, settings.reduceInterruptions]);
 
   // Pending auto-lock timer. We don't lock the instant the app goes to
   // background — a permission dialog, the system HOME intent fired by our
@@ -295,13 +329,37 @@ function AppContent() {
         for (const n of initial) seenNotifIds.current.add(n.id);
 
         unsub = addNotificationListener((n) => {
-          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner);
+          notificationCallbackForFocus(n, seenNotifIds, focusModeRef, setBanner, routingRef.current);
         });
       } catch { /* ignore */ }
     })();
 
     return () => { if (unsub) unsub(); };
   }, [device.isReady, isLocked]);
+
+  // Scheduled Summary (#869, sub-issue 2 de #630/#838): agrega as notificações
+  // que routeNotification suprimiu com reason:'batched' (apps em política
+  // 'scheduled'/'digest') e liberta-as num único banner-resumo nos slots
+  // configurados em scheduledSummaryIdx (0=Off, 1=Morning 8:00, 2=Evening
+  // 18:00, 3=Both). Com idx===0 nenhum timer é registado — as notificações
+  // embaladas continuam suprimidas, tal como antes.
+  const scheduledSummaryTrackerRef = useRef(createScheduledSummaryTracker());
+  useEffect(() => {
+    if (settings.scheduledSummaryIdx === 0) return;
+
+    const check = () => {
+      void runScheduledSummaryCheck({
+        now: new Date(),
+        scheduledSummaryIdx: settings.scheduledSummaryIdx,
+        tracker: scheduledSummaryTrackerRef.current,
+        releaseBatched,
+        setBanner,
+      });
+    };
+    check();
+    const id = setInterval(check, SCHEDULED_SUMMARY_CHECK_MS);
+    return () => clearInterval(id);
+  }, [settings.scheduledSummaryIdx]);
 
   if (!fontsLoaded && !fontError) return null;
   if (showOnboarding === null) return null;
@@ -326,7 +384,7 @@ function AppContent() {
       <StatusBar style={isDark ? 'light' : 'dark'} hidden />
       <ReachabilityShifter>
         <GestureHost>
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <TabNavigator />
           </NavigationContainer>
         </GestureHost>
@@ -399,23 +457,32 @@ export default function App() {
               <ProfileProvider>
                 <AppsProviderWithIconTreatment>
                 <DeviceProvider>
+                <LocationProvider>
                 <FoldersProvider>
                 <BookmarksProvider>
                 <ReadingListProvider>
                 <AssistiveTouchProvider>
-                <HealthProvider>
                 <WalletProvider>
+                <CardProvider>
+                {/* Health (#276): o HealthScreen chama useHealth(), que lança
+                    sem provider acima — abrir o ícone Health no launcher real
+                    rebentava. Montado aqui, ao lado dos restantes stores. */}
+                <HealthProvider>
+                <ShortcutsProvider>
                 <ErrorBoundary>
                   <AlertProvider>
                     <AppContent />
                   </AlertProvider>
                 </ErrorBoundary>
-                </WalletProvider>
+                </ShortcutsProvider>
                 </HealthProvider>
+                </CardProvider>
+                </WalletProvider>
                 </AssistiveTouchProvider>
                 </ReadingListProvider>
                 </BookmarksProvider>
                 </FoldersProvider>
+                </LocationProvider>
                 </DeviceProvider>
                 </AppsProviderWithIconTreatment>
               </ProfileProvider>

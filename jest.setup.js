@@ -22,18 +22,6 @@ jest.mock('expo-haptics', () => ({
 
 jest.mock('expo-blur', () => ({ BlurView: 'BlurView' }));
 
-// expo-sensors: the Pedometer has no JS-side implementation under jest-expo.
-// `watchStepCount` returns a subscription handle and tests reach for the
-// registered callback via `Pedometer.watchStepCount.mock.calls[0][0]` to inject
-// real step deltas.
-jest.mock('expo-sensors', () => ({
-  Pedometer: {
-    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
-    watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
-    getStepCountAsync: jest.fn(() => Promise.resolve({ steps: 0 })),
-  },
-}));
-
 jest.mock('expo-navigation-bar', () => ({
   setBackgroundColorAsync: jest.fn(() => Promise.resolve()),
   setVisibilityAsync: jest.fn(() => Promise.resolve()),
@@ -44,6 +32,14 @@ jest.mock('expo-navigation-bar', () => ({
 }));
 
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
+
+// expo-linking's real createURL() reads the manifest via expo-constants to
+// resolve the URI scheme, and throws when Constants.expoConfig is empty (as
+// it is under jest-expo's mock) — see Schemes.js's resolveScheme(). Mocked
+// like the other native-backed expo-* modules above (#785).
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path) => `iostoandroid://${path ?? ''}`),
+}));
 
 jest.mock('expo-brightness', () => ({
   getBrightnessAsync: jest.fn(() => Promise.resolve(0.5)),
@@ -122,9 +118,29 @@ jest.mock('expo-location', () => ({
   Accuracy: { Low: 1, Balanced: 2, High: 3, Highest: 4, BestForNavigation: 5 },
 }));
 
+// #271 Health: the step-counter sensor does not exist in the JS test
+// environment. Default to "available" so the store's happy path is reachable;
+// individual tests override with mockResolvedValue(false).
+jest.mock('expo-sensors', () => ({
+  Pedometer: {
+    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+    watchStepCount: jest.fn(() => ({ remove: jest.fn() })),
+    getStepCountAsync: jest.fn(() => Promise.resolve({ steps: 0 })),
+  },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true })),
   launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true })),
+}));
+
+// Default secure-store mock (CardStore, LockScreen, LauncherSettingsScreen).
+// Individual test files may still override with their own jest.mock('expo-secure-store', ...)
+// when they need a stateful in-memory implementation.
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => Promise.resolve(null)),
+  setItemAsync: jest.fn(() => Promise.resolve()),
+  deleteItemAsync: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -342,6 +358,10 @@ jest.mock('./modules/launcher-module/src', () => ({
   addSpeechResultListener: jest.fn(() => jest.fn()),
   addSpeechPartialResultListener: jest.fn(() => jest.fn()),
   addSpeechErrorListener: jest.fn(() => jest.fn()),
+  // NotificationCenterScreen subscribes to live posted/removed events (#646).
+  // Return a no-op unsubscribe; individual tests override with mockReturnValue.
+  addNotificationListener: jest.fn(() => jest.fn()),
+  addNotificationRemovedListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
@@ -375,6 +395,8 @@ jest.mock('./modules/launcher-module/src', () => ({
     sendSms: jest.fn(() => Promise.resolve(true)),
     requestAllPermissions: jest.fn(() => Promise.resolve(true)),
     checkPermissions: jest.fn(() => Promise.resolve({})),
+    // #624 Privacy Monitor
+    getPrivacyReport: jest.fn(() => Promise.resolve({ generatedAt: Date.now(), sensors: [] })),
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
@@ -388,6 +410,13 @@ jest.mock('./modules/launcher-module/src', () => ({
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #627 child issue: push the protected set to the foreground monitor.
+    setProtectedApps: jest.fn(() => Promise.resolve(true)),
+    isForegroundMonitorEnabled: jest.fn(() => Promise.resolve(false)),
+    // #624-S3: real per-app usage time from UsageStatsManager (not sensor access).
+    getScreenTimeStats: jest.fn(() => Promise.resolve([])),
+    getTodayScreenTime: jest.fn(() => Promise.resolve({ totalMinutes: 0, topApps: [] })),
+    openAccessibilitySettings: jest.fn(() => Promise.resolve(true)),
     // #608 Tap to Wake
     wakeScreen: jest.fn(() => Promise.resolve()),
     // #626 Live Activities

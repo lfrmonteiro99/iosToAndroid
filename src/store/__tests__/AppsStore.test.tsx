@@ -215,7 +215,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
 
     // #486/#482: a máscara (forma/expoente) viaja no 1º argumento, o tratamento no 2º.
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-all',
     );
   });
@@ -226,7 +226,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
   });
@@ -244,7 +244,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     await act(async () => {});
     await act(async () => {});
     expect(LauncherModule.getInstalledApps).toHaveBeenLastCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-all',
     );
 
@@ -257,7 +257,7 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
 
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledTimes(1);
     expect(LauncherModule.getInstalledApps).toHaveBeenCalledWith(
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'none',
     );
   });
@@ -287,12 +287,12 @@ describe('AppsStore — icon cache (#486: treatment threading, size, manual rebu
     // devolver ícones com outra silhueta (#486 + #482).
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.a',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(LauncherModule.getAppInfo).toHaveBeenCalledWith(
       'com.example.b',
-      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle4.7' }),
+      expect.objectContaining({ shape: 'squircle', cacheKey: 'squircle5.0' }),
       'mask-adaptive-only',
     );
     expect(result.current.isRebuildingIconCache).toBe(false);
@@ -619,6 +619,108 @@ describe('AppsStore — home grid holes (#762: removeFromHome no longer recompac
       { packageName: 'com.example.banana', position: 3 },
     ]);
     expect(result.current.nonDockApps.map(a => a.packageName)).not.toContain('com.example.banana');
+  });
+});
+
+// ─── #761: arrastar um ícone em jiggle-mode para outra célula troca posições ──
+describe('AppsStore — swapHomeApps (#761: jiggle-mode drag swaps two positions)', () => {
+  const apple = { name: 'Apple', packageName: 'com.example.apple', icon: '', isSystem: false };
+  const banana = { name: 'Banana', packageName: 'com.example.banana', icon: '', isSystem: false };
+  const cherry = { name: 'Cherry', packageName: 'com.example.cherry', icon: '', isSystem: false };
+
+  function seedLayout(homeApps: Array<{ packageName: string; position: number }>) {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === '@iostoandroid/apps_layout' ? JSON.stringify({ dockApps: [], homeApps }) : null),
+    );
+  }
+
+  it('swaps the two positions and leaves every other entry untouched', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 2 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana, cherry]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.cherry');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 2 },
+      { packageName: 'com.example.banana', position: 1 },
+      { packageName: 'com.example.cherry', position: 0 },
+    ]);
+  });
+
+  it('persists the swapped layout so it survives the next launch', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.banana');
+    });
+
+    const persistCall = (AsyncStorage.setItem as jest.Mock).mock.calls.find(
+      (call) => call[0] === '@iostoandroid/apps_layout',
+    );
+    expect(persistCall).toBeTruthy();
+    expect(JSON.parse(persistCall![1]).homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 1 },
+      { packageName: 'com.example.banana', position: 0 },
+    ]);
+  });
+
+  it('swapping a package with itself is a no-op (no persist, no position change)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.apple');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    expect(AsyncStorage.setItem).not.toHaveBeenCalledWith('@iostoandroid/apps_layout', expect.anything());
+  });
+
+  it('swapping against an unknown package is a no-op (dropping on something not in homeApps)', async () => {
+    seedLayout([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
+    (LauncherModule.getInstalledApps as jest.Mock).mockResolvedValue([apple, banana]);
+    const { result } = renderHook(() => useApps(), { wrapper });
+    await act(async () => {});
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.swapHomeApps?.('com.example.apple', 'com.example.nonexistent');
+    });
+
+    expect(result.current.homeApps).toEqual([
+      { packageName: 'com.example.apple', position: 0 },
+      { packageName: 'com.example.banana', position: 1 },
+    ]);
   });
 });
 

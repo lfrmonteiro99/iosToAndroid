@@ -183,12 +183,16 @@ describe('SettingsStore fontChoice (#477: Inter or system typeface)', () => {
 });
 
 describe('SettingsStore iconTreatment (#486: icon mask treatment + cache rebuild)', () => {
-  it('defaults to mask-adaptive-only when nothing is stored', async () => {
+  // O default passou de 'mask-adaptive-only' a 'mask-all' no ed9f035: com
+  // adaptive-only, a maioria das apps ficava quadrada porque só os ícones
+  // adaptativos eram mascarados. 'mask-all' dá a TODOS a mesma silhueta, que é
+  // o que o iOS faz. Mudança deliberada; o teste é que ficou no valor antigo.
+  it('defaults to mask-all when nothing is stored', async () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     await act(async () => {});
 
-    expect(result.current.settings.iconTreatment).toBe('mask-adaptive-only');
-    expect(DEFAULT_SETTINGS.iconTreatment).toBe('mask-adaptive-only');
+    expect(result.current.settings.iconTreatment).toBe('mask-all');
+    expect(DEFAULT_SETTINGS.iconTreatment).toBe('mask-all');
   });
 
   it('update() switches iconTreatment to mask-all', async () => {

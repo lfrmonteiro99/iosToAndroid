@@ -103,7 +103,7 @@ export function LauncherSettingsScreen() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const { settings, update, updateMany, reset: resetSettings } = useSettings();
-  const { dockApps, apps, hiddenApps, unhideApp, compactHomeLayout } = useApps();
+  const { dockApps, apps, hiddenApps, unhideApp, protectedApps = [], compactHomeLayout } = useApps();
   const { folders, deleteFolder } = useFolders();
 
   const alert = useAlert();
@@ -627,6 +627,20 @@ export function LauncherSettingsScreen() {
           showChevron
           isLast
           onPress={handleChangePinPress}
+        />
+      </CupertinoListSection>
+
+      {/* ── Protected Apps (#627) ─────────────────────────────────
+          Distinto do Lock Screen acima: aquele bloqueia o launcher todo, este
+          pede biometria a abrir apps individuais (ver AppsStore.launchApp). */}
+      <CupertinoListSection header="App Lock">
+        <CupertinoListTile
+          title="Protected Apps"
+          subtitle={protectedApps.length > 0 ? `${protectedApps.length} protected` : 'None'}
+          leading={{ name: 'shield-checkmark', color: '#fff', backgroundColor: '#34C759' }}
+          showChevron
+          isLast
+          onPress={() => navigation.navigate('ProtectedApps')}
         />
       </CupertinoListSection>
 

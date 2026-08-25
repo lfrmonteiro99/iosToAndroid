@@ -1,0 +1,26 @@
+name: Enforce PR base branch
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: Only allow PRs from dev into main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject PRs to main that do not come from dev
+        run: |
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          echo "PR head: $HEAD_REF -> base: $BASE_REF"
+          if [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" != "dev" ]; then
+            echo "::error::PRs into main must come from 'dev'. Change this PR's base branch to 'dev'."
+            exit 1
+          fi
+          echo "OK"

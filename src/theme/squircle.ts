@@ -6,7 +6,7 @@
  */
 
 /** Generate SVG path for a superellipse (squircle shape). */
-export function superellipsePath(size: number, n = 4.7, segments = 64): string {
+export function superellipsePath(size: number, n = 5.0, segments = 64): string {
   const a = size / 2;
   const b = size / 2;
   const center = size / 2;

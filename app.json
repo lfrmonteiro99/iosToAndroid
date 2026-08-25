@@ -2,7 +2,8 @@
   "expo": {
     "name": "iosToAndroid",
     "slug": "iosToAndroid",
-    "version": "1.89.0",
+    "scheme": "iostoandroid",
+    "version": "1.115.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -72,6 +73,7 @@
       "./plugins/withAsyncStorageRepo",
       "./plugins/withLauncherIntent",
       "./plugins/withGradleMemory",
+      "./plugins/withFastReleaseBuilds",
       [
         "expo-camera",
         {

@@ -12,6 +12,8 @@ import { LocationProvider } from './store/LocationStore';
 import { ReadingListProvider } from './store/ReadingListStore';
 import { HealthProvider } from './store/HealthStore';
 import { WalletProvider } from './store/WalletStore';
+import { CardProvider } from './store/CardStore';
+import { ShortcutsProvider } from './store/ShortcutsStore';
 
 // gateFirstRender={false} on the two gated providers.
 //
@@ -37,9 +39,13 @@ function AllProviders({ children }: { children: React.ReactNode }) {
                   <LocationProvider>
                     <ReadingListProvider>
                       <HealthProvider>
-                        <WalletProvider>
-                          {children}
-                        </WalletProvider>
+                      <WalletProvider>
+                      <CardProvider>
+                      <ShortcutsProvider>
+                        {children}
+                      </ShortcutsProvider>
+                      </CardProvider>
+                      </WalletProvider>
                       </HealthProvider>
                     </ReadingListProvider>
                   </LocationProvider>

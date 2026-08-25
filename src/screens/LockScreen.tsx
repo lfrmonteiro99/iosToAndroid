@@ -33,6 +33,7 @@ import { useDevice } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { useApps } from '../store/AppsStore';
 import { useTheme } from '../theme/ThemeContext';
+import { Shape } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 
 const getLauncher = async () => {
@@ -162,6 +163,100 @@ interface NotificationGroupData {
   appName: string;
   appIcon: string;
   notifications: RealNotification[];
+}
+
+// ---------------------------------------------------------------------------
+// Widget slots (complications) — compact chips above/below the clock
+// ---------------------------------------------------------------------------
+
+function LockWidgetSlot({
+  icon,
+  iconColor,
+  value,
+  label,
+  accessibilityLabel,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  value: string;
+  label: string;
+  accessibilityLabel: string;
+  onPress?: () => void;
+}) {
+  const { textScale } = useTheme();
+  if (onPress) {
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.widgetSlot, pressed && { opacity: 0.7 }]}
+        onPress={onPress}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole="button"
+      >
+        <GlassSurface intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+        <Ionicons name={icon} size={16} color={iconColor} />
+        <Text style={[styles.widgetSlotValue, { fontSize: 13 * textScale }]}>{value}</Text>
+        <Text style={[styles.widgetSlotLabel, { fontSize: 11 * textScale }]}>{label}</Text>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={styles.widgetSlot} accessibilityLabel={accessibilityLabel} accessibilityRole="text">
+      <GlassSurface intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+      <Ionicons name={icon} size={16} color={iconColor} />
+      <Text style={[styles.widgetSlotValue, { fontSize: 13 * textScale }]}>{value}</Text>
+      <Text style={[styles.widgetSlotLabel, { fontSize: 11 * textScale }]}>{label}</Text>
+    </View>
+  );
+}
+
+function BatteryWidgetSlot({ level, isCharging, onPress }: { level: number; isCharging: boolean; onPress?: () => void }) {
+  const pct = Math.round(level * 100);
+  const color = pct > 20 ? '#30D158' : '#FF453A';
+  const icon: keyof typeof Ionicons.glyphMap = isCharging
+    ? 'battery-charging-outline'
+    : pct > 50
+    ? 'battery-full-outline'
+    : pct > 20
+    ? 'battery-half-outline'
+    : 'battery-dead-outline';
+  return (
+    <LockWidgetSlot
+      icon={icon}
+      iconColor={color}
+      value={`${pct}%`}
+      label="Battery"
+      accessibilityLabel={`Battery widget, ${pct}%`}
+      onPress={onPress}
+    />
+  );
+}
+
+function StorageWidgetSlot({ usedGB, totalGB, onPress }: { usedGB: string; totalGB: string; onPress?: () => void }) {
+  return (
+    <LockWidgetSlot
+      icon="server-outline"
+      iconColor="rgba(255,255,255,0.8)"
+      value={`${usedGB} GB`}
+      label="Storage"
+      accessibilityLabel={`Storage widget, ${usedGB} GB of ${totalGB} GB used`}
+      onPress={onPress}
+    />
+  );
+}
+
+function WeatherWidgetSlot({ temp, condition, icon, onPress }: { temp: number; condition: string; icon: string; onPress?: () => void }) {
+  const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
+  return (
+    <LockWidgetSlot
+      icon={iconName}
+      iconColor="#FFD60A"
+      value={`${temp}°C`}
+      label={condition}
+      accessibilityLabel={`Weather widget, ${temp}°C, ${condition}`}
+      onPress={onPress}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -742,11 +837,43 @@ export function LockScreen({ navigation, onUnlock }: { navigation?: AppNavigatio
         </View>
 
         {/* ---------------------------------------------------------------- */}
+        {/* Widget slots above the clock (iOS-style complications)            */}
+        {/* ---------------------------------------------------------------- */}
+        {!!device.weather.condition && (
+          <View style={styles.widgetRowAbove}>
+            <WeatherWidgetSlot
+              temp={device.weather.temp}
+              condition={device.weather.condition}
+              icon={device.weather.icon}
+              onPress={navigation ? () => navigation.navigate('Weather') : undefined}
+            />
+          </View>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
         {/* Large clock                                                        */}
         {/* ---------------------------------------------------------------- */}
         <View style={styles.clockArea}>
           <Text style={[styles.fullDate, { fontSize: 20 * textScale }]}>{formatFullDate(now)}</Text>
           <Text style={styles.bigClock}>{formatLargeClock(now, settings.use24Hour)}</Text>
+        </View>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Widget slots below the clock (iOS-style complications)            */}
+        {/* ---------------------------------------------------------------- */}
+        <View style={styles.widgetRowBelow}>
+          <BatteryWidgetSlot
+            level={device.battery.level}
+            isCharging={device.battery.isCharging}
+            onPress={navigation ? () => navigation.navigate('Battery') : undefined}
+          />
+          {!device.storageError && (
+            <StorageWidgetSlot
+              usedGB={device.storage.usedGB}
+              totalGB={device.storage.totalGB}
+              onPress={navigation ? () => navigation.navigate('Storage') : undefined}
+            />
+          )}
         </View>
 
         {/* ---------------------------------------------------------------- */}
@@ -999,6 +1126,42 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
     marginBottom: 2,
     letterSpacing: 0.2,
+  },
+
+  // Widget slots (complications)
+  widgetRowAbove: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  widgetRowBelow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  widgetSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Shape.widgetSmall.radius,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  widgetSlotValue: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  widgetSlotLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '400',
   },
 
   // Notifications

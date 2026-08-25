@@ -180,4 +180,31 @@ describe('PassDetailScreen', () => {
     expect(navigation.goBack).not.toHaveBeenCalled();
     expect(api!.passes.length).toBe(1);
   });
+
+  // #286: the simulated-pay/Google-Pay flow (CardDetailScreen) is reached
+  // from here rather than from the WalletScreen row tap, which #284 already
+  // claimed for PassDetail (view/edit/delete). See CardDetailScreen.tsx for
+  // the payment UI itself — this only proves the entry point wires through.
+  it('renders a Pay button that navigates to CardDetail with the open pass id', async () => {
+    const navigation = makeNavigation();
+    let api: ReturnType<typeof useWallet> | null = null;
+    const { getByText } = render(
+      <WalletProvider>
+        <Harness navigation={navigation} onApi={(a) => { api = a; }} />
+      </WalletProvider>,
+    );
+    await waitFor(() => expect(getByText('TAP LIS-OPO')).toBeTruthy());
+
+    fireEvent.press(getByText('Pay'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('CardDetail', { passId: api!.passes[0].id });
+  });
+
+  it('does not show a Pay button on the not-found state', () => {
+    const { queryByText } = render(
+      <PassDetailScreen navigation={makeNavigation()} route={makeRoute('does-not-exist')} />,
+    );
+
+    expect(queryByText('Pay')).toBeNull();
+  });
 });

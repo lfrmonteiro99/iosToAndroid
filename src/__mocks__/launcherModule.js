@@ -2,6 +2,7 @@ module.exports = {
   __esModule: true,
   // Named exports used by App.tsx (notification listener) and onBridgeError handler
   addNotificationListener: jest.fn(() => jest.fn()),
+  addNotificationRemovedListener: jest.fn(() => jest.fn()),
   addPackageChangedListener: jest.fn(() => jest.fn()),
   onBridgeError: jest.fn(() => jest.fn()),
   default: {
@@ -37,9 +38,19 @@ module.exports = {
     sendSms: jest.fn(() => Promise.resolve(true)),
     requestAllPermissions: jest.fn(() => Promise.resolve(true)),
     checkPermissions: jest.fn(() => Promise.resolve({})),
+    // #624 Privacy Monitor
+    getPrivacyReport: jest.fn(() => Promise.resolve({ generatedAt: Date.now(), sensors: [] })),
     startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
+    // #634 App access (sensor usage)
+    getRecentAccessEvents: jest.fn(() => Promise.resolve([])),
+    getAppAccessCounts: jest.fn(() => Promise.resolve({})),
+    startAccessTrackingService: jest.fn(() => Promise.resolve(false)),
+    stopAccessTrackingService: jest.fn(() => Promise.resolve(false)),
+    isAccessTrackingServiceRunning: jest.fn(() => Promise.resolve(false)),
+    getScreenTimeStats: jest.fn(() => Promise.resolve([])),
+    getTodayScreenTime: jest.fn(() => Promise.resolve({ totalMinutes: 0, topApps: [] })),
     getCalendarEvents: jest.fn(() => Promise.resolve([])),
     getNowPlaying: jest.fn(() => Promise.resolve({ title: '', artist: '', album: '', isPlaying: false, packageName: '' })),
     uninstallApp: jest.fn(() => Promise.resolve(true)),
@@ -50,5 +61,9 @@ module.exports = {
     // #626 Live Activities
     postLiveActivity: jest.fn(() => Promise.resolve(true)),
     cancelLiveActivity: jest.fn(() => Promise.resolve(true)),
+    // #636 Back Tap
+    startTapDetection: jest.fn(() => Promise.resolve(true)),
+    stopTapDetection: jest.fn(() => Promise.resolve(true)),
+    isTapDetectionRunning: jest.fn(() => Promise.resolve(false)),
   },
 };

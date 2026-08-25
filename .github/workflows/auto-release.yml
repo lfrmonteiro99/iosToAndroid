@@ -140,7 +140,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add app.json package.json
           git commit -m "chore: bump version to ${{ steps.version.outputs.next }}"
-          git push
+          git push origin HEAD:main
+
+      - name: Sync version bump to dev
+        run: |
+          git fetch origin main dev
+          git checkout -B dev origin/dev
+          if ! git merge --ff-only origin/main; then
+            git merge --no-ff origin/main -m "chore: sync version bump ${{ steps.version.outputs.next }} to dev"
+          fi
+          git push origin dev
 
       - name: Create tag and release
         uses: actions/github-script@v7
@@ -245,9 +254,17 @@ jobs:
       - name: Make Gradlew executable
         run: chmod +x android/gradlew
 
+      # This job runs on a pull_request ref, so cache-read-only defaults to true:
+      # it restores the default-branch cache seeded by build-apk.yml and skips the
+      # upload of a PR-scoped cache no later run could read.
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      # Shipped APK keeps 32-bit ARM for older devices; the x86 emulator ABIs are
+      # dropped, which is where most of the CMake time went.
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4

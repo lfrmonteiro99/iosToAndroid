@@ -6,11 +6,14 @@ import { logger } from '../utils/logger';
 import { migrateAsyncStorageKey } from './storage';
 import { upsertApp, removeApp } from './appsIndexReducer';
 import { getIconMask, subscribeIconMask, type IconMaskOptions } from '../utils/iconShape';
+import { authenticateWithBiometrics } from '../utils/biometricAuth';
+import { dispatchLaunchApp } from '../actions/primitiveDispatcher';
 import type { PackageChange } from '../../modules/launcher-module/src';
 
 const STORAGE_KEY = '@iostoandroid/apps_layout';
 const LIBRARY_ONLY_KEY = '@iostoandroid/library_only';
 const HIDDEN_APPS_KEY = '@iostoandroid/hidden_apps';
+const PROTECTED_APPS_KEY = '@iostoandroid/protected_apps';
 const APPS_INDEX_KEY = '@iostoandroid/apps_index';
 const RECENTS_KEY = '@iostoandroid/recent_apps';
 const RECENTS_LEGACY_KEY = '@recent_apps';
@@ -95,6 +98,33 @@ export function assignHomePositions(homeApps: HomeApp[], apps: InstalledApp[]): 
   return [...homeApps, ...additions];
 }
 
+/**
+ * Swaps the `position` of two homeApps entries (#761 — jiggle-mode drag to
+ * reorder). This is the classic iOS behaviour: dropping icon A onto icon B's
+ * cell trades their positions, it does not shift everything in between (that
+ * shift, and dropping on an EMPTY cell, is the next sub-issue's scope — #761
+ * explicitly excludes it).
+ *
+ * Returns the same array reference when there is nothing to do (same
+ * package, or either package has no recorded position — dragging something
+ * not yet in homeApps shouldn't happen via the grid, but failing closed here
+ * means a stray call is a no-op instead of corrupting positions), so a no-op
+ * swap does not trigger an extra persist()/re-render.
+ */
+export function swapHomePositions(homeApps: HomeApp[], packageA: string, packageB: string): HomeApp[] {
+  if (packageA === packageB) return homeApps;
+  const idxA = homeApps.findIndex(h => h.packageName === packageA);
+  const idxB = homeApps.findIndex(h => h.packageName === packageB);
+  if (idxA === -1 || idxB === -1) return homeApps;
+  const posA = homeApps[idxA].position;
+  const posB = homeApps[idxB].position;
+  if (posA === posB) return homeApps;
+  const next = [...homeApps];
+  next[idxA] = { ...next[idxA], position: posB };
+  next[idxB] = { ...next[idxB], position: posA };
+  return next;
+}
+
 // Dynamic import to avoid crashing the module on non-Android. Falls back to a
 // synchronous require when dynamic import() is unavailable (e.g. Jest's VM
 // without --experimental-vm-modules) so moduleNameMapper mocks still apply in tests.
@@ -149,6 +179,13 @@ interface AppsState {
    * not silently undo a "Remove from Home".
    */
   hiddenApps: string[];
+  /**
+   * Packages that require a successful biometric authentication (#627 —
+   * "Protected Apps") before launchApp() actually starts them. Independent of
+   * hiddenApps: a protected app can still be visible everywhere, it just gates
+   * on open.
+   */
+  protectedApps: string[];
 }
 
 export interface IconCacheRebuildProgress {
@@ -174,6 +211,13 @@ interface AppsContextValue {
    */
   hiddenApps: string[];
   /**
+   * Packages gated behind biometric authentication on launch (#627 —
+   * "Protected Apps"). See launchApp(). Optional on the context value for the
+   * same reason as libraryOnlyApps above — older hand-built test mocks cast to
+   * AppsContextValue without it; the real provider always populates it.
+   */
+  protectedApps?: string[];
+  /**
    * `apps` minus the hidden packages — what the App Library shows in its
    * categories and Recently Added / Suggestions strips. Search deliberately
    * keeps reading `apps` so a hidden app remains launchable.
@@ -190,6 +234,13 @@ interface AppsContextValue {
   addToHome: (packageName: string) => void;
   removeFromHome: (packageName: string) => void;
   /**
+   * Swaps two homeApps entries' positions (#761 — jiggle-mode drag to
+   * reorder). Optional on the context value for the same reason as
+   * protectApp above: older hand-built test mocks cast to AppsContextValue
+   * without it keep type-checking; the real provider always populates it.
+   */
+  swapHomeApps?: (packageA: string, packageB: string) => void;
+  /**
    * Reassigns every homeApps[].position sequentially (0, 1, 2, ...) in their
    * current relative order, removing any holes left by removeFromHome or by
    * dropping an icon on an empty cell (#762). No app is dropped — only
@@ -200,6 +251,13 @@ interface AppsContextValue {
   hideApp: (packageName: string) => void;
   /** Undo hideApp() for the package (#606). */
   unhideApp: (packageName: string) => void;
+  /**
+   * Gate the package behind biometric authentication on launch (#627).
+   * Optional on the context value for the same reason as protectedApps above.
+   */
+  protectApp?: (packageName: string) => void;
+  /** Undo protectApp() for the package (#627). Optional, same reason. */
+  unprotectApp?: (packageName: string) => void;
   addToDock: (packageName: string) => void;
   removeFromDock: (packageName: string) => void;
   removeFromRecents: (packageName: string) => void;
@@ -230,6 +288,7 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.contacts': { name: 'Contacts', packageName: 'com.iostoandroid.contacts', icon: '', isSystem: false },
   'com.iostoandroid.settings': { name: 'Settings', packageName: 'com.iostoandroid.settings', icon: '', isSystem: false },
   'com.iostoandroid.weather': { name: 'Weather', packageName: 'com.iostoandroid.weather', icon: '', isSystem: false },
+  'com.iostoandroid.health': { name: 'Health', packageName: 'com.iostoandroid.health', icon: '', isSystem: false },
   'com.iostoandroid.clock': { name: 'Clock', packageName: 'com.iostoandroid.clock', icon: '', isSystem: false },
   'com.iostoandroid.camera': { name: 'Camera', packageName: 'com.iostoandroid.camera', icon: '', isSystem: false },
   'com.iostoandroid.photos': { name: 'Photos', packageName: 'com.iostoandroid.photos', icon: '', isSystem: false },
@@ -238,7 +297,6 @@ const VIRTUAL_APPS_MAP: Record<string, InstalledApp> = {
   'com.iostoandroid.notes': { name: 'Notes', packageName: 'com.iostoandroid.notes', icon: '', isSystem: false },
   'com.iostoandroid.reminders': { name: 'Reminders', packageName: 'com.iostoandroid.reminders', icon: '', isSystem: false },
   'com.iostoandroid.mail': { name: 'Mail', packageName: 'com.iostoandroid.mail', icon: '', isSystem: false },
-  'com.iostoandroid.health': { name: 'Health', packageName: 'com.iostoandroid.health', icon: '', isSystem: false },
   'com.iostoandroid.wallet': { name: 'Wallet', packageName: 'com.iostoandroid.wallet', icon: '', isSystem: false },
 };
 
@@ -285,6 +343,10 @@ export function AppsProvider({
   const alert = useAlert();
   const alertRef = React.useRef(alert);
   alertRef.current = alert;
+  // Read inside launchApp without adding state.protectedApps as a dependency
+  // (same reasoning as alertRef above): keeps launchApp's identity stable
+  // across every protect/unprotect toggle instead of recreating it.
+  const protectedAppsRef = React.useRef<string[]>([]);
   const [state, setState] = useState<AppsState>({
     allApps: [],
     homeApps: [],
@@ -292,7 +354,9 @@ export function AppsProvider({
     isLoading: true,
     libraryOnlyApps: [],
     hiddenApps: [],
+    protectedApps: [],
   });
+  protectedAppsRef.current = state.protectedApps;
   const [isDefault, setIsDefault] = useState(false);
   const [recentApps, setRecentApps] = useState<RecentApp[]>([]);
   const [iconCacheSizeBytes, setIconCacheSizeBytes] = useState(0);
@@ -384,6 +448,46 @@ export function AppsProvider({
   const persistHidden = useCallback((pkgs: string[]) => {
     AsyncStorage.setItem(HIDDEN_APPS_KEY, JSON.stringify(pkgs));
   }, []);
+
+  // Load the protected-apps set (#627). Own key, same reasoning as hiddenApps:
+  // independent of every other set so resetting one never silently changes another.
+  useEffect(() => {
+    (async () => {
+      const raw = await AsyncStorage.getItem(PROTECTED_APPS_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setState(prev => ({ ...prev, protectedApps: parsed.filter((p): p is string => typeof p === 'string') }));
+        }
+      } catch (e) { logger.warn('AppsStore', 'failed to parse protected apps set', e); }
+    })();
+  }, []);
+
+  const persistProtected = useCallback((pkgs: string[]) => {
+    AsyncStorage.setItem(PROTECTED_APPS_KEY, JSON.stringify(pkgs));
+  }, []);
+
+  // #627 child issue: keep the native foreground monitor (ForegroundMonitorService)
+  // in sync with the protected set. Whenever the set changes we push it down so
+  // the AccessibilityService can gate the app even when launched from outside the
+  // launcher (recent apps / share sheet / deep link) — the JS gate in launchApp
+  // only covers in-launcher opens. Fail-open here: if the module/binding is
+  // unavailable we log and move on; not being able to seed the service must not
+  // break the launcher's own launch path.
+  const pushProtectedToMonitor = useCallback(async (pkgs: string[]) => {
+    try {
+      const mod = await getLauncherModule();
+      await mod?.setProtectedApps?.(pkgs);
+    } catch (e) {
+      logger.warn('AppsStore', 'could not push protected apps to monitor', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Seed the monitor whenever the protected set settles or changes.
+    pushProtectedToMonitor(state.protectedApps);
+  }, [state.protectedApps, pushProtectedToMonitor]);
 
   const addToRecents = useCallback(async (packageName: string) => {
     setRecentApps(prev => {
@@ -633,21 +737,25 @@ export function AppsProvider({
   // Returns whether the launch actually succeeded (#509) — callers that show
   // an icon-expand transition need this to revert it on failure instead of
   // leaving the animation stuck full-screen over a launcher that never left.
+  // #781: the decision procedure (protected-apps gate, native launch, recents,
+  // error alert) now lives in dispatchLaunchApp — a framework-free primitive
+  // any caller can dispatch, not just one running inside this Provider.
   const launchApp = useCallback(async (packageName: string): Promise<boolean> => {
-    if (Platform.OS !== 'android') return false;
-    try {
-      const LauncherModule = (await import('../../modules/launcher-module/src')).default;
-      const ok = await LauncherModule.launchApp(packageName);
-      if (ok) {
-        addToRecents(packageName);
-      } else {
-        alertRef.current('Error', 'Could not launch app. Please try again.');
-      }
-      return ok;
-    } catch {
-      alertRef.current('Error', 'Could not launch app. Please try again.');
-      return false;
-    }
+    return dispatchLaunchApp(packageName, {
+      isAndroid: Platform.OS === 'android',
+      isProtected: (pkg) => protectedAppsRef.current.includes(pkg),
+      authenticate: authenticateWithBiometrics,
+      launchNative: async (pkg) => {
+        // getLauncherModule(), not a bare `await import(...)`: the raw dynamic
+        // import throws under Jest ("invoked without --experimental-vm-modules"),
+        // which made this whole function silently fail — and therefore
+        // untestable — for both protected and unprotected packages alike.
+        const LauncherModule = await getLauncherModule();
+        return (await LauncherModule?.launchApp(pkg)) ?? false;
+      },
+      onLaunched: addToRecents,
+      onError: (title, message) => alertRef.current(title, message),
+    });
   }, [addToRecents]);
 
   const addToHome = useCallback((packageName: string) => {
@@ -672,6 +780,15 @@ export function AppsProvider({
       return { ...prev, homeApps, libraryOnlyApps };
     });
   }, [persist, persistLibraryOnly]);
+
+  const swapHomeApps = useCallback((packageA: string, packageB: string) => {
+    setState(prev => {
+      const homeApps = swapHomePositions(prev.homeApps, packageA, packageB);
+      if (homeApps === prev.homeApps) return prev;
+      persist(prev.dockApps, homeApps);
+      return { ...prev, homeApps };
+    });
+  }, [persist]);
 
   // #762: sorts by current position (stable — Array.prototype.sort is stable
   // since ES2019, and ties can't happen because positions are unique) then
@@ -705,6 +822,25 @@ export function AppsProvider({
       return { ...prev, hiddenApps };
     });
   }, [persistHidden]);
+
+  const protectApp = useCallback((packageName: string) => {
+    setState(prev => {
+      // Idempotent, same reasoning as hideApp above.
+      if (prev.protectedApps.includes(packageName)) return prev;
+      const protectedApps = [...prev.protectedApps, packageName];
+      persistProtected(protectedApps);
+      return { ...prev, protectedApps };
+    });
+  }, [persistProtected]);
+
+  const unprotectApp = useCallback((packageName: string) => {
+    setState(prev => {
+      if (!prev.protectedApps.includes(packageName)) return prev;
+      const protectedApps = prev.protectedApps.filter(p => p !== packageName);
+      persistProtected(protectedApps);
+      return { ...prev, protectedApps };
+    });
+  }, [persistProtected]);
 
   const addToDock = useCallback((packageName: string) => {
     setState(prev => {
@@ -812,6 +948,7 @@ export function AppsProvider({
     nonDockApps,
     libraryOnlyApps: state.libraryOnlyApps,
     hiddenApps: state.hiddenApps,
+    protectedApps: state.protectedApps,
     visibleApps,
     recentPackages,
     recentApps,
@@ -819,9 +956,12 @@ export function AppsProvider({
     launchApp,
     addToHome,
     removeFromHome,
+    swapHomeApps,
     compactHomeLayout,
     hideApp,
     unhideApp,
+    protectApp,
+    unprotectApp,
     addToDock,
     removeFromDock,
     removeFromRecents,
@@ -836,7 +976,7 @@ export function AppsProvider({
     isRebuildingIconCache,
     iconCacheRebuildProgress,
     rebuildIconCache,
-  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, compactHomeLayout, hideApp, unhideApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
+  }), [state, dockApps, nonDockApps, visibleApps, recentPackages, recentApps, isDefault, launchApp, addToHome, removeFromHome, swapHomeApps, compactHomeLayout, hideApp, unhideApp, protectApp, unprotectApp, addToDock, removeFromDock, removeFromRecents, clearRecents, openLauncherSettings, loadApps, iconCacheSizeBytes, isRebuildingIconCache, iconCacheRebuildProgress, rebuildIconCache]);
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;
 }

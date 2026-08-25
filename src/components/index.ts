@@ -1,3 +1,5 @@
+export { CupertinoBarChart } from './CupertinoBarChart';
+export type { BarChartDatum } from './CupertinoBarChart';
 export { CupertinoButton } from './CupertinoButton';
 export { CupertinoSwitch } from './CupertinoSwitch';
 export { CupertinoTextField } from './CupertinoTextField';
@@ -8,6 +10,7 @@ export { CupertinoNavigationBar } from './CupertinoNavigationBar';
 export { CupertinoActionSheet } from './CupertinoActionSheet';
 export { CupertinoAlertDialog } from './CupertinoAlertDialog';
 export { CupertinoTabBar } from './CupertinoTabBar';
+export { CupertinoSplitView } from './CupertinoSplitView';
 export { CupertinoSearchBar } from './CupertinoSearchBar';
 export { CupertinoSlider } from './CupertinoSlider';
 export { CupertinoActivityIndicator } from './CupertinoActivityIndicator';
@@ -38,6 +41,44 @@ export { EdgePanelOverlay } from './EdgePanelOverlay';
 export { AppLaunchOverlay, interpolateLaunchFrame } from './AppLaunchOverlay';
 export type { LaunchBounds } from './AppLaunchOverlay';
 export { GlassSurface } from './GlassSurface';
+export { IOContextMenu } from './IOContextMenu';
+export type { IOContextMenuProps, IOContextMenuItem } from './IOContextMenu';
+// Widgets now live in the shared src/widgets/ module (#811). Re-exported here
+// so existing call sites that import from '../components' keep working.
+export { WidgetCard } from '../widgets/WidgetCard';
+export type { WidgetCardProps } from '../widgets/WidgetCard';
+export { SmartStack, rotateForward, rotateBackward } from './SmartStack';
+export type { SmartStackProps, SmartStackItem } from './SmartStack';
 export { SiriWaveform } from './SiriWaveform';
 export type { SiriWaveformProps } from './SiriWaveform';
+export {
+  RideActivityCard,
+  MatchActivityCard,
+  TimerActivityCard,
+  TrackingActivityCard,
+  LiveActivityExampleDeck,
+  clamp01,
+  fractionOf,
+  formatRemainingMs,
+} from './LiveActivityCards';
+export { CupertinoContextMenu } from './CupertinoContextMenu';
+export type { ContextMenuItem, CupertinoContextMenuProps } from './CupertinoContextMenu';
 export type { GlassSurfaceProps } from './GlassSurface';
+export {
+  ALL_WIDGET_TYPES,
+  DEFAULT_ENABLED as DEFAULT_ENABLED_WIDGETS,
+  WIDGET_CONFIG_KEY,
+  WIDGET_LABELS,
+  WIDGET_ICONS,
+  loadWidgetConfig,
+  saveWidgetConfig,
+  useWidgetConfig,
+  useWidgetMap,
+  BatteryWidget,
+  StorageWidget,
+  WeatherWidget,
+  UpNextWidget,
+  MessagesWidget,
+  ScreenTimeWidget,
+} from '../widgets/TodayWidgets';
+export type { WidgetType, CalendarEventItem } from '../widgets/TodayWidgets';
