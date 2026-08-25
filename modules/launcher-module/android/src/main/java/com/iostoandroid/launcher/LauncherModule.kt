@@ -640,7 +640,7 @@ class LauncherModule : Module() {
                 // constant is absent, so we guard the SDK level and fall back to the
                 // general privacy settings — a crash here would surface as a dead tile.
                 "privacy_dashboard" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Settings.ACTION_PRIVACY_DASHBOARD
+                    "android.settings.PRIVACY_DASHBOARD_SETTINGS"
                 } else {
                     Settings.ACTION_PRIVACY_SETTINGS
                 }
@@ -1670,6 +1670,7 @@ class LauncherModule : Module() {
         // squircle mask; backfill them with the icon's edge colour so the
         // silhouette stays solid (#465/#480, now addressed).
         return backfillTransparentCorners(square)
+    }
 
     /**
      * Composes an AdaptiveIconDrawable ourselves: background layer clipped to
