@@ -56,6 +56,9 @@ export interface DeviceWeather {
   condition: string;
   icon: string;
   city: string;
+  /** Today's forecast high/low (°C), from the same wttr.in j1 payload as `temp`. */
+  maxTemp?: number;
+  minTemp?: number;
 }
 
 function mapWeatherIcon(code: string): string {
@@ -305,11 +308,14 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       const current = data.current_condition[0];
       const area = data.nearest_area[0];
+      const today = data.weather?.[0];
       return {
         temp: parseInt(current.temp_C, 10),
         condition: current.weatherDesc[0].value,
         icon: mapWeatherIcon(current.weatherCode),
         city: area.areaName[0].value,
+        maxTemp: today ? parseInt(today.maxtempC, 10) : undefined,
+        minTemp: today ? parseInt(today.mintempC, 10) : undefined,
       };
     } catch {
       return { temp: 0, condition: '', icon: 'cloud', city: '' };
