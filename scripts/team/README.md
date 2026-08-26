@@ -68,7 +68,40 @@ bash scripts/team/orchestrator.sh --pr 300      # só revê este PR
 bash scripts/team/curator.sh 212                # força análise
 ```
 
-O orquestrador **termina sozinho** quando não houver nenhum issue accionável.
+O orquestrador **termina sozinho** quando não houver nenhum issue accionável. É
+por isso que o `start.sh` o lança debaixo do `supervise.sh`.
+
+## Porque há um supervisor
+
+O orquestrador é um batch job: drena a fila e faz `exit 0` com "BACKLOG VAZIO".
+Isso era o comportamento certo com um lote fixo de 83 issues. Com issues a chegar
+de forma contínua é uma armadilha — um `qa:ready` filado depois desse instante
+fica na fila para sempre, porque não fica ninguém a olhar.
+
+E o `start.sh` não relançava nada: corria o orquestrador uma vez dentro do tmux e
+acabava em `echo '--- TERMINOU ---'; read -r`, que só existe para a pane não
+fechar. Pior, essa pane parqueada deixa a sessão tmux viva para sempre, e o
+`--status` decidia por `tmux has-session` — respondia **"a correr" com o processo
+morto há horas**. A avaria era invisível por construção.
+
+Duas correcções:
+
+* **`supervise.sh`** relança o orquestrador. Fila vazia → nova sondagem em
+  `TEAM_IDLE_SLEEP` (omissão 300s). Crash → backoff exponencial de
+  `TEAM_FAIL_SLEEP` (30s) até `TEAM_FAIL_SLEEP_MAX` (600s), que só reinicia
+  depois de uma corrida com mais de `TEAM_RUN_OK_S` (120s) — sem isso, um
+  crash-loop de arranque reiniciava o backoff a cada volta e martelava a API.
+  Supervisionar em vez de tirar o `exit 0` foi deliberado: cobre também o
+  orquestrador a **crashar**, que era igualmente fatal e igualmente invisível.
+* **`--status` pergunta pelos PIDs**, não pela sessão tmux
+  (`state/supervisor.pid`, `state/orchestrator.pid`). Distingue "a correr",
+  "entre ciclos", "a correr sem supervisor" (batch) e "PARADO" — e quando está
+  parado com a sessão tmux presente, di-lo em vez de a tomar por prova de vida.
+
+Os modos de alvo explícito (`--once`, `--max-cycles`, `--issue`, `--pr`) **não**
+são supervisionados: relançar um `--once` seria desobedecer ao pedido, e um
+`--issue N` em ciclo despacharia o mesmo issue para sempre. O `start.sh` detecta-os
+e corre o orquestrador directo.
 
 ## Os papéis
 

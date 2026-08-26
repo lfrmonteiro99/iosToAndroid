@@ -29,6 +29,25 @@ case "$ACTION" in
     exec tmux attach -t "$SESSION"
     ;;
   stop)
+    # O supervisor primeiro, e antes do tmux. Matar a sessão deixava-o a apanhar o
+    # SIGHUP da pane a fechar — e uma corrida em que ele relança o orquestrador
+    # entre o kill da sessão e a limpeza dos locks aqui em baixo, ressuscitando
+    # exactamente o que este comando existe para parar.
+    sup_pid=$(cat "$STATE_DIR/supervisor.pid" 2>/dev/null || echo "")
+    if [ -n "$sup_pid" ] && kill -0 "$sup_pid" 2>/dev/null; then
+      log "a terminar o supervisor (pid $sup_pid)"
+      kill -TERM "$sup_pid" 2>/dev/null || true
+      # O trap dele mata o orquestrador e apaga os pid files. Dar-lhe tempo.
+      for _ in 1 2 3 4 5; do kill -0 "$sup_pid" 2>/dev/null || break; sleep 1; done
+      kill -0 "$sup_pid" 2>/dev/null && kill -KILL "$sup_pid" 2>/dev/null || true
+    fi
+    orc_pid=$(cat "$STATE_DIR/orchestrator.pid" 2>/dev/null || echo "")
+    if [ -n "$orc_pid" ] && kill -0 "$orc_pid" 2>/dev/null; then
+      log "a terminar o orquestrador (pid $orc_pid)"
+      kill -TERM "$orc_pid" 2>/dev/null || true
+    fi
+    rm -f "$STATE_DIR/supervisor.pid" "$STATE_DIR/orchestrator.pid"
+
     tmux kill-session -t "$SESSION" 2>/dev/null && log "sessão '$SESSION' terminada" \
       || log "sessão '$SESSION' não estava a correr"
 
@@ -64,11 +83,38 @@ case "$ACTION" in
     exit 0
     ;;
   status)
-    if tmux has-session -t "$SESSION" 2>/dev/null; then
-      echo "orquestrador: a correr (tmux '$SESSION')"
+    # SAÚDE POR PID, NÃO POR SESSÃO TMUX.
+    #
+    # Isto decidia por `tmux has-session`, e mentia. O comando de arranque
+    # terminava em `echo '--- TERMINOU ---'; read -r` para a pane não fechar, o que
+    # deixa a sessão viva PARA SEMPRE depois de o orquestrador sair. Resultado:
+    # "orquestrador: a correr" com o processo morto há horas, e um `qa:ready` novo
+    # a apodrecer na fila sem ninguém dar por isso.
+    #
+    # A pergunta certa é se o processo existe, e é isso que o pid file responde.
+    # A sessão tmux continua a ser reportada, mas como o que é — uma pane, não uma
+    # prova de vida.
+    sup_pid=$(cat "$STATE_DIR/supervisor.pid" 2>/dev/null || echo "")
+    orc_pid=$(cat "$STATE_DIR/orchestrator.pid" 2>/dev/null || echo "")
+    sup_alive=0; orc_alive=0
+    [ -n "$sup_pid" ] && kill -0 "$sup_pid" 2>/dev/null && sup_alive=1
+    [ -n "$orc_pid" ] && kill -0 "$orc_pid" 2>/dev/null && orc_alive=1
+
+    if [ "$sup_alive" = "1" ] && [ "$orc_alive" = "1" ]; then
+      echo "orquestrador: a correr (pid $orc_pid, supervisor $sup_pid)"
+    elif [ "$sup_alive" = "1" ]; then
+      echo "orquestrador: entre ciclos — supervisor vivo (pid $sup_pid), a aguardar para relançar"
+    elif [ "$orc_alive" = "1" ]; then
+      echo "orquestrador: a correr sem supervisor (pid $orc_pid) — modo batch, não relança"
     else
-      echo "orquestrador: parado"
+      echo "orquestrador: PARADO"
+      [ -n "$sup_pid$orc_pid" ] && echo "    (pid files obsoletos: supervisor='$sup_pid' orquestrador='$orc_pid')"
+      if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "    a sessão tmux '$SESSION' existe na mesma — é a pane parqueada, não prova de vida."
+        echo "    Arrancar: bash scripts/team/start.sh --stop && bash scripts/team/start.sh"
+      fi
     fi
+    tmux has-session -t "$SESSION" 2>/dev/null && echo "tmux: sessão '$SESSION' presente"
     # SAÚDE PRIMEIRO. As contagens de issues pareciam saudáveis nas duas avarias
     # de hoje; o que as denunciava era não haver PRs nem agentes.
     bash "$SCRIPT_DIR/watchdog.sh" --report 2>/dev/null || true
@@ -143,10 +189,33 @@ case "$ACTION" in
     ;;
 esac
 
+# "Já está a correr" é uma pergunta sobre PROCESSOS, não sobre panes. Uma sessão
+# tmux parqueada no `read -r` de uma corrida antiga bloqueava o arranque para
+# sempre, com o `--status` a jurar que estava tudo bem.
+sup_pid=$(cat "$STATE_DIR/supervisor.pid" 2>/dev/null || echo "")
+orc_pid=$(cat "$STATE_DIR/orchestrator.pid" 2>/dev/null || echo "")
+for _p in "$sup_pid" "$orc_pid"; do
+  if [ -n "$_p" ] && kill -0 "$_p" 2>/dev/null; then
+    log "já está a correr (pid $_p). Usa --attach, ou --stop primeiro."
+    exit 1
+  fi
+done
 if tmux has-session -t "$SESSION" 2>/dev/null; then
-  log "sessão '$SESSION' já está a correr. Usa --attach, ou --stop primeiro."
-  exit 1
+  log "sessão '$SESSION' existe mas nada vivo lá dentro — a limpar a pane parqueada."
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
 fi
+rm -f "$STATE_DIR/supervisor.pid" "$STATE_DIR/orchestrator.pid"
+
+# Os modos de batch NÃO são supervisionados: relançar um `--once` seria desobedecer
+# ao que foi pedido, e um `--issue N` repetido em ciclo despacharia o mesmo issue
+# para sempre. Só o modo contínuo (sem argumentos de alvo) passa pelo supervisor.
+RUNNER="supervise.sh"
+for a in ${ORCH_ARGS[*]:-}; do
+  case "$a" in
+    --once|--max-cycles|--issue|--pr) RUNNER="orchestrator.sh"; break ;;
+  esac
+done
+[ "$RUNNER" = "orchestrator.sh" ] && log "modo batch (${ORCH_ARGS[*]}) — sem supervisor"
 
 LOGFILE="$LOG_DIR/orchestrator-$(date +%Y%m%d-%H%M%S).log"
 log "a arrancar em tmux '$SESSION'; log: $LOGFILE"
@@ -219,12 +288,22 @@ done
 # `tee` into a file as well as the pane: once a pane closes there is no way to
 # inspect what happened, and this thing runs for hours unattended.
 tmux new-session -d -s "$SESSION" -n orchestrator \
-  "cd '$SCRIPT_DIR' &&${TEAM_ENV:+ export$TEAM_ENV &&} bash orchestrator.sh ${ORCH_ARGS[*]:-} 2>&1 | tee '$LOGFILE'; echo '--- TERMINOU ---'; read -r"
+  "cd '$SCRIPT_DIR' &&${TEAM_ENV:+ export$TEAM_ENV &&} bash $RUNNER ${ORCH_ARGS[*]:-} 2>&1 | tee '$LOGFILE'; echo '--- TERMINOU ---'; read -r"
 
-cat <<EOF
-Pipeline a correr.
+if [ "$RUNNER" = "supervise.sh" ]; then
+  cat <<EOF
+Pipeline a correr, supervisionada — o orquestrador é relançado quando a fila
+esvazia (${TEAM_IDLE_SLEEP:-300}s) ou quando ele cai.
   Ver:      tmux attach -t $SESSION      (ou: start.sh --attach)
   Estado:   bash scripts/team/start.sh --status
   Log:      tail -f $LOGFILE
   Parar:    bash scripts/team/start.sh --stop
 EOF
+else
+  cat <<EOF
+Pipeline a correr em modo batch (uma passagem, sem supervisor).
+  Ver:      tmux attach -t $SESSION      (ou: start.sh --attach)
+  Log:      tail -f $LOGFILE
+  Parar:    bash scripts/team/start.sh --stop
+EOF
+fi

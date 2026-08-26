@@ -70,6 +70,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# PID FILE — é isto que o `start.sh --status` lê.
+#
+# O status decidia por `tmux has-session`, e a pane fica parqueada num `read -r`
+# depois de este processo sair: a sessão sobrevive ao processo e o status jurava
+# "a correr" com a fila parada há horas. Escrito aqui e não no supervisor porque
+# assim o modo batch (--once, --issue) também fica visível.
+ORCH_PID_FILE="$STATE_DIR/orchestrator.pid"
+echo "$$" > "$ORCH_PID_FILE" 2>/dev/null || true
+# Só apaga se o ficheiro ainda for NOSSO: em modo supervisionado o processo
+# seguinte já lá escreveu o dele quando este trap corre, e apagá-lo às cegas
+# deixava o status a dizer "parado" com o orquestrador vivo.
+trap '[ "$(cat "$ORCH_PID_FILE" 2>/dev/null)" = "$$" ] && rm -f "$ORCH_PID_FILE"' EXIT
+
 REVIEWED_STATE="$STATE_DIR/reviewed-shas"
 touch "$REVIEWED_STATE" 2>/dev/null || true
 
