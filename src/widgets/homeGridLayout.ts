@@ -225,3 +225,73 @@ export function freeCellCount<T>(page: PageLayout<T>, cols: number, rows: number
   const used = page.widgets.reduce((n, w) => n + w.colSpan * w.rowSpan, 0) + page.items.length;
   return Math.max(0, Math.max(1, cols) * Math.max(1, rows) - used);
 }
+
+/**
+ * Decide which home page a NEW widget should land on (#936).
+ *
+ * It goes where the user is looking — the page the gallery was opened from.
+ * If that page has no free footprint for the widget's span, the next page with
+ * room takes it and `overflowed` is set so the caller can tell the user;
+ * silently dropping the widget, or placing it on a page the user is not looking
+ * at, is worse than refusing.
+ *
+ * Free space is read from the REAL packed layout (`computeHomeGridLayout`'s
+ * output) — icons occupy cells too, and a page can be full of them with zero
+ * widgets. Re-deriving occupancy from just the widget list (an earlier version
+ * of this function did that) undercounts a page an icon grid has already
+ * filled: it would report room that does not exist. A page never seen before
+ * (past the end of `pages`) has no icons or widgets and is treated as empty.
+ *
+ * Pure and framework-free, so the rule is testable without mounting a pager.
+ */
+export function resolveWidgetPlacement<T>({
+  cols,
+  rows,
+  pages,
+  focusPage,
+  size,
+}: {
+  cols: number;
+  rows: number;
+  /** The packed layout (icons AND widgets) for each existing home page, in
+   * the same shape `computeHomeGridLayout` returns. */
+  pages: readonly PageLayout<T>[];
+  /** The page being viewed when the gallery opened. */
+  focusPage: number;
+  size: WidgetSize;
+}): { page: number; overflowed: boolean } {
+  const safeCols = Math.max(1, Math.floor(cols));
+  const safeRows = Math.max(1, Math.floor(rows));
+  const span = spanFor(size, safeCols);
+
+  const gridFor = (page: number): boolean[][] => {
+    const grid = makeGrid(safeCols, safeRows);
+    const layout = pages[page];
+    if (layout) {
+      for (const w of layout.widgets) {
+        if (fits(grid, w.col, w.row, w.colSpan, w.rowSpan)) {
+          occupy(grid, w.col, w.row, w.colSpan, w.rowSpan);
+        }
+      }
+      for (const it of layout.items) {
+        if (fits(grid, it.col, it.row, 1, 1)) {
+          occupy(grid, it.col, it.row, 1, 1);
+        }
+      }
+    }
+    return grid;
+  };
+
+  const start = Math.max(0, Math.floor(focusPage));
+  if (firstFit(gridFor(start), span.cols, span.rows)) {
+    return { page: start, overflowed: false };
+  }
+
+  // Walk forward. A page never seen before is empty, so this terminates at
+  // start + 1 at the latest — there is always a fresh page with room.
+  for (let page = start + 1; ; page++) {
+    if (firstFit(gridFor(page), span.cols, span.rows)) {
+      return { page, overflowed: true };
+    }
+  }
+}
