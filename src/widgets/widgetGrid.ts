@@ -14,10 +14,11 @@
 // (rowSpan 2) also reserves the next row beneath it.
 
 import type { WidgetType } from './TodayWidgets';
+import { DEFAULT_WIDGET_SIZES, type WidgetSize } from './widgetInstances';
 
 export const GRID_COLUMNS = 2;
 
-export type WidgetSize = 'small' | 'medium' | 'large';
+export type { WidgetSize };
 
 // Horizontal span (in columns) per size.
 export const SIZE_SPAN: Record<WidgetSize, number> = {
@@ -33,18 +34,12 @@ export const SIZE_ROW_SPAN: Record<WidgetSize, number> = {
   large: 2,
 };
 
-// Default size per widget type. Mirrors the wiring in TodayViewScreen:
-// weather/medium, upNext/large, everything else/small. This is the single
-// source of truth consumed by both the grid layout and any caller needing
-// DEFAULT_SIZES.
-export const DEFAULT_SIZES: Record<WidgetType, WidgetSize> = {
-  battery: 'small',
-  storage: 'small',
-  weather: 'medium',
-  upNext: 'large',
-  messages: 'small',
-  screenTime: 'small',
-};
+// The per-type default size now has ONE definition, in widgetInstances.ts.
+// It used to live here as `DEFAULT_SIZES` and again in TodayWidgets.tsx as
+// `WIDGET_SIZES` — the same six entries in two files, free to drift (#933).
+// Since size is a property of the placed instance now, all a per-type table can
+// honestly mean is the size a new widget of that type starts at.
+export { DEFAULT_WIDGET_SIZES };
 
 export interface WidgetGridCell {
   type: WidgetType;
@@ -63,13 +58,14 @@ export interface WidgetGridCell {
  * Pack a list of widget types into a 2-column grid.
  *
  * @param types   Ordered list of enabled widget types (order is preserved).
- * @param sizes   Optional per-type size override. Defaults to DEFAULT_SIZES;
+ * @param sizes   Optional per-type size override. Defaults to the per-type
+ *                placement defaults (DEFAULT_WIDGET_SIZES);
  *                an unknown/absent type falls back to 'small' rather than
  *                throwing, so a partial map from storage never crashes layout.
  */
 export function computeWidgetGrid(
   types: WidgetType[],
-  sizes: Record<WidgetType, WidgetSize> = DEFAULT_SIZES,
+  sizes: Record<WidgetType, WidgetSize> = DEFAULT_WIDGET_SIZES,
 ): WidgetGridCell[] {
   const cells: WidgetGridCell[] = [];
   // `rowCursor[col]` = next free row in that column. A wide (colSpan 2) widget

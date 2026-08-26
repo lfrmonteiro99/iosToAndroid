@@ -31,7 +31,6 @@ import {
   ALL_WIDGET_TYPES,
   WIDGET_LABELS,
   WIDGET_ICONS,
-  WIDGET_SIZES,
   useWidgetConfig,
   useWidgetMap,
   useSmartStackConfig,
@@ -48,7 +47,7 @@ import { SmartStack, type SmartStackItem } from '../components/SmartStack';
 // (side-by-side pairs); 'medium'/'large' widgets span both columns, with
 // 'large' getting extra vertical room for denser content (e.g. event lists).
 // Sizes and packing live in the framework-free src/widgets/widgetGrid.ts so
-// they stay unit-testable in isolation (#809). WIDGET_SIZES itself stays in
+// they stay unit-testable in isolation (#809). The per-type default size stays in
 // TodayWidgets so the Smart Stack eligibility logic reads the exact same
 // source as the grid (#810).
 
