@@ -359,17 +359,30 @@ describe('ConversationScreen — failed send preserves text and draft (#930)', (
       expect(store.get('@iostoandroid/draft_+15551234567')).toBe('Hello there');
     }, { timeout: 2000 });
 
+    // The failure is INJECTED, not inherited.
+    //
+    // This used to rely on getLauncher()'s require() failing in this
+    // environment, so sendSmsNative resolved false by accident. #927 then wired
+    // `activeLauncher` — the mapped mock ConversationScreen actually calls —
+    // into this suite, and that mock's sendSms resolves TRUE by default. The
+    // import stopped failing, the send started succeeding, and the failure path
+    // this test exists for became unreachable. It went red on dev, which is the
+    // gate working: a test whose premise is "the environment happens to be
+    // broken here" stops testing anything the moment the environment is fixed.
+    // mockReset before mockResolvedValue, not mockResolvedValueOnce: an earlier
+    // test in this file queues a `Once(true)` it does not always consume, and a
+    // queued once-value is served BEFORE anything set later. Passing alone and
+    // failing in the file is the signature of that. Resetting first makes this
+    // test independent of what ran before it.
+    activeLauncher.sendSms.mockReset();
+    activeLauncher.sendSms.mockResolvedValue(false);
+
     fireEvent.press(getByLabelText('Send message'));
 
-    // getLauncher()'s dynamic import cannot execute in this Jest environment
-    // (see the "sends to the chosen recipient" test above), so
-    // sendSmsNative always resolves to `false` here — exactly the shape a
-    // real unconfirmed/failed native sendSms now produces after #930
-    // (previously the native side always resolved `true`, so this failure
-    // path was unreachable from a real send). This proves the existing
-    // ConversationScreen.tsx guard — clear input/draft only `if (success)`
-    // — actually holds under a genuine failure, not just that it reads
-    // correctly on paper.
+    // Proves the ConversationScreen.tsx guard — clear input/draft only
+    // `if (success)` — holds under a real unconfirmed send (the shape #930 gave
+    // the native side, which used to always resolve true), not just that it
+    // reads correctly on paper.
     await waitFor(() => {
       expect(mockAlert.mock.calls.some(([title]) => title === 'Failed')).toBe(true);
     }, { timeout: 2000 });
