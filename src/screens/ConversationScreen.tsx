@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
+import { addSentMessage, loadSentMessages, mergeSentWithProvider, normalizeAddress, sentMessageToDeviceSms } from '../store/SentMessagesStore';
 import { CupertinoTextField, GlassSurface, useAlert } from '../components';
 import { findContactByPhone } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
@@ -261,7 +262,18 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     try {
       const page = await mod.getMessagesForThread(addr, MESSAGES_PAGE_SIZE, null);
       if (requestId !== threadRequestIdRef.current) return;
-      setThreadMessages(page);
+      // #929: the provider never carries what this app sent (only the default
+      // SMS app may write to content://sms), so the locally-recorded sent
+      // messages for this thread are merged in here — deduped against the
+      // provider and sorted by date, newest-first.
+      const threadKey = normalizeAddress(addr);
+      const localSent = (await loadSentMessages()).filter(
+        (m) => normalizeAddress(m.address) === threadKey,
+      );
+      if (requestId !== threadRequestIdRef.current) return;
+      setThreadMessages(mergeSentWithProvider(localSent, page));
+      // Paging stays driven by the provider alone: the local records are all
+      // recent, so they must not make the screen think there is another page.
       setHasMoreMessages(page.length === MESSAGES_PAGE_SIZE);
       oldestLoadedDateRef.current = page.length > 0 ? page[page.length - 1].date ?? null : null;
     } catch {
@@ -474,6 +486,10 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     }
 
     setIsSending(true);
+    // Captured by the onSent callback below, then awaited before scrolling —
+    // dispatchSendMessage's onSent is synchronous (fire-and-forget) so the
+    // list update would otherwise race the unrelated device.refresh() call.
+    let appended: Promise<unknown> = Promise.resolve();
     try {
       const success = await dispatchSendMessage(address, text, {
         isAndroid: Platform.OS === 'android',
@@ -510,7 +526,18 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             ],
           );
         },
-        onSent: () => {},
+        onSent: () => {
+          // #929: the provider never gets this message (SmsManager doesn't
+          // write to content://sms unless this app is the default SMS app),
+          // so append it locally instead of waiting for device.refresh().
+          appended = addSentMessage(address, text)
+            .then((saved) => {
+              // Optimistic append: the message shows in this thread right
+              // away, before device.refresh()/loadFirstPage re-read anything.
+              setThreadMessages((prev) => [sentMessageToDeviceSms(saved), ...prev]);
+            })
+            .catch(() => {});
+        },
         onError: () => {
           alert('Failed', 'Could not send message. Check permissions and try again.');
         },
@@ -519,6 +546,9 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
       if (success) {
         setInputText('');
         AsyncStorage.removeItem(draftKey).catch(() => {});
+        // #929: the local append has to land before anything re-reads the
+        // thread, otherwise the reload races it and the message vanishes.
+        await appended;
         // device.refresh() keeps the global 50-message list (MessagesScreen's
         // conversation previews) in sync; loadFirstPage refreshes this
         // screen's own thread so the just-sent message appears immediately.
