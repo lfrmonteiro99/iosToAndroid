@@ -7,6 +7,20 @@ import { WidgetCard } from './WidgetCard';
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
 import type { AppNavigationProp } from '../navigation/types';
+import {
+  DEFAULT_WIDGET_SIZES,
+  WIDGET_INSTANCES_KEY,
+  addWidget as addWidgetTo,
+  instanceTypes,
+  migrateTypesToInstances,
+  moveWidget as moveWidgetIn,
+  normalizeInstances,
+  reconcileWithTypes,
+  removeWidget as removeWidgetFrom,
+  resizeWidget as resizeWidgetIn,
+  type WidgetInstance,
+  type WidgetSize,
+} from './widgetInstances';
 
 // ---------------------------------------------------------------------------
 // Widget configuration types & storage
@@ -47,16 +61,16 @@ export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = 
 // 'large' getting extra vertical room for denser content. Shared between
 // TodayViewScreen and the Smart Stack eligibility logic so the stack only
 // ever groups widgets that occupy a half-width cell.
-export type WidgetSize = 'small' | 'medium' | 'large';
-
-export const WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
-  battery: 'small',
-  storage: 'small',
-  weather: 'medium',
-  upNext: 'large',
-  messages: 'small',
-  screenTime: 'small',
-};
+// WidgetSize and the per-type table now live in widgetInstances.ts, defined
+// once. They used to exist TWICE — `WIDGET_SIZES` here and `DEFAULT_SIZES` in
+// widgetGrid.ts — same six entries in two files, free to drift (#933).
+export type { WidgetSize, WidgetInstance } from './widgetInstances';
+export {
+  DEFAULT_WIDGET_SIZES,
+  WIDGET_INSTANCES_KEY,
+  migrateTypesToInstances,
+  normalizeInstances,
+} from './widgetInstances';
 
 export async function loadWidgetConfig(): Promise<WidgetType[]> {
   try {
@@ -76,6 +90,39 @@ export async function saveWidgetConfig(config: WidgetType[]): Promise<void> {
   await AsyncStorage.setItem(WIDGET_CONFIG_KEY, JSON.stringify(config));
 }
 
+/**
+ * Read the placed widgets, migrating the old type list on first run.
+ *
+ * The migration writes to a NEW key and leaves `@iostoandroid/widget_config`
+ * untouched. Someone who installs this version and then rolls back still has
+ * their widgets — overwriting the old key in place would strand them with an
+ * empty home screen and no way to tell why.
+ */
+export async function loadWidgetInstances(): Promise<WidgetInstance[]> {
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_INSTANCES_KEY);
+    if (raw != null) {
+      return normalizeInstances(JSON.parse(raw), ALL_WIDGET_TYPES);
+    }
+  } catch {
+    // A corrupt blob falls through to the migration below rather than
+    // presenting an empty home screen.
+  }
+
+  const legacy = await loadWidgetConfig();
+  const migrated = migrateTypesToInstances(legacy);
+  try {
+    await AsyncStorage.setItem(WIDGET_INSTANCES_KEY, JSON.stringify(migrated));
+  } catch {
+    // Persisting the migration is best-effort; it re-runs next launch.
+  }
+  return migrated;
+}
+
+export async function saveWidgetInstances(instances: WidgetInstance[]): Promise<void> {
+  await AsyncStorage.setItem(WIDGET_INSTANCES_KEY, JSON.stringify(instances));
+}
+
 // ---------------------------------------------------------------------------
 // Smart Stack configuration (#810) — which widgets are grouped into the single
 // auto-rotating cell above the 2-column grid.
@@ -93,7 +140,7 @@ export const SMART_STACK_MAX = 4;
 
 /** Small widgets that may be grouped into the stack (half-width cells). */
 export const SMART_STACK_ELIGIBLE: WidgetType[] = (['battery', 'storage', 'messages', 'screenTime'] as WidgetType[]).filter(
-  (t) => WIDGET_SIZES[t] === 'small',
+  (t) => DEFAULT_WIDGET_SIZES[t] === 'small',
 );
 
 export async function loadSmartStackConfig(): Promise<WidgetType[]> {
@@ -135,23 +182,96 @@ export function useSmartStackConfig() {
   return { stack, setStack, loaded };
 }
 
+/**
+ * The placed widgets, plus the CRUD the rest of the epic needs.
+ *
+ * `enabled` / `setEnabled` are kept, derived from the instances, because the
+ * Today View's Edit Widgets panel and the gallery still speak in types and
+ * rewriting them is not this issue (#933 is the model; #935-#938 are the
+ * surfaces). Reading `enabled` gives the types in order; writing it reconciles
+ * — a type that appears gains an instance, one that disappears loses its, and
+ * everything else keeps its id, size and position.
+ */
 export function useWidgetConfig() {
-  const [enabled, setEnabled] = useState<WidgetType[]>(DEFAULT_ENABLED);
+  const [instances, setInstances] = useState<WidgetInstance[]>(() =>
+    migrateTypesToInstances(DEFAULT_ENABLED),
+  );
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadWidgetConfig().then((cfg) => {
-      setEnabled(cfg);
+    let alive = true;
+    loadWidgetInstances().then((list) => {
+      if (!alive) return;
+      setInstances(list);
       setLoaded(true);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  const persist = useCallback((next: WidgetInstance[]) => {
+    setInstances(next);
+    saveWidgetInstances(next);
+  }, []);
+
+  const enabled = useMemo(() => instanceTypes(instances), [instances]);
+
+  const setEnabled = useCallback(
+    (next: WidgetType[]) => {
+      setInstances((prev) => {
+        const reconciled = reconcileWithTypes(prev, next);
+        saveWidgetInstances(reconciled);
+        return reconciled;
+      });
+    },
+    [],
+  );
+
+  const addWidget = useCallback(
+    (type: WidgetType, opts?: { size?: WidgetSize; page?: number; col?: number; row?: number }) => {
+      setInstances((prev) => {
+        const next = addWidgetTo(prev, type, opts ?? {});
+        saveWidgetInstances(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const removeWidget = useCallback((id: string) => {
+    setInstances((prev) => {
+      const next = removeWidgetFrom(prev, id);
+      saveWidgetInstances(next);
+      return next;
     });
   }, []);
 
-  const persist = useCallback((next: WidgetType[]) => {
-    setEnabled(next);
-    saveWidgetConfig(next);
+  const moveWidget = useCallback((id: string, page: number, col: number, row: number) => {
+    setInstances((prev) => {
+      const next = moveWidgetIn(prev, id, page, col, row);
+      saveWidgetInstances(next);
+      return next;
+    });
   }, []);
 
-  return { enabled, setEnabled: persist, loaded };
+  const resizeWidget = useCallback((id: string, size: WidgetSize) => {
+    setInstances((prev) => {
+      const next = resizeWidgetIn(prev, id, size);
+      saveWidgetInstances(next);
+      return next;
+    });
+  }, []);
+
+  return {
+    instances,
+    setInstances: persist,
+    addWidget,
+    removeWidget,
+    moveWidget,
+    resizeWidget,
+    enabled,
+    setEnabled,
+    loaded,
+  };
 }
 
 // ---------------------------------------------------------------------------

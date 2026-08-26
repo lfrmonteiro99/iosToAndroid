@@ -25,7 +25,7 @@ import { useTheme } from '../theme/ThemeContext';
 import {
   ALL_WIDGET_TYPES,
   WIDGET_LABELS,
-  WIDGET_SIZES,
+  DEFAULT_WIDGET_SIZES,
   useWidgetConfig,
   useWidgetMap,
   type WidgetType,
@@ -45,13 +45,14 @@ export interface WidgetGalleryProps {
 function GalleryEntry({
   type,
   preview,
-  isAdded,
+  placedCount,
   onAdd,
   onRemove,
 }: {
   type: WidgetType;
   preview: React.ReactNode;
-  isAdded: boolean;
+  /** How many of this type are already placed. Zero is not a special case. */
+  placedCount: number;
   onAdd: () => void;
   onRemove: () => void;
 }) {
@@ -62,7 +63,7 @@ function GalleryEntry({
       <View style={styles.entryHeader}>
         <Text style={[styles.entryLabel, { fontSize: 17 * textScale }]}>{label}</Text>
         <Text style={[styles.entrySize, { fontSize: 13 * textScale }]}>
-          {WIDGET_SIZES[type] === 'small' ? 'Small' : WIDGET_SIZES[type] === 'medium' ? 'Medium' : 'Large'}
+          {DEFAULT_WIDGET_SIZES[type] === 'small' ? 'Small' : DEFAULT_WIDGET_SIZES[type] === 'medium' ? 'Medium' : 'Large'}
         </Text>
       </View>
 
@@ -73,19 +74,12 @@ function GalleryEntry({
         {preview}
       </View>
 
-      {isAdded ? (
-        <Pressable
-          onPress={onRemove}
-          style={[styles.actionBtn, styles.actionBtnRemove]}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${label} widget`}
-        >
-          <Ionicons name="remove-circle" size={18} color="#FF453A" />
-          <Text style={[styles.actionText, { color: '#FF453A', fontSize: 15 * textScale }]}>
-            Remove Widget
-          </Text>
-        </Pressable>
-      ) : (
+      {/* Add is ALWAYS offered, and Remove only appears alongside it once
+          something is placed. The gallery used to swap one button for the
+          other, which made a second copy of a type impossible to ask for —
+          two Weather widgets (two cities) is the case the instance model
+          (#933) exists to allow. */}
+      <View style={styles.actionRow}>
         <Pressable
           onPress={onAdd}
           style={[styles.actionBtn, styles.actionBtnAdd]}
@@ -94,10 +88,23 @@ function GalleryEntry({
         >
           <Ionicons name="add-circle" size={18} color="#0A84FF" />
           <Text style={[styles.actionText, { color: '#0A84FF', fontSize: 15 * textScale }]}>
-            Add Widget
+            {placedCount > 0 ? `Add Another (${placedCount})` : 'Add Widget'}
           </Text>
         </Pressable>
-      )}
+        {placedCount > 0 && (
+          <Pressable
+            onPress={onRemove}
+            style={[styles.actionBtn, styles.actionBtnRemove]}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${label} widget`}
+          >
+            <Ionicons name="remove-circle" size={18} color="#FF453A" />
+            <Text style={[styles.actionText, { color: '#FF453A', fontSize: 15 * textScale }]}>
+              Remove
+            </Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -105,25 +112,30 @@ function GalleryEntry({
 export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
   const insets = useSafeAreaInsets();
   const { textScale } = useTheme();
-  const { enabled, setEnabled } = useWidgetConfig();
+  const { instances, addWidget, removeWidget } = useWidgetConfig();
   const widgetMap = useWidgetMap();
   const [query, setQuery] = useState('');
 
-  const added = useMemo(() => new Set(enabled), [enabled]);
+  /** Placed count per type — what the row shows, and what gates Remove. */
+  const placed = useMemo(() => {
+    const counts = new Map<WidgetType, number>();
+    for (const i of instances) counts.set(i.type, (counts.get(i.type) ?? 0) + 1);
+    return counts;
+  }, [instances]);
 
-  const add = useCallback(
-    (type: WidgetType) => {
-      // Appended, not inserted: the home row and the Today View grid both read
-      // this order, and a new widget arriving in the middle would silently
-      // reshuffle a layout the user arranged.
-      if (!added.has(type)) setEnabled([...enabled, type]);
-    },
-    [added, enabled, setEnabled],
-  );
+  // addWidget appends. The home row and the Today View grid both read this
+  // order, and a new widget arriving in the middle would silently reshuffle an
+  // arrangement the user made.
+  const add = useCallback((type: WidgetType) => addWidget(type), [addWidget]);
 
+  // Removes the LAST placed instance of the type: with several of a kind, the
+  // one the user just added is the one they are most likely undoing.
   const remove = useCallback(
-    (type: WidgetType) => setEnabled(enabled.filter((t) => t !== type)),
-    [enabled, setEnabled],
+    (type: WidgetType) => {
+      const last = [...instances].reverse().find((i) => i.type === type);
+      if (last) removeWidget(last.id);
+    },
+    [instances, removeWidget],
   );
 
   const visibleTypes = useMemo(() => {
@@ -175,10 +187,10 @@ export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
             <Pressable
               onPress={() => setQuery('')}
               style={styles.chipCount}
-              accessibilityLabel={`${enabled.length} widgets added`}
+              accessibilityLabel={`${instances.length} widgets added`}
             >
               <Text style={[styles.chipText, { fontSize: 13 * textScale }]}>
-                {enabled.length} added
+                {instances.length} added
               </Text>
             </Pressable>
           </View>
@@ -193,7 +205,7 @@ export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
                 key={type}
                 type={type}
                 preview={widgetMap[type]}
-                isAdded={added.has(type)}
+                placedCount={placed.get(type) ?? 0}
                 onAdd={() => add(type)}
                 onRemove={() => remove(type)}
               />
@@ -284,7 +296,12 @@ const styles = StyleSheet.create({
   previewWrap: {
     marginTop: 10,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   actionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

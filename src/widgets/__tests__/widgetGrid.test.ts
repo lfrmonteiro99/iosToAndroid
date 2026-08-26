@@ -2,7 +2,7 @@ import {
   GRID_COLUMNS,
   SIZE_SPAN,
   SIZE_ROW_SPAN,
-  DEFAULT_SIZES,
+  DEFAULT_WIDGET_SIZES,
   computeWidgetGrid,
   gridRowCount,
   type WidgetSize,
@@ -23,7 +23,7 @@ describe('widgetGrid — pure 2-column packing algorithm', () => {
     expect(SIZE_ROW_SPAN.large).toBe(2);
   });
 
-  it('DEFAULT_SIZES maps each widget type to the issue-specified size', () => {
+  it('the per-type placement default maps each widget type to the issue-specified size', () => {
     const expected: Record<WidgetType, WidgetSize> = {
       battery: 'small',
       storage: 'small',
@@ -32,10 +32,10 @@ describe('widgetGrid — pure 2-column packing algorithm', () => {
       messages: 'small',
       screenTime: 'small',
     };
-    expect(DEFAULT_SIZES).toEqual(expected);
+    expect(DEFAULT_WIDGET_SIZES).toEqual(expected);
     // every known type has a default
     for (const t of ALL) {
-      expect(DEFAULT_SIZES[t]).toBeDefined();
+      expect(DEFAULT_WIDGET_SIZES[t]).toBeDefined();
     }
   });
 
