@@ -405,6 +405,16 @@ export interface SettingsState {
    * openApp sem packageName) não dispare um intent partido.
    */
   backTap: BackTapConfig;
+  /**
+   * Default Dialer request flow (#919): true once the user has declined (or
+   * the request intent failed to launch, then a later dialog was actually
+   * shown for) becoming the default dialer at least once. Read by
+   * `runDefaultDialerFlow` (src/utils/defaultDialerFlow.ts) so the in-context
+   * prompt from CallScreen is asked at most once — never repeated on every
+   * subsequent call. Independent of `isDefaultDialer()` (a live native read):
+   * this is the "did we already ask" memory, not the current role.
+   */
+  defaultDialerRequestDeclined: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsState = {
@@ -511,6 +521,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   bluetoothDeviceTypes: {},
   backTap: DEFAULT_BACK_TAP,
   performanceProfile: 'normal',
+  defaultDialerRequestDeclined: false,
 };
 
 interface SettingsContextValue {
@@ -638,6 +649,13 @@ export function SettingsProvider({
             allowListImmediate: normalizeAllowList(parsed?.allowListImmediate),
             perAppDelivery: normalizePerAppDelivery(parsed?.perAppDelivery),
             reduceInterruptions: Boolean(parsed?.reduceInterruptions),
+            // defaultDialerRequestDeclined (#919) gates a native OS prompt; a
+            // corrupted value (string, null) must fall back to false (never
+            // asked) rather than true (would silently suppress the prompt
+            // forever) or a truthy non-boolean (would suppress it too, via
+            // the reducer's `previouslyDeclined` check treating anything
+            // truthy as "declined").
+            defaultDialerRequestDeclined: Boolean(parsed?.defaultDialerRequestDeclined),
           }));
         } catch { /* ignore */ }
       }

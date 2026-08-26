@@ -23,6 +23,8 @@ import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useSettings } from '../store/SettingsStore';
+import { runDefaultDialerFlow } from '../utils/defaultDialerFlow';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,6 +91,7 @@ interface CallScreenProps {
 
 export function CallScreen({ navigation, route }: CallScreenProps) {
   const { typography, textScale } = useTheme();
+  const { settings, update } = useSettings();
   const insets = useSafeAreaInsets();
   const { number, name } = route.params;
   const displayName = name || number || 'Unknown';
@@ -134,6 +137,17 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
         try {
           await mod.makeCall(number);
         } catch (e) { logger.error('CallScreen', 'native call failed', e); }
+        // Default Dialer request flow (#919): in-context only — this screen
+        // only mounts while a call is actually being placed, never at app
+        // start. runDefaultDialerFlow itself no-ops when already the default
+        // dialer or when a previous request was declined, so this is safe to
+        // call on every CallScreen mount.
+        runDefaultDialerFlow({
+          isDefaultDialer: mod.isDefaultDialer,
+          requestDefaultDialer: mod.requestDefaultDialer,
+          getDeclined: () => settings.defaultDialerRequestDeclined,
+          setDeclined: (declined) => update('defaultDialerRequestDeclined', declined),
+        }).catch((e) => { logger.error('CallScreen', 'default dialer flow failed', e); });
       }
       // Return once user comes back from the system dialer
       const sub = AppState.addEventListener('change', (state) => {
