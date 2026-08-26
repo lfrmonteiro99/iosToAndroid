@@ -365,6 +365,8 @@ jest.mock('./modules/launcher-module/src', () => ({
   // App.tsx subscribes to InCallService call-state events (#921) to route a
   // ringing (incoming) call to CallScreen.
   addCallStateListener: jest.fn(() => jest.fn()),
+  // CallScreen subscribes to this on mount (#920) — see src/__mocks__/launcherModule.js.
+  addCallAudioStateListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
@@ -395,6 +397,9 @@ jest.mock('./modules/launcher-module/src', () => ({
     // #921: incoming call answer/reject, via the InCallService Call reference.
     answerCall: jest.fn(() => Promise.resolve(true)),
     rejectCall: jest.fn(() => Promise.resolve(true)),
+    // #920 Call audio routing
+    setMuted: jest.fn(() => Promise.resolve(true)),
+    setAudioRoute: jest.fn(() => Promise.resolve(true)),
     getNotifications: jest.fn(() => Promise.resolve([])),
     clearNotification: jest.fn(() => Promise.resolve(true)),
     clearAllNotifications: jest.fn(() => Promise.resolve(true)),
