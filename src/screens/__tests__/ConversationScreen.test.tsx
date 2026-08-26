@@ -131,6 +131,43 @@ describe('ConversationScreen', () => {
     expect(getByLabelText('Back to Messages')).toBeTruthy();
   });
 
+  it('shows the history when opened from a contact whose stored number is formatted differently than the message address (#928)', () => {
+    // Route "address" arrives in the contact's stored format (+351911111111,
+    // matching CONTACTS[0].phone); the SMS provider recorded the same person's
+    // messages in the bare national format (911111111). Without normalized
+    // comparison these never match, and the conversation opens empty even
+    // though the messages exist — the symptom reported in #928.
+    const differentFormatRoute = { params: { address: '+351911111111' } };
+    const { getByText } = render(
+      <DeviceContext.Provider
+        value={deviceCtxWith({
+          contacts: CONTACTS,
+          messages: [
+            { id: 'm1', address: '911111111', body: 'Ola from Ana', dateFormatted: 'Today', type: 1, isRead: true },
+          ],
+        })}
+      >
+        <ConversationScreen navigation={mockNavigation as never} route={differentFormatRoute as never} />
+      </DeviceContext.Provider>
+    );
+    expect(getByText('Ola from Ana')).toBeTruthy();
+  });
+
+  it('does NOT show messages from an unrelated address that merely shares digits (no over-matching)', () => {
+    const { queryByText } = render(
+      <DeviceContext.Provider
+        value={deviceCtxWith({
+          messages: [
+            { id: 'm2', address: '+1911111111', body: 'Different person entirely', dateFormatted: 'Today', type: 1, isRead: true },
+          ],
+        })}
+      >
+        <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+      </DeviceContext.Provider>
+    );
+    expect(queryByText('Different person entirely')).toBeNull();
+  });
+
   it('migrates a legacy draft to the namespaced key on mount', async () => {
     const store = setupMemoryAsyncStorage({
       '@draft_+15551234567': 'Hello legacy draft',

@@ -25,7 +25,7 @@ import { useTheme, ResolvedTypography } from '../theme/ThemeContext';
 import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoTextField, GlassSurface, useAlert } from '../components';
-import { findContactByPhone } from '../utils/contacts';
+import { findContactByPhone, normalizePhoneKey } from '../utils/contacts';
 import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
@@ -297,8 +297,9 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   // accidentally match a stray message with an empty/undefined address.
   const rawMessages = useMemo(() => {
     if (!address) return [] as DeviceSms[];
+    const addressKey = normalizePhoneKey(address);
     const deviceMsgs = device.messages
-      .filter((m) => m.address === address)
+      .filter((m) => normalizePhoneKey(m.address) === addressKey)
       .sort((a, b) => {
         const aTime = (a as DeviceSms & { date?: number }).date ?? 0;
         const bTime = (b as DeviceSms & { date?: number }).date ?? 0;
