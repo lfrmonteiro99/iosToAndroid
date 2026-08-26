@@ -420,6 +420,19 @@ describe('LauncherHomeScreen built-in duplicate suppression (#438)', () => {
 describe('LauncherHomeScreen last page is the App Library itself (#434)', () => {
   afterEach(() => { jest.restoreAllMocks(); });
 
+  // These assertions need the library POPULATED. They used to run against
+  // `apps: []`, where the "Categories" header rendered over an empty grid —
+  // the orphan header #925 removed, so an empty library now shows an empty
+  // state instead. One app is enough and states the intent better anyway: the
+  // last page is the App Library, already filled in.
+  const libraryApp: AppsStore.InstalledApp = {
+    name: 'Chess',
+    packageName: 'com.example.chess',
+    icon: '',
+    isSystem: false,
+  };
+  const withOneApp = { apps: [libraryApp], visibleApps: [libraryApp] };
+
   // Mirrors the #438 describe block above: LauncherHomeScreen renders only
   // a loading spinner while `isLoading` is true, and the real AppsProvider
   // stays in that state synchronously in tests (its load is async, jest's
@@ -505,7 +518,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
   });
 
   it('shows the Categories section directly, without navigating anywhere first', () => {
-    mockLoadedApps();
+    mockLoadedApps(withOneApp);
     const { getByText } = render(<LauncherHomeScreen />);
     expect(getByText('Categories')).toBeTruthy();
   });
@@ -523,7 +536,7 @@ describe('LauncherHomeScreen last page is the App Library itself (#434)', () => 
   });
 
   it('the embedded library is the real interactive component, not a static copy: typing into its search bar filters results', () => {
-    mockLoadedApps();
+    mockLoadedApps(withOneApp);
     const { getByPlaceholderText, getByText, queryByText } = render(<LauncherHomeScreen />);
     // "Categories" heading is only shown outside search mode; typing switches
     // to the search-results view, proving the search bar is wired to real

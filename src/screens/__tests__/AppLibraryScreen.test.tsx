@@ -76,10 +76,14 @@ describe('AppLibraryScreen — categoryOverrides corrompido no AsyncStorage (#68
       (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
       (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined);
 
-      const { getByPlaceholderText, findByText } = render(<AppLibraryScreen navigation={nav} />);
-      // Após o SettingsProvider aplicar o settings corrompido, a grelha continua
-      // a montar: o cabeçalho "Categories" e a barra de pesquisa aparecem.
-      await findByText('Categories');
+      const { getByPlaceholderText, findByTestId } = render(<AppLibraryScreen navigation={nav} />);
+      // Após o SettingsProvider aplicar o settings corrompido, o ecrã continua a
+      // montar. A prova disso era `findByText('Categories')` — mas estes casos
+      // montam com ZERO apps (o módulo nativo mockado devolve lista vazia), e
+      // esse cabeçalho aparecia sobre nada: era o header órfão que o #925
+      // identificou, não sinal de vida. Com zero apps o que a UI deve mostrar é
+      // o estado vazio, e é isso que prova aqui que renderizou sem crashar.
+      await findByTestId('app-library-empty');
       expect(getByPlaceholderText('Search')).toBeTruthy();
     },
   );

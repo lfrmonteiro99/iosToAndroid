@@ -88,8 +88,13 @@ describe('Siri & Search — visibilidade na App Library (#610)', () => {
 
   it('searchShowInLibrary=false esconde as apps da App Library', async () => {
     mockStoredSettings({ searchShowInLibrary: false });
-    const { queryAllByText, queryByText } = render(<AppLibraryContent />);
-    await waitFor(() => expect(queryByText('Categories')).toBeTruthy());
+    const { queryAllByText, queryByText, findByTestId } = render(<AppLibraryContent />);
+    // A prova de que montou era `queryByText('Categories')`. Com a lista vazia
+    // esse cabeçalho aparecia sobre nada — o header órfão que o #925 removeu.
+    // O que a UI mostra agora neste caso é o estado vazio próprio da definição,
+    // e é isso que prova aqui que renderizou. As asserções reais do #610 (não
+    // mostrar apps nem strips) estão abaixo, intactas.
+    await findByTestId('app-library-empty');
     expect(queryAllByText('Facebook')).toHaveLength(0);
     expect(queryAllByText('Spotify')).toHaveLength(0);
     expect(queryByText('Recently Added')).toBeNull();
@@ -98,8 +103,8 @@ describe('Siri & Search — visibilidade na App Library (#610)', () => {
 
   it('searchShowInLibrary=false também esvazia a procura interna da App Library', async () => {
     mockStoredSettings({ searchShowInLibrary: false });
-    const { getByPlaceholderText, queryAllByText, queryByText } = render(<AppLibraryContent />);
-    await waitFor(() => expect(queryByText('Categories')).toBeTruthy());
+    const { getByPlaceholderText, queryAllByText, findByTestId } = render(<AppLibraryContent />);
+    await findByTestId('app-library-empty');
     fireEvent.changeText(getByPlaceholderText('Search'), 'Face');
     await waitFor(() => expect(queryAllByText('Facebook')).toHaveLength(0));
   });

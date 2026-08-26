@@ -27,7 +27,7 @@ import {
 } from '../utils/categoryOverrides';
 import { CupertinoSearchBar } from '../components/CupertinoSearchBar';
 import { CupertinoPressable } from '../components/CupertinoPressable';
-import { CupertinoNavigationBar, CupertinoEmptyState } from '../components';
+import { CupertinoNavigationBar, CupertinoEmptyState, CupertinoActivityIndicator } from '../components';
 import type { AppNavigationProp } from '../navigation/types';
 import type { CupertinoColors } from '../theme/CupertinoTheme';
 import { hapticImpact } from '../utils/haptics';
@@ -580,7 +580,20 @@ export function AppLibraryContent({ navigation }: { navigation?: AppNavigationPr
   // `apps` é a lista completa (usada só pela procura, para que uma app
   // escondida continue lançável) e `visibleApps` é a lista sem as escondidas
   // (#606), usada nas categorias e nos strips.
-  const { apps: allInstalledApps, visibleApps: nonHiddenApps, launchApp, recentApps, hideApp } = useApps();
+  // `isLoading` was the one field this component dropped on the floor, and the
+  // consequence was a screen with no loading branch and no empty branch: with
+  // zero apps all that stayed painted was the search bar and an orphan
+  // "Categories" header, on systemGroupedBackground — literally #000000 in dark
+  // mode. Indistinguishable from a crash (#925). LauncherHomeScreen, on the same
+  // store, has had the loading branch all along.
+  const {
+    apps: allInstalledApps,
+    visibleApps: nonHiddenApps,
+    launchApp,
+    recentApps,
+    hideApp,
+    isLoading,
+  } = useApps();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -724,6 +737,34 @@ export function AppLibraryContent({ navigation }: { navigation?: AppNavigationPr
           badgeCounts={badgeCounts}
           showNotifications={showNotifications}
         />
+      ) : isLoading && visibleApps.length === 0 ? (
+        /* Scanning, with nothing cached to paint yet. The `length === 0` half
+           matters: a warm start paints the cached grid while a rescan runs, and
+           replacing it with a spinner would be a regression. */
+        <View style={styles.stateWrap} testID="app-library-loading">
+          <CupertinoActivityIndicator />
+        </View>
+      ) : visibleApps.length === 0 ? (
+        /* Two distinct messages, because the two causes need different actions.
+           `searchShowInLibrary === false` is the user's own setting doing what
+           it says; anything else means the package scan came back empty, which
+           is a failure. Telling someone to check a setting they did not touch
+           sends them the wrong way. */
+        <View style={styles.stateWrap} testID="app-library-empty">
+          {settings.searchShowInLibrary ? (
+            <CupertinoEmptyState
+              icon="apps-outline"
+              title="No Apps Found"
+              message="The installed apps could not be read. Pull down to refresh, or restart the launcher."
+            />
+          ) : (
+            <CupertinoEmptyState
+              icon="eye-off-outline"
+              title="Apps Hidden"
+              message="Show Apps in App Library is turned off in Settings, under Siri & Search. Your apps are still installed and open from the home screen."
+            />
+          )}
+        </View>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
@@ -760,8 +801,9 @@ export function AppLibraryContent({ navigation }: { navigation?: AppNavigationPr
             </View>
           )}
 
-          {/* Category grid */}
-          <SectionHeader title="Categories" colors={colors} />
+          {/* Category grid. The header is gated: it rendered unconditionally, so
+              an empty library showed the word "Categories" over nothing. */}
+          {categories.length > 0 && <SectionHeader title="Categories" colors={colors} />}
           <View style={styles.categoryGrid}>
             {categories.map((cat) => (
               <CategoryCard
@@ -876,6 +918,15 @@ const styles = StyleSheet.create({
     minWidth: 70,
     alignItems: 'flex-end',
     paddingHorizontal: 4,
+  },
+  // flex: 1 inside the existing root, deliberately NOT absolute and with no
+  // safe-area padding: AppLibraryContent is mounted twice, as a stack route and
+  // as the home pager's last page, and either would misplace it in one of them.
+  stateWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
   },
   searchBarWrap: {
     paddingHorizontal: 12,
