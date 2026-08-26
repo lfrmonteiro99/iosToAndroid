@@ -1,9 +1,15 @@
 /**
  * #936 — the gallery must place a new widget on the page the user is viewing
  * (the `focusPage` it is opened from), not leave it PAGE_UNPLACED. The screen
- * passes `focusPage`, `cols` and `rows`; the gallery routes placement through
+ * passes `focusPage`, `cols`, `rows` and `pages` (the real packed layout —
+ * icons AND widgets); the gallery routes placement through
  * `resolveWidgetPlacement`, which prefers `focusPage` and overflows forward
  * (telling the user) only when that page is full.
+ *
+ * `pages` matters on its own: a page can be full of ICONS with zero widgets,
+ * and that has to count as "no room" too (rework — an earlier round of this
+ * fix rebuilt occupancy from the widget list alone, so an icon-only page was
+ * incorrectly reported as empty).
  *
  * These tests render the REAL WidgetGallery with the REAL useWidgetConfig
  * (backed by AsyncStorage), so `addWidget` actually persists — we assert on
@@ -13,6 +19,8 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { render, fireEvent, waitFor } from '../../test-utils';
 import { WidgetGallery } from '../WidgetGallery';
+import { computeHomeGridLayout, type PageLayout } from '../../widgets/homeGridLayout';
+import type { WidgetInstance } from '../../widgets/widgetInstances';
 
 const WIDGET_INSTANCES_KEY = '@iostoandroid/widget_instances';
 
@@ -21,14 +29,27 @@ jest.mock('../AlertProvider', () => ({
   useAlert: () => mockAlert,
 }));
 
-function seedInstances(list: unknown[]) {
+function seedInstances(list: WidgetInstance[]) {
   (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
     key === WIDGET_INSTANCES_KEY ? Promise.resolve(JSON.stringify(list)) : Promise.resolve(null),
   );
   (AsyncStorage.setItem as jest.Mock).mockImplementation(() => Promise.resolve());
 }
 
-function renderGallery(props: Partial<{ focusPage: number; cols: number; rows: number }> = {}) {
+/** A page whose every cell is covered by an icon, and no widget. */
+function fullOfIcons(cols: number, rows: number): PageLayout<unknown> {
+  const items: PageLayout<unknown>['items'] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      items.push({ item: `icon-${row}-${col}`, col, row });
+    }
+  }
+  return { widgets: [], items, rowsUsed: rows };
+}
+
+function renderGallery(
+  props: Partial<{ focusPage: number; cols: number; rows: number; pages: readonly PageLayout<unknown>[] }> = {},
+) {
   return render(
     <WidgetGallery
       visible
@@ -36,6 +57,7 @@ function renderGallery(props: Partial<{ focusPage: number; cols: number; rows: n
       focusPage={props.focusPage ?? 0}
       cols={props.cols ?? 4}
       rows={props.rows ?? 6}
+      pages={props.pages ?? []}
     />,
   );
 }
@@ -86,16 +108,18 @@ describe('WidgetGallery placement (#936)', () => {
     });
   });
 
-  it('overflows to the next page and informs the user when the focused page is full', async () => {
+  it('overflows to the next page and informs the user when the focused page is full of widgets', async () => {
     // Page 0 is completely full: a large (4x4, rows 0-3) plus a medium (4x2,
     // rows 4-5) occupy all 24 cells of a 4x6 grid. A newly added widget cannot
     // fit there, so it must move to page 1 and the user must be told.
-    seedInstances([
+    const seeded: WidgetInstance[] = [
       { id: 'weather-0', type: 'weather', size: 'large', page: 0, col: 0, row: 0 },
       { id: 'upnext-0', type: 'upNext', size: 'medium', page: 0, col: 0, row: 4 },
-    ]);
+    ];
+    seedInstances(seeded);
+    const pages = computeHomeGridLayout({ cols: 4, rows: 6, widgets: seeded, items: [] as unknown[] });
 
-    const { getByLabelText } = renderGallery({ focusPage: 0 });
+    const { getByLabelText } = renderGallery({ focusPage: 0, pages });
     await waitFor(() => expect(getByLabelText('Add Battery widget')).toBeTruthy());
 
     fireEvent.press(getByLabelText('Add Battery widget'));
@@ -109,11 +133,34 @@ describe('WidgetGallery placement (#936)', () => {
     expect(mockAlert).toHaveBeenCalled();
   });
 
+  it('overflows to the next page when the focused page is full of ICONS and holds no widget', async () => {
+    // No widget instance lives on page 0 at all — it is packed edge to edge
+    // with app icons. Deriving occupancy from the widget list alone (the
+    // pre-rework bug) would see zero widgets and report the page as wide
+    // open; the real packed layout must be consulted instead.
+    seedInstances([]);
+    const pages: PageLayout<unknown>[] = [fullOfIcons(4, 6)];
+
+    const { getByLabelText } = renderGallery({ focusPage: 0, pages });
+    await waitFor(() => expect(getByLabelText('Add Battery widget')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Add Battery widget'));
+
+    await waitFor(async () => {
+      const written = await persistedInstances();
+      expect(written).toHaveLength(1);
+      expect(written[0].page).toBe(1);
+    });
+    expect(mockAlert).toHaveBeenCalled();
+  });
+
   it('does NOT overflow when the focused page still has room', async () => {
     // A small widget on page 0 leaves room below for another — no alert.
-    seedInstances([{ id: 'weather-0', type: 'weather', size: 'small', page: 0, col: 0, row: 0 }]);
+    const seeded: WidgetInstance[] = [{ id: 'weather-0', type: 'weather', size: 'small', page: 0, col: 0, row: 0 }];
+    seedInstances(seeded);
+    const pages = computeHomeGridLayout({ cols: 4, rows: 6, widgets: seeded, items: [] as unknown[] });
 
-    const { getByLabelText } = renderGallery({ focusPage: 0 });
+    const { getByLabelText } = renderGallery({ focusPage: 0, pages });
     await waitFor(() => expect(getByLabelText('Add Battery widget')).toBeTruthy());
 
     fireEvent.press(getByLabelText('Add Battery widget'));

@@ -235,19 +235,27 @@ export function freeCellCount<T>(page: PageLayout<T>, cols: number, rows: number
  * silently dropping the widget, or placing it on a page the user is not looking
  * at, is worse than refusing.
  *
+ * Free space is read from the REAL packed layout (`computeHomeGridLayout`'s
+ * output) — icons occupy cells too, and a page can be full of them with zero
+ * widgets. Re-deriving occupancy from just the widget list (an earlier version
+ * of this function did that) undercounts a page an icon grid has already
+ * filled: it would report room that does not exist. A page never seen before
+ * (past the end of `pages`) has no icons or widgets and is treated as empty.
+ *
  * Pure and framework-free, so the rule is testable without mounting a pager.
  */
-export function resolveWidgetPlacement({
+export function resolveWidgetPlacement<T>({
   cols,
   rows,
-  placed,
+  pages,
   focusPage,
   size,
 }: {
   cols: number;
   rows: number;
-  /** Instances already on home pages (the ones `isOnHomePage` accepts). */
-  placed: readonly WidgetInstance[];
+  /** The packed layout (icons AND widgets) for each existing home page, in
+   * the same shape `computeHomeGridLayout` returns. */
+  pages: readonly PageLayout<T>[];
   /** The page being viewed when the gallery opened. */
   focusPage: number;
   size: WidgetSize;
@@ -256,29 +264,23 @@ export function resolveWidgetPlacement({
   const safeRows = Math.max(1, Math.floor(rows));
   const span = spanFor(size, safeCols);
 
-  // Rebuild occupancy per page exactly as the packer would, so the free-space
-  // check matches what `computeHomeGridLayout` will actually produce.
-  const grids = new Map<number, boolean[][]>();
   const gridFor = (page: number): boolean[][] => {
-    const p = Math.max(0, Math.floor(page));
-    let g = grids.get(p);
-    if (!g) {
-      g = makeGrid(safeCols, safeRows);
-      grids.set(p, g);
+    const grid = makeGrid(safeCols, safeRows);
+    const layout = pages[page];
+    if (layout) {
+      for (const w of layout.widgets) {
+        if (fits(grid, w.col, w.row, w.colSpan, w.rowSpan)) {
+          occupy(grid, w.col, w.row, w.colSpan, w.rowSpan);
+        }
+      }
+      for (const it of layout.items) {
+        if (fits(grid, it.col, it.row, 1, 1)) {
+          occupy(grid, it.col, it.row, 1, 1);
+        }
+      }
     }
-    return g;
+    return grid;
   };
-  for (const w of placed) {
-    const ws = spanFor(w.size, safeCols);
-    const col = Math.max(0, Math.floor(w.col));
-    const row = Math.max(0, Math.floor(w.row));
-    if (fits(gridFor(w.page), col, row, ws.cols, ws.rows)) {
-      occupy(gridFor(w.page), col, row, ws.cols, ws.rows);
-    } else {
-      const moved = firstFit(gridFor(w.page), ws.cols, ws.rows);
-      if (moved) occupy(gridFor(w.page), moved.col, moved.row, ws.cols, ws.rows);
-    }
-  }
 
   const start = Math.max(0, Math.floor(focusPage));
   if (firstFit(gridFor(start), span.cols, span.rows)) {

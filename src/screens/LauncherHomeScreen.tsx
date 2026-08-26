@@ -2371,6 +2371,7 @@ export function LauncherHomeScreen() {
         focusPage={currentPage}
         cols={gridGeometry.cols}
         rows={settings.gridRows}
+        pages={homeLayout}
       />
 
       {/* ---------------------------------------------------------------- */}

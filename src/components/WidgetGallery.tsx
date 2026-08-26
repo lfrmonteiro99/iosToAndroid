@@ -31,8 +31,7 @@ import {
   useWidgetMap,
   type WidgetType,
 } from '../widgets/TodayWidgets';
-import { isOnHomePage } from '../widgets/widgetInstances';
-import { resolveWidgetPlacement } from '../widgets/homeGridLayout';
+import { resolveWidgetPlacement, type PageLayout } from '../widgets/homeGridLayout';
 
 export interface WidgetGalleryProps {
   visible: boolean;
@@ -47,6 +46,13 @@ export interface WidgetGalleryProps {
   /** Grid dimensions, so the gallery can tell whether `focusPage` has room. */
   cols: number;
   rows: number;
+  /**
+   * The REAL packed layout (icons AND widgets) for each existing home page —
+   * the same `computeHomeGridLayout` output the screen renders from. Icons
+   * occupy cells too: a page can be full of them with zero widgets, and
+   * `resolveWidgetPlacement` needs that to correctly report "no room".
+   */
+  pages: readonly PageLayout<unknown>[];
 }
 
 /**
@@ -122,7 +128,7 @@ function GalleryEntry({
   );
 }
 
-export function WidgetGallery({ visible, onClose, focusPage, cols, rows }: WidgetGalleryProps) {
+export function WidgetGallery({ visible, onClose, focusPage, cols, rows, pages }: WidgetGalleryProps) {
   const insets = useSafeAreaInsets();
   const { textScale } = useTheme();
   const alert = useAlert();
@@ -146,11 +152,10 @@ export function WidgetGallery({ visible, onClose, focusPage, cols, rows }: Widge
    */
   const add = useCallback(
     (type: WidgetType) => {
-      const homePlaced = instances.filter(isOnHomePage);
       const { page, overflowed } = resolveWidgetPlacement({
         cols,
         rows,
-        placed: homePlaced,
+        pages,
         focusPage,
         size: DEFAULT_WIDGET_SIZES[type],
       });
@@ -162,7 +167,7 @@ export function WidgetGallery({ visible, onClose, focusPage, cols, rows }: Widge
         );
       }
     },
-    [addWidget, alert, cols, rows, focusPage, instances],
+    [addWidget, alert, cols, rows, pages, focusPage],
   );
 
   // Removes the LAST placed instance of the type: with several of a kind, the
