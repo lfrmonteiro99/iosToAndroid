@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -74,6 +75,12 @@ class LauncherModule : Module() {
 
         // #930: sendSms — how long to wait for the sentIntent broadcast(s)
         // before giving up and reporting an indeterminate (=failed) send.
+        // #931: content://mms has no ADDRESS column to filter on directly —
+        // recipients only resolve after a per-row content://mms/{id}/addr
+        // query — so getMessagesForThread overfetches this many pages' worth
+        // of MMS candidates before filtering by address in Kotlin.
+        private const val MMS_ADDRESS_FILTER_OVERFETCH = 5
+
         private const val SMS_SEND_TIMEOUT_MS = 30_000L
         private const val SMS_SENT_ACTION_PREFIX = "com.iostoandroid.launcher.SMS_SENT"
         private const val EXTRA_SMS_PART_INDEX = "smsPartIndex"
@@ -142,7 +149,8 @@ class LauncherModule : Module() {
                         "date" to date,
                         "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
                         "type" to it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.TYPE)),
-                        "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1)
+                        "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1),
+                        "kind" to "sms"
                     ))
                 }
             }
@@ -150,6 +158,103 @@ class LauncherModule : Module() {
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    /**
+     * #931: content://sms only ever holds SMS — group messages and anything
+     * with an attachment are MMS and were invisible before this. MMS rows
+     * have no ADDRESS or BODY column of their own: recipients live in
+     * content://mms/{id}/addr and text lives in content://mms/part as a
+     * text/plain part, both resolved per row below and mapped through
+     * [MmsMessageMapper] so the result merges with [queryMessages]'s SMS
+     * rows by `date` (already normalized to milliseconds there).
+     *
+     * Wrapped in one try/catch around the whole cursor walk, not per-row:
+     * a device without a Mms table, or without READ_SMS, throws once on the
+     * first ContentResolver call, and the AC calls for degrading the entire
+     * MMS side to empty in that case rather than a partial/inconsistent list.
+     */
+    private fun queryMmsMessages(selection: String?, selectionArgs: Array<String>?, limit: Int): List<Map<String, Any?>> {
+        return try {
+            val cursor: Cursor? = context.contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Mms._ID,
+                    Telephony.Mms.THREAD_ID,
+                    Telephony.Mms.DATE,
+                    Telephony.Mms.MESSAGE_BOX,
+                    Telephony.Mms.READ
+                ),
+                selection, selectionArgs,
+                MessagesQueryBuilder.buildSortOrder(Telephony.Mms.DATE, limit)
+            )
+            val rows = mutableListOf<Map<String, Any?>>()
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val id = it.getLong(it.getColumnIndexOrThrow(Telephony.Mms._ID))
+                    rows.add(MmsMessageMapper.toMessageMap(
+                        id = id,
+                        threadId = it.getLong(it.getColumnIndexOrThrow(Telephony.Mms.THREAD_ID)),
+                        dateSeconds = it.getLong(it.getColumnIndexOrThrow(Telephony.Mms.DATE)),
+                        messageBox = it.getInt(it.getColumnIndexOrThrow(Telephony.Mms.MESSAGE_BOX)),
+                        isRead = it.getInt(it.getColumnIndexOrThrow(Telephony.Mms.READ)) == 1,
+                        addresses = queryMmsAddresses(id),
+                        textParts = queryMmsTextParts(id)
+                    ))
+                }
+            }
+            rows
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** `content://mms/{id}/addr` — the FROM/TO/CC/BCC rows for one MMS. */
+    private fun queryMmsAddresses(mmsId: Long): List<MmsMessageMapper.MmsAddress> {
+        val uri = Uri.withAppendedPath(ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, mmsId), "addr")
+        val addresses = mutableListOf<MmsMessageMapper.MmsAddress>()
+        context.contentResolver.query(
+            uri,
+            arrayOf(Telephony.Mms.Addr.ADDRESS, Telephony.Mms.Addr.TYPE),
+            null, null, null
+        )?.use {
+            while (it.moveToNext()) {
+                val address = it.getString(it.getColumnIndexOrThrow(Telephony.Mms.Addr.ADDRESS)) ?: continue
+                addresses.add(MmsMessageMapper.MmsAddress(address, it.getInt(it.getColumnIndexOrThrow(Telephony.Mms.Addr.TYPE))))
+            }
+        }
+        return addresses
+    }
+
+    /** `content://mms/part`, `text/plain` parts only — MMS' text body, one row per part. */
+    private fun queryMmsTextParts(mmsId: Long): List<String> {
+        val parts = mutableListOf<String>()
+        context.contentResolver.query(
+            Telephony.Mms.Part.CONTENT_URI,
+            arrayOf(Telephony.Mms.Part.TEXT),
+            "${Telephony.Mms.Part.MSG_ID} = ? AND ${Telephony.Mms.Part.CONTENT_TYPE} = ?",
+            arrayOf(mmsId.toString(), "text/plain"),
+            null
+        )?.use {
+            val col = it.getColumnIndex(Telephony.Mms.Part.TEXT)
+            if (col >= 0) {
+                while (it.moveToNext()) {
+                    it.getString(col)?.let { text -> parts.add(text) }
+                }
+            }
+        }
+        return parts
+    }
+
+    /**
+     * Merges SMS + MMS rows by `date` (both already in milliseconds) and
+     * truncates to [limit] — the merge point that makes a mixed conversation
+     * show both kinds without a gap (#931 AC1). Each side already applied
+     * its own SQL "date DESC LIMIT n" cutoff, so pulling `limit` rows from
+     * each before merging can't leave a hole between them.
+     */
+    private fun mergeMessagesByDate(sms: List<Map<String, Any?>>, mms: List<Map<String, Any?>>, limit: Int): List<Map<String, Any?>> {
+        return (sms + mms).sortedByDescending { (it["date"] as? Long) ?: 0L }.take(limit)
     }
 
     override fun definition() = ModuleDefinition {
@@ -681,7 +786,11 @@ class LauncherModule : Module() {
         // ── SMS / Messages ───────────────────────────────────────────────
 
         AsyncFunction("getRecentMessages") { limit: Int ->
-            queryMessages(null, null, limit)
+            // #931: global feed across every thread, so MMS is queried with
+            // no thread/address filter, same as the SMS side.
+            val sms = queryMessages(null, null, limit)
+            val mms = queryMmsMessages(null, null, limit)
+            mergeMessagesByDate(sms, mms, limit)
         }
 
         // #927: per-thread history, paged. `beforeDate` null = newest page;
@@ -692,7 +801,34 @@ class LauncherModule : Module() {
             val (selection, selectionArgs) = MessagesQueryBuilder.buildSelection(
                 Telephony.Sms.ADDRESS, Telephony.Sms.DATE, address, beforeDate
             )
-            queryMessages(selection, selectionArgs, limit)
+            val sms = queryMessages(selection, selectionArgs, limit)
+
+            // #931: MMS recipients live in content://mms/{id}/addr, not a
+            // column on Telephony.Mms itself, so the digit-suffix address
+            // match MessagesQueryBuilder builds for SMS can't be pushed into
+            // this query's SQL selection — only the date (keyset) clause can.
+            // Overfetch before resolving addresses and filtering in Kotlin so
+            // a handful of rows belonging to other threads don't starve this
+            // page; MMS volume is small enough in practice for this to stay
+            // cheap (see MessagesQueryBuilder.buildSortOrder for the same
+            // SQL-level LIMIT approach the SMS side already relies on).
+            val mmsDateSelection = if (beforeDate == null) null else "${Telephony.Mms.DATE} < ?"
+            val mmsDateArgs = if (beforeDate == null) null else arrayOf((beforeDate.toLong() / 1000L).toString())
+            val mmsCandidates = queryMmsMessages(mmsDateSelection, mmsDateArgs, limit * MMS_ADDRESS_FILTER_OVERFETCH)
+            val addressSuffix = MessagesQueryBuilder.digitsSuffix(address)
+            val mms = mmsCandidates.filter { row ->
+                val rowAddress = row["address"] as? String ?: ""
+                val matches = rowAddress.split(", ").any { participant ->
+                    if (addressSuffix.isEmpty()) {
+                        participant.equals(address, ignoreCase = true)
+                    } else {
+                        MessagesQueryBuilder.digitsSuffix(participant) == addressSuffix
+                    }
+                }
+                matches
+            }.take(limit)
+
+            mergeMessagesByDate(sms, mms, limit)
         }
 
         // ── System Settings Panels ───────────────────────────────────────

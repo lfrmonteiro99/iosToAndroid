@@ -85,6 +85,13 @@ export interface SmsMessage {
   dateFormatted: string;
   type: number; // 1 = inbox, 2 = sent
   isRead: boolean;
+  /**
+   * 'sms' or 'mms' (#931) — an MMS row has no native ADDRESS/BODY columns of
+   * its own (recipients/text are resolved natively from separate tables), so
+   * the UI needs this to know e.g. that an empty-looking `body` on an 'mms'
+   * row is a resolved attachment marker, not a data gap.
+   */
+  kind: 'sms' | 'mms';
 }
 
 export interface NetworkInfo {
