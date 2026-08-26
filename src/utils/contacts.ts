@@ -1,21 +1,24 @@
 /**
- * Shared contact matching utility.
- * Matches phone numbers by stripping non-digit chars and comparing suffixes.
- * Uses last 10 digits for numbers with 10+ digits (North American style),
- * or exact digit match for shorter numbers (international / short codes).
+ * Normalizes a phone number to a comparison key by stripping non-digit chars
+ * and taking the last 9 digits (the national significant number length shared
+ * across country-code / 00-prefixed / bare-national forms of the same number).
+ * Numbers with 9 or fewer digits (emergency lines, short codes) are kept as-is
+ * so they only ever match exactly, never as a suffix of a longer number.
+ */
+export function normalizePhoneKey(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 0) return '';
+  return digits.length > 9 ? digits.slice(-9) : digits;
+}
+
+/**
+ * Shared contact matching utility. Matches phone numbers via normalizePhoneKey.
  */
 export function findContactByPhone<T extends { phone: string }>(
   phone: string,
   contacts: T[],
 ): T | undefined {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length === 0) return undefined;
-  // For short numbers (emergency, short codes), match exactly
-  const matchDigits = digits.length >= 10 ? digits.slice(-10) : digits;
-  return contacts.find((c) => {
-    const cDigits = c.phone.replace(/\D/g, '');
-    if (cDigits.length === 0) return false;
-    const cMatch = cDigits.length >= 10 ? cDigits.slice(-10) : cDigits;
-    return matchDigits === cMatch;
-  });
+  const key = normalizePhoneKey(phone);
+  if (key.length === 0) return undefined;
+  return contacts.find((c) => normalizePhoneKey(c.phone) === key);
 }
