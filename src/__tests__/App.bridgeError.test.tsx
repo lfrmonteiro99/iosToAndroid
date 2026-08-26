@@ -24,6 +24,7 @@ var capturedBridgeErrorCb: ((method: string, error: unknown) => void) | null = n
 jest.mock('../../modules/launcher-module/src', () => ({
   __esModule: true,
   addNotificationListener: jest.fn(() => jest.fn()),
+  addCallStateListener: jest.fn(() => jest.fn()),
   onBridgeError: jest.fn((cb: (method: string, error: unknown) => void) => {
     capturedBridgeErrorCb = cb; // captured into module-level var
     return jest.fn(); // unsubscribe

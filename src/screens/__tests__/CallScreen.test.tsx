@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, Text } from 'react-native';
 import { act } from '@testing-library/react-native';
-import { render, fireEvent } from '../../test-utils';
+import { render, fireEvent, waitFor } from '../../test-utils';
 import { CallScreen } from '../CallScreen';
 import { useSettings } from '../../store/SettingsStore';
 import LauncherModule, { addCallAudioStateListener } from '../../../modules/launcher-module/src';
@@ -45,7 +45,7 @@ function SetTextSize({ index }: { index: number }) {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const navigation = { navigate: jest.fn(), goBack: jest.fn() } as any;
 
-function renderCall(params: { number?: string; name?: string }) {
+function renderCall(params: { number?: string; name?: string; direction?: 'incoming' | 'outgoing' }) {
   return render(
     <CallScreen navigation={navigation} route={{ params } as any} />
   );
@@ -59,6 +59,9 @@ beforeEach(() => {
   jest.useFakeTimers();
   navigation.navigate.mockClear();
   navigation.goBack.mockClear();
+  (LauncherModule.makeCall as jest.Mock).mockClear();
+  (LauncherModule.answerCall as jest.Mock).mockClear();
+  (LauncherModule.rejectCall as jest.Mock).mockClear();
   (addCallAudioStateListener as jest.Mock).mockClear();
   (LauncherModule.setMuted as jest.Mock).mockClear();
   (LauncherModule.setAudioRoute as jest.Mock).mockClear();
@@ -307,6 +310,99 @@ describe('CallScreen', () => {
     expect(getByLabelText('Mute')).toBeTruthy();
     expect(getByLabelText('Speaker')).toBeTruthy();
     expect(getByLabelText('End Call')).toBeTruthy();
+  });
+});
+
+// #921: incoming calls. The InCallService/App.tsx routes here with
+// direction: 'incoming' instead of the default (originate) flow.
+describe('CallScreen — incoming call (#921)', () => {
+  it('shows an Incoming Call status instead of Call Initiated', () => {
+    const { getByText, queryByText } = renderCall({
+      number: '+15551234567',
+      name: 'Jane Doe',
+      direction: 'incoming',
+    });
+
+    expect(getByText('Incoming Call')).toBeTruthy();
+    expect(queryByText('Call Initiated')).toBeNull();
+  });
+
+  it('does not place a native call on mount (unlike the outgoing flow)', () => {
+    renderCall({ number: '+15551234567', name: 'Jane Doe', direction: 'incoming' });
+
+    expect(LauncherModule.makeCall).not.toHaveBeenCalled();
+  });
+
+  it('shows Accept and Decline controls instead of Mute/Speaker/End Call', () => {
+    const { getByLabelText, queryByLabelText } = renderCall({
+      number: '+15551234567',
+      name: 'Jane Doe',
+      direction: 'incoming',
+    });
+
+    expect(getByLabelText('Accept')).toBeTruthy();
+    expect(getByLabelText('Decline')).toBeTruthy();
+    expect(queryByLabelText('Mute')).toBeNull();
+    expect(queryByLabelText('Speaker')).toBeNull();
+    expect(queryByLabelText('End Call')).toBeNull();
+  });
+
+  it('pressing Accept answers the native call and switches to the connected controls', async () => {
+    const { getByLabelText, queryByLabelText } = renderCall({
+      number: '+15551234567',
+      name: 'Jane Doe',
+      direction: 'incoming',
+    });
+
+    fireEvent.press(getByLabelText('Accept'));
+
+    await waitFor(() => expect(LauncherModule.answerCall).toHaveBeenCalledTimes(1));
+    expect(queryByLabelText('Accept')).toBeNull();
+    expect(queryByLabelText('Decline')).toBeNull();
+    expect(getByLabelText('End Call')).toBeTruthy();
+    expect(navigation.goBack).not.toHaveBeenCalled();
+  });
+
+  it('pressing Accept twice in a row only answers the call once', async () => {
+    const { getByLabelText } = renderCall({
+      number: '+15551234567',
+      name: 'Jane Doe',
+      direction: 'incoming',
+    });
+
+    const accept = getByLabelText('Accept');
+    fireEvent.press(accept);
+    fireEvent.press(accept);
+
+    await waitFor(() => expect(LauncherModule.answerCall).toHaveBeenCalledTimes(1));
+  });
+
+  it('pressing Decline rejects the native call and navigates back', async () => {
+    const { getByLabelText } = renderCall({
+      number: '+15551234567',
+      name: 'Jane Doe',
+      direction: 'incoming',
+    });
+
+    fireEvent.press(getByLabelText('Decline'));
+
+    await waitFor(() => expect(LauncherModule.rejectCall).toHaveBeenCalledTimes(1));
+    expect(navigation.goBack).toHaveBeenCalledTimes(1);
+    expect(LauncherModule.answerCall).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the number when an incoming call has no resolved name', () => {
+    const { getByText } = renderCall({ number: '+15551234567', direction: 'incoming' });
+    expect(getByText('+15551234567')).toBeTruthy();
+  });
+
+  it('the outgoing (default) flow is unchanged: no direction still places the call and shows End Call', async () => {
+    const { getByLabelText, queryByLabelText } = renderCall({ number: '+15551234567', name: 'Jane Doe' });
+
+    await waitFor(() => expect(LauncherModule.makeCall).toHaveBeenCalledWith('+15551234567'));
+    expect(getByLabelText('End Call')).toBeTruthy();
+    expect(queryByLabelText('Accept')).toBeNull();
+    expect(queryByLabelText('Decline')).toBeNull();
   });
 });
 
