@@ -387,14 +387,19 @@ export function WeatherWidget({
     solidColor: { light: gradientColors[1], dark: gradientColors[1] },
   };
 
+  // Every Text in this widget sits on a colored gradient stop, not the
+  // near-black glass frame WidgetGlassText.title/.secondary were tuned for
+  // (rgba(...,0.75) / rgba(...,0.55) blended over a lighter stop drops well
+  // below WCAG AA — see the token comment on WidgetWeatherGradients). Opaque
+  // primary is the only tone in that set that clears 4.5:1 on every stop.
   if (isUnavailable) {
     return (
       <WidgetCard testID="widget-card-weather" appearance={appearance}>
         <View style={styles.widgetRow}>
-          <Ionicons name="cloud-offline" size={22} color={WidgetGlassText.tertiary} />
-          <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
+          <Ionicons name="cloud-offline" size={22} color={WidgetGlassText.primary} />
+          <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
         </View>
-        <Text style={[styles.widgetSubtext, { fontSize: 15 * textScale, marginTop: 8 }]}>
+        <Text style={[styles.widgetSubtext, { fontSize: 15 * textScale, marginTop: 8, color: WidgetGlassText.primary }]}>
           Unable to load weather
         </Text>
       </WidgetCard>
@@ -408,15 +413,15 @@ export function WeatherWidget({
     <WidgetCard testID="widget-card-weather" appearance={appearance}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color={WidgetGlassText.primary} />
-        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
-        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale }]}>{city}</Text> : null}
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
+        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
         <Text style={[styles.weatherTemp, { fontSize: 40 * textScale }]}>{temp}°</Text>
-        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale }]}>{condition}</Text>
+        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale, color: WidgetGlassText.primary }]}>{condition}</Text>
       </View>
       {hasRange ? (
-        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>
+        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale, color: WidgetGlassText.primary }]}>
           {`H:${maxTemp}°  L:${minTemp}°`}
         </Text>
       ) : null}

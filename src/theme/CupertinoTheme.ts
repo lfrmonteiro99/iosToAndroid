@@ -324,11 +324,20 @@ export function glassSurface(dark: boolean, weight: 'thin' | 'regular' | 'thick'
 // widget, its own colored surface stays legible regardless of system theme).
 // Centralised here — same rule as every other CupertinoTheme token — so the
 // widget component never has a hex literal of its own.
+//
+// Every stop (not just the darkest one) must hold ≥4.5:1 contrast against
+// opaque white text: RN's LinearGradient interpolates each RGB channel
+// linearly in t, and gamma-linearised luminance is a positive-weighted sum of
+// monotonic functions of each channel, so it is monotonic in t too — the
+// lighter stop is always the worst case for a light-on-dark pair, and
+// checking both endpoints bounds every point in between. 'clear', 'cloudy'
+// and 'snow' were previously too light (2.5:1–3.5:1 against white); see
+// WidgetCard.appearance.test.tsx for the ratio assertion per stop.
 export const WidgetWeatherGradients = {
-  clear: ['#4DA9F2', '#0A5FBE'],
-  cloudy: ['#7C8B9E', '#4B5A6E'],
+  clear: ['#2C6CB0', '#0A2A4D'],
+  cloudy: ['#53606D', '#20262D'],
   rain: ['#3C5266', '#1B2A38'],
-  snow: ['#A9C4D9', '#5C7A94'],
+  snow: ['#4C6C86', '#1E2E3D'],
 } as const;
 
 export type WidgetWeatherCondition = keyof typeof WidgetWeatherGradients;

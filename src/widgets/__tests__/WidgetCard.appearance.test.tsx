@@ -16,7 +16,59 @@ import { render, act, fireEvent } from '../../test-utils';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
 import { WeatherWidget, UpNextWidget, BatteryWidget, type CalendarEventItem } from '../TodayWidgets';
-import { WidgetWeatherGradients } from '../../theme/CupertinoTheme';
+import { WidgetWeatherGradients, WidgetGlassText } from '../../theme/CupertinoTheme';
+
+// ---------------------------------------------------------------------------
+// WCAG contrast helpers (mirrors the standard relative-luminance formula —
+// see https://www.w3.org/TR/WCAG21/#contrast-minimum). Reads the real
+// exported tokens; nothing here is a copy of production values.
+// ---------------------------------------------------------------------------
+
+function parseColor(color: string): { r: number; g: number; b: number; a: number } {
+  if (color.startsWith('rgba') || color.startsWith('rgb')) {
+    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (match) {
+      return {
+        r: parseInt(match[1], 10),
+        g: parseInt(match[2], 10),
+        b: parseInt(match[3], 10),
+        a: match[4] !== undefined ? parseFloat(match[4]) : 1,
+      };
+    }
+  }
+  if (color.startsWith('#')) {
+    const hex = color.slice(1);
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+      a: hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+  throw new Error(`Unsupported color: ${color}`);
+}
+
+function relativeLuminance(c: { r: number; g: number; b: number }): number {
+  const linearize = (channel: number) => {
+    const s = channel / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b);
+}
+
+/** WCAG contrast ratio between a (possibly translucent) foreground and an opaque background. */
+function contrastRatio(fg: string, bg: string): number {
+  const fgColor = parseColor(fg);
+  const bgColor = parseColor(bg);
+  const blended = {
+    r: fgColor.r * fgColor.a + bgColor.r * (1 - fgColor.a),
+    g: fgColor.g * fgColor.a + bgColor.g * (1 - fgColor.a),
+    b: fgColor.b * fgColor.a + bgColor.b * (1 - fgColor.a),
+  };
+  const L1 = relativeLuminance(blended);
+  const L2 = relativeLuminance(bgColor);
+  return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+}
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -240,6 +292,37 @@ describe('Weather high/low (#934 AC)', () => {
     const tempNode = getByText('24°');
     const flat = flattenStyle(tempNode.props.style);
     expect(flat.fontSize).toBe(40 * 1.3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Weather: WCAG AA contrast for every gradient stop (#934 reviewer round 1)
+// ---------------------------------------------------------------------------
+
+describe('Weather gradient contrast (#934 WCAG AA)', () => {
+  const WCAG_AA_NORMAL_TEXT = 4.5;
+
+  it.each(Object.entries(WidgetWeatherGradients))(
+    '%s: both stops hold >=4.5:1 against opaque white text (not just the darker one)',
+    (_condition, stops) => {
+      for (const stop of stops) {
+        const ratio = contrastRatio(WidgetGlassText.primary, stop);
+        expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+      }
+    },
+  );
+
+  it('the lighter stop of every condition is the binding constraint (linear RGB interpolation is monotonic in luminance)', () => {
+    // Confirms the "check both endpoints" strategy above actually covers the
+    // worst case: for every condition the first (lighter) stop has a lower
+    // contrast ratio than the second (darker) one, so no interior point of
+    // the two-stop LinearGradient can fall outside [min(ratio0, ratio1)].
+    for (const stops of Object.values(WidgetWeatherGradients)) {
+      const [lighter, darker] = stops;
+      expect(contrastRatio(WidgetGlassText.primary, lighter)).toBeLessThanOrEqual(
+        contrastRatio(WidgetGlassText.primary, darker),
+      );
+    }
   });
 });
 
