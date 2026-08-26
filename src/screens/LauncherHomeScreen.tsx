@@ -124,8 +124,12 @@ export const DOCK_VERTICAL_PADDING = 18;
 export const DOCK_HORIZONTAL_INSET = 10;
 // Home screen widget stack (#654): two cards per row, same 16px side padding
 // convention as the dock above, with a 12px gap between the pair.
+// Gutter between a widget's edge and the next cell, so two widgets side by side
+// do not touch. HOME_WIDGET_ITEM_WIDTH is gone with #935: it was
+// `(SCREEN_WIDTH - 32 - gap) / 2` — half the screen for every widget of every
+// size, which is precisely why nothing could adapt around one. A widget's width
+// now derives from cellWidth * colSpan, so it follows GRID_GEOMETRY (#499/#503).
 const HOME_WIDGET_GAP = 12;
-export const HOME_WIDGET_ITEM_WIDTH = (SCREEN_WIDTH - 32 - HOME_WIDGET_GAP) / 2;
 
 // How far past the screen edge the wallpaper layer is oversized (see the
 // `{ left: -PARALLAX_OVERHANG, right: -PARALLAX_OVERHANG }` layer style below).
@@ -197,6 +201,8 @@ import {
   BUILT_IN_DUPLICATE_PACKAGES,
   builtInAppName,
 } from '../utils/builtInAppRoutes';
+import { computeHomeGridLayout } from '../widgets/homeGridLayout';
+import { isOnHomePage } from '../widgets/widgetInstances';
 import { logger } from '../utils/logger';
 import {
   IOS_FACADE_BY_PACKAGE,
@@ -997,7 +1003,7 @@ export function LauncherHomeScreen() {
   // widgetMap/config the Today View sheet reads/writes, so a widget looks and
   // behaves identically whether it's reached by swiping right into Today View
   // or seen directly on the home page.
-  const { enabled: homeWidgetsEnabled, loaded: homeWidgetsLoaded } = useWidgetConfig();
+  const { instances: homeWidgetInstances, loaded: homeWidgetsLoaded } = useWidgetConfig();
   const homeWidgetMap = useWidgetMap();
 
   // Tap to Wake (#608): the HOME-press effect below is registered with deps
@@ -1016,7 +1022,10 @@ export function LauncherHomeScreen() {
     () => computeLauncherGridGeometry(SCREEN_WIDTH, settings.gridColumns, settings.iconSizeScale),
     [settings.gridColumns, settings.iconSizeScale],
   );
-  const appsPerPage = gridGeometry.cols * settings.gridRows;
+  // The cell's height, named once. The same expression was already open-coded in
+  // the empty-slot render and in the drag's target math, and #935 needs it a
+  // third time to size a widget's rows.
+  const cellHeight = 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0);
 
   // Tinted Icons (#620): resolved once per render, shared by every AppIcon
   // call site below (grid, dock, folder overlay) so a single setting change
@@ -1537,20 +1546,66 @@ export function LauncherHomeScreen() {
   // memoização de AppIcon/FolderIcon a jusante — `pages.map` produzia
   // sempre uma árvore de elementos nova, mesmo quando gridItems não mudou.
   // Slicing the same flat, order-stable `gridItems` list at a different chunk
-  // size (appsPerPage derives from settings, issue #503) re-packs pages
+  // size (cols/rows derive from settings, issue #503) re-packs pages
   // without ever reordering an app — there is no per-page stored position to
   // migrate (issue #503).
+  // #935: pages come from the packer, not from slicing at a fixed
+  // `appsPerPage`. Once a widget occupies cells, "24 per page" stops being
+  // true — the count has to come from the page. The packer returns each page's
+  // widgets and the cell each icon landed in, and overflows the rest forward.
+  const homeLayout = useMemo(
+    () =>
+      computeHomeGridLayout<GridItem>({
+        cols: gridGeometry.cols,
+        rows: settings.gridRows,
+        // Only what was placed on a home page. The Today View shows every
+        // instance; the home grid shows the ones that live here.
+        widgets: homeWidgetsLoaded ? homeWidgetInstances.filter(isOnHomePage) : [],
+        items: gridItems,
+      }),
+    [gridGeometry.cols, settings.gridRows, homeWidgetsLoaded, homeWidgetInstances, gridItems],
+  );
+
+  /**
+   * Each page as a DENSE array of `cols * rows` cells, in row-major order.
+   *
+   * Dense on purpose. The drag (#761) maps a translation to a target index and
+   * back to a cell with `index % cols` / `floor(index / cols)`, so the rendered
+   * flow has to keep index and cell in step. A cell a widget covers renders as
+   * the same blank `empty` slot #762 already uses for a hole — which also makes
+   * a drop there a no-op, matching the existing rule that only a drop onto
+   * another app swaps.
+   */
   const allPages: GridItem[][] = useMemo(() => {
-    const out: GridItem[][] = [];
-    for (let i = 0; i < gridItems.length; i += appsPerPage) {
-      out.push(gridItems.slice(i, i + appsPerPage));
-    }
-    // Ensure at least one page
-    if (out.length === 0) {
-      out.push([]);
-    }
-    return out;
-  }, [gridItems, appsPerPage]);
+    const cellCount = Math.max(1, gridGeometry.cols * settings.gridRows);
+    return homeLayout.map((page, pageIndex) => {
+      const cells: GridItem[] = Array.from({ length: cellCount }, (_, i) => ({
+        type: 'empty' as const,
+        key: `p${pageIndex}-c${i}`,
+      }));
+
+      let lastUsed = -1;
+      for (const placed of page.items) {
+        const index = placed.row * gridGeometry.cols + placed.col;
+        if (index < 0 || index >= cells.length) continue;
+        cells[index] = placed.item;
+        if (index > lastUsed) lastUsed = index;
+      }
+      // A widget's cells have to be reserved even with no icon after them,
+      // otherwise the blanks it needs are trimmed away and it overlaps nothing.
+      for (const w of page.widgets) {
+        const last = (w.row + w.rowSpan - 1) * gridGeometry.cols + (w.col + w.colSpan - 1);
+        if (last > lastUsed) lastUsed = Math.min(last, cells.length - 1);
+      }
+
+      // Trailing blanks are TRIMMED. Without this every page rendered a full
+      // cols*rows of cells, so a page holding five apps painted nineteen extra
+      // blank slots — a behaviour change of its own, on top of the layout one.
+      // Trimmed, a page with no widget produces exactly the array the old
+      // `gridItems.slice(...)` produced.
+      return cells.slice(0, lastUsed + 1);
+    });
+  }, [homeLayout, gridGeometry.cols, settings.gridRows]);
 
   // Focus filters (#618): com um modo de Focus activo, as páginas cujo índice
   // está em `focusPageVisibility[focusMode]` não renderizam. O índice é o da
@@ -1645,7 +1700,7 @@ export function LauncherHomeScreen() {
       translationX,
       translationY,
       cellWidth: gridGeometry.cellWidth,
-      cellHeight: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+      cellHeight,
       cols: gridGeometry.cols,
       itemCount: pageItems.length,
     });
@@ -1656,7 +1711,7 @@ export function LauncherHomeScreen() {
     if (targetItem && targetItem.type === 'app' && targetItem.app.packageName !== app.packageName) {
       swapHomeApps?.(app.packageName, targetItem.app.packageName);
     }
-  }, [pages, gridGeometry, settings.showIconLabels, swapHomeApps]);
+  }, [pages, gridGeometry, cellHeight, swapHomeApps]);
 
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
@@ -2091,15 +2146,6 @@ export function LauncherHomeScreen() {
             key={pageIndex}
             style={[styles.page, { paddingHorizontal: gridGeometry.horizontalPadding }, pageIndex === 0 ? firstPageOverscrollStyle : null]}
           >
-            {pageIndex === 0 && homeWidgetsLoaded && homeWidgetsEnabled.length > 0 && (
-              <View testID="launcher-home-widgets" style={styles.homeWidgetRow}>
-                {homeWidgetsEnabled.map((type) => (
-                  <View key={type} testID={`launcher-home-widget-${type}`} style={styles.homeWidgetItem}>
-                    {homeWidgetMap[type]}
-                  </View>
-                ))}
-              </View>
-            )}
             <View
               testID={`launcher-page-grid-${pageIndex}`}
               style={styles.pageGrid}
@@ -2123,7 +2169,7 @@ export function LauncherHomeScreen() {
                       testID={`grid-empty-slot-${item.key}`}
                       style={{
                         width: gridGeometry.cellWidth,
-                        height: 5 + gridGeometry.iconSize + (settings.showIconLabels ? 23 : 0),
+                        height: cellHeight,
                       }}
                     />
                   );
@@ -2169,6 +2215,37 @@ export function LauncherHomeScreen() {
                   />
                 );
               })}
+
+              {/* Widgets, over the cells they own.
+                  Absolute inside this container rather than a row above it: a
+                  widget has to occupy grid CELLS for the icons to flow around
+                  it, and the blank slots underneath are what reserve them. The
+                  width comes from cellWidth * colSpan (plus the same gaps the
+                  icons use), so it follows GRID_GEOMETRY (#499/#503) instead of
+                  the old HOME_WIDGET_ITEM_WIDTH half-screen constant.
+
+                  The `launcher-home-widgets` / `launcher-home-widget-<type>`
+                  testIDs are kept: what changed is the geometry, not what the
+                  home screen contains. */}
+              {homeWidgetsLoaded && homeLayout[pageIndex]?.widgets.length > 0 && (
+                <View testID={`launcher-home-widgets-${pageIndex}`} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                  {homeLayout[pageIndex].widgets.map((placed) => (
+                    <View
+                      key={placed.id}
+                      testID={`launcher-home-widget-${placed.instance.type}`}
+                      style={{
+                        position: 'absolute',
+                        left: placed.col * gridGeometry.cellWidth,
+                        top: placed.row * cellHeight,
+                        width: placed.colSpan * gridGeometry.cellWidth - HOME_WIDGET_GAP,
+                        height: placed.rowSpan * cellHeight - HOME_WIDGET_GAP,
+                      }}
+                    >
+                      {homeWidgetMap[placed.instance.type]}
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           </Animated.View>
         ))}
@@ -2418,15 +2495,6 @@ const styles = StyleSheet.create({
   },
 
   // Home screen widgets (#654)
-  homeWidgetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: HOME_WIDGET_GAP,
-    marginBottom: 16,
-  },
-  homeWidgetItem: {
-    width: HOME_WIDGET_ITEM_WIDTH,
-  },
 
   // App icons
   appIconWrapper: {

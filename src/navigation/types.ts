@@ -12,7 +12,7 @@ export type RootStackParamList = {
   // Built-in apps
   Calculator: undefined;
   Phone: undefined;
-  CallScreen: { name: string; number: string };
+  CallScreen: { name: string; number: string; direction?: 'incoming' | 'outgoing' };
   Messages: undefined;
   Conversation: { address: string };
   Contacts: undefined;

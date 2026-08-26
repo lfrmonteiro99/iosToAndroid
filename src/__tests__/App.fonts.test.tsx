@@ -17,6 +17,7 @@ jest.mock('expo-font', () => ({
 jest.mock('../../modules/launcher-module/src', () => ({
   __esModule: true,
   addNotificationListener: jest.fn(() => jest.fn()),
+  addCallStateListener: jest.fn(() => jest.fn()),
   onBridgeError: jest.fn(() => jest.fn()),
   default: {
     isDefaultLauncher: jest.fn(() => Promise.resolve(false)),

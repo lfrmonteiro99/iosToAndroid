@@ -73,6 +73,12 @@ export interface StorageInfo {
 
 export interface SmsMessage {
   id: string;
+  /**
+   * Android's stable per-conversation identifier (Telephony.Sms.THREAD_ID),
+   * as a string. Present so a future thread grouping (#928) can key on this
+   * instead of re-deriving it from `address` heuristically.
+   */
+  threadId: string;
   address: string;
   body: string;
   date: number;
@@ -306,6 +312,16 @@ interface LauncherModuleType {
   getStorageInfo(): Promise<StorageInfo | null>;
   // SMS
   getRecentMessages(limit: number): Promise<SmsMessage[]>;
+  /**
+   * One conversation's history, paged (#927) — ConversationScreen's own
+   * source of truth, instead of filtering the `getRecentMessages` global
+   * list (which only ever holds the N most recent SMS across every thread).
+   * `beforeDate` null fetches the newest page; a value fetches the page
+   * strictly older than it (keyset pagination — page by the SMS `date`
+   * column, not by offset, since an offset would desync when a new SMS
+   * arrives mid-scroll).
+   */
+  getMessagesForThread(address: string, limit: number, beforeDate: number | null): Promise<SmsMessage[]>;
   // Volume
   getVolume(): Promise<number>;
   setVolume(level: number): Promise<boolean>;
@@ -333,6 +349,14 @@ interface LauncherModuleType {
   // requestAllPermissions' fire-and-forget contract.
   isDefaultDialer(): Promise<boolean>;
   requestDefaultDialer(): Promise<boolean>;
+  // Incoming calls (#921): answer/reject the Call the InCallService is
+  // currently holding a reference to (LauncherInCallService.kt). [message],
+  // when non-empty, rejects with a "decline with message" SMS instead of a
+  // plain reject — cheap to pass through since Call.reject already takes it.
+  // false when there is no ringing call to act on (already answered/ended,
+  // or this app isn't the InCallService bound to Telecom).
+  answerCall(): Promise<boolean>;
+  rejectCall(message?: string): Promise<boolean>;
   // Call audio routing (#920): commands LauncherInCallService's Telecom-bound
   // CallAudioState. Both are no-ops (resolve false) while no InCallService is
   // bound — i.e. this app is not the current default dialer — mirroring the
@@ -470,6 +494,7 @@ const stub: LauncherModuleType = {
   unpairBluetoothDevice: async () => false,
   getStorageInfo: async () => ({ totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }),
   getRecentMessages: async () => [],
+  getMessagesForThread: async () => [],
   getVolume: async () => 0.5,
   setVolume: async () => false,
   openSystemSettings: async () => false,
@@ -483,6 +508,8 @@ const stub: LauncherModuleType = {
   makeCall: async () => false,
   isDefaultDialer: async () => false,
   requestDefaultDialer: async () => false,
+  answerCall: async () => false,
+  rejectCall: async () => false,
   setMuted: async () => false,
   setAudioRoute: async () => false,
   getNotifications: async () => [],
@@ -727,6 +754,10 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.getRecentMessages(limit); }
       catch (e) { console.error('LauncherModule.getRecentMessages failed:', e); reportBridgeError('getRecentMessages', e); return []; }
     },
+    getMessagesForThread: async (address: string, limit: number, beforeDate: number | null) => {
+      try { return await nativeModule.getMessagesForThread(address, limit, beforeDate); }
+      catch (e) { console.error('LauncherModule.getMessagesForThread failed:', e); reportBridgeError('getMessagesForThread', e); return []; }
+    },
     getVolume: async () => {
       try { return await nativeModule.getVolume(); }
       catch (e) { console.error('LauncherModule.getVolume failed:', e); reportBridgeError('getVolume', e); return 0.5; }
@@ -778,6 +809,14 @@ function createBridgedModule(): LauncherModuleType {
     requestDefaultDialer: async () => {
       try { return await nativeModule.requestDefaultDialer(); }
       catch (e) { console.error('LauncherModule.requestDefaultDialer failed:', e); reportBridgeError('requestDefaultDialer', e); return false; }
+    },
+    answerCall: async () => {
+      try { return await nativeModule.answerCall(); }
+      catch (e) { console.error('LauncherModule.answerCall failed:', e); reportBridgeError('answerCall', e); return false; }
+    },
+    rejectCall: async (message?: string) => {
+      try { return await nativeModule.rejectCall(message ?? null); }
+      catch (e) { console.error('LauncherModule.rejectCall failed:', e); reportBridgeError('rejectCall', e); return false; }
     },
     setMuted: async (muted: boolean) => {
       try { return await nativeModule.setMuted(muted); }
@@ -1225,6 +1264,36 @@ export function addForegroundAppListener(
 ): () => void {
   const sub = addModuleListener<{ packageName: string }>('onForegroundAppChanged', (n: { packageName: string }) => {
     listener(n.packageName);
+  });
+  return () => sub.remove();
+}
+
+/**
+ * A Telecom call state transition, emitted by LauncherInCallService (#919).
+ * `state` mirrors android.telecom.Call's constants as lowercase strings —
+ * 'ringing' is the one that means "incoming call, not yet answered" (an
+ * outgoing call placed via makeCall goes dialing → active, never ringing on
+ * our side). `number` is the raw dialable string from the call's handle;
+ * empty when Telecom didn't attach one.
+ */
+export interface CallStateEvent {
+  state: string;
+  number: string;
+}
+
+/**
+ * Subscribe to Telecom call-state transitions (#921). This only fires while
+ * this app is bound as the system's InCallService, which Telecom only does
+ * once the app is the default dialer — so on a device where this app isn't
+ * the dialer, the listener is registered but simply never called, and
+ * nothing about incoming-call handling changes.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addCallStateListener(
+  listener: (event: CallStateEvent) => void,
+): () => void {
+  const sub = addModuleListener<Partial<CallStateEvent>>('onCallStateChanged', (n) => {
+    listener({ state: n.state ?? '', number: n.number ?? '' });
   });
   return () => sub.remove();
 }

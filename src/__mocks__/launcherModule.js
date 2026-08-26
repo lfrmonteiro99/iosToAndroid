@@ -5,6 +5,7 @@ module.exports = {
   addNotificationRemovedListener: jest.fn(() => jest.fn()),
   addPackageChangedListener: jest.fn(() => jest.fn()),
   addCallAudioStateListener: jest.fn(() => jest.fn()),
+  addCallStateListener: jest.fn(() => jest.fn()),
   onBridgeError: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
@@ -23,6 +24,7 @@ module.exports = {
     setBluetoothEnabled: jest.fn(() => Promise.resolve(true)),
     getStorageInfo: jest.fn(() => Promise.resolve({ totalGB: '128.0', usedGB: '89.3', freeGB: '38.7', usedPercentage: 70 })),
     getRecentMessages: jest.fn(() => Promise.resolve([])),
+    getMessagesForThread: jest.fn(() => Promise.resolve([])),
     getVolume: jest.fn(() => Promise.resolve(0.5)),
     setVolume: jest.fn(() => Promise.resolve(true)),
     openSystemSettings: jest.fn(() => Promise.resolve(true)),
@@ -34,6 +36,9 @@ module.exports = {
     // #919 Default Dialer request flow
     isDefaultDialer: jest.fn(() => Promise.resolve(false)),
     requestDefaultDialer: jest.fn(() => Promise.resolve(true)),
+    // #921 Incoming calls
+    answerCall: jest.fn(() => Promise.resolve(true)),
+    rejectCall: jest.fn(() => Promise.resolve(true)),
     // #920 Call audio routing
     setMuted: jest.fn(() => Promise.resolve(true)),
     setAudioRoute: jest.fn(() => Promise.resolve(true)),
