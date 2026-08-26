@@ -90,6 +90,50 @@ class LauncherModule : Module() {
     private val context: Context
         get() = appContext.reactContext ?: throw Exception("React context is not available")
 
+    /**
+     * Shared by getRecentMessages and getMessagesForThread: queries
+     * content://sms with [selection]/[selectionArgs] and a "date DESC LIMIT n"
+     * sort order (see [MessagesQueryBuilder]) so the row cutoff happens in
+     * SQL, not by looping past rows the query already fetched.
+     */
+    private fun queryMessages(selection: String?, selectionArgs: Array<String>?, limit: Int): List<Map<String, Any?>> {
+        return try {
+            val cursor: Cursor? = context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.THREAD_ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.READ
+                ),
+                selection, selectionArgs,
+                MessagesQueryBuilder.buildSortOrder(Telephony.Sms.DATE, limit)
+            )
+            val messages = mutableListOf<Map<String, Any?>>()
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val date = it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.DATE))
+                    messages.add(mapOf(
+                        "id" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms._ID)).toString(),
+                        "threadId" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)).toString(),
+                        "address" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)),
+                        "body" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY)),
+                        "date" to date,
+                        "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
+                        "type" to it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.TYPE)),
+                        "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1)
+                    ))
+                }
+            }
+            messages
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
@@ -619,42 +663,18 @@ class LauncherModule : Module() {
         // ── SMS / Messages ───────────────────────────────────────────────
 
         AsyncFunction("getRecentMessages") { limit: Int ->
-            try {
-                val cursor: Cursor? = context.contentResolver.query(
-                    Telephony.Sms.CONTENT_URI,
-                    arrayOf(
-                        Telephony.Sms._ID,
-                        Telephony.Sms.ADDRESS,
-                        Telephony.Sms.BODY,
-                        Telephony.Sms.DATE,
-                        Telephony.Sms.TYPE,
-                        Telephony.Sms.READ
-                    ),
-                    null, null,
-                    "${Telephony.Sms.DATE} DESC"
-                )
+            queryMessages(null, null, limit)
+        }
 
-                val messages = mutableListOf<Map<String, Any?>>()
-                cursor?.use {
-                    var count = 0
-                    while (it.moveToNext() && count < limit) {
-                        val date = it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.DATE))
-                        messages.add(mapOf(
-                            "id" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms._ID)).toString(),
-                            "address" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)),
-                            "body" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY)),
-                            "date" to date,
-                            "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
-                            "type" to it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.TYPE)),
-                            "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1)
-                        ))
-                        count++
-                    }
-                }
-                messages
-            } catch (e: Exception) {
-                emptyList<Map<String, Any?>>()
-            }
+        // #927: per-thread history, paged. `beforeDate` null = newest page;
+        // otherwise the page strictly older than it (keyset pagination — an
+        // OFFSET would desync if a new SMS lands mid-scroll). The address
+        // match tolerates formatting differences; see MessagesQueryBuilder.
+        AsyncFunction("getMessagesForThread") { address: String, limit: Int, beforeDate: Double? ->
+            val (selection, selectionArgs) = MessagesQueryBuilder.buildSelection(
+                Telephony.Sms.ADDRESS, Telephony.Sms.DATE, address, beforeDate
+            )
+            queryMessages(selection, selectionArgs, limit)
         }
 
         // ── System Settings Panels ───────────────────────────────────────

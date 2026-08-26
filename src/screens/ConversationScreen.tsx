@@ -37,9 +37,20 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null; // Expected: module unavailable on non-Android
+    // Dynamic import is unavailable in some environments (e.g. Jest's VM);
+    // fall back to a synchronous require so the module stays reachable there.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src').default;
+    } catch {
+      return null; // Expected: module unavailable on non-Android
+    }
   }
 };
+
+// #927: one page of a conversation's history. Small enough to make pagination
+// exercise-able in practice and in tests, without paging on every few messages.
+const MESSAGES_PAGE_SIZE = 30;
 
 // ─── Date grouping ──────────────────────────────────────────────────────────
 
@@ -200,6 +211,93 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
   const [localImageMessages, setLocalImageMessages] = useState<LocalImageMessage[]>([]);
   const listRef = useRef<FlatList>(null);
+
+  // #927: this screen's own paged thread history — NOT a filter over
+  // device.messages, which only ever holds the 50 most-recent SMS across
+  // every conversation (see DeviceStore.loadMessages). oldestLoadedDateRef
+  // drives keyset pagination (page by `date`, not offset, so a new incoming
+  // SMS mid-scroll can't shift the page boundary).
+  const [threadMessages, setThreadMessages] = useState<DeviceSms[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const oldestLoadedDateRef = useRef<number | null>(null);
+  // A ref, not just the isLoadingOlderMessages state, guards re-entrancy: if
+  // onEndReached fires twice before React re-renders, both calls would read
+  // the same stale (false) state value from their closures and both proceed.
+  const isLoadingOlderRef = useRef(false);
+  // RN can call onEndReached as soon as an (initially empty) list mounts,
+  // before the first page has resolved — without this guard that races
+  // loadOlderMessages(beforeDate=null) against loadFirstPage's own request
+  // for the same page, duplicating the first page's rows once both resolve.
+  const hasLoadedFirstPageRef = useRef(false);
+  // Discards a response that resolves after a newer request started (address
+  // switched, or unmount) — the mount/unmount effect below also sets this to
+  // -1 so any in-flight response is dropped even if no new request follows.
+  const threadRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => { threadRequestIdRef.current = -1; };
+  }, []);
+
+  const loadFirstPage = useCallback(async (addr: string) => {
+    const requestId = ++threadRequestIdRef.current;
+    hasLoadedFirstPageRef.current = false;
+    if (!addr) {
+      setThreadMessages([]);
+      setHasMoreMessages(false);
+      oldestLoadedDateRef.current = null;
+      hasLoadedFirstPageRef.current = true;
+      return;
+    }
+    const mod = await getLauncher();
+    if (requestId !== threadRequestIdRef.current) return;
+    if (!mod) {
+      setThreadMessages([]);
+      setHasMoreMessages(false);
+      oldestLoadedDateRef.current = null;
+      hasLoadedFirstPageRef.current = true;
+      return;
+    }
+    try {
+      const page = await mod.getMessagesForThread(addr, MESSAGES_PAGE_SIZE, null);
+      if (requestId !== threadRequestIdRef.current) return;
+      setThreadMessages(page);
+      setHasMoreMessages(page.length === MESSAGES_PAGE_SIZE);
+      oldestLoadedDateRef.current = page.length > 0 ? page[page.length - 1].date ?? null : null;
+    } catch {
+      if (requestId !== threadRequestIdRef.current) return;
+      setThreadMessages([]);
+      setHasMoreMessages(false);
+      oldestLoadedDateRef.current = null;
+    } finally {
+      if (requestId === threadRequestIdRef.current) hasLoadedFirstPageRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFirstPage(address);
+  }, [address, loadFirstPage]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!address || !hasMoreMessages || isLoadingOlderRef.current || !hasLoadedFirstPageRef.current) return;
+    isLoadingOlderRef.current = true;
+    const requestId = threadRequestIdRef.current;
+    setIsLoadingOlderMessages(true);
+    try {
+      const mod = await getLauncher();
+      if (!mod || requestId !== threadRequestIdRef.current) return;
+      const page = await mod.getMessagesForThread(address, MESSAGES_PAGE_SIZE, oldestLoadedDateRef.current);
+      if (requestId !== threadRequestIdRef.current) return;
+      setThreadMessages((prev) => [...prev, ...page]);
+      setHasMoreMessages(page.length === MESSAGES_PAGE_SIZE);
+      if (page.length > 0) {
+        oldestLoadedDateRef.current = page[page.length - 1].date ?? oldestLoadedDateRef.current;
+      }
+    } finally {
+      isLoadingOlderRef.current = false;
+      if (requestId === threadRequestIdRef.current) setIsLoadingOlderMessages(false);
+    }
+  }, [address, hasMoreMessages]);
   const draftKey = draftStorageKey(address);
   const legacyDraftKey = draftLegacyStorageKey(address);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -292,22 +390,17 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
       ? `${contact.firstName} ${contact.lastName}`.trim()
       : address;
 
-  // Filter messages for this address (including local image messages).
+  // This thread's own messages (including local image messages), loaded via
+  // getMessagesForThread — NOT filtered from device.messages, which only
+  // holds the 50 most-recent SMS globally (#927). threadMessages already
+  // arrives newest-first from the native DATE DESC query.
   // Guard the empty (no recipient chosen yet) case explicitly so it can never
   // accidentally match a stray message with an empty/undefined address.
   const rawMessages = useMemo(() => {
     if (!address) return [] as DeviceSms[];
-    const deviceMsgs = device.messages
-      .filter((m) => m.address === address)
-      .sort((a, b) => {
-        const aTime = (a as DeviceSms & { date?: number }).date ?? 0;
-        const bTime = (b as DeviceSms & { date?: number }).date ?? 0;
-        return bTime - aTime;
-      });
-    // Merge local image messages (already newest-first)
-    const allMsgs = [...localImageMessages, ...deviceMsgs] as DeviceSms[];
+    const allMsgs = [...localImageMessages, ...threadMessages] as DeviceSms[];
     return allMsgs;
-  }, [device.messages, address, localImageMessages]);
+  }, [address, threadMessages, localImageMessages]);
 
   const messages = useMemo(
     () => insertDateSeparators(rawMessages),
@@ -426,13 +519,21 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
       if (success) {
         setInputText('');
         AsyncStorage.removeItem(draftKey).catch(() => {});
-        await device.refresh();
-        listRef.current?.scrollToIndex({ index: 0, animated: true });
+        // device.refresh() keeps the global 50-message list (MessagesScreen's
+        // conversation previews) in sync; loadFirstPage refreshes this
+        // screen's own thread so the just-sent message appears immediately.
+        await Promise.all([device.refresh(), loadFirstPage(address)]);
+        // A brand-new conversation's first send can still race an empty list
+        // here (loadFirstPage just resolved into state, not into this
+        // closure's rawMessages) — scrollToIndex(0) throws on an empty list.
+        try {
+          listRef.current?.scrollToIndex({ index: 0, animated: true });
+        } catch { /* nothing to scroll to yet */ }
       }
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending, address, device, draftKey, alert]);
+  }, [inputText, isSending, address, device, draftKey, alert, loadFirstPage]);
 
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => {
@@ -603,7 +704,15 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
         renderItem={renderItem}
         inverted={rawMessages.length > 0}
         ListEmptyComponent={ListEmpty}
-
+        // Inverted list: "end" is the oldest end, rendered at the visual top —
+        // reaching it is "scrolled to the top", where the previous (older) page loads.
+        onEndReached={loadOlderMessages}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          isLoadingOlderMessages
+            ? <ActivityIndicator size="small" color={colors.systemGray} style={styles.olderMessagesLoader} />
+            : null
+        }
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
           rawMessages.length === 0
@@ -770,5 +879,8 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     flex: 1,
+  },
+  olderMessagesLoader: {
+    paddingVertical: 12,
   },
 });

@@ -73,6 +73,12 @@ export interface StorageInfo {
 
 export interface SmsMessage {
   id: string;
+  /**
+   * Android's stable per-conversation identifier (Telephony.Sms.THREAD_ID),
+   * as a string. Present so a future thread grouping (#928) can key on this
+   * instead of re-deriving it from `address` heuristically.
+   */
+  threadId: string;
   address: string;
   body: string;
   date: number;
@@ -306,6 +312,16 @@ interface LauncherModuleType {
   getStorageInfo(): Promise<StorageInfo | null>;
   // SMS
   getRecentMessages(limit: number): Promise<SmsMessage[]>;
+  /**
+   * One conversation's history, paged (#927) — ConversationScreen's own
+   * source of truth, instead of filtering the `getRecentMessages` global
+   * list (which only ever holds the N most recent SMS across every thread).
+   * `beforeDate` null fetches the newest page; a value fetches the page
+   * strictly older than it (keyset pagination — page by the SMS `date`
+   * column, not by offset, since an offset would desync when a new SMS
+   * arrives mid-scroll).
+   */
+  getMessagesForThread(address: string, limit: number, beforeDate: number | null): Promise<SmsMessage[]>;
   // Volume
   getVolume(): Promise<number>;
   setVolume(level: number): Promise<boolean>;
@@ -455,6 +471,7 @@ const stub: LauncherModuleType = {
   unpairBluetoothDevice: async () => false,
   getStorageInfo: async () => ({ totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }),
   getRecentMessages: async () => [],
+  getMessagesForThread: async () => [],
   getVolume: async () => 0.5,
   setVolume: async () => false,
   openSystemSettings: async () => false,
@@ -707,6 +724,10 @@ function createBridgedModule(): LauncherModuleType {
     getRecentMessages: async (limit: number) => {
       try { return await nativeModule.getRecentMessages(limit); }
       catch (e) { console.error('LauncherModule.getRecentMessages failed:', e); reportBridgeError('getRecentMessages', e); return []; }
+    },
+    getMessagesForThread: async (address: string, limit: number, beforeDate: number | null) => {
+      try { return await nativeModule.getMessagesForThread(address, limit, beforeDate); }
+      catch (e) { console.error('LauncherModule.getMessagesForThread failed:', e); reportBridgeError('getMessagesForThread', e); return []; }
     },
     getVolume: async () => {
       try { return await nativeModule.getVolume(); }
