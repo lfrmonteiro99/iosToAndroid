@@ -111,7 +111,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged", "onCallStateChanged", "onCallEnded")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged", "onCallStateChanged", "onCallEnded", "onCallAudioStateChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -976,6 +976,23 @@ class LauncherModule : Module() {
             } catch (e: Exception) {
                 false
             }
+        }
+
+        // ── Call audio routing (#920) ───────────────────────────────────────
+        // Mute/route commands only take effect while LauncherInCallService is
+        // actually bound for the active call (this app is the default dialer
+        // — see requestDefaultDialer above); otherwise there is no InCallService
+        // instance to command and these are no-ops that resolve false, matching
+        // the CallScreen contract of only enabling the buttons once a real
+        // CallAudioState event has been observed (see addCallAudioStateListener).
+
+        AsyncFunction("setMuted") { muted: Boolean ->
+            LauncherInCallService.requestMuted(muted)
+        }
+
+        AsyncFunction("setAudioRoute") { route: String ->
+            val routeInt = CallAudioRouteMapper.fromName(route) ?: return@AsyncFunction false
+            LauncherInCallService.requestAudioRoute(routeInt)
         }
 
         // ── Notifications ────────────────────────────────────────────────
