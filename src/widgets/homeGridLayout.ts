@@ -295,3 +295,56 @@ export function resolveWidgetPlacement<T>({
     }
   }
 }
+
+/**
+ * Whether a candidate cell for a widget being DRAGGED (#938) actually holds
+ * it there, and — if so — the packed layout of the page with everything else
+ * reflowed around it. This is the single page-scoped source for both the
+ * live drag preview and the drop decision, so they can never disagree about
+ * where the widget is allowed to land.
+ *
+ * `fits` is stricter than `computeHomeGridLayout` placing the widget somewhere
+ * on its own: that function treats "the stored cell is occupied" as "find the
+ * next free one on this page, or spill to the next" — exactly right for
+ * mount-time layout, wrong for a drag, where landing anywhere other than the
+ * cell the user is hovering over must read as an invalid drop (AC: "largada
+ * inválida... devolve o widget à origem com mola; nunca fica sobreposto"),
+ * not a silent relocation. Comparing the packer's own output for the dragged
+ * widget's id against the requested (col, row) is what tells the two cases
+ * apart, without duplicating `fits`/`firstFit` (kept private to this module).
+ *
+ * `otherWidgets` is every OTHER widget already on the page (the dragged one
+ * excluded) — passing the full page list back in would make the widget
+ * collide with its own old position and never fit anywhere.
+ */
+export function resolveWidgetDragTarget<T>({
+  cols,
+  rows,
+  otherWidgets,
+  items,
+  dragged,
+  targetCol,
+  targetRow,
+}: {
+  cols: number;
+  rows: number;
+  otherWidgets: readonly WidgetInstance[];
+  /** Icons already on this page, in their existing order. */
+  items: readonly T[];
+  dragged: WidgetInstance;
+  targetCol: number;
+  targetRow: number;
+}): { fits: boolean; layout: PageLayout<T> } {
+  const candidate: WidgetInstance = { ...dragged, page: 0, col: targetCol, row: targetRow };
+  const layout = computeHomeGridLayout<T>({
+    cols,
+    rows,
+    widgets: [...otherWidgets.map((w) => ({ ...w, page: 0 })), candidate],
+    items,
+  })[0];
+
+  const placed = layout.widgets.find((w) => w.id === dragged.id);
+  const fits = !!placed && placed.col === targetCol && placed.row === targetRow;
+
+  return { fits, layout };
+}

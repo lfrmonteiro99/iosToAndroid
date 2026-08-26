@@ -31,6 +31,7 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
+  type SharedValue,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -85,7 +86,8 @@ import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 import { hiddenPageIndicesForMode, filterVisiblePages } from '../utils/focusPageVisibility';
 import { dockOverrideForMode } from '../utils/focusDockOverride';
 import { clampWithRubberBand } from '../theme/motion';
-import { computeDragTargetIndex, computeEdgeScrollDirection } from '../utils/launcherDrag';
+import { computeDragTargetIndex, computeEdgeScrollDirection, computeWidgetDragTargetCell } from '../utils/launcherDrag';
+import { GestureHaptics } from '../utils/gestureHaptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -201,8 +203,8 @@ import {
   BUILT_IN_DUPLICATE_PACKAGES,
   builtInAppName,
 } from '../utils/builtInAppRoutes';
-import { computeHomeGridLayout } from '../widgets/homeGridLayout';
-import { isOnHomePage } from '../widgets/widgetInstances';
+import { computeHomeGridLayout, resolveWidgetDragTarget, spanFor, type PageLayout } from '../widgets/homeGridLayout';
+import { isOnHomePage, type WidgetInstance } from '../widgets/widgetInstances';
 import { logger } from '../utils/logger';
 import {
   IOS_FACADE_BY_PACKAGE,
@@ -599,6 +601,103 @@ const AppIcon = React.memo(function AppIcon({
         </Text>
       )}
     </Pressable>
+    </GestureDetector>
+  );
+});
+
+interface DraggableWidgetTileProps {
+  instance: WidgetInstance;
+  pageIndex: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  isJiggling?: boolean;
+  reduceMotionShared: SharedValue<boolean>;
+  onDragStart?: (instance: WidgetInstance, pageIndex: number) => void;
+  onDragUpdate?: (instance: WidgetInstance, translationX: number, translationY: number, absoluteX: number) => void;
+  onDragEnd?: (instance: WidgetInstance, translationX: number, translationY: number, velocityX: number, velocityY: number) => void;
+  children: React.ReactNode;
+}
+
+// Widget drag-to-reorder (#938), same convention as AppIcon's #761 gesture
+// above: `Gesture.Pan().minDistance(10)` for the same reason (a future ✕
+// remove control would be a nested Pressable in this same subtree, and a Pan
+// with no minimum travel would win the responder race on a stationary tap).
+//
+// The tile's own `left`/`top` come from the REAL (non-preview) layout and
+// never change mid-drag — only `dragTranslateX/Y` move it, exactly like
+// AppIcon. The reflow the user sees around it is a SEPARATE thing: the
+// screen swaps in a preview layout for the icons/other-widgets on this page
+// while `widgetDragPreview` is set (see LauncherHomeScreen's
+// `effectiveHomeLayout`). If this tile's own base position were swapped to
+// the candidate cell too, the translateX/Y offset (already "how far from the
+// original position") would double-apply and the widget would jump.
+//
+// React.memo (#518): same reasoning as AppIcon — the parent's onDragStart/
+// onDragUpdate/onDragEnd are useCallback-memoized, so a re-render caused by
+// the drag preview state elsewhere on the page does not recreate this tile's
+// gesture (armadilha: "uma pré-visualização que recrie handlers a cada frame
+// anula-a e o arrasto fica a tremer" — the state update happens at most once
+// per cell crossing, not per frame, precisely so this holds).
+const DraggableWidgetTile = React.memo(function DraggableWidgetTile({
+  instance,
+  pageIndex,
+  left,
+  top,
+  width,
+  height,
+  isJiggling,
+  reduceMotionShared,
+  onDragStart,
+  onDragUpdate,
+  onDragEnd,
+  children,
+}: DraggableWidgetTileProps) {
+  const dragTranslateX = useSharedValue(0);
+  const dragTranslateY = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: dragTranslateX.value },
+      { translateY: dragTranslateY.value },
+    ],
+  }));
+
+  const dragGesture = Gesture.Pan()
+    .enabled(!!isJiggling)
+    .minDistance(10)
+    .onBegin(() => {
+      'worklet';
+      if (onDragStart) runOnJS(onDragStart)(instance, pageIndex);
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragTranslateX.value = e.translationX;
+      dragTranslateY.value = e.translationY;
+      if (onDragUpdate) runOnJS(onDragUpdate)(instance, e.translationX, e.translationY, e.absoluteX);
+    })
+    .onEnd((e) => {
+      'worklet';
+      // #487: the spring MUST inherit the release velocity — a widget that
+      // settles from a standstill is immediately visible next to icons that
+      // settle with theirs (armadilha of this issue). `settle()` is the
+      // helper #487 built for exactly this; a bare `withSpring(0)` (what
+      // AppIcon's own #761 gesture still does above) is what this issue
+      // explicitly calls out as the wrong reference to copy.
+      dragTranslateX.value = settle(0, 'mediumSettle', reduceMotionShared.value, e.velocityX);
+      dragTranslateY.value = settle(0, 'mediumSettle', reduceMotionShared.value, e.velocityY);
+      if (onDragEnd) runOnJS(onDragEnd)(instance, e.translationX, e.translationY, e.velocityX, e.velocityY);
+    });
+
+  return (
+    <GestureDetector gesture={dragGesture}>
+      <Animated.View
+        testID={`launcher-home-widget-${instance.type}`}
+        style={[{ position: 'absolute', left, top, width, height }, animatedStyle]}
+      >
+        {children}
+      </Animated.View>
     </GestureDetector>
   );
 });
@@ -1003,7 +1102,7 @@ export function LauncherHomeScreen() {
   // widgetMap/config the Today View sheet reads/writes, so a widget looks and
   // behaves identically whether it's reached by swiping right into Today View
   // or seen directly on the home page.
-  const { instances: homeWidgetInstances, loaded: homeWidgetsLoaded } = useWidgetConfig();
+  const { instances: homeWidgetInstances, loaded: homeWidgetsLoaded, moveWidget } = useWidgetConfig();
   const homeWidgetMap = useWidgetMap();
 
   // Tap to Wake (#608): the HOME-press effect below is registered with deps
@@ -1566,6 +1665,25 @@ export function LauncherHomeScreen() {
     [gridGeometry.cols, settings.gridRows, homeWidgetsLoaded, homeWidgetInstances, gridItems],
   );
 
+  // Live drag preview (#938): while a widget is being dragged in jiggle mode,
+  // this holds the page it is over and the packed layout with icons reflowed
+  // around the CANDIDATE cell — "the things around it have to adapt" from the
+  // issue's wording, before the drop, not after. `null` outside a drag (or
+  // while hovering a cell that would not fit): the real `homeLayout` renders
+  // unchanged, which is also how an invalid hover reads — nothing moves until
+  // a valid cell is found, so nothing ever looks like it landed somewhere it
+  // did not.
+  const [widgetDragPreview, setWidgetDragPreview] = useState<{ pageIndex: number; layout: PageLayout<GridItem> } | null>(null);
+
+  // What actually renders. Only the page under an active, VALID widget drag
+  // differs from `homeLayout` — every other page, and the dragged widget's
+  // own tile (which moves via its own translateX/Y, see DraggableWidgetTile),
+  // are untouched.
+  const effectiveHomeLayout: PageLayout<GridItem>[] = useMemo(() => {
+    if (!widgetDragPreview) return homeLayout;
+    return homeLayout.map((page, i) => (i === widgetDragPreview.pageIndex ? widgetDragPreview.layout : page));
+  }, [homeLayout, widgetDragPreview]);
+
   /**
    * Each page as a DENSE array of `cols * rows` cells, in row-major order.
    *
@@ -1578,7 +1696,7 @@ export function LauncherHomeScreen() {
    */
   const allPages: GridItem[][] = useMemo(() => {
     const cellCount = Math.max(1, gridGeometry.cols * settings.gridRows);
-    return homeLayout.map((page, pageIndex) => {
+    return effectiveHomeLayout.map((page, pageIndex) => {
       const cells: GridItem[] = Array.from({ length: cellCount }, (_, i) => ({
         type: 'empty' as const,
         key: `p${pageIndex}-c${i}`,
@@ -1605,7 +1723,7 @@ export function LauncherHomeScreen() {
       // `gridItems.slice(...)` produced.
       return cells.slice(0, lastUsed + 1);
     });
-  }, [homeLayout, gridGeometry.cols, settings.gridRows]);
+  }, [effectiveHomeLayout, gridGeometry.cols, settings.gridRows]);
 
   // Focus filters (#618): com um modo de Focus activo, as páginas cujo índice
   // está em `focusPageVisibility[focusMode]` não renderizam. O índice é o da
@@ -1712,6 +1830,94 @@ export function LauncherHomeScreen() {
       swapHomeApps?.(app.packageName, targetItem.app.packageName);
     }
   }, [pages, gridGeometry, cellHeight, swapHomeApps]);
+
+  // Widget drag-to-reorder (#938). Same ref-not-state reasoning as the icon
+  // drag above for anything that fires on every pixel of movement; the one
+  // exception is `widgetDragPreview`, which DOES need to be state because it
+  // drives what actually renders (the reflow) — it only changes when the
+  // candidate cell crosses into a new one (computeWidgetDragTargetCell rounds
+  // to whole cells), not per pixel, so it stays far short of a per-frame
+  // re-render.
+  const widgetDragOriginRef = useRef<{ instance: WidgetInstance; pageIndex: number } | null>(null);
+  const lastWidgetEdgeScrollAtRef = useRef(0);
+
+  const handleWidgetDragStart = useCallback((instance: WidgetInstance, pageIndex: number) => {
+    widgetDragOriginRef.current = { instance, pageIndex };
+    GestureHaptics.holdConfirm();
+  }, []);
+
+  /** Shared by the live preview and the drop decision — see `resolveWidgetDragTarget`'s own doc for why they must not disagree. */
+  const resolveWidgetDrop = useCallback((instance: WidgetInstance, pageIndex: number, translationX: number, translationY: number) => {
+    const span = spanFor(instance.size, gridGeometry.cols);
+    const target = computeWidgetDragTargetCell({
+      originCol: instance.col,
+      originRow: instance.row,
+      translationX,
+      translationY,
+      cellWidth: gridGeometry.cellWidth,
+      cellHeight,
+      cols: gridGeometry.cols,
+      rows: settings.gridRows,
+      colSpan: span.cols,
+      rowSpan: span.rows,
+    });
+    const otherWidgets = homeWidgetInstances.filter(
+      (w) => isOnHomePage(w) && w.page === pageIndex && w.id !== instance.id,
+    );
+    const iconsOnPage = (homeLayout[pageIndex]?.items ?? []).map((i) => i.item);
+    const { fits, layout } = resolveWidgetDragTarget<GridItem>({
+      cols: gridGeometry.cols,
+      rows: settings.gridRows,
+      otherWidgets,
+      items: iconsOnPage,
+      dragged: instance,
+      targetCol: target.col,
+      targetRow: target.row,
+    });
+    return { target, fits, layout };
+  }, [gridGeometry, cellHeight, settings.gridRows, homeWidgetInstances, homeLayout]);
+
+  const handleWidgetDragUpdate = useCallback((instance: WidgetInstance, translationX: number, translationY: number, absoluteX: number) => {
+    const origin = widgetDragOriginRef.current;
+    if (!origin) return;
+
+    const direction = computeEdgeScrollDirection(absoluteX, SCREEN_WIDTH, DRAG_EDGE_THRESHOLD_DP);
+    if (direction && Date.now() - lastWidgetEdgeScrollAtRef.current >= EDGE_SCROLL_THROTTLE_MS) {
+      const targetPage = direction === 'prev' ? origin.pageIndex - 1 : origin.pageIndex + 1;
+      // Mirrors the icon drag's own bound (#761): the App Library page at the
+      // end has no home grid to drop into.
+      if (targetPage >= 0 && targetPage < pages.length) {
+        lastWidgetEdgeScrollAtRef.current = Date.now();
+        widgetDragOriginRef.current = { ...origin, pageIndex: targetPage };
+        setCurrentPage(targetPage);
+        scrollViewRef.current?.scrollTo({ x: targetPage * SCREEN_WIDTH, animated: true });
+        setWidgetDragPreview(null);
+        return;
+      }
+    }
+
+    const pageIndex = origin.pageIndex;
+    const { fits, layout } = resolveWidgetDrop(instance, pageIndex, translationX, translationY);
+    setWidgetDragPreview(fits ? { pageIndex, layout } : null);
+  }, [pages.length, resolveWidgetDrop]);
+
+  const handleWidgetDragEnd = useCallback((instance: WidgetInstance, translationX: number, translationY: number) => {
+    const origin = widgetDragOriginRef.current;
+    widgetDragOriginRef.current = null;
+    setWidgetDragPreview(null);
+    GestureHaptics.commit('light');
+    if (!origin) return;
+
+    const pageIndex = origin.pageIndex;
+    const { target, fits } = resolveWidgetDrop(instance, pageIndex, translationX, translationY);
+    // Invalid drop: do nothing. The tile's own gesture already springs the
+    // widget back to its original position with the release velocity (see
+    // DraggableWidgetTile's onEnd) — moving nothing here is what keeps it
+    // from ever landing overlapped.
+    if (fits && (target.col !== instance.col || target.row !== instance.row || pageIndex !== instance.page)) {
+      moveWidget(instance.id, pageIndex, target.col, target.row);
+    }
+  }, [resolveWidgetDrop, moveWidget]);
 
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
@@ -2226,23 +2432,31 @@ export function LauncherHomeScreen() {
 
                   The `launcher-home-widgets` / `launcher-home-widget-<type>`
                   testIDs are kept: what changed is the geometry, not what the
-                  home screen contains. */}
+                  home screen contains.
+
+                  Deliberately `homeLayout` here, not `effectiveHomeLayout`
+                  (#938): this tile's own drag transform already represents
+                  "how far from its real position", so its base left/top must
+                  stay the REAL one — see DraggableWidgetTile's own comment. */}
               {homeWidgetsLoaded && homeLayout[pageIndex]?.widgets.length > 0 && (
                 <View testID={`launcher-home-widgets-${pageIndex}`} style={StyleSheet.absoluteFill} pointerEvents="box-none">
                   {homeLayout[pageIndex].widgets.map((placed) => (
-                    <View
+                    <DraggableWidgetTile
                       key={placed.id}
-                      testID={`launcher-home-widget-${placed.instance.type}`}
-                      style={{
-                        position: 'absolute',
-                        left: placed.col * gridGeometry.cellWidth,
-                        top: placed.row * cellHeight,
-                        width: placed.colSpan * gridGeometry.cellWidth - HOME_WIDGET_GAP,
-                        height: placed.rowSpan * cellHeight - HOME_WIDGET_GAP,
-                      }}
+                      instance={placed.instance}
+                      pageIndex={pageIndex}
+                      left={placed.col * gridGeometry.cellWidth}
+                      top={placed.row * cellHeight}
+                      width={placed.colSpan * gridGeometry.cellWidth - HOME_WIDGET_GAP}
+                      height={placed.rowSpan * cellHeight - HOME_WIDGET_GAP}
+                      isJiggling={isJiggling}
+                      reduceMotionShared={reduceMotionShared}
+                      onDragStart={handleWidgetDragStart}
+                      onDragUpdate={handleWidgetDragUpdate}
+                      onDragEnd={handleWidgetDragEnd}
                     >
                       {homeWidgetMap[placed.instance.type]}
-                    </View>
+                    </DraggableWidgetTile>
                   ))}
                 </View>
               )}
