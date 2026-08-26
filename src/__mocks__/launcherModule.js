@@ -4,6 +4,7 @@ module.exports = {
   addNotificationListener: jest.fn(() => jest.fn()),
   addNotificationRemovedListener: jest.fn(() => jest.fn()),
   addPackageChangedListener: jest.fn(() => jest.fn()),
+  addCallAudioStateListener: jest.fn(() => jest.fn()),
   onBridgeError: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
@@ -33,6 +34,9 @@ module.exports = {
     // #919 Default Dialer request flow
     isDefaultDialer: jest.fn(() => Promise.resolve(false)),
     requestDefaultDialer: jest.fn(() => Promise.resolve(true)),
+    // #920 Call audio routing
+    setMuted: jest.fn(() => Promise.resolve(true)),
+    setAudioRoute: jest.fn(() => Promise.resolve(true)),
     getNotifications: jest.fn(() => Promise.resolve([])),
     clearNotification: jest.fn(() => Promise.resolve(true)),
     clearAllNotifications: jest.fn(() => Promise.resolve(true)),
