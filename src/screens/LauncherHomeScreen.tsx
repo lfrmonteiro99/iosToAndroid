@@ -2368,6 +2368,9 @@ export function LauncherHomeScreen() {
       <WidgetGallery
         visible={widgetGalleryOpen}
         onClose={() => setWidgetGalleryOpen(false)}
+        focusPage={currentPage}
+        cols={gridGeometry.cols}
+        rows={settings.gridRows}
       />
 
       {/* ---------------------------------------------------------------- */}

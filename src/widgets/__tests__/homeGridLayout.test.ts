@@ -168,6 +168,21 @@ describe('widget pages', () => {
     expect(layout[1].items).toHaveLength(0);
   });
 
+  it('#936: a widget-only page survives when its page index is required', () => {
+    // Page 1 holds ONLY a widget. Icons fill page 0 (they fit there), so the
+    // widget-only page 1 must still be returned and must not be pruned to
+    // page 0. The layout derives pages from widgets + items, never icon-only,
+    // so a widget with no icons on its page survives.
+    const layout = computeHomeGridLayout({
+      ...GRID,
+      widgets: [widget({ id: 'a', page: 1 })],
+      items: ['p0a', 'p0b', 'p0c'],
+    });
+    expect(layout.length).toBeGreaterThanOrEqual(2);
+    expect(layout[1].widgets).toHaveLength(1);
+    expect(layout[0].items.map((i) => i.item)).toEqual(['p0a', 'p0b', 'p0c']);
+  });
+
   it('always returns at least one page, so the pager never has zero children', () => {
     expect(computeHomeGridLayout({ ...GRID, widgets: [], items: [] })).toHaveLength(1);
   });

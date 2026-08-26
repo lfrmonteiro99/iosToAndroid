@@ -21,6 +21,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet, Modal } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useAlert } from './AlertProvider';
 import { useTheme } from '../theme/ThemeContext';
 import {
   ALL_WIDGET_TYPES,
@@ -30,10 +31,22 @@ import {
   useWidgetMap,
   type WidgetType,
 } from '../widgets/TodayWidgets';
+import { isOnHomePage } from '../widgets/widgetInstances';
+import { resolveWidgetPlacement } from '../widgets/homeGridLayout';
 
 export interface WidgetGalleryProps {
   visible: boolean;
   onClose: () => void;
+  /**
+   * The home page being viewed when the gallery opened. A widget is placed
+   * here (#936) — iOS puts it where you are, no page picker. If this page has
+   * no room, the widget overflows to the next page with space and the user is
+   * told, rather than being dropped or hidden on a page they are not looking at.
+   */
+  focusPage: number;
+  /** Grid dimensions, so the gallery can tell whether `focusPage` has room. */
+  cols: number;
+  rows: number;
 }
 
 /**
@@ -109,9 +122,10 @@ function GalleryEntry({
   );
 }
 
-export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
+export function WidgetGallery({ visible, onClose, focusPage, cols, rows }: WidgetGalleryProps) {
   const insets = useSafeAreaInsets();
   const { textScale } = useTheme();
+  const alert = useAlert();
   const { instances, addWidget, removeWidget } = useWidgetConfig();
   const widgetMap = useWidgetMap();
   const [query, setQuery] = useState('');
@@ -123,10 +137,33 @@ export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
     return counts;
   }, [instances]);
 
-  // addWidget appends. The home row and the Today View grid both read this
-  // order, and a new widget arriving in the middle would silently reshuffle an
-  // arrangement the user made.
-  const add = useCallback((type: WidgetType) => addWidget(type), [addWidget]);
+  /**
+   * Place on the page the user is looking at (#936). Where it lands is decided
+   * by `resolveWidgetPlacement`, which prefers `focusPage` and walks forward to
+   * the first page with room when that one is full — reporting `overflowed` so
+   * we can tell the user rather than hiding the widget on a page they cannot
+   * see. The chosen page is passed straight to `addWidget`, which persists it.
+   */
+  const add = useCallback(
+    (type: WidgetType) => {
+      const homePlaced = instances.filter(isOnHomePage);
+      const { page, overflowed } = resolveWidgetPlacement({
+        cols,
+        rows,
+        placed: homePlaced,
+        focusPage,
+        size: DEFAULT_WIDGET_SIZES[type],
+      });
+      addWidget(type, { page });
+      if (overflowed) {
+        alert(
+          'Not enough room here',
+          `Added to page ${page + 1} — the page you were on was full.`,
+        );
+      }
+    },
+    [addWidget, alert, cols, rows, focusPage, instances],
+  );
 
   // Removes the LAST placed instance of the type: with several of a kind, the
   // one the user just added is the one they are most likely undoing.
@@ -169,7 +206,7 @@ export function WidgetGallery({ visible, onClose }: WidgetGalleryProps) {
           </View>
 
           <Text style={[styles.subtitle, { fontSize: 15 * textScale }]}>
-            Widgets appear at the top of your first home page and in Today View.
+            Widgets appear on the home page you add them from.
           </Text>
 
           {/* Filter is a plain row of chips rather than a text field: with six

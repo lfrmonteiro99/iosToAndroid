@@ -179,6 +179,16 @@ describe('LauncherHomeScreen — home screen widgets (#654)', () => {
     expect(queryByTestId('launcher-home-widgets-0')).toBeNull();
   });
 
+  it('PROBE renders a widget placed on a non-zero page only there', async () => {
+    mockApps();
+    mockPlacedWidgets([{ type: 'battery', page: 1 }]);
+
+    const { getByTestId, queryByTestId } = render(<LauncherHomeScreen />);
+
+    await waitFor(() => expect(getByTestId('launcher-home-widgets-1')).toBeTruthy(), { timeout: 3000 });
+    expect(queryByTestId('launcher-home-widgets-0')).toBeNull();
+  });
+
   it('tapping the Battery widget navigates to the Battery screen, same as from Today View', async () => {
     // A placed widget, since that is what the home grid renders now. The point
     // of the test is unchanged: a widget on the home screen is the same live
