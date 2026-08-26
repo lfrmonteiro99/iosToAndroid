@@ -1,11 +1,14 @@
 package com.iostoandroid.launcher
 
+import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.PowerManager
@@ -45,6 +48,7 @@ import android.provider.Telephony
 import android.telecom.TelecomManager
 import android.util.Base64
 import android.util.Log
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
@@ -54,6 +58,9 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 class LauncherModule : Module() {
     companion object {
@@ -64,6 +71,17 @@ class LauncherModule : Module() {
         // Live Activities (#626): one shared low-importance channel for every
         // ongoing notification posted via postLiveActivity.
         private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
+
+        // #930: sendSms — how long to wait for the sentIntent broadcast(s)
+        // before giving up and reporting an indeterminate (=failed) send.
+        private const val SMS_SEND_TIMEOUT_MS = 30_000L
+        private const val SMS_SENT_ACTION_PREFIX = "com.iostoandroid.launcher.SMS_SENT"
+        private const val EXTRA_SMS_PART_INDEX = "smsPartIndex"
+
+        // Monotonically increasing so two sends in flight at once (or the
+        // user double-tapping Send) each get their own broadcast action and
+        // PendingIntent request codes instead of colliding.
+        private val smsSendRequestId = AtomicInteger(0)
 
         /**
          * Protected-app set pushed from JS (AppsStore) so the foreground monitor
@@ -1035,7 +1053,12 @@ class LauncherModule : Module() {
 
         // ── SMS Send ─────────────────────────────────────────────────────
 
-        AsyncFunction("sendSms") { address: String, body: String ->
+        // `Coroutine`, not a plain lambda: awaitSmsSendOutcome (below) is a
+        // suspend function that waits on the sentIntent broadcast(s), and a
+        // plain AsyncFunction body is not a coroutine scope. Same builder
+        // HealthConnectModule uses for its suspending body — see the comment
+        // there for why a plain lambda fails to compile.
+        AsyncFunction("sendSms") Coroutine { address: String, body: String ->
             SmsRequestValidator.validate(address, body)?.let { reason -> throw Exception(reason) }
             if (!hasPermission(android.Manifest.permission.SEND_SMS)) {
                 throw Exception("SMS não enviado: permissão SEND_SMS não concedida")
@@ -1051,10 +1074,18 @@ class LauncherModule : Module() {
                 }
 
             val parts = smsManager.divideMessage(body)
-            if (parts.size > 1) {
-                smsManager.sendMultipartTextMessage(address, null, parts, null, null)
-            } else {
-                smsManager.sendTextMessage(address, null, body, null, null)
+            // #930: sendSms used to fire-and-forget (sentIntent=null) and always
+            // resolve true — the call being accepted for processing is not the
+            // same as the radio actually sending it. Now the promise only
+            // resolves once every part's sentIntent broadcast confirms RESULT_OK,
+            // a distinguishable reason on failure, or a timeout if the broadcast
+            // never arrives.
+            val outcome = withTimeoutOrNull(SMS_SEND_TIMEOUT_MS) {
+                awaitSmsSendOutcome(context, smsManager, address, parts)
+            } ?: SmsResultMapper.Outcome(success = false, reason = "timeout")
+
+            if (!outcome.success) {
+                throw Exception("SMS não enviado: ${outcome.reason ?: "unknown_error"}")
             }
             true
         }
@@ -1737,6 +1768,88 @@ class LauncherModule : Module() {
         return androidx.core.content.ContextCompat.checkSelfPermission(
             context, permission
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * Registers a one-shot [BroadcastReceiver] as the `sentIntent` for every
+     * part of an SMS send (one PendingIntent per part — the OS fires each
+     * one separately, once its part is handed to the radio) and suspends
+     * until all parts have reported, aggregating via [SmsResultMapper]. The
+     * receiver always unregisters exactly once: on the normal completion
+     * path, or via `invokeOnCancellation` when the caller (the
+     * withTimeoutOrNull in AsyncFunction("sendSms")) cancels this coroutine.
+     */
+    private suspend fun awaitSmsSendOutcome(
+        context: Context,
+        smsManager: android.telephony.SmsManager,
+        address: String,
+        parts: ArrayList<String>,
+    ): SmsResultMapper.Outcome = suspendCancellableCoroutine { continuation ->
+        val requestId = smsSendRequestId.incrementAndGet()
+        val action = "$SMS_SENT_ACTION_PREFIX.$requestId"
+        val results = IntArray(parts.size) { Int.MIN_VALUE }
+        var remaining = parts.size
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                val partIndex = intent?.getIntExtra(EXTRA_SMS_PART_INDEX, -1) ?: -1
+                // Ignore a part we've already recorded: onReceive can fire
+                // again for the same PendingIntent (e.g. a stray redelivery),
+                // and double-counting it would let `remaining` reach zero
+                // before every real part has reported.
+                if (partIndex < 0 || partIndex >= results.size || results[partIndex] != Int.MIN_VALUE) {
+                    return
+                }
+                results[partIndex] = resultCode
+                remaining--
+                if (remaining == 0) {
+                    try { context.unregisterReceiver(this) } catch (_: Exception) {}
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.success(SmsResultMapper.aggregate(results.toList())))
+                    }
+                }
+            }
+        }
+
+        androidx.core.content.ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(action),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        continuation.invokeOnCancellation {
+            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+        }
+
+        val sentIntents = ArrayList<PendingIntent>(parts.size)
+        for (i in parts.indices) {
+            val intent = Intent(action).putExtra(EXTRA_SMS_PART_INDEX, i).setPackage(context.packageName)
+            sentIntents.add(
+                PendingIntent.getBroadcast(
+                    context,
+                    requestId * 1000 + i,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            )
+        }
+
+        // The SmsManager calls below can throw synchronously (e.g. an invalid
+        // address, or a permission revoked between hasPermission() and here)
+        // before any sentIntent broadcast is ever scheduled. That throw isn't
+        // a coroutine cancellation, so invokeOnCancellation above would never
+        // run — without this catch the receiver registered a few lines up
+        // would leak.
+        try {
+            if (parts.size > 1) {
+                smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, null)
+            } else {
+                smsManager.sendTextMessage(address, null, parts[0], sentIntents[0], null)
+            }
+        } catch (e: Exception) {
+            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+            throw e
+        }
     }
 
     private fun resolveContactName(phoneNumber: String): String? {

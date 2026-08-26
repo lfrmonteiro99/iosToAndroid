@@ -305,6 +305,41 @@ describe('ConversationScreen', () => {
   });
 });
 
+describe('ConversationScreen — failed send preserves text and draft (#930)', () => {
+  it('keeps the typed message and the saved draft when the send is not confirmed', async () => {
+    const store = setupMemoryAsyncStorage();
+    const { getByPlaceholderText, getByLabelText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    const messageBox = getByPlaceholderText('Message') as unknown as { props: { value: string } };
+    fireEvent.changeText(messageBox, 'Hello there');
+
+    // Let the debounced draft save (500ms, see handleInputChange) land before sending.
+    await waitFor(() => {
+      expect(store.get('@iostoandroid/draft_+15551234567')).toBe('Hello there');
+    }, { timeout: 2000 });
+
+    fireEvent.press(getByLabelText('Send message'));
+
+    // getLauncher()'s dynamic import cannot execute in this Jest environment
+    // (see the "sends to the chosen recipient" test above), so
+    // sendSmsNative always resolves to `false` here — exactly the shape a
+    // real unconfirmed/failed native sendSms now produces after #930
+    // (previously the native side always resolved `true`, so this failure
+    // path was unreachable from a real send). This proves the existing
+    // ConversationScreen.tsx guard — clear input/draft only `if (success)`
+    // — actually holds under a genuine failure, not just that it reads
+    // correctly on paper.
+    await waitFor(() => {
+      expect(mockAlert.mock.calls.some(([title]) => title === 'Failed')).toBe(true);
+    }, { timeout: 2000 });
+
+    expect(messageBox.props.value).toBe('Hello there');
+    expect(store.get('@iostoandroid/draft_+15551234567')).toBe('Hello there');
+  });
+});
+
 describe('ConversationScreen — compose new message (#439)', () => {
   let checkSpy: jest.SpyInstance;
 
