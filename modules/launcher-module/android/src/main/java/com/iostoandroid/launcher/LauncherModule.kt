@@ -93,7 +93,7 @@ class LauncherModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged", "onCallStateChanged", "onCallEnded")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -921,6 +921,43 @@ class LauncherModule : Module() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             true
+        }
+
+        // ── Default Dialer request flow (#919) ─────────────────────────────
+        // LauncherInCallService only takes over the call UI once this app is
+        // selected as the system's default dialer — being merely installed is
+        // not enough. isDefaultDialer is a live poll (same shape as
+        // checkPermissions); requestDefaultDialer only launches the OS
+        // role/intent and resolves once that launch succeeded, mirroring
+        // requestAllPermissions' fire-and-forget contract — the actual
+        // decision comes back to the app via the next isDefaultDialer() poll,
+        // not via this promise.
+
+        AsyncFunction("isDefaultDialer") {
+            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            telecomManager?.defaultDialerPackage == context.packageName
+        }
+
+        AsyncFunction("requestDefaultDialer") {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
+                        ?: return@AsyncFunction false
+                    if (!roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_DIALER)) return@AsyncFunction false
+                    val activity = appContext.currentActivity ?: return@AsyncFunction false
+                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_DIALER)
+                    activity.startActivity(intent)
+                } else {
+                    val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER).apply {
+                        putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, context.packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
 
         // ── Notifications ────────────────────────────────────────────────

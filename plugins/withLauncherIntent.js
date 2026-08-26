@@ -60,6 +60,28 @@ function applyManifestMod(manifest) {
     });
   }
 
+  // #919: RoleManager.ROLE_DIALER (and its pre-API-29 ACTION_CHANGE_DEFAULT_DIALER
+  // equivalent) only lists this app as eligible to become the default dialer
+  // if the manifest declares BOTH an InCallService (see the module's own
+  // AndroidManifest.xml — modules/launcher-module/android/src/main/AndroidManifest.xml,
+  // declared there rather than here because every other <service> in this app
+  // already lives in the autolinked module manifest) AND an activity that
+  // handles ACTION_DIAL. Without this filter, LauncherModule.requestDefaultDialer
+  // would launch a role-request intent the system silently refuses because
+  // the requesting app doesn't qualify.
+  const hasDialFilter = mainActivity["intent-filter"].some((filter) =>
+    filter.action?.some(
+      (action) => action.$["android:name"] === "android.intent.action.DIAL"
+    )
+  );
+
+  if (!hasDialFilter) {
+    mainActivity["intent-filter"].push({
+      action: [{ $: { "android:name": "android.intent.action.DIAL" } }],
+      category: [{ $: { "android:name": "android.intent.category.DEFAULT" } }],
+    });
+  }
+
   return manifest;
 }
 
