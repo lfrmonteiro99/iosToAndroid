@@ -81,5 +81,25 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:exported="false" />
+
+        <!-- #919: in-call UI provider, bound by Telecom once this app is
+             selected as the default dialer (LauncherModule.requestDefaultDialer).
+             android.telecom.IN_CALL_SERVICE_UI=true is required for Telecom to
+             treat this as the app's OWN call-screen UI rather than a passive
+             observer — without it, the installed dialer's screen would still
+             be the one shown on top. exported=true + BIND_INCALL_SERVICE is
+             the framework-mandated combination (Telecom itself is the only
+             caller allowed to bind, enforced by the permission). -->
+        <service
+            android:name=".LauncherInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

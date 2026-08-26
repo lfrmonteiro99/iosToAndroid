@@ -325,6 +325,14 @@ interface LauncherModuleType {
   // Call Log
   getCallLog(limit: number): Promise<CallLogEntry[]>;
   makeCall(number: string): Promise<boolean>;
+  // Default Dialer (#919): InCallService only takes over the call UI once
+  // this app is selected as the system's default dialer. isDefaultDialer is
+  // a live poll (mirrors checkPermissions after requestAllPermissions);
+  // requestDefaultDialer only launches the OS role/intent and resolves once
+  // that launch succeeded — not once the user has decided, matching
+  // requestAllPermissions' fire-and-forget contract.
+  isDefaultDialer(): Promise<boolean>;
+  requestDefaultDialer(): Promise<boolean>;
   // Notifications
   getNotifications(): Promise<DeviceNotification[]>;
   clearNotification(key: string): Promise<boolean>;
@@ -466,6 +474,8 @@ const stub: LauncherModuleType = {
   wakeScreen: async () => { /* stub: app-dimmed wake is best-effort / no-op off-Android */ },
   getCallLog: async () => [],
   makeCall: async () => false,
+  isDefaultDialer: async () => false,
+  requestDefaultDialer: async () => false,
   getNotifications: async () => [],
   clearNotification: async () => false,
   clearAllNotifications: async () => false,
@@ -751,6 +761,14 @@ function createBridgedModule(): LauncherModuleType {
     makeCall: async (number: string) => {
       try { return await nativeModule.makeCall(number); }
       catch (e) { console.error('LauncherModule.makeCall failed:', e); reportBridgeError('makeCall', e); return false; }
+    },
+    isDefaultDialer: async () => {
+      try { return await nativeModule.isDefaultDialer(); }
+      catch (e) { console.error('LauncherModule.isDefaultDialer failed:', e); reportBridgeError('isDefaultDialer', e); return false; }
+    },
+    requestDefaultDialer: async () => {
+      try { return await nativeModule.requestDefaultDialer(); }
+      catch (e) { console.error('LauncherModule.requestDefaultDialer failed:', e); reportBridgeError('requestDefaultDialer', e); return false; }
     },
     getNotifications: async () => {
       try { return await nativeModule.getNotifications(); }

@@ -30,6 +30,9 @@ module.exports = {
     isFlashlightOn: jest.fn(() => Promise.resolve(false)),
     getCallLog: jest.fn(() => Promise.resolve([])),
     makeCall: jest.fn(() => Promise.resolve(true)),
+    // #919 Default Dialer request flow
+    isDefaultDialer: jest.fn(() => Promise.resolve(false)),
+    requestDefaultDialer: jest.fn(() => Promise.resolve(true)),
     getNotifications: jest.fn(() => Promise.resolve([])),
     clearNotification: jest.fn(() => Promise.resolve(true)),
     clearAllNotifications: jest.fn(() => Promise.resolve(true)),
