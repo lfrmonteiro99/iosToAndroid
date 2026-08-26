@@ -335,6 +335,49 @@ const MEASURE_FALLBACK_MS = 50;
 // navigation, built-in or not).
 type MeasureBounds = () => Promise<LaunchBounds | undefined>;
 
+// Cell position (#937 — reflow animation), shared by AppIcon and FolderIcon.
+// `mounted` guards the first render so a cell never springs in from (0,0),
+// and every later left/top change (a widget resize displacing this cell,
+// on the SAME page) TRANSITIONS via settle() instead of snapping. Cross-page
+// moves are a mount/unmount, not a transition — nothing to animate there,
+// matching iOS.
+//
+// React Native's LayoutAnimation was considered instead of this (it animates
+// a layout-affecting state update with no shared values at all), and
+// rejected: it is a single global flag on the NEXT commit, not scoped to
+// these cells — it would also catch page-count changes, folder-overlay
+// opens, jiggle-mode's own layout churn, and every other unrelated layout
+// change in the same tree, none of which this issue asks to animate. It
+// also has no way to take the project's own spring presets (settle() /
+// 'mediumSettle', or the release velocity settle() forwards) — its spring
+// preset is a fixed bounciness/speed pair, unrelated to gestureConfig.ts —
+// and on Android it needs UIManager.setLayoutAnimationEnabledExperimental,
+// itself flaky pre-New-Architecture. Reanimated shared values, already the
+// established convention here (#487/#492, HomeWidgetSlot below), animate
+// exactly the cells this issue is about and nothing else.
+function useCellPosition(left: number, top: number, reduceMotion: boolean) {
+  const animLeft = useSharedValue(left);
+  const animTop = useSharedValue(top);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      animLeft.value = left;
+      animTop.value = top;
+      return;
+    }
+    // eslint-disable-next-line react-hooks/immutability
+    animLeft.value = settle(left, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animTop.value = settle(top, 'mediumSettle', reduceMotion);
+  }, [left, top, reduceMotion]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useAnimatedStyle(() => ({
+    position: 'absolute' as const,
+    left: animLeft.value,
+    top: animTop.value,
+  }));
+}
+
 interface AppIconProps {
   app: InstalledApp;
   cellWidth: number;
@@ -374,6 +417,17 @@ interface AppIconProps {
   onDragStart?: (app: InstalledApp, pageIndex: number, pageItemIndex: number) => void;
   onDragUpdate?: (app: InstalledApp, translationX: number, translationY: number, absoluteX: number) => void;
   onDragEnd?: (app: InstalledApp, translationX: number, translationY: number) => void;
+  /** Cell position in dp, home-grid call site only (#937). When set, the icon
+   * renders absolutely positioned and TRANSITIONS to a new left/top via
+   * settle()/'mediumSettle' instead of snapping — this is what makes a
+   * widget resize's reflow (icons displaced to a new cell on the SAME page)
+   * animate rather than jump. Dock and folder-overlay call sites never pass
+   * these, so they keep their original flex-flow layout untouched. */
+  left?: number;
+  top?: number;
+  /** Required together with left/top — 'off'/no transition when reduceMotion
+   * is set, same convention as HomeWidgetSlot. */
+  reduceMotion?: boolean;
 }
 
 // React.memo (#518): sem isto, cada AppIcon re-executava o corpo da função —
@@ -404,6 +458,7 @@ const AppIcon = React.memo(function AppIcon({
   onDragStart,
   onDragUpdate,
   onDragEnd,
+  left, top, reduceMotion = false,
 }: AppIconProps) {
   const virtualCfg = VIRTUAL_ICON_CONFIG[app.packageName];
   // Label block (margin + text line) measured at the 393dp reference so the
@@ -492,6 +547,9 @@ const AppIcon = React.memo(function AppIcon({
   // minimum travel would win the responder race on a plain tap and swallow
   // the delete press. 10dp of slack gives RNGH's native responder time to let
   // the child Pressable's own tap-recognition claim a stationary touch first.
+  // Home-grid call site only (left/top set) — see useCellPosition above.
+  const positionAnimatedStyle = useCellPosition(left ?? 0, top ?? 0, reduceMotion);
+
   const dragGesture = Gesture.Pan()
     .enabled(!!isJiggling)
     .minDistance(10)
@@ -515,7 +573,7 @@ const AppIcon = React.memo(function AppIcon({
       dragTranslateY.value = withSpring(0);
     });
 
-  return (
+  const iconTree = (
     <GestureDetector gesture={dragGesture}>
     <Pressable
       ref={iconRef}
@@ -601,6 +659,17 @@ const AppIcon = React.memo(function AppIcon({
       )}
     </Pressable>
     </GestureDetector>
+  );
+
+  // Home-grid call site only (left/top set): absolutely positioned so a
+  // reflow TRANSITIONS instead of re-flowing instantly. Dock and
+  // folder-overlay call sites (no left/top) keep the original flex-item
+  // render, untouched.
+  if (left == null || top == null) return iconTree;
+  return (
+    <Animated.View style={[{ width: cellWidth, height: wrapperHeight }, positionAnimatedStyle]}>
+      {iconTree}
+    </Animated.View>
   );
 });
 
@@ -819,6 +888,9 @@ const FolderIcon = React.memo(function FolderIcon({
   iconRadius = ICON_RADIUS,
   showLabel = true,
   iconTint,
+  left = 0,
+  top = 0,
+  reduceMotion = false,
 }: {
   folder: AppFolder;
   cellWidth: number;
@@ -830,6 +902,10 @@ const FolderIcon = React.memo(function FolderIcon({
   iconRadius?: number;
   showLabel?: boolean;
   iconTint?: string | null;
+  // Cell position (#937).
+  left?: number;
+  top?: number;
+  reduceMotion?: boolean;
 }) {
   const folderApps = folder.apps
     .map(pkg => apps.find(a => a.packageName === pkg))
@@ -847,8 +923,10 @@ const FolderIcon = React.memo(function FolderIcon({
   // next column).
   const miniSize = Math.max(6, Math.round(iconSize * (14 / 60)));
   const miniRadius = Math.max(1, Math.round(miniSize * (3 / 14)));
+  const positionAnimatedStyle = useCellPosition(left, top, reduceMotion);
 
   return (
+    <Animated.View style={[{ width: cellWidth, height: wrapperHeight }, positionAnimatedStyle]}>
     <CupertinoPressable
       style={[styles.appIconWrapper, { width: cellWidth, height: wrapperHeight }]}
       onPress={handlePress}
@@ -883,6 +961,7 @@ const FolderIcon = React.memo(function FolderIcon({
         <Text style={[styles.appIconLabel, { fontSize: 11 * textScale }]} numberOfLines={1}>{folder.name}</Text>
       )}
     </CupertinoPressable>
+    </Animated.View>
   );
 });
 
@@ -2293,7 +2372,15 @@ export function LauncherHomeScreen() {
           >
             <View
               testID={`launcher-page-grid-${pageIndex}`}
-              style={styles.pageGrid}
+              // #937: the grid is absolutely-positioned per cell now (so a
+              // reflow can TRANSITION each icon to its new cell instead of
+              // re-flowing instantly — see AppIcon/FolderIcon's animated
+              // left/top), which means it no longer sizes itself from its
+              // children's flex flow. Height comes from the same row count
+              // the old flexWrap auto-height produced: pageItems is already
+              // the dense, trimmed cols*rows array (allPages, above), so
+              // ceil(length / cols) is exactly the number of rows it drew.
+              style={[styles.pageGrid, { height: Math.ceil(pageItems.length / gridGeometry.cols) * cellHeight }]}
               // Cold/warm start (#517) fecham AQUI, no primeiro layout da
               // grelha da primeira página — o primeiro instante em que a
               // grelha está de facto pintada. Medir no mount do ecrã daria um
@@ -2304,15 +2391,24 @@ export function LauncherHomeScreen() {
               onLayout={pageIndex === 0 ? markGridVisible : undefined}
             >
               {pageItems.map((item, pageItemIndex) => {
+                const cellCol = pageItemIndex % gridGeometry.cols;
+                const cellRow = Math.floor(pageItemIndex / gridGeometry.cols);
+                const cellLeft = cellCol * gridGeometry.cellWidth;
+                const cellTop = cellRow * cellHeight;
                 if (item.type === 'empty') {
                   // #762: a position with no app renders a blank cell instead
                   // of letting the next app slide up into it — no Pressable,
-                  // no accessibility role, nothing tappable here.
+                  // no accessibility role, nothing tappable here. Static
+                  // (unanimated) position: there is nothing visible here to
+                  // transition.
                   return (
                     <View
                       key={item.key}
                       testID={`grid-empty-slot-${item.key}`}
                       style={{
+                        position: 'absolute',
+                        left: cellLeft,
+                        top: cellTop,
                         width: gridGeometry.cellWidth,
                         height: cellHeight,
                       }}
@@ -2333,6 +2429,9 @@ export function LauncherHomeScreen() {
                       iconTint={iconTint}
                       onPress={handleOpenFolder}
                       onLongPress={handleFolderLongPress}
+                      left={cellLeft}
+                      top={cellTop}
+                      reduceMotion={reduceMotion}
                     />
                   );
                 }
@@ -2357,6 +2456,9 @@ export function LauncherHomeScreen() {
                     onDragStart={handleDragStart}
                     onDragUpdate={handleDragUpdate}
                     onDragEnd={handleDragEnd}
+                    left={cellLeft}
+                    top={cellTop}
+                    reduceMotion={reduceMotion}
                   />
                 );
               })}
@@ -2654,9 +2756,15 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     paddingHorizontal: GRID_HORIZONTAL_PADDING,
   },
+  // #937: was `{ flexDirection: 'row', flexWrap: 'wrap' }` — pure flow layout,
+  // which is exactly why a reflow (a widget resize displacing icons to a new
+  // cell) could never animate: flex re-lays-out its children instantly, with
+  // no position to spring FROM. Icons/folders now position themselves via an
+  // animated left/top (see AppIcon/FolderIcon), so this container only needs
+  // to be their positioning root; height is set inline per page (pageItems.map
+  // call site) since it depends on how many rows that page's items fill.
   pageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    position: 'relative',
   },
 
   // Home screen widgets (#654)
