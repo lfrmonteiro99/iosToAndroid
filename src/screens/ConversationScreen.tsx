@@ -37,7 +37,14 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null; // Expected: module unavailable on non-Android
+    // Dynamic import is unavailable in some environments (e.g. Jest's VM);
+    // fall back to a synchronous require so the module stays reachable there.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src').default;
+    } catch {
+      return null; // Expected: module unavailable on non-Android
+    }
   }
 };
 
@@ -381,6 +388,10 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
     }
 
     setIsSending(true);
+    // Captured by the onSent callback below, then awaited before scrolling —
+    // dispatchSendMessage's onSent is synchronous (fire-and-forget) so the
+    // list update would otherwise race the unrelated device.refresh() call.
+    let appended: Promise<unknown> = Promise.resolve();
     try {
       const success = await dispatchSendMessage(address, text, {
         isAndroid: Platform.OS === 'android',
@@ -417,7 +428,12 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
             ],
           );
         },
-        onSent: () => {},
+        onSent: () => {
+          // #929: the provider never gets this message (SmsManager doesn't
+          // write to content://sms unless this app is the default SMS app),
+          // so append it locally instead of waiting for device.refresh().
+          appended = device.addSentMessage(address, text).catch(() => {});
+        },
         onError: () => {
           alert('Failed', 'Could not send message. Check permissions and try again.');
         },
@@ -426,8 +442,15 @@ export function ConversationScreen({ navigation, route }: ConversationScreenProp
       if (success) {
         setInputText('');
         AsyncStorage.removeItem(draftKey).catch(() => {});
-        await device.refresh();
-        listRef.current?.scrollToIndex({ index: 0, animated: true });
+        await appended;
+        device.refresh().catch(() => {});
+        try {
+          listRef.current?.scrollToIndex({ index: 0, animated: true });
+        } catch {
+          // Empty list — e.g. the first message in a brand-new thread, or
+          // this render hasn't caught up with the just-appended message yet.
+          // Nothing to scroll to; it'll show as soon as the list re-renders.
+        }
       }
     } finally {
       setIsSending(false);

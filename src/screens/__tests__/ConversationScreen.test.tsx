@@ -74,6 +74,9 @@ function deviceCtxWith(overrides: Partial<DeviceContextValue>): DeviceContextVal
     openSystemPanel: jest.fn(() => Promise.resolve()),
     requestContactsPermission: jest.fn(() => Promise.resolve(false)),
     requestSmsPermission: jest.fn(() => Promise.resolve(false)),
+    addSentMessage: jest.fn((address: string, body: string) => Promise.resolve({
+      id: 'local:test', address, body, dateFormatted: 'Now', type: 2, isRead: true,
+    })),
     autoBrightness: true,
     setAutoBrightness: jest.fn(() => Promise.resolve()),
     ...overrides,
@@ -232,6 +235,9 @@ describe('ConversationScreen', () => {
       openSystemPanel: jest.fn(() => Promise.resolve()),
       requestContactsPermission: jest.fn(() => Promise.resolve(false)),
       requestSmsPermission: jest.fn(() => Promise.resolve(false)),
+      addSentMessage: jest.fn((address: string, body: string) => Promise.resolve({
+        id: 'local:test', address, body, dateFormatted: 'Now', type: 2, isRead: true,
+      })),
       autoBrightness: true,
       setAutoBrightness: jest.fn(() => Promise.resolve()),
       };
@@ -265,6 +271,27 @@ describe('ConversationScreen', () => {
     // Sanity: input value reflects the last keystroke.
     const input = getByPlaceholderText('Message') as unknown as { props: { value: string } };
     expect(input.props.value).toBe('Hel');
+  });
+});
+
+describe('ConversationScreen — sent message reappears in the thread (#929)', () => {
+  it('shows the just-sent message immediately, even though the provider never gets it', async () => {
+    // Real behaviour being reproduced: SmsManager sends the SMS but does not
+    // write it to content://sms (only the default SMS app may), so every
+    // getRecentMessages() call — before AND after the send — returns the
+    // exact same (empty) list. If the screen relies on that read to show the
+    // message, it never appears.
+    launcherMock.getRecentMessages.mockResolvedValue([]);
+    launcherMock.sendSms.mockResolvedValue(true);
+
+    const { getByPlaceholderText, getByLabelText, findByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    fireEvent.changeText(getByPlaceholderText('Message'), 'Hello from me');
+    fireEvent.press(getByLabelText('Send message'));
+
+    expect(await findByText('Hello from me')).toBeTruthy();
   });
 });
 
