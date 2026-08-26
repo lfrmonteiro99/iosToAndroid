@@ -140,6 +140,29 @@ describe('ConversationScreen', () => {
     expect(getByLabelText('Back to Messages')).toBeTruthy();
   });
 
+  it('shows the thread history for the route address, regardless of how the caller formatted it (#928 native contract)', async () => {
+    // #928's format-tolerant address matching (last-10-digit comparison) now
+    // lives natively in MessagesQueryBuilder (see
+    // modules/launcher-module/android/.../MessagesQueryBuilderTest.kt) — the
+    // provider query does the matching, not this screen (#927 removed the
+    // device.messages filter this test originally exercised). This asserts
+    // the JS side passes the caller's address through unmodified and renders
+    // whatever the native query resolves for it.
+    const differentFormatRoute = { params: { address: '+351911111111' } };
+    activeLauncher.getMessagesForThread.mockResolvedValueOnce([
+      { id: 'm1', address: '911111111', body: 'Ola from Ana', dateFormatted: 'Today', type: 1, isRead: true },
+    ]);
+
+    const { findByText } = render(
+      <DeviceContext.Provider value={deviceCtxWith({ contacts: CONTACTS })}>
+        <ConversationScreen navigation={mockNavigation as never} route={differentFormatRoute as never} />
+      </DeviceContext.Provider>
+    );
+
+    expect(await findByText('Ola from Ana')).toBeTruthy();
+    expect(activeLauncher.getMessagesForThread).toHaveBeenCalledWith('+351911111111', 30, null);
+  });
+
   it('migrates a legacy draft to the namespaced key on mount', async () => {
     const store = setupMemoryAsyncStorage({
       '@draft_+15551234567': 'Hello legacy draft',
