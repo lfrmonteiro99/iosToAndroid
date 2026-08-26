@@ -91,11 +91,24 @@ function mockPlacedWidgets(placed: Array<{ type: string; size?: string; page?: n
     col: 0,
     row: 0,
   }));
+  seedRawWidgets(JSON.stringify(instances));
+}
+
+/** Seeds the stored blob verbatim — for a remount that must read back exactly
+ * what the previous mount wrote, and for hostile values a helper would not
+ * produce. */
+function seedRawWidgets(json: string | null) {
   (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
-    key === '@iostoandroid/widget_instances'
-      ? Promise.resolve(JSON.stringify(instances))
-      : Promise.resolve(null),
+    key === '@iostoandroid/widget_instances' ? Promise.resolve(json) : Promise.resolve(null),
   );
+}
+
+/** The last blob written to the widget-instances key, or undefined. */
+function lastPersistedWidgets(): string | undefined {
+  const calls = (AsyncStorage.setItem as jest.Mock).mock.calls.filter(
+    ([key]) => key === '@iostoandroid/widget_instances',
+  );
+  return calls.length > 0 ? (calls[calls.length - 1][1] as string) : undefined;
 }
 
 /** Full replacement of useSettings, same convention as
@@ -245,13 +258,107 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
     await waitFor(() => expect(utils.queryByTestId('launcher-page-grid-1')).toBeNull());
     expect(within(utils.getByTestId('launcher-page-grid-0')).queryAllByLabelText(/^Open /)).toHaveLength(20);
   });
+
+  // ------------------------------------------------------------------
+  // Beyond the happy path
+  // ------------------------------------------------------------------
+
+  it('two instances of the same type resize independently (#937 AC 5)', async () => {
+    // The whole point of moving size onto the instance (#933): one Weather on
+    // the page may be large while its twin stays small. If resizeWidget still
+    // addressed the TYPE, this would write 'large' to both.
+    mockApps([realApp('Chess', 'com.example.chess')]);
+    mockFolders();
+    mockPlacedWidgets([
+      { type: 'weather', size: 'small' },
+      { type: 'weather', size: 'small' },
+    ]);
+
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(utils.getAllByTestId('launcher-home-widget-weather')).toHaveLength(2));
+    await enterJiggleMode(utils, 'Open Chess');
+
+    const [first] = utils.getAllByTestId('launcher-home-widget-weather');
+    fireEvent(within(first).getByLabelText('Resize Weather widget'), 'longPress');
+    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    fireEvent.press(utils.getByText('Large'));
+
+    await waitFor(() => {
+      const saved = JSON.parse(lastPersistedWidgets()!);
+      expect(saved.map((i: { id: string; size: string }) => [i.id, i.size])).toEqual([
+        ['weather-0', 'large'],
+        ['weather-1', 'small'],
+      ]);
+    });
+  });
+
+  it('the chosen size survives a remount, read back from storage (#937 AC 6)', async () => {
+    mockApps([realApp('Chess', 'com.example.chess')]);
+    mockFolders();
+    mockPlacedWidgets([{ type: 'weather', size: 'small' }]);
+
+    const first = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(first.getByTestId('launcher-home-widget-weather')).toBeTruthy());
+    await enterJiggleMode(first, 'Open Chess');
+    fireEvent(within(first.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
+    await waitFor(() => expect(first.getByText('Resize Weather')).toBeTruthy());
+    fireEvent.press(first.getByText('Medium'));
+    await waitFor(() => expect(lastPersistedWidgets()).toBeTruthy());
+
+    // Restart: the next mount reads back the EXACT blob the last one wrote,
+    // not a helper-built stand-in — a size that only lived in React state
+    // would come back 'small' here.
+    const persisted = lastPersistedWidgets()!;
+    first.unmount();
+    seedRawWidgets(persisted);
+
+    const second = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(second.getByTestId('launcher-home-widget-weather')).toBeTruthy());
+    await enterJiggleMode(second, 'Open Chess');
+    fireEvent(within(second.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
+
+    await waitFor(() => expect(second.getByText('Medium (current)')).toBeTruthy());
+    expect(second.queryByText('Small (current)')).toBeNull();
+  });
+
+  it('a stored size the type does not declare is clamped before it reaches the layout (#937 AC 7, read path)', async () => {
+    // The write path refuses it (widgetInstances.test.ts), but a blob from an
+    // older build — or a hand-edited one — is the other door in. Unclamped, a
+    // 'large' Battery lays out at 4x4 and eats 16 of the page's 24 cells,
+    // pushing icons to page 1 to draw one percentage.
+    mockApps([]);
+    mockFolders();
+    seedRawWidgets(JSON.stringify([{ id: 'battery-0', type: 'battery', size: 'large', page: 0, col: 0, row: 0 }]));
+
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(utils.getByTestId('launcher-home-widget-battery')).toBeTruthy());
+
+    // Clamped to 'small' (2x2 = 4 cells): the 20 built-ins still fit on page 0.
+    expect(utils.queryByTestId('launcher-page-grid-1')).toBeNull();
+    expect(within(utils.getByTestId('launcher-page-grid-0')).queryAllByLabelText(/^Open /)).toHaveLength(20);
+
+    await enterJiggleMode(utils, 'Open Phone');
+    fireEvent(within(utils.getByTestId('launcher-home-widget-battery')).getByLabelText('Resize Battery widget'), 'longPress');
+    await waitFor(() => expect(utils.getByText('Small (current)')).toBeTruthy());
+  });
+
+  it('a corrupt widget blob leaves the home screen standing, with no widget', async () => {
+    mockApps([realApp('Chess', 'com.example.chess')]);
+    mockFolders();
+    seedRawWidgets('{"not":"an array"}');
+
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(utils.getByLabelText('Open Chess')).toBeTruthy());
+    expect(utils.queryByTestId('launcher-home-widget-battery')).toBeNull();
+    expect(utils.queryByTestId('launcher-home-widget-weather')).toBeNull();
+  });
 });
 
 // #937 retrabalho — a reviewer round blocked the first PR because only the
 // widget's own box animated on resize; the icons it displaces re-flowed
 // instantly (flexWrap re-layout has no position to spring FROM). These tests
 // prove the icons ALSO transition, through the same settle()/'mediumSettle'
-// call as the widget box (HomeWidgetSlot), not a bespoke animation, and that
+// call as the widget box (DraggableWidgetTile), not a bespoke animation, and that
 // reduceMotion still reaches every displaced icon.
 //
 // Spying directly on Reanimated's withSpring/withTiming does NOT work here:
@@ -341,6 +448,38 @@ describe('LauncherHomeScreen widget resize — icon reflow animates too (#937 Ar
     // animates, never WHERE things end up.
     expect(within(utils.getByTestId('launcher-page-grid-0')).queryAllByLabelText(/^Open /)).toHaveLength(8);
     expect(within(utils.getByTestId('launcher-page-grid-1')).queryAllByLabelText(/^Open /)).toHaveLength(12);
+
+    settleSpy.mockRestore();
+  });
+
+  it('the inverse: re-picking the size a widget already has moves nothing, so nothing animates', async () => {
+    // Without this, the count above proves only "settle() ran a lot", not
+    // "settle() ran because things MOVED": an implementation that re-fired
+    // every icon's spring on every widget-store write would pass the two tests
+    // above and flood the screen with springs on a no-op. Picking the current
+    // size is also the repetition case — the same choice made twice in a row.
+    mockApps([]);
+    mockFolders();
+    mockPlacedWidgets([{ type: 'weather', size: 'small' }]);
+
+    const utils = render(<LauncherHomeScreen />);
+    await waitFor(() => expect(utils.getByTestId('launcher-home-widget-weather')).toBeTruthy());
+    await enterJiggleMode(utils, 'Open Phone');
+
+    const settleSpy = jest.spyOn(GestureReduceMotion, 'settle');
+    const before = settleSpy.mock.calls.length;
+
+    for (let i = 0; i < 2; i++) {
+      fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
+      await waitFor(() => expect(utils.getByText('Small (current)')).toBeTruthy());
+      fireEvent.press(utils.getByText('Small (current)'));
+      await waitFor(() => expect(utils.queryByText('Resize Weather')).toBeNull());
+    }
+
+    expect(settleSpy.mock.calls.slice(before)).toHaveLength(0);
+    // ...and the layout is exactly where it started.
+    expect(utils.queryByTestId('launcher-page-grid-1')).toBeNull();
+    expect(within(utils.getByTestId('launcher-page-grid-0')).queryAllByLabelText(/^Open /)).toHaveLength(20);
 
     settleSpy.mockRestore();
   });

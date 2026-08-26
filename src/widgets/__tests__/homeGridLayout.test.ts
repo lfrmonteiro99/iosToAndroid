@@ -1,4 +1,4 @@
-import { computeHomeGridLayout, freeCellCount, spanFor, WIDGET_CELL_SPAN } from '../homeGridLayout';
+import { computeHomeGridLayout, freeCellCount, resolveWidgetDragTarget, spanFor, WIDGET_CELL_SPAN } from '../homeGridLayout';
 import type { WidgetInstance } from '../widgetInstances';
 
 // #935 — one grid instead of two.
@@ -268,5 +268,122 @@ describe('freeCellCount', () => {
   it('never goes negative', () => {
     const layout = computeHomeGridLayout({ cols: 1, rows: 1, widgets: [], items: ['a'] });
     expect(freeCellCount(layout[0], 1, 1)).toBe(0);
+  });
+});
+
+// #938: dragging a widget in jiggle mode. The red step for this issue —
+// "simular um pan sobre um widget em jiggle mode e afirmar que o col/row da
+// instância mudou" — has no gesture to simulate against yet (no drag is wired
+// to a widget at all, `git log -S onDragEnd -- src/screens/LauncherHomeScreen.tsx`
+// only turns up AppIcon's #761 gesture). `resolveWidgetDragTarget` is the pure
+// decision both the live preview and the drop use, so it is exercised
+// directly here; LauncherHomeScreen.widgetDrag.test.tsx exercises the real
+// wired-up gesture end to end.
+describe('resolveWidgetDragTarget', () => {
+  it('an empty page: the widget fits exactly where requested', () => {
+    const dragged = widget({ id: 'a', col: 0, row: 0, size: 'small' });
+    const { fits, layout } = resolveWidgetDragTarget({
+      ...GRID,
+      otherWidgets: [],
+      items: [],
+      dragged,
+      targetCol: 1,
+      targetRow: 2,
+    });
+    expect(fits).toBe(true);
+    expect(layout.widgets[0]).toMatchObject({ id: 'a', col: 1, row: 2 });
+  });
+
+  it('a cell already covered by ANOTHER widget does not fit', () => {
+    const other = widget({ id: 'b', col: 2, row: 0, size: 'small' }); // occupies cols 2-3, rows 0-1
+    const dragged = widget({ id: 'a', col: 0, row: 0, size: 'small' });
+    const { fits } = resolveWidgetDragTarget({
+      ...GRID,
+      otherWidgets: [other],
+      items: [],
+      dragged,
+      targetCol: 2,
+      targetRow: 0,
+    });
+    expect(fits).toBe(false);
+  });
+
+  it('an icon never blocks a widget landing — widgets are packed before icons', () => {
+    // computeHomeGridLayout's own invariant (see 'icons around a widget'
+    // above): widgets are placed FIRST, icons fill whatever is left. A widget
+    // drop therefore can only be refused by another WIDGET or the grid edge,
+    // never by an icon sitting in the way — the icon simply gets displaced by
+    // the reflow instead.
+    const dragged = widget({ id: 'a', col: 2, row: 0, size: 'small' });
+    const { fits } = resolveWidgetDragTarget({
+      ...GRID,
+      otherWidgets: [],
+      items: ['x', 'y'], // would otherwise pack into (0,0) and (1,0)
+      dragged,
+      targetCol: 0,
+      targetRow: 0,
+    });
+    expect(fits).toBe(true);
+  });
+
+  it('too small a grid for the footprint at all does not fit', () => {
+    const dragged = widget({ id: 'a', col: 0, row: 0, size: 'small' }); // 2x2
+    const { fits } = resolveWidgetDragTarget({
+      cols: 2,
+      rows: 2,
+      otherWidgets: [],
+      items: [],
+      dragged,
+      targetCol: 1,
+      targetRow: 1,
+    });
+    // small is 2x2 — at cols=2,rows=2 the only footprint that fits at all is
+    // (0,0); requesting (1,1) is out of bounds for a 2x2 span on a 2x2 grid.
+    expect(fits).toBe(false);
+  });
+
+  it('a target outside the grid does not fit', () => {
+    const dragged = widget({ id: 'a', col: 0, row: 0, size: 'small' });
+    const { fits } = resolveWidgetDragTarget({
+      ...GRID,
+      otherWidgets: [],
+      items: [],
+      dragged,
+      targetCol: 10,
+      targetRow: 10,
+    });
+    expect(fits).toBe(false);
+  });
+
+  it('the dragged widget never collides with its OWN old position', () => {
+    // otherWidgets excludes the dragged one — dropping it back exactly where
+    // it started must still fit.
+    const dragged = widget({ id: 'a', col: 0, row: 0, size: 'small' });
+    const { fits } = resolveWidgetDragTarget({
+      ...GRID,
+      otherWidgets: [],
+      items: [],
+      dragged,
+      targetCol: 0,
+      targetRow: 0,
+    });
+    expect(fits).toBe(true);
+  });
+
+  it('a valid move reflows icons around the new position (the preview)', () => {
+    const dragged = widget({ id: 'a', col: 0, row: 0, size: 'small' });
+    const { layout } = resolveWidgetDragTarget({
+      ...GRID,
+      otherWidgets: [],
+      items: ['x'],
+      dragged,
+      targetCol: 2,
+      targetRow: 0,
+    });
+    // With the widget moved out of (0,0)-(1,1), the icon now packs into the
+    // first free cell, which is (0,0) again — the point is it is computed
+    // fresh around the CANDIDATE position, not the widget's old one.
+    expect(layout.items[0]).toMatchObject({ item: 'x', col: 0, row: 0 });
+    expect(layout.widgets[0]).toMatchObject({ col: 2, row: 0 });
   });
 });

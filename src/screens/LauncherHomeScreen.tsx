@@ -31,6 +31,7 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
+  type SharedValue,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -85,7 +86,8 @@ import { computeLauncherGridGeometry } from '../utils/launcherGridGeometry';
 import { hiddenPageIndicesForMode, filterVisiblePages } from '../utils/focusPageVisibility';
 import { dockOverrideForMode } from '../utils/focusDockOverride';
 import { clampWithRubberBand } from '../theme/motion';
-import { computeDragTargetIndex, computeEdgeScrollDirection } from '../utils/launcherDrag';
+import { computeDragTargetIndex, computeEdgeScrollDirection, computeWidgetDragTargetCell } from '../utils/launcherDrag';
+import { GestureHaptics } from '../utils/gestureHaptics';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -201,7 +203,7 @@ import {
   BUILT_IN_DUPLICATE_PACKAGES,
   builtInAppName,
 } from '../utils/builtInAppRoutes';
-import { computeHomeGridLayout } from '../widgets/homeGridLayout';
+import { computeHomeGridLayout, resolveWidgetDragTarget, spanFor, type PageLayout } from '../widgets/homeGridLayout';
 import { ALLOWED_WIDGET_SIZES, isOnHomePage, type WidgetInstance, type WidgetSize } from '../widgets/widgetInstances';
 import { WIDGET_LABELS, type WidgetType } from '../widgets/TodayWidgets';
 import { logger } from '../utils/logger';
@@ -353,7 +355,7 @@ type MeasureBounds = () => Promise<LaunchBounds | undefined>;
 // preset is a fixed bounciness/speed pair, unrelated to gestureConfig.ts —
 // and on Android it needs UIManager.setLayoutAnimationEnabledExperimental,
 // itself flaky pre-New-Architecture. Reanimated shared values, already the
-// established convention here (#487/#492, HomeWidgetSlot below), animate
+// established convention here (#487/#492, DraggableWidgetTile below), animate
 // exactly the cells this issue is about and nothing else.
 function useCellPosition(left: number, top: number, reduceMotion: boolean) {
   const animLeft = useSharedValue(left);
@@ -426,7 +428,7 @@ interface AppIconProps {
   left?: number;
   top?: number;
   /** Required together with left/top — 'off'/no transition when reduceMotion
-   * is set, same convention as HomeWidgetSlot. */
+   * is set, same convention as DraggableWidgetTile. */
   reduceMotion?: boolean;
 }
 
@@ -673,6 +675,175 @@ const AppIcon = React.memo(function AppIcon({
   );
 });
 
+interface DraggableWidgetTileProps {
+  instance: WidgetInstance;
+  pageIndex: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  isJiggling?: boolean;
+  /** JS-thread flag, drives the geometry transition below (#937). */
+  reduceMotion: boolean;
+  /** UI-thread mirror of the same flag, read inside the drag worklet (#938). */
+  reduceMotionShared: SharedValue<boolean>;
+  /** Long press in jiggle mode → size sheet (#937). */
+  onLongPress: (instance: WidgetInstance) => void;
+  onDragStart?: (instance: WidgetInstance, pageIndex: number) => void;
+  onDragUpdate?: (instance: WidgetInstance, translationX: number, translationY: number, absoluteX: number) => void;
+  onDragEnd?: (instance: WidgetInstance, translationX: number, translationY: number, velocityX: number, velocityY: number) => void;
+  children: React.ReactNode;
+}
+
+// Widget drag-to-reorder (#938), same convention as AppIcon's #761 gesture
+// above: `Gesture.Pan().minDistance(10)` for the same reason (a future ✕
+// remove control would be a nested Pressable in this same subtree, and a Pan
+// with no minimum travel would win the responder race on a stationary tap).
+//
+// The tile's own `left`/`top` come from the REAL (non-preview) layout and
+// never change mid-drag — only `dragTranslateX/Y` move it, exactly like
+// AppIcon. The reflow the user sees around it is a SEPARATE thing: the
+// screen swaps in a preview layout for the icons/other-widgets on this page
+// while `widgetDragPreview` is set (see LauncherHomeScreen's
+// `effectiveHomeLayout`). If this tile's own base position were swapped to
+// the candidate cell too, the translateX/Y offset (already "how far from the
+// original position") would double-apply and the widget would jump.
+//
+// React.memo (#518): same reasoning as AppIcon — the parent's onDragStart/
+// onDragUpdate/onDragEnd are useCallback-memoized, so a re-render caused by
+// the drag preview state elsewhere on the page does not recreate this tile's
+// gesture (armadilha: "uma pré-visualização que recrie handlers a cada frame
+// anula-a e o arrasto fica a tremer" — the state update happens at most once
+// per cell crossing, not per frame, precisely so this holds).
+//
+// #937 folded the old `HomeWidgetSlot` into this tile rather than nesting two
+// wrappers: the resize sheet's long press and the drag pan have to arbitrate
+// over the SAME subtree (a Pan with minDistance 10 never claims a stationary
+// touch, so the long press wins it; any real travel cancels the press and the
+// drag takes over), and the tile's box geometry is a single animated style,
+// not one per feature.
+const DraggableWidgetTile = React.memo(function DraggableWidgetTile({
+  instance,
+  pageIndex,
+  left,
+  top,
+  width,
+  height,
+  isJiggling,
+  reduceMotion,
+  reduceMotionShared,
+  onLongPress,
+  onDragStart,
+  onDragUpdate,
+  onDragEnd,
+  children,
+}: DraggableWidgetTileProps) {
+  const dragTranslateX = useSharedValue(0);
+  const dragTranslateY = useSharedValue(0);
+
+  // Box geometry as shared values (#937) so a resize — or any other reflow
+  // that moves this widget, e.g. an icon added ahead of it pushing it to a new
+  // cell — TRANSITIONS instead of snapping, with the same spring presets
+  // already established for the rest of the launcher (#487/#492) rather than a
+  // bespoke animation. `mounted` guards the very first render: without it the
+  // widget would spring in from (0,0)/0x0 the first time it appears.
+  //
+  // These base values are the REAL (non-preview) layout's, so nothing here
+  // moves mid-drag and the translate offset above never double-applies — see
+  // the comment block above.
+  const animLeft = useSharedValue(left);
+  const animTop = useSharedValue(top);
+  const animWidth = useSharedValue(width);
+  const animHeight = useSharedValue(height);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      animLeft.value = left;
+      animTop.value = top;
+      animWidth.value = width;
+      animHeight.value = height;
+      return;
+    }
+    // eslint-disable-next-line react-hooks/immutability
+    animLeft.value = settle(left, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animTop.value = settle(top, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animWidth.value = settle(width, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animHeight.value = settle(height, 'mediumSettle', reduceMotion);
+  }, [left, top, width, height, reduceMotion]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    left: animLeft.value,
+    top: animTop.value,
+    width: animWidth.value,
+    height: animHeight.value,
+    transform: [
+      { translateX: dragTranslateX.value },
+      { translateY: dragTranslateY.value },
+    ],
+  }));
+
+  const handleLongPress = useCallback(() => {
+    onLongPress(instance);
+  }, [onLongPress, instance]);
+
+  const dragGesture = Gesture.Pan()
+    .enabled(!!isJiggling)
+    .minDistance(10)
+    .onBegin(() => {
+      'worklet';
+      if (onDragStart) runOnJS(onDragStart)(instance, pageIndex);
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragTranslateX.value = e.translationX;
+      dragTranslateY.value = e.translationY;
+      if (onDragUpdate) runOnJS(onDragUpdate)(instance, e.translationX, e.translationY, e.absoluteX);
+    })
+    .onEnd((e) => {
+      'worklet';
+      // #487: the spring MUST inherit the release velocity — a widget that
+      // settles from a standstill is immediately visible next to icons that
+      // settle with theirs (armadilha of this issue). `settle()` is the
+      // helper #487 built for exactly this; a bare `withSpring(0)` (what
+      // AppIcon's own #761 gesture still does above) is what this issue
+      // explicitly calls out as the wrong reference to copy.
+      dragTranslateX.value = settle(0, 'mediumSettle', reduceMotionShared.value, e.velocityX);
+      dragTranslateY.value = settle(0, 'mediumSettle', reduceMotionShared.value, e.velocityY);
+      if (onDragEnd) runOnJS(onDragEnd)(instance, e.translationX, e.translationY, e.velocityX, e.velocityY);
+    });
+
+  return (
+    <GestureDetector gesture={dragGesture}>
+      <Animated.View
+        testID={`launcher-home-widget-${instance.type}`}
+        style={[styles.homeWidgetSlot, animatedStyle]}
+      >
+        {/* Jiggling swallows the widget's own taps (pointerEvents="none") so a
+            long press over it can only reach the resize Pressable below —
+            without this, tapping a jiggling Battery/Storage/Messages widget
+            would still navigate away, same bug #518 fixed for icons via
+            `onPress={isJiggling ? undefined : handlePress}`. */}
+        <View pointerEvents={isJiggling ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
+          {children}
+        </View>
+        {isJiggling && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onLongPress={handleLongPress}
+            accessibilityRole="button"
+            accessibilityLabel={`Resize ${WIDGET_LABELS[instance.type]} widget`}
+          />
+        )}
+      </Animated.View>
+    </GestureDetector>
+  );
+});
+
 interface PageDotsProps {
   total: number;
   current: number;
@@ -772,103 +943,6 @@ export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: H
   }
   return items;
 }
-
-// ---------------------------------------------------------------------------
-// HomeWidgetSlot — a placed widget's own box on the home grid (#937)
-// ---------------------------------------------------------------------------
-
-interface HomeWidgetSlotProps {
-  instance: WidgetInstance;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  isJiggling: boolean;
-  reduceMotion: boolean;
-  onLongPress: (instance: WidgetInstance) => void;
-  children: React.ReactNode;
-}
-
-// React.memo (#518, same convention as AppIcon/FolderIcon above): a page
-// re-render (e.g. paging) must not re-run this component's animated-style
-// wiring for every widget on every other page.
-const HomeWidgetSlot = React.memo(function HomeWidgetSlot({
-  instance,
-  left,
-  top,
-  width,
-  height,
-  isJiggling,
-  reduceMotion,
-  onLongPress,
-  children,
-}: HomeWidgetSlotProps) {
-  // Geometry as shared values so a resize — or any other reflow that moves
-  // this widget, e.g. an icon added ahead of it pushing it to a new cell —
-  // TRANSITIONS instead of snapping, with the same spring presets already
-  // established for the rest of the launcher (#487/#492) rather than a
-  // bespoke animation. `mounted` guards the very first render: without it the
-  // widget would spring in from (0,0)/0x0 the first time it appears.
-  const animLeft = useSharedValue(left);
-  const animTop = useSharedValue(top);
-  const animWidth = useSharedValue(width);
-  const animHeight = useSharedValue(height);
-  const mounted = useRef(false);
-
-  useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      animLeft.value = left;
-      animTop.value = top;
-      animWidth.value = width;
-      animHeight.value = height;
-      return;
-    }
-    // eslint-disable-next-line react-hooks/immutability
-    animLeft.value = settle(left, 'mediumSettle', reduceMotion);
-    // eslint-disable-next-line react-hooks/immutability
-    animTop.value = settle(top, 'mediumSettle', reduceMotion);
-    // eslint-disable-next-line react-hooks/immutability
-    animWidth.value = settle(width, 'mediumSettle', reduceMotion);
-    // eslint-disable-next-line react-hooks/immutability
-    animHeight.value = settle(height, 'mediumSettle', reduceMotion);
-  }, [left, top, width, height, reduceMotion]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    left: animLeft.value,
-    top: animTop.value,
-    width: animWidth.value,
-    height: animHeight.value,
-  }));
-
-  const handleLongPress = useCallback(() => {
-    onLongPress(instance);
-  }, [onLongPress, instance]);
-
-  return (
-    <Animated.View
-      testID={`launcher-home-widget-${instance.type}`}
-      style={[styles.homeWidgetSlot, animatedStyle]}
-    >
-      {/* Jiggling swallows the widget's own taps (pointerEvents="none") so a
-          long press over it can only reach the resize Pressable below —
-          without this, tapping a jiggling Battery/Storage/Messages widget
-          would still navigate away, same bug #518 fixed for icons via
-          `onPress={isJiggling ? undefined : handlePress}`. */}
-      <View pointerEvents={isJiggling ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
-        {children}
-      </View>
-      {isJiggling && (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onLongPress={handleLongPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Resize ${WIDGET_LABELS[instance.type]} widget`}
-        />
-      )}
-    </Animated.View>
-  );
-});
 
 // ---------------------------------------------------------------------------
 // FolderIcon
@@ -1180,7 +1254,12 @@ export function LauncherHomeScreen() {
   // widgetMap/config the Today View sheet reads/writes, so a widget looks and
   // behaves identically whether it's reached by swiping right into Today View
   // or seen directly on the home page.
-  const { instances: homeWidgetInstances, loaded: homeWidgetsLoaded, resizeWidget: resizeWidgetInstance } = useWidgetConfig();
+  const {
+    instances: homeWidgetInstances,
+    loaded: homeWidgetsLoaded,
+    resizeWidget: resizeWidgetInstance,
+    moveWidget,
+  } = useWidgetConfig();
   // Content-by-size (#937 AC 8): useWidgetMap renders one node per TYPE, so a
   // per-instance size can only flow into it as "the size of whichever placed
   // instance of this type we pick" — the last one wins for a type with two
@@ -1790,6 +1869,25 @@ export function LauncherHomeScreen() {
     [gridGeometry.cols, settings.gridRows, homeWidgetsLoaded, homeWidgetInstances, gridItems],
   );
 
+  // Live drag preview (#938): while a widget is being dragged in jiggle mode,
+  // this holds the page it is over and the packed layout with icons reflowed
+  // around the CANDIDATE cell — "the things around it have to adapt" from the
+  // issue's wording, before the drop, not after. `null` outside a drag (or
+  // while hovering a cell that would not fit): the real `homeLayout` renders
+  // unchanged, which is also how an invalid hover reads — nothing moves until
+  // a valid cell is found, so nothing ever looks like it landed somewhere it
+  // did not.
+  const [widgetDragPreview, setWidgetDragPreview] = useState<{ pageIndex: number; layout: PageLayout<GridItem> } | null>(null);
+
+  // What actually renders. Only the page under an active, VALID widget drag
+  // differs from `homeLayout` — every other page, and the dragged widget's
+  // own tile (which moves via its own translateX/Y, see DraggableWidgetTile),
+  // are untouched.
+  const effectiveHomeLayout: PageLayout<GridItem>[] = useMemo(() => {
+    if (!widgetDragPreview) return homeLayout;
+    return homeLayout.map((page, i) => (i === widgetDragPreview.pageIndex ? widgetDragPreview.layout : page));
+  }, [homeLayout, widgetDragPreview]);
+
   /**
    * Each page as a DENSE array of `cols * rows` cells, in row-major order.
    *
@@ -1802,7 +1900,7 @@ export function LauncherHomeScreen() {
    */
   const allPages: GridItem[][] = useMemo(() => {
     const cellCount = Math.max(1, gridGeometry.cols * settings.gridRows);
-    return homeLayout.map((page, pageIndex) => {
+    return effectiveHomeLayout.map((page, pageIndex) => {
       const cells: GridItem[] = Array.from({ length: cellCount }, (_, i) => ({
         type: 'empty' as const,
         key: `p${pageIndex}-c${i}`,
@@ -1829,7 +1927,7 @@ export function LauncherHomeScreen() {
       // `gridItems.slice(...)` produced.
       return cells.slice(0, lastUsed + 1);
     });
-  }, [homeLayout, gridGeometry.cols, settings.gridRows]);
+  }, [effectiveHomeLayout, gridGeometry.cols, settings.gridRows]);
 
   // Focus filters (#618): com um modo de Focus activo, as páginas cujo índice
   // está em `focusPageVisibility[focusMode]` não renderizam. O índice é o da
@@ -1936,6 +2034,94 @@ export function LauncherHomeScreen() {
       swapHomeApps?.(app.packageName, targetItem.app.packageName);
     }
   }, [pages, gridGeometry, cellHeight, swapHomeApps]);
+
+  // Widget drag-to-reorder (#938). Same ref-not-state reasoning as the icon
+  // drag above for anything that fires on every pixel of movement; the one
+  // exception is `widgetDragPreview`, which DOES need to be state because it
+  // drives what actually renders (the reflow) — it only changes when the
+  // candidate cell crosses into a new one (computeWidgetDragTargetCell rounds
+  // to whole cells), not per pixel, so it stays far short of a per-frame
+  // re-render.
+  const widgetDragOriginRef = useRef<{ instance: WidgetInstance; pageIndex: number } | null>(null);
+  const lastWidgetEdgeScrollAtRef = useRef(0);
+
+  const handleWidgetDragStart = useCallback((instance: WidgetInstance, pageIndex: number) => {
+    widgetDragOriginRef.current = { instance, pageIndex };
+    GestureHaptics.holdConfirm();
+  }, []);
+
+  /** Shared by the live preview and the drop decision — see `resolveWidgetDragTarget`'s own doc for why they must not disagree. */
+  const resolveWidgetDrop = useCallback((instance: WidgetInstance, pageIndex: number, translationX: number, translationY: number) => {
+    const span = spanFor(instance.size, gridGeometry.cols);
+    const target = computeWidgetDragTargetCell({
+      originCol: instance.col,
+      originRow: instance.row,
+      translationX,
+      translationY,
+      cellWidth: gridGeometry.cellWidth,
+      cellHeight,
+      cols: gridGeometry.cols,
+      rows: settings.gridRows,
+      colSpan: span.cols,
+      rowSpan: span.rows,
+    });
+    const otherWidgets = homeWidgetInstances.filter(
+      (w) => isOnHomePage(w) && w.page === pageIndex && w.id !== instance.id,
+    );
+    const iconsOnPage = (homeLayout[pageIndex]?.items ?? []).map((i) => i.item);
+    const { fits, layout } = resolveWidgetDragTarget<GridItem>({
+      cols: gridGeometry.cols,
+      rows: settings.gridRows,
+      otherWidgets,
+      items: iconsOnPage,
+      dragged: instance,
+      targetCol: target.col,
+      targetRow: target.row,
+    });
+    return { target, fits, layout };
+  }, [gridGeometry, cellHeight, settings.gridRows, homeWidgetInstances, homeLayout]);
+
+  const handleWidgetDragUpdate = useCallback((instance: WidgetInstance, translationX: number, translationY: number, absoluteX: number) => {
+    const origin = widgetDragOriginRef.current;
+    if (!origin) return;
+
+    const direction = computeEdgeScrollDirection(absoluteX, SCREEN_WIDTH, DRAG_EDGE_THRESHOLD_DP);
+    if (direction && Date.now() - lastWidgetEdgeScrollAtRef.current >= EDGE_SCROLL_THROTTLE_MS) {
+      const targetPage = direction === 'prev' ? origin.pageIndex - 1 : origin.pageIndex + 1;
+      // Mirrors the icon drag's own bound (#761): the App Library page at the
+      // end has no home grid to drop into.
+      if (targetPage >= 0 && targetPage < pages.length) {
+        lastWidgetEdgeScrollAtRef.current = Date.now();
+        widgetDragOriginRef.current = { ...origin, pageIndex: targetPage };
+        setCurrentPage(targetPage);
+        scrollViewRef.current?.scrollTo({ x: targetPage * SCREEN_WIDTH, animated: true });
+        setWidgetDragPreview(null);
+        return;
+      }
+    }
+
+    const pageIndex = origin.pageIndex;
+    const { fits, layout } = resolveWidgetDrop(instance, pageIndex, translationX, translationY);
+    setWidgetDragPreview(fits ? { pageIndex, layout } : null);
+  }, [pages.length, resolveWidgetDrop]);
+
+  const handleWidgetDragEnd = useCallback((instance: WidgetInstance, translationX: number, translationY: number) => {
+    const origin = widgetDragOriginRef.current;
+    widgetDragOriginRef.current = null;
+    setWidgetDragPreview(null);
+    GestureHaptics.commit('light');
+    if (!origin) return;
+
+    const pageIndex = origin.pageIndex;
+    const { target, fits } = resolveWidgetDrop(instance, pageIndex, translationX, translationY);
+    // Invalid drop: do nothing. The tile's own gesture already springs the
+    // widget back to its original position with the release velocity (see
+    // DraggableWidgetTile's onEnd) — moving nothing here is what keeps it
+    // from ever landing overlapped.
+    if (fits && (target.col !== instance.col || target.row !== instance.row || pageIndex !== instance.page)) {
+      moveWidget(instance.id, pageIndex, target.col, target.row);
+    }
+  }, [resolveWidgetDrop, moveWidget]);
 
   // Non-Android fallback
   if (Platform.OS !== 'android' && !isLoading && nonDockApps.length === 0 && dockApps.length === 0) {
@@ -2473,23 +2659,33 @@ export function LauncherHomeScreen() {
 
                   The `launcher-home-widgets` / `launcher-home-widget-<type>`
                   testIDs are kept: what changed is the geometry, not what the
-                  home screen contains. */}
+                  home screen contains.
+
+                  Deliberately `homeLayout` here, not `effectiveHomeLayout`
+                  (#938): this tile's own drag transform already represents
+                  "how far from its real position", so its base left/top must
+                  stay the REAL one — see DraggableWidgetTile's own comment. */}
               {homeWidgetsLoaded && homeLayout[pageIndex]?.widgets.length > 0 && (
                 <View testID={`launcher-home-widgets-${pageIndex}`} style={StyleSheet.absoluteFill} pointerEvents="box-none">
                   {homeLayout[pageIndex].widgets.map((placed) => (
-                    <HomeWidgetSlot
+                    <DraggableWidgetTile
                       key={placed.id}
                       instance={placed.instance}
+                      pageIndex={pageIndex}
                       left={placed.col * gridGeometry.cellWidth}
                       top={placed.row * cellHeight}
                       width={placed.colSpan * gridGeometry.cellWidth - HOME_WIDGET_GAP}
                       height={placed.rowSpan * cellHeight - HOME_WIDGET_GAP}
                       isJiggling={isJiggling}
                       reduceMotion={reduceMotion}
+                      reduceMotionShared={reduceMotionShared}
                       onLongPress={handleWidgetLongPress}
+                      onDragStart={handleWidgetDragStart}
+                      onDragUpdate={handleWidgetDragUpdate}
+                      onDragEnd={handleWidgetDragEnd}
                     >
                       {homeWidgetMap[placed.instance.type]}
-                    </HomeWidgetSlot>
+                    </DraggableWidgetTile>
                   ))}
                 </View>
               )}
@@ -2673,7 +2869,7 @@ const styles = StyleSheet.create({
   },
 
   // A placed home-screen widget's own box (#937) — position/size come from
-  // the animated style HomeWidgetSlot drives; this only fixes it `absolute`.
+  // the animated style DraggableWidgetTile drives; this only fixes it `absolute`.
   homeWidgetSlot: {
     position: 'absolute',
   },

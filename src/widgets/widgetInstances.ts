@@ -139,6 +139,27 @@ function isWidgetSize(v: unknown): v is WidgetSize {
   return v === 'small' || v === 'medium' || v === 'large';
 }
 
+/**
+ * The size to render a stored entry at (#937).
+ *
+ * `resizeWidget` guards the WRITE path against a size a type does not declare;
+ * this guards the READ path, which is the other way the field is reached — a
+ * blob written before ALLOWED_WIDGET_SIZES existed, a hand-edited value, or a
+ * later build that narrows a type's list. Without it, a stored
+ * `{type:'battery', size:'large'}` lays out at 4x4 and eats 16 of a page's 24
+ * cells to draw one percentage, which is the empty oversized card AC 5 exists
+ * to prevent — reached without the UI ever offering it.
+ *
+ * Falls back to the type's own DEFAULT_WIDGET_SIZES entry (guaranteed to be in
+ * its allowed list by that table's own test), NOT to `'small'`: `upNext`
+ * allows medium|large, so a blanket smallest-size clamp would invent a size no
+ * type declares.
+ */
+function allowedSize(type: WidgetType, v: unknown): WidgetSize {
+  if (isWidgetSize(v) && ALLOWED_WIDGET_SIZES[type].includes(v)) return v;
+  return DEFAULT_WIDGET_SIZES[type];
+}
+
 /** A finite, non-negative integer, or the given fallback. */
 function coord(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fallback;
@@ -183,7 +204,7 @@ export function normalizeInstances(raw: unknown, knownTypes: readonly WidgetType
     out.push({
       id,
       type,
-      size: isWidgetSize(e.size) ? e.size : DEFAULT_WIDGET_SIZES[type],
+      size: allowedSize(type, e.size),
       page: pageCoord(e.page, PAGE_UNPLACED),
       col: coord(e.col, 0),
       row: coord(e.row, 0),
