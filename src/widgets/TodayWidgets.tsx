@@ -3,9 +3,10 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WidgetCard } from './WidgetCard';
+import { WidgetCard, type WidgetAppearance } from './WidgetCard';
 import { useDevice } from '../store/DeviceStore';
 import { useTheme } from '../theme/ThemeContext';
+import { SystemColors, WidgetWeatherGradients, WidgetGlassText, type WidgetWeatherCondition } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
 import {
   DEFAULT_WIDGET_SIZES,
@@ -47,13 +48,17 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   screenTime: 'Screen Time',
 };
 
+// Filled glyphs, matching the widget bodies below (which already draw `server`,
+// `calendar`, `chatbubble-ellipses`, `hourglass`) and the iOS reference, where
+// widget glyphs are solid rather than thin line art (#934). The only consumer is
+// the "Edit Widgets" panel row (`TodayViewScreen.tsx`).
 export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = {
   battery: 'battery-full',
-  storage: 'server-outline',
-  weather: 'partly-sunny-outline',
-  upNext: 'calendar-outline',
-  messages: 'chatbubble-ellipses-outline',
-  screenTime: 'hourglass-outline',
+  storage: 'server',
+  weather: 'partly-sunny',
+  upNext: 'calendar',
+  messages: 'chatbubble-ellipses',
+  screenTime: 'hourglass',
 };
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
@@ -295,7 +300,7 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
 export function BatteryWidget({ level, isCharging, onPress }: { level: number; isCharging: boolean; onPress?: () => void }) {
   const { textScale } = useTheme();
   const pct = Math.round(level * 100);
-  const color = pct > 20 ? '#30D158' : '#FF453A';
+  const color = pct > 20 ? SystemColors.dark.systemGreen : SystemColors.dark.systemRed;
   const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
 
   return (
@@ -330,12 +335,12 @@ export function StorageWidget({
 }) {
   const { theme, textScale } = useTheme();
   const pct = usedPercentage / 100;
-  const color = pct > 0.85 ? '#FF453A' : pct > 0.65 ? '#FF9F0A' : theme.colors.accent;
+  const color = pct > 0.85 ? SystemColors.dark.systemRed : pct > 0.65 ? SystemColors.dark.systemOrange : theme.colors.accent;
 
   return (
     <WidgetCard testID="widget-card-storage" onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
       <View style={styles.widgetRow}>
-        <Ionicons name="server-outline" size={22} color={color} />
+        <Ionicons name="server" size={22} color={color} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Storage</Text>
       </View>
       <View style={styles.storageRow}>
@@ -352,36 +357,78 @@ export function StorageWidget({
 // Weather Widget (live data from wttr.in)
 // ---------------------------------------------------------------------------
 
-export function WeatherWidget({ temp, condition, icon, city }: { temp: number; condition: string; icon: string; city: string }) {
-  const { textScale } = useTheme();
-  const iconName = `${icon}-outline` as keyof typeof Ionicons.glyphMap;
-  const isUnavailable = !condition;
+/** Groups the raw wttr.in condition icon into one of the four gradient moods. */
+function weatherGradientCondition(icon: string): WidgetWeatherCondition {
+  if (icon === 'sunny') return 'clear';
+  if (icon === 'snow') return 'snow';
+  if (icon === 'rainy' || icon === 'thunderstorm') return 'rain';
+  return 'cloudy'; // partly-sunny, cloud, and any unrecognised icon
+}
 
+export function WeatherWidget({
+  temp,
+  condition,
+  icon,
+  city,
+  maxTemp,
+  minTemp,
+}: {
+  temp: number;
+  condition: string;
+  icon: string;
+  city: string;
+  maxTemp?: number;
+  minTemp?: number;
+}) {
+  const { textScale } = useTheme();
+  const isUnavailable = !condition;
+  const gradientColors = WidgetWeatherGradients[weatherGradientCondition(icon)];
+  // Own colored surface regardless of app theme (like the reference widget); the
+  // Reduce Transparency fallback uses the gradient's darker stop as a flat fill.
+  const appearance: WidgetAppearance = {
+    surface: 'gradient',
+    gradientColors,
+    solidColor: { light: gradientColors[1], dark: gradientColors[1] },
+  };
+
+  // Every Text in this widget sits on a colored gradient stop, not the
+  // near-black glass frame WidgetGlassText.title/.secondary were tuned for
+  // (rgba(...,0.75) / rgba(...,0.55) blended over a lighter stop drops well
+  // below WCAG AA — see the token comment on WidgetWeatherGradients). Opaque
+  // primary is the only tone in that set that clears 4.5:1 on every stop.
   if (isUnavailable) {
     return (
-      <WidgetCard testID="widget-card-weather">
+      <WidgetCard testID="widget-card-weather" appearance={appearance}>
         <View style={styles.widgetRow}>
-          <Ionicons name="cloud-offline-outline" size={22} color="rgba(255,255,255,0.4)" />
-          <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
+          <Ionicons name="cloud-offline" size={22} color={WidgetGlassText.primary} />
+          <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
         </View>
-        <Text style={[styles.widgetSubtext, { fontSize: 15 * textScale, marginTop: 8 }]}>
+        <Text style={[styles.widgetSubtext, { fontSize: 15 * textScale, marginTop: 8, color: WidgetGlassText.primary }]}>
           Unable to load weather
         </Text>
       </WidgetCard>
     );
   }
 
+  const iconName = icon as keyof typeof Ionicons.glyphMap;
+  const hasRange = maxTemp !== undefined && minTemp !== undefined;
+
   return (
-    <WidgetCard testID="widget-card-weather">
+    <WidgetCard testID="widget-card-weather" appearance={appearance}>
       <View style={styles.widgetRow}>
-        <Ionicons name={iconName} size={22} color="#FFD60A" />
-        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Weather</Text>
-        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale }]}>{city}</Text> : null}
+        <Ionicons name={iconName} size={22} color={WidgetGlassText.primary} />
+        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
+        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
-        <Text style={styles.weatherTemp}>{temp}°C</Text>
-        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale }]}>{condition}</Text>
+        <Text style={[styles.weatherTemp, { fontSize: 40 * textScale }]}>{temp}°</Text>
+        <Text style={[styles.weatherDesc, { fontSize: 16 * textScale, color: WidgetGlassText.primary }]}>{condition}</Text>
       </View>
+      {hasRange ? (
+        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale, color: WidgetGlassText.primary }]}>
+          {`H:${maxTemp}°  L:${minTemp}°`}
+        </Text>
+      ) : null}
     </WidgetCard>
   );
 }
@@ -407,26 +454,46 @@ function formatEventTime(ts: number, allDay: boolean): string {
   return `${h}:${m}`;
 }
 
-export function UpNextWidget({ events }: { events: CalendarEventItem[] }) {
-  const { textScale } = useTheme();
+/** Start–end range for a timed event, or the single "All day" label. */
+function formatEventRange(ev: CalendarEventItem): string {
+  if (ev.allDay) return 'All day';
+  return `${formatEventTime(ev.start, false)}–${formatEventTime(ev.end, false)}`;
+}
+
+const UP_NEXT_BAR_COLORS = [SystemColors.dark.systemOrange, SystemColors.dark.systemBlue, SystemColors.dark.systemGreen];
+
+export function UpNextWidget({ events, now = new Date() }: { events: CalendarEventItem[]; now?: Date }) {
+  const { theme, textScale } = useTheme();
+  const appearance: WidgetAppearance = {
+    surface: 'solid',
+    solidColor: {
+      light: SystemColors.light.systemBackground,
+      dark: SystemColors.dark.secondarySystemBackground,
+    },
+  };
+  const cardTextColor = theme.colors.textPrimary;
+  const cardSecondaryColor = theme.colors.textSecondary;
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+  const dayNumber = now.getDate();
+
   return (
-    <WidgetCard testID="widget-card-upNext">
-      <View style={styles.widgetRow}>
-        <Ionicons name="calendar-outline" size={22} color="#FF9F0A" />
-        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Up Next</Text>
+    <WidgetCard testID="widget-card-upNext" appearance={appearance}>
+      <View style={styles.calendarHeader}>
+        <Text style={[styles.calendarWeekday, { color: theme.colors.systemRed, fontSize: 13 * textScale }]}>{weekday}</Text>
+        <Text style={[styles.calendarDayNumber, { color: cardTextColor, fontSize: 32 * textScale }]}>{dayNumber}</Text>
       </View>
       {events.length === 0 ? (
         <View style={styles.upNextBody}>
-          <Ionicons name="calendar" size={36} color="rgba(255,255,255,0.2)" />
-          <Text style={[styles.upNextText, { fontSize: 15 * textScale }]}>No upcoming events</Text>
+          <Ionicons name="calendar" size={36} color={cardSecondaryColor} />
+          <Text style={[styles.upNextText, { color: cardSecondaryColor, fontSize: 15 * textScale }]}>No upcoming events</Text>
         </View>
       ) : (
-        events.slice(0, 3).map((ev) => (
+        events.slice(0, 3).map((ev, index) => (
           <View key={ev.id} style={styles.eventRow}>
-            <View style={styles.eventDot} />
+            <View style={[styles.eventBar, { backgroundColor: UP_NEXT_BAR_COLORS[index % UP_NEXT_BAR_COLORS.length] }]} />
             <View style={styles.eventMeta}>
-              <Text style={[styles.eventTitle, { fontSize: 14 * textScale }]} numberOfLines={1}>{ev.title}</Text>
-              <Text style={[styles.eventTime, { fontSize: 12 * textScale }]}>{formatEventTime(ev.start, ev.allDay)}{ev.location ? `  ·  ${ev.location}` : ''}</Text>
+              <Text style={[styles.eventTitle, { color: cardTextColor, fontSize: 14 * textScale }]} numberOfLines={1}>{ev.title}</Text>
+              <Text style={[styles.eventTime, { color: cardSecondaryColor, fontSize: 12 * textScale }]}>{formatEventRange(ev)}{ev.location ? `  ·  ${ev.location}` : ''}</Text>
             </View>
           </View>
         ))
@@ -444,12 +511,12 @@ export function MessagesWidget({ unreadCount, onPress }: { unreadCount: number; 
   return (
     <WidgetCard testID="widget-card-messages" onPress={onPress} accessibilityLabel={`Messages: ${unreadCount > 0 ? `${unreadCount} unread` : 'No unread messages'}`}>
       <View style={styles.widgetRow}>
-        <Ionicons name="chatbubble-ellipses-outline" size={22} color="#30D158" />
+        <Ionicons name="chatbubble-ellipses" size={22} color={SystemColors.dark.systemGreen} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Messages</Text>
       </View>
       {unreadCount > 0 ? (
         <>
-          <Text style={[styles.widgetBigNumber, { color: '#30D158', fontSize: 36 * textScale }]}>{unreadCount}</Text>
+          <Text style={[styles.widgetBigNumber, { color: SystemColors.dark.systemGreen, fontSize: 36 * textScale }]}>{unreadCount}</Text>
           <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>unread message{unreadCount !== 1 ? 's' : ''}</Text>
         </>
       ) : (
@@ -489,12 +556,12 @@ export function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
   return (
     <WidgetCard testID="widget-card-screenTime" onPress={onPress} accessibilityLabel={totalMinutes !== null ? `Screen Time: ${formatScreenTime(totalMinutes)} today` : 'Screen Time'}>
       <View style={styles.widgetRow}>
-        <Ionicons name="hourglass-outline" size={22} color="#BF5AF2" />
+        <Ionicons name="hourglass" size={22} color={SystemColors.dark.systemPurple} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
       </View>
       {totalMinutes !== null ? (
         <>
-          <Text style={[styles.widgetBigNumber, { color: '#BF5AF2', fontSize: 36 * textScale }]}>
+          <Text style={[styles.widgetBigNumber, { color: SystemColors.dark.systemPurple, fontSize: 36 * textScale }]}>
             {formatScreenTime(totalMinutes)}
           </Text>
           <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>today</Text>
@@ -561,6 +628,8 @@ export function useWidgetMap(): Record<WidgetType, React.ReactNode> {
           condition={device.weather.condition}
           icon={device.weather.icon}
           city={device.weather.city}
+          maxTemp={device.weather.maxTemp}
+          minTemp={device.weather.minTemp}
         />
       ),
       upNext: <UpNextWidget key="upNext" events={calendarEvents} />,
@@ -598,21 +667,21 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   widgetTitle: {
-    color: 'rgba(255,255,255,0.75)',
+    color: WidgetGlassText.title,
     fontSize: 14,
     fontWeight: '500',
     letterSpacing: -0.2,
     textTransform: 'uppercase',
   },
   widgetBigNumber: {
-    color: '#ffffff',
+    color: WidgetGlassText.primary,
     fontSize: 36,
     fontWeight: '700',
     letterSpacing: -1,
     marginBottom: 6,
   },
   widgetSubtext: {
-    color: 'rgba(255,255,255,0.55)',
+    color: WidgetGlassText.secondary,
     fontSize: 13,
     fontWeight: '400',
     marginTop: 6,
@@ -622,7 +691,7 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: WidgetGlassText.progressTrack,
     overflow: 'hidden',
   },
   progressFill: {
@@ -637,7 +706,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  // Weather
+  // Weather — gradient surface, so the white glass text tones read on every
+  // condition mood (all four are mid/dark saturation, see WidgetWeatherGradients).
   weatherRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -645,25 +715,35 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   weatherTemp: {
-    color: '#ffffff',
-    fontSize: 40,
+    color: WidgetGlassText.primary,
     fontWeight: '200',
     letterSpacing: -1,
   },
   weatherDesc: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
+    color: WidgetGlassText.title,
     fontWeight: '400',
   },
 
-  // Up Next
+  // Up Next — solid surface that follows the theme, so its text comes from
+  // theme.colors (passed inline per row) rather than a fixed tone here.
+  calendarHeader: {
+    marginBottom: 10,
+  },
+  calendarWeekday: {
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  calendarDayNumber: {
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
   upNextBody: {
     alignItems: 'center',
     paddingVertical: 8,
     gap: 8,
   },
   upNextText: {
-    color: 'rgba(255,255,255,0.5)',
     fontSize: 15,
     fontWeight: '400',
   },
@@ -675,24 +755,19 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 8,
   },
-  eventDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF9F0A',
-    marginTop: 4,
+  eventBar: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+    minHeight: 28,
   },
   eventMeta: {
     flex: 1,
   },
   eventTitle: {
-    color: '#ffffff',
-    fontSize: 14,
     fontWeight: '500',
   },
   eventTime: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
     fontWeight: '400',
     marginTop: 2,
   },

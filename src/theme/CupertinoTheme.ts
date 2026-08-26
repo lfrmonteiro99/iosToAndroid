@@ -319,6 +319,43 @@ export function glassSurface(dark: boolean, weight: 'thin' | 'regular' | 'thick'
   };
 }
 
+// Widget appearance tokens (#934): the Weather widget's gradient background is
+// keyed by condition, not by light/dark app theme (like the reference iOS
+// widget, its own colored surface stays legible regardless of system theme).
+// Centralised here — same rule as every other CupertinoTheme token — so the
+// widget component never has a hex literal of its own.
+//
+// Every stop (not just the darkest one) must hold ≥4.5:1 contrast against
+// opaque white text: RN's LinearGradient interpolates each RGB channel
+// linearly in t, and gamma-linearised luminance is a positive-weighted sum of
+// monotonic functions of each channel, so it is monotonic in t too — the
+// lighter stop is always the worst case for a light-on-dark pair, and
+// checking both endpoints bounds every point in between. 'clear', 'cloudy'
+// and 'snow' were previously too light (2.5:1–3.5:1 against white); see
+// WidgetCard.appearance.test.tsx for the ratio assertion per stop.
+export const WidgetWeatherGradients = {
+  clear: ['#2C6CB0', '#0A2A4D'],
+  cloudy: ['#53606D', '#20262D'],
+  rain: ['#3C5266', '#1B2A38'],
+  snow: ['#4C6C86', '#1E2E3D'],
+} as const;
+
+export type WidgetWeatherCondition = keyof typeof WidgetWeatherGradients;
+
+/**
+ * Text tones for widgets still on the default WidgetCard appearance (glass,
+ * fixed dark — #934 keeps them unmigrated to avoid a contrast regression).
+ * Values match what those widgets already rendered; centralised here only so
+ * the component holds no bare hex/rgba of its own.
+ */
+export const WidgetGlassText = {
+  title: 'rgba(255,255,255,0.75)',
+  primary: '#ffffff',
+  secondary: 'rgba(255,255,255,0.55)',
+  tertiary: 'rgba(255,255,255,0.4)',
+  progressTrack: 'rgba(255,255,255,0.15)',
+} as const;
+
 // Border Radius
 export const BorderRadius = {
   small: 8,
