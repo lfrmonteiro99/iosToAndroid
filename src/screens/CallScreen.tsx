@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,9 @@ import type { AppNavigationProp, AppRouteProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useSettings } from '../store/SettingsStore';
+import { runDefaultDialerFlow } from '../utils/defaultDialerFlow';
+import LauncherModule, { addCallAudioStateListener, type CallAudioState } from '../../modules/launcher-module/src';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,7 +43,14 @@ const getLauncher = async () => {
   try {
     return (await import('../../modules/launcher-module/src')).default;
   } catch {
-    return null; // Expected: module unavailable on non-Android
+    // Dynamic import is unavailable in some environments (e.g. Jest's VM);
+    // fall back to a synchronous require so the module stays reachable there.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+      return require('../../modules/launcher-module/src').default;
+    } catch {
+      return null; // Expected: module unavailable on non-Android
+    }
   }
 };
 
@@ -89,9 +99,35 @@ interface CallScreenProps {
 
 export function CallScreen({ navigation, route }: CallScreenProps) {
   const { typography, textScale } = useTheme();
+  const { settings, update } = useSettings();
   const insets = useSafeAreaInsets();
-  const { number, name } = route.params;
+  const { number, name, direction = 'outgoing' } = route.params;
   const displayName = name || number || 'Unknown';
+  const isIncoming = direction === 'incoming';
+
+  // Outgoing calls are "connected" from the moment this screen mounts (the
+  // system dialer/Telecom owns the actual call state — see the disclosure
+  // text below). An incoming call starts unanswered: the user has to accept
+  // it first, via the native Call reference the InCallService holds (#921).
+  const [answered, setAnswered] = useState(!isIncoming);
+  // Guards against a double Accept/Decline tap answering or rejecting the
+  // native call twice — the buttons unmount on the next render, but two
+  // fireEvent.press calls in the same tick both run before that render.
+  const respondedRef = useRef(false);
+
+  // CallAudioState reported by LauncherInCallService (#920). null means no
+  // event has ever been observed for this call — either the InCallService
+  // hasn't reported yet, or (the common case) this app isn't the current
+  // default dialer and the call is routed through another app's dialer UI
+  // (ACTION_CALL path, #379). Mute/Speaker stay disabled until this is
+  // non-null, and always reflect this system-reported state, never a local
+  // toggle.
+  const [audioState, setAudioState] = useState<CallAudioState | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = addCallAudioStateListener(setAudioState);
+    return unsubscribe;
+  }, []);
 
   // Pulsing animation while the call is being placed
   const pulseScale = useSharedValue(1);
@@ -125,8 +161,12 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
     elevation: pulseGlow.value * 12,
   }));
 
-  // Initiate the native call on mount, then go back when the user returns from the system dialer
+  // Initiate the native call on mount, then go back when the user returns from the system dialer.
+  // An incoming call never places a call — it's already ringing — so this
+  // whole effect (and the default-dialer prompt inside it) only applies to
+  // the outgoing/originate flow.
   useEffect(() => {
+    if (isIncoming) return undefined;
     let didReturn = false;
     (async () => {
       const mod = await getLauncher();
@@ -134,6 +174,17 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
         try {
           await mod.makeCall(number);
         } catch (e) { logger.error('CallScreen', 'native call failed', e); }
+        // Default Dialer request flow (#919): in-context only — this screen
+        // only mounts while a call is actually being placed, never at app
+        // start. runDefaultDialerFlow itself no-ops when already the default
+        // dialer or when a previous request was declined, so this is safe to
+        // call on every CallScreen mount.
+        runDefaultDialerFlow({
+          isDefaultDialer: mod.isDefaultDialer,
+          requestDefaultDialer: mod.requestDefaultDialer,
+          getDeclined: () => settings.defaultDialerRequestDeclined,
+          setDeclined: (declined) => update('defaultDialerRequestDeclined', declined),
+        }).catch((e) => { logger.error('CallScreen', 'default dialer flow failed', e); });
       }
       // Return once user comes back from the system dialer
       const sub = AppState.addEventListener('change', (state) => {
@@ -160,6 +211,58 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
     navigation.goBack();
   }, [navigation]);
 
+  const handleAccept = useCallback(() => {
+    if (respondedRef.current) return;
+    respondedRef.current = true;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setAnswered(true);
+    (async () => {
+      const mod = await getLauncher();
+      if (!mod) return;
+      try { await mod.answerCall(); }
+      catch (e) { logger.error('CallScreen', 'answerCall failed', e); }
+    })();
+  }, []);
+
+  const handleDecline = useCallback(() => {
+    if (respondedRef.current) return;
+    respondedRef.current = true;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    (async () => {
+      const mod = await getLauncher();
+      if (!mod) return;
+      try { await mod.rejectCall(); }
+      catch (e) { logger.error('CallScreen', 'rejectCall failed', e); }
+    })();
+    navigation.goBack();
+  }, [navigation]);
+
+  // Only reachable while audioState is non-null — ControlButton's disabled
+  // prop makes onPress undefined otherwise — but the audioState guard is kept
+  // so a stray call (e.g. a queued press resolving after the InCallService
+  // unbinds) cannot fire a command with nothing to reflect it back.
+  //
+  // Calls LauncherModule directly (the statically-imported default, same as
+  // useLiveActivity.ts) rather than through the makeCall/isDefaultDialer
+  // effect's getLauncher() dynamic import above — that indirection exists to
+  // dodge an import-time crash on mount, which doesn't apply to a press
+  // handler, and a static import is what makes this path exercisable by RTL.
+  const handleToggleMute = useCallback(async () => {
+    if (!audioState) return;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      await LauncherModule.setMuted(!audioState.isMuted);
+    } catch (e) { logger.error('CallScreen', 'setMuted failed', e); }
+  }, [audioState]);
+
+  const handleToggleSpeaker = useCallback(async () => {
+    if (!audioState) return;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      await LauncherModule.setAudioRoute(audioState.route === 'speaker' ? 'earpiece' : 'speaker');
+    } catch (e) { logger.error('CallScreen', 'setAudioRoute failed', e); }
+  }, [audioState]);
+
   return (
     <LinearGradient
       colors={['#1a1a2e', '#16213e']}
@@ -182,48 +285,82 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
         </Text>
 
         {/* Status — honest label: native dialer handles the actual call */}
-        <Text style={[styles.callStatus, { fontSize: 14 * textScale }]}>Call Initiated</Text>
-
-        {/* Disclosure — call and audio controls are managed by the system */}
-        <Text style={[typography.caption2, styles.systemDisclosure]}>
-          Call managed by system phone — audio controls unavailable
+        <Text style={[styles.callStatus, { fontSize: 14 * textScale }]}>
+          {isIncoming && !answered ? 'Incoming Call' : 'Call Initiated'}
         </Text>
+
+        {/* Disclosure — shown once connected on the ACTION_CALL path, where
+            this app is not the default dialer and audio controls stay
+            genuinely inert (#379). An unanswered incoming call has no audio
+            to disclose anything about yet. */}
+        {answered && !audioState && (
+          <Text style={[typography.caption2, styles.systemDisclosure]}>
+            Call managed by system phone — audio controls unavailable
+          </Text>
+        )}
       </View>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Control buttons                                                      */}
-      {/* ------------------------------------------------------------------ */}
-      <View style={styles.controlsGrid}>
-        <View style={styles.controlsRow}>
-          <ControlButton
-            icon="mic"
-            label="Mute"
-            onPress={() => {}}
-            disabled
-          />
-          <ControlButton
-            icon="volume-medium"
-            label="Speaker"
-            onPress={() => {}}
-            disabled
-          />
+      {answered ? (
+        <>
+          {/* -------------------------------------------------------------- */}
+          {/* Control buttons                                                  */}
+          {/* -------------------------------------------------------------- */}
+          <View style={styles.controlsGrid}>
+            <View style={styles.controlsRow}>
+              <ControlButton
+                icon={audioState?.isMuted ? 'mic-off' : 'mic'}
+                label="Mute"
+                onPress={handleToggleMute}
+                active={audioState?.isMuted}
+                disabled={!audioState}
+              />
+              <ControlButton
+                icon={audioState?.route === 'speaker' ? 'volume-high' : 'volume-medium'}
+                label="Speaker"
+                onPress={handleToggleSpeaker}
+                active={audioState?.route === 'speaker'}
+                disabled={!audioState}
+              />
+            </View>
+            {!audioState && (
+              <Text style={[typography.caption2, styles.audioHint]}>Audio controlled by system dialer</Text>
+            )}
+          </View>
+
+          {/* -------------------------------------------------------------- */}
+          {/* End Call button                                                  */}
+          {/* -------------------------------------------------------------- */}
+          <View style={styles.endCallRow}>
+            <Pressable
+              style={({ pressed }) => [styles.endCallBtn, pressed && { opacity: 0.7 }]}
+              onPress={handleEndCall}
+              accessibilityRole="button"
+              accessibilityLabel="End Call"
+            >
+              <Ionicons name="call" size={32} color="#ffffff" style={styles.endCallIcon} />
+            </Pressable>
+          </View>
+        </>
+      ) : (
+        <View style={styles.incomingActionsRow}>
+          <Pressable
+            style={({ pressed }) => [styles.declineBtn, pressed && { opacity: 0.7 }]}
+            onPress={handleDecline}
+            accessibilityRole="button"
+            accessibilityLabel="Decline"
+          >
+            <Ionicons name="call" size={32} color="#ffffff" style={styles.endCallIcon} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.acceptBtn, pressed && { opacity: 0.7 }]}
+            onPress={handleAccept}
+            accessibilityRole="button"
+            accessibilityLabel="Accept"
+          >
+            <Ionicons name="call" size={32} color="#ffffff" />
+          </Pressable>
         </View>
-        <Text style={[typography.caption2, styles.audioHint]}>Audio controlled by system dialer</Text>
-      </View>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* End Call button                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <View style={styles.endCallRow}>
-        <Pressable
-          style={({ pressed }) => [styles.endCallBtn, pressed && { opacity: 0.7 }]}
-          onPress={handleEndCall}
-          accessibilityRole="button"
-          accessibilityLabel="End Call"
-        >
-          <Ionicons name="call" size={32} color="#ffffff" style={styles.endCallIcon} />
-        </Pressable>
-      </View>
+      )}
     </LinearGradient>
   );
 }
@@ -331,5 +468,31 @@ const styles = StyleSheet.create({
   },
   endCallIcon: {
     transform: [{ rotate: '135deg' }],
+  },
+
+  // Incoming call — Accept / Decline (#921)
+  incomingActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingBottom: 24,
+  },
+  declineBtn: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  acceptBtn: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#34C759',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
 });

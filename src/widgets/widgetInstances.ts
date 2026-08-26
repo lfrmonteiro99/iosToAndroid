@@ -62,6 +62,29 @@ export interface WidgetInstance {
 export const WIDGET_INSTANCES_KEY = '@iostoandroid/widget_instances';
 
 /**
+ * `page` for a widget that is NOT on a home page.
+ *
+ * The Today View and the home grid share this list, and they are different
+ * surfaces: the Today View shows every widget, the home screen shows the ones
+ * the user placed there. Before #935 that distinction did not have to exist,
+ * because home widgets were a half-width row above the icons and cost the grid
+ * nothing.
+ *
+ * With real footprints it costs a lot. The five widgets in DEFAULT_ENABLED take
+ * 20 of a 4x6 page's 24 cells, and `upNext` (4x4) does not fit at all — so a
+ * migration that put them on page 0 would flood the home screen and push every
+ * icon to page 2. Migrated widgets are therefore unplaced: the Today View is
+ * unchanged, and the home screen only shows what was added to it, which is also
+ * what makes #936's "place it on the page you are looking at" mean anything.
+ */
+export const PAGE_UNPLACED = -1;
+
+/** Whether an instance is on a home page at all. */
+export function isOnHomePage(instance: WidgetInstance): boolean {
+  return instance.page >= 0;
+}
+
+/**
  * A stable id.
  *
  * Never an array index: the id is what a move, a resize and a remove all
@@ -97,6 +120,13 @@ function coord(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fallback;
 }
 
+/** Like `coord`, but PAGE_UNPLACED is a legitimate value rather than garbage. */
+function pageCoord(v: unknown, fallback: number): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+  const n = Math.floor(v);
+  return n < 0 ? PAGE_UNPLACED : n;
+}
+
 /**
  * Parse whatever is in storage into instances, dropping only what cannot be
  * understood.
@@ -130,7 +160,7 @@ export function normalizeInstances(raw: unknown, knownTypes: readonly WidgetType
       id,
       type,
       size: isWidgetSize(e.size) ? e.size : DEFAULT_WIDGET_SIZES[type],
-      page: coord(e.page, 0),
+      page: pageCoord(e.page, PAGE_UNPLACED),
       col: coord(e.col, 0),
       row: coord(e.row, 0),
     });
@@ -142,36 +172,25 @@ export function normalizeInstances(raw: unknown, knownTypes: readonly WidgetType
 /**
  * Convert the old type list into instances.
  *
- * Order is preserved and positions are packed in that order, because the old
- * list order is the only statement of arrangement the user ever made — the
- * home row and the Today View grid both read it. Sizes come from the per-type
- * defaults, which is exactly what those widgets rendered at before.
+ * Order is preserved, because the old list order is the only statement of
+ * arrangement the user ever made and the Today View grid reads it. Sizes come
+ * from the per-type defaults, which is exactly what those widgets rendered at
+ * before.
  *
- * Positions are laid out as pairs across a 4-column icon grid (a `small` is
- * 2x2 there), which is what #935 will place them into. Until then nothing
- * reads col/row, so the arrangement only has to be stable and sensible.
+ * They are UNPLACED (see PAGE_UNPLACED): the Today View shows them all, and the
+ * home screen starts with none. Putting them on page 0 would have flooded it —
+ * DEFAULT_ENABLED takes 20 of a 4x6 page's 24 cells once footprints are real,
+ * and `upNext` does not fit at all.
  */
 export function migrateTypesToInstances(types: readonly WidgetType[]): WidgetInstance[] {
-  const instances: WidgetInstance[] = [];
-  let col = 0;
-  let row = 0;
-
-  types.forEach((type, index) => {
-    const size = DEFAULT_WIDGET_SIZES[type];
-    const span = size === 'small' ? 2 : 4;
-    if (col + span > 4) {
-      col = 0;
-      row += 2;
-    }
-    instances.push({ id: makeWidgetId(type, index), type, size, page: 0, col, row });
-    col += span;
-    if (col >= 4) {
-      col = 0;
-      row += 2;
-    }
-  });
-
-  return instances;
+  return types.map((type, index) => ({
+    id: makeWidgetId(type, index),
+    type,
+    size: DEFAULT_WIDGET_SIZES[type],
+    page: PAGE_UNPLACED,
+    col: 0,
+    row: 0,
+  }));
 }
 
 // ── CRUD, as pure reducers ────────────────────────────────────────────────
@@ -194,7 +213,7 @@ export function addWidget(
       id: makeWidgetId(type, nextSeq(instances, type)),
       type,
       size: opts.size ?? DEFAULT_WIDGET_SIZES[type],
-      page: coord(opts.page, 0),
+      page: pageCoord(opts.page, PAGE_UNPLACED),
       col: coord(opts.col, 0),
       row: coord(opts.row, 0),
     },
@@ -213,7 +232,7 @@ export function moveWidget(
   row: number,
 ): WidgetInstance[] {
   return instances.map((i) =>
-    i.id === id ? { ...i, page: coord(page, i.page), col: coord(col, i.col), row: coord(row, i.row) } : i,
+    i.id === id ? { ...i, page: pageCoord(page, i.page), col: coord(col, i.col), row: coord(row, i.row) } : i,
   );
 }
 

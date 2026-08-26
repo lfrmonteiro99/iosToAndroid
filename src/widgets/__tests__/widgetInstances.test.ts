@@ -10,6 +10,8 @@ import {
   removeWidget,
   resizeWidget,
   type WidgetInstance,
+  PAGE_UNPLACED,
+  isOnHomePage,
 } from '../widgetInstances';
 import { ALL_WIDGET_TYPES, type WidgetType } from '../TodayWidgets';
 
@@ -38,9 +40,16 @@ describe('migrateTypesToInstances', () => {
     expect(migrated.map((i) => i.size)).toEqual(['small', 'medium', 'large']);
   });
 
-  it('puts everything on page 0, which is where widgets lived', () => {
+  it('leaves everything UNPLACED rather than putting it on page 0', () => {
+    // Changed deliberately while implementing #935, and this is the reason: with
+    // real cell footprints the five widgets in DEFAULT_ENABLED take 20 of a 4x6
+    // page's 24 cells, and upNext (4x4) does not fit at all. Migrating them onto
+    // page 0 flooded the home screen and pushed every icon to page 2. The Today
+    // View shows every instance either way; the home grid shows what was placed
+    // on it.
     const migrated = migrateTypesToInstances(['battery', 'weather', 'storage']);
-    expect(migrated.every((i) => i.page === 0)).toBe(true);
+    expect(migrated.every((i) => i.page === PAGE_UNPLACED)).toBe(true);
+    expect(migrated.every((i) => isOnHomePage(i))).toBe(false);
   });
 
   it('gives each one a distinct id', () => {
@@ -48,19 +57,12 @@ describe('migrateTypesToInstances', () => {
     expect(new Set(migrated.map((i) => i.id)).size).toBe(3);
   });
 
-  it('packs positions in the order the user had them', () => {
-    // The old list order is the only statement of arrangement ever made, so it
-    // is what the positions have to preserve.
-    const migrated = migrateTypesToInstances(['battery', 'storage']);
-    expect(migrated[0].col).toBe(0);
-    expect(migrated[1].col).toBe(2); // a small is 2 icon columns wide
-    expect(migrated[0].row).toBe(migrated[1].row);
-  });
-
-  it('wraps to the next row when the 4 columns are full', () => {
+  it('preserves the order, which is the only arrangement the user ever stated', () => {
+    // The Today View grid reads this order. Positions are not invented: an
+    // unplaced widget has no cell, and #935's packer assigns one when it is
+    // placed on a page.
     const migrated = migrateTypesToInstances(['battery', 'storage', 'messages']);
-    expect(migrated[2].row).toBeGreaterThan(migrated[0].row);
-    expect(migrated[2].col).toBe(0);
+    expect(migrated.map((i) => i.type)).toEqual(['battery', 'storage', 'messages']);
   });
 
   it('handles an empty list', () => {
@@ -122,7 +124,14 @@ describe('normalizeInstances', () => {
       [{ id: 'a', type: 'battery', col: -3, row: Number.NaN, page: 'first' }],
       KNOWN,
     );
-    expect(parsed[0]).toMatchObject({ col: 0, row: 0, page: 0 });
+    expect(parsed[0]).toMatchObject({ col: 0, row: 0, page: PAGE_UNPLACED });
+  });
+
+  it('keeps a negative page as UNPLACED instead of clamping it to page 0', () => {
+    // The one coordinate where a negative value is meaningful: clamping it to 0
+    // would silently move every unplaced widget onto the first home page.
+    const parsed = normalizeInstances([{ id: 'a', type: 'battery', page: -1 }], KNOWN);
+    expect(parsed[0].page).toBe(PAGE_UNPLACED);
   });
 
   it('floors a fractional cell coordinate', () => {
@@ -193,10 +202,17 @@ describe('CRUD', () => {
   });
 
   it('resizeWidget changes size, and nothing else', () => {
-    const list = addWidget([], 'weather');
+    const list = addWidget([], 'weather', { page: 0 });
     const [resized] = resizeWidget(list, list[0].id, 'large');
     expect(resized.size).toBe('large');
     expect(resized).toMatchObject({ id: list[0].id, page: 0, col: 0, row: 0 });
+  });
+
+  it('addWidget leaves a widget unplaced unless a page is given', () => {
+    // So the gallery has to say where. Defaulting to page 0 is what flooded the
+    // home screen during #935.
+    expect(addWidget([], 'weather')[0].page).toBe(PAGE_UNPLACED);
+    expect(addWidget([], 'weather', { page: 2 })[0].page).toBe(2);
   });
 
   it('two instances of one type can have different sizes', () => {

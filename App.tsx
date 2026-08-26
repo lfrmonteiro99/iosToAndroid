@@ -39,7 +39,7 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { findContactByPhone } from './src/utils/contacts';
 import { suppressAutoLock } from './src/utils/permissions';
 import { resolveAutoLockDelay } from './src/utils/autoLockUtils';
-import LauncherModule, { addNotificationListener, onBridgeError } from './modules/launcher-module/src';
+import LauncherModule, { addNotificationListener, addCallStateListener, onBridgeError } from './modules/launcher-module/src';
 import { notificationCallbackForFocus } from './src/utils/notificationFocusFilter';
 import { releaseBatched } from './src/utils/scheduledSummaryBuffer';
 import {
@@ -319,6 +319,24 @@ function AppContent() {
 
     lastMsgCount.current = currentCount;
   }, [device.messages, device.isReady, device.contacts, isLocked, navigationRef]);
+
+  // Incoming calls (#921, passo 6 de #378): LauncherInCallService only emits
+  // 'ringing' while this app is the bound InCallService, which Telecom only
+  // does once it's the default dialer — so on any other device this listener
+  // is registered but simply never fires, and nothing here runs.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+
+    const unsub = addCallStateListener(({ state, number }) => {
+      if (state !== 'ringing') return;
+      const contact = findContactByPhone(number, device.contacts);
+      const name = contact ? `${contact.firstName} ${contact.lastName}`.trim() : '';
+      try {
+        (navigationRef as any).navigate('CallScreen', { number, name, direction: 'incoming' }); // eslint-disable-line @typescript-eslint/no-explicit-any
+      } catch { /* navigation not ready */ }
+    });
+    return unsub;
+  }, [device.contacts, navigationRef]);
 
   // Monitor native notifications via event-driven listener (replaces 30s polling)
   useEffect(() => {

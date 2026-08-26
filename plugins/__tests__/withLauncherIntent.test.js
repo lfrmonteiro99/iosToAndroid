@@ -100,6 +100,32 @@ describe("applyManifestMod", () => {
     expect(() => applyManifestMod(manifest)).not.toThrow();
     expect(manifest.manifest.application[0].activity[0].$["android:stateNotNeeded"]).toBeUndefined();
   });
+
+  function dialFilters(activity) {
+    return (activity["intent-filter"] ?? []).filter((f) =>
+      f.action?.some((a) => a.$["android:name"] === "android.intent.action.DIAL")
+    );
+  }
+
+  it("adds an ACTION_DIAL/DEFAULT intent filter, a manifest requirement for RoleManager.ROLE_DIALER eligibility (#919)", () => {
+    const result = applyManifestMod(manifestWith(mainActivity()));
+    const filters = dialFilters(findMain(result));
+    expect(filters).toHaveLength(1);
+    expect(filters[0].category[0].$["android:name"]).toBe("android.intent.category.DEFAULT");
+  });
+
+  it("does not add a second DIAL filter when one is already present", () => {
+    const once = applyManifestMod(manifestWith(mainActivity()));
+    const twice = applyManifestMod(once);
+    expect(dialFilters(findMain(twice))).toHaveLength(1);
+  });
+
+  it("keeps both the HOME and DIAL filters side by side", () => {
+    const result = applyManifestMod(manifestWith(mainActivity()));
+    const main = findMain(result);
+    expect(homeFilters(main)).toHaveLength(1);
+    expect(dialFilters(main)).toHaveLength(1);
+  });
 });
 
 describe("applyMainActivityMod", () => {

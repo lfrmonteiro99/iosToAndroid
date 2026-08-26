@@ -1,11 +1,15 @@
 package com.iostoandroid.launcher
 
+import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.PowerManager
@@ -45,6 +49,7 @@ import android.provider.Telephony
 import android.telecom.TelecomManager
 import android.util.Base64
 import android.util.Log
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.ByteArrayOutputStream
@@ -54,6 +59,9 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 class LauncherModule : Module() {
     companion object {
@@ -64,6 +72,23 @@ class LauncherModule : Module() {
         // Live Activities (#626): one shared low-importance channel for every
         // ongoing notification posted via postLiveActivity.
         private const val LIVE_ACTIVITY_CHANNEL_ID = "live_activities"
+
+        // #930: sendSms — how long to wait for the sentIntent broadcast(s)
+        // before giving up and reporting an indeterminate (=failed) send.
+        // #931: content://mms has no ADDRESS column to filter on directly —
+        // recipients only resolve after a per-row content://mms/{id}/addr
+        // query — so getMessagesForThread overfetches this many pages' worth
+        // of MMS candidates before filtering by address in Kotlin.
+        private const val MMS_ADDRESS_FILTER_OVERFETCH = 5
+
+        private const val SMS_SEND_TIMEOUT_MS = 30_000L
+        private const val SMS_SENT_ACTION_PREFIX = "com.iostoandroid.launcher.SMS_SENT"
+        private const val EXTRA_SMS_PART_INDEX = "smsPartIndex"
+
+        // Monotonically increasing so two sends in flight at once (or the
+        // user double-tapping Send) each get their own broadcast action and
+        // PendingIntent request codes instead of colliding.
+        private val smsSendRequestId = AtomicInteger(0)
 
         /**
          * Protected-app set pushed from JS (AppsStore) so the foreground monitor
@@ -90,10 +115,152 @@ class LauncherModule : Module() {
     private val context: Context
         get() = appContext.reactContext ?: throw Exception("React context is not available")
 
+    /**
+     * Shared by getRecentMessages and getMessagesForThread: queries
+     * content://sms with [selection]/[selectionArgs] and a "date DESC LIMIT n"
+     * sort order (see [MessagesQueryBuilder]) so the row cutoff happens in
+     * SQL, not by looping past rows the query already fetched.
+     */
+    private fun queryMessages(selection: String?, selectionArgs: Array<String>?, limit: Int): List<Map<String, Any?>> {
+        return try {
+            val cursor: Cursor? = context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.THREAD_ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.READ
+                ),
+                selection, selectionArgs,
+                MessagesQueryBuilder.buildSortOrder(Telephony.Sms.DATE, limit)
+            )
+            val messages = mutableListOf<Map<String, Any?>>()
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val date = it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.DATE))
+                    messages.add(mapOf(
+                        "id" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms._ID)).toString(),
+                        "threadId" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)).toString(),
+                        "address" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)),
+                        "body" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY)),
+                        "date" to date,
+                        "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
+                        "type" to it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.TYPE)),
+                        "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1),
+                        "kind" to "sms"
+                    ))
+                }
+            }
+            messages
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * #931: content://sms only ever holds SMS — group messages and anything
+     * with an attachment are MMS and were invisible before this. MMS rows
+     * have no ADDRESS or BODY column of their own: recipients live in
+     * content://mms/{id}/addr and text lives in content://mms/part as a
+     * text/plain part, both resolved per row below and mapped through
+     * [MmsMessageMapper] so the result merges with [queryMessages]'s SMS
+     * rows by `date` (already normalized to milliseconds there).
+     *
+     * Wrapped in one try/catch around the whole cursor walk, not per-row:
+     * a device without a Mms table, or without READ_SMS, throws once on the
+     * first ContentResolver call, and the AC calls for degrading the entire
+     * MMS side to empty in that case rather than a partial/inconsistent list.
+     */
+    private fun queryMmsMessages(selection: String?, selectionArgs: Array<String>?, limit: Int): List<Map<String, Any?>> {
+        return try {
+            val cursor: Cursor? = context.contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                arrayOf(
+                    Telephony.Mms._ID,
+                    Telephony.Mms.THREAD_ID,
+                    Telephony.Mms.DATE,
+                    Telephony.Mms.MESSAGE_BOX,
+                    Telephony.Mms.READ
+                ),
+                selection, selectionArgs,
+                MessagesQueryBuilder.buildSortOrder(Telephony.Mms.DATE, limit)
+            )
+            val rows = mutableListOf<Map<String, Any?>>()
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val id = it.getLong(it.getColumnIndexOrThrow(Telephony.Mms._ID))
+                    rows.add(MmsMessageMapper.toMessageMap(
+                        id = id,
+                        threadId = it.getLong(it.getColumnIndexOrThrow(Telephony.Mms.THREAD_ID)),
+                        dateSeconds = it.getLong(it.getColumnIndexOrThrow(Telephony.Mms.DATE)),
+                        messageBox = it.getInt(it.getColumnIndexOrThrow(Telephony.Mms.MESSAGE_BOX)),
+                        isRead = it.getInt(it.getColumnIndexOrThrow(Telephony.Mms.READ)) == 1,
+                        addresses = queryMmsAddresses(id),
+                        textParts = queryMmsTextParts(id)
+                    ))
+                }
+            }
+            rows
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** `content://mms/{id}/addr` — the FROM/TO/CC/BCC rows for one MMS. */
+    private fun queryMmsAddresses(mmsId: Long): List<MmsMessageMapper.MmsAddress> {
+        val uri = Uri.withAppendedPath(ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, mmsId), "addr")
+        val addresses = mutableListOf<MmsMessageMapper.MmsAddress>()
+        context.contentResolver.query(
+            uri,
+            arrayOf(Telephony.Mms.Addr.ADDRESS, Telephony.Mms.Addr.TYPE),
+            null, null, null
+        )?.use {
+            while (it.moveToNext()) {
+                val address = it.getString(it.getColumnIndexOrThrow(Telephony.Mms.Addr.ADDRESS)) ?: continue
+                addresses.add(MmsMessageMapper.MmsAddress(address, it.getInt(it.getColumnIndexOrThrow(Telephony.Mms.Addr.TYPE))))
+            }
+        }
+        return addresses
+    }
+
+    /** `content://mms/part`, `text/plain` parts only — MMS' text body, one row per part. */
+    private fun queryMmsTextParts(mmsId: Long): List<String> {
+        val parts = mutableListOf<String>()
+        context.contentResolver.query(
+            Telephony.Mms.Part.CONTENT_URI,
+            arrayOf(Telephony.Mms.Part.TEXT),
+            "${Telephony.Mms.Part.MSG_ID} = ? AND ${Telephony.Mms.Part.CONTENT_TYPE} = ?",
+            arrayOf(mmsId.toString(), "text/plain"),
+            null
+        )?.use {
+            val col = it.getColumnIndex(Telephony.Mms.Part.TEXT)
+            if (col >= 0) {
+                while (it.moveToNext()) {
+                    it.getString(col)?.let { text -> parts.add(text) }
+                }
+            }
+        }
+        return parts
+    }
+
+    /**
+     * Merges SMS + MMS rows by `date` (both already in milliseconds) and
+     * truncates to [limit] — the merge point that makes a mixed conversation
+     * show both kinds without a gap (#931 AC1). Each side already applied
+     * its own SQL "date DESC LIMIT n" cutoff, so pulling `limit` rows from
+     * each before merging can't leave a hole between them.
+     */
+    private fun mergeMessagesByDate(sms: List<Map<String, Any?>>, mms: List<Map<String, Any?>>, limit: Int): List<Map<String, Any?>> {
+        return (sms + mms).sortedByDescending { (it["date"] as? Long) ?: 0L }.take(limit)
+    }
+
     override fun definition() = ModuleDefinition {
         Name("LauncherModule")
 
-        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged")
+        Events("onNotificationPosted", "onNotificationRemoved", "onHomePressed", "onPackageChanged", "onSpeechPartialResult", "onSpeechResult", "onSpeechError", "onBackTap", "onAppAccess", "onForegroundAppChanged", "onCallStateChanged", "onCallEnded", "onCallAudioStateChanged")
 
         // Native view that reserves its own bounds against the Android system
         // gesture (see SystemGestureExclusionView). Used by BackEdgeSwipe's
@@ -619,42 +786,49 @@ class LauncherModule : Module() {
         // ── SMS / Messages ───────────────────────────────────────────────
 
         AsyncFunction("getRecentMessages") { limit: Int ->
-            try {
-                val cursor: Cursor? = context.contentResolver.query(
-                    Telephony.Sms.CONTENT_URI,
-                    arrayOf(
-                        Telephony.Sms._ID,
-                        Telephony.Sms.ADDRESS,
-                        Telephony.Sms.BODY,
-                        Telephony.Sms.DATE,
-                        Telephony.Sms.TYPE,
-                        Telephony.Sms.READ
-                    ),
-                    null, null,
-                    "${Telephony.Sms.DATE} DESC"
-                )
+            // #931: global feed across every thread, so MMS is queried with
+            // no thread/address filter, same as the SMS side.
+            val sms = queryMessages(null, null, limit)
+            val mms = queryMmsMessages(null, null, limit)
+            mergeMessagesByDate(sms, mms, limit)
+        }
 
-                val messages = mutableListOf<Map<String, Any?>>()
-                cursor?.use {
-                    var count = 0
-                    while (it.moveToNext() && count < limit) {
-                        val date = it.getLong(it.getColumnIndexOrThrow(Telephony.Sms.DATE))
-                        messages.add(mapOf(
-                            "id" to it.getLong(it.getColumnIndexOrThrow(Telephony.Sms._ID)).toString(),
-                            "address" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)),
-                            "body" to it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY)),
-                            "date" to date,
-                            "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(date)),
-                            "type" to it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.TYPE)),
-                            "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1)
-                        ))
-                        count++
+        // #927: per-thread history, paged. `beforeDate` null = newest page;
+        // otherwise the page strictly older than it (keyset pagination — an
+        // OFFSET would desync if a new SMS lands mid-scroll). The address
+        // match tolerates formatting differences; see MessagesQueryBuilder.
+        AsyncFunction("getMessagesForThread") { address: String, limit: Int, beforeDate: Double? ->
+            val (selection, selectionArgs) = MessagesQueryBuilder.buildSelection(
+                Telephony.Sms.ADDRESS, Telephony.Sms.DATE, address, beforeDate
+            )
+            val sms = queryMessages(selection, selectionArgs, limit)
+
+            // #931: MMS recipients live in content://mms/{id}/addr, not a
+            // column on Telephony.Mms itself, so the digit-suffix address
+            // match MessagesQueryBuilder builds for SMS can't be pushed into
+            // this query's SQL selection — only the date (keyset) clause can.
+            // Overfetch before resolving addresses and filtering in Kotlin so
+            // a handful of rows belonging to other threads don't starve this
+            // page; MMS volume is small enough in practice for this to stay
+            // cheap (see MessagesQueryBuilder.buildSortOrder for the same
+            // SQL-level LIMIT approach the SMS side already relies on).
+            val mmsDateSelection = if (beforeDate == null) null else "${Telephony.Mms.DATE} < ?"
+            val mmsDateArgs = if (beforeDate == null) null else arrayOf((beforeDate.toLong() / 1000L).toString())
+            val mmsCandidates = queryMmsMessages(mmsDateSelection, mmsDateArgs, limit * MMS_ADDRESS_FILTER_OVERFETCH)
+            val addressSuffix = MessagesQueryBuilder.digitsSuffix(address)
+            val mms = mmsCandidates.filter { row ->
+                val rowAddress = row["address"] as? String ?: ""
+                val matches = rowAddress.split(", ").any { participant ->
+                    if (addressSuffix.isEmpty()) {
+                        participant.equals(address, ignoreCase = true)
+                    } else {
+                        MessagesQueryBuilder.digitsSuffix(participant) == addressSuffix
                     }
                 }
-                messages
-            } catch (e: Exception) {
-                emptyList<Map<String, Any?>>()
-            }
+                matches
+            }.take(limit)
+
+            mergeMessagesByDate(sms, mms, limit)
         }
 
         // ── System Settings Panels ───────────────────────────────────────
@@ -923,6 +1097,75 @@ class LauncherModule : Module() {
             true
         }
 
+        // ── Default Dialer request flow (#919) ─────────────────────────────
+        // LauncherInCallService only takes over the call UI once this app is
+        // selected as the system's default dialer — being merely installed is
+        // not enough. isDefaultDialer is a live poll (same shape as
+        // checkPermissions); requestDefaultDialer only launches the OS
+        // role/intent and resolves once that launch succeeded, mirroring
+        // requestAllPermissions' fire-and-forget contract — the actual
+        // decision comes back to the app via the next isDefaultDialer() poll,
+        // not via this promise.
+
+        AsyncFunction("isDefaultDialer") {
+            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            telecomManager?.defaultDialerPackage == context.packageName
+        }
+
+        AsyncFunction("requestDefaultDialer") {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
+                        ?: return@AsyncFunction false
+                    if (!roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_DIALER)) return@AsyncFunction false
+                    val activity = appContext.currentActivity ?: return@AsyncFunction false
+                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_DIALER)
+                    activity.startActivity(intent)
+                } else {
+                    val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER).apply {
+                        putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, context.packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        // ── Incoming calls (#921, passo 6 de #378) ─────────────────────────
+        // LauncherInCallService (#919) holds the ringing/active Call reference;
+        // these just forward to it. false when there is no call to act on
+        // (already answered/ended, or Telecom never bound this service — i.e.
+        // this app isn't the default dialer, matching the "nothing changes
+        // when we're not the Dialer" acceptance criterion).
+
+        AsyncFunction("answerCall") {
+            LauncherInCallService.answerCurrentCall()
+        }
+
+        AsyncFunction("rejectCall") { message: String? ->
+            LauncherInCallService.rejectCurrentCall(message)
+        }
+
+        // ── Call audio routing (#920) ───────────────────────────────────────
+        // Mute/route commands only take effect while LauncherInCallService is
+        // actually bound for the active call (this app is the default dialer
+        // — see requestDefaultDialer above); otherwise there is no InCallService
+        // instance to command and these are no-ops that resolve false, matching
+        // the CallScreen contract of only enabling the buttons once a real
+        // CallAudioState event has been observed (see addCallAudioStateListener).
+
+        AsyncFunction("setMuted") { muted: Boolean ->
+            LauncherInCallService.requestMuted(muted)
+        }
+
+        AsyncFunction("setAudioRoute") { route: String ->
+            val routeInt = CallAudioRouteMapper.fromName(route) ?: return@AsyncFunction false
+            LauncherInCallService.requestAudioRoute(routeInt)
+        }
+
         // ── Notifications ────────────────────────────────────────────────
 
         AsyncFunction("getNotifications") {
@@ -998,7 +1241,12 @@ class LauncherModule : Module() {
 
         // ── SMS Send ─────────────────────────────────────────────────────
 
-        AsyncFunction("sendSms") { address: String, body: String ->
+        // `Coroutine`, not a plain lambda: awaitSmsSendOutcome (below) is a
+        // suspend function that waits on the sentIntent broadcast(s), and a
+        // plain AsyncFunction body is not a coroutine scope. Same builder
+        // HealthConnectModule uses for its suspending body — see the comment
+        // there for why a plain lambda fails to compile.
+        AsyncFunction("sendSms") Coroutine { address: String, body: String ->
             SmsRequestValidator.validate(address, body)?.let { reason -> throw Exception(reason) }
             if (!hasPermission(android.Manifest.permission.SEND_SMS)) {
                 throw Exception("SMS não enviado: permissão SEND_SMS não concedida")
@@ -1014,10 +1262,18 @@ class LauncherModule : Module() {
                 }
 
             val parts = smsManager.divideMessage(body)
-            if (parts.size > 1) {
-                smsManager.sendMultipartTextMessage(address, null, parts, null, null)
-            } else {
-                smsManager.sendTextMessage(address, null, body, null, null)
+            // #930: sendSms used to fire-and-forget (sentIntent=null) and always
+            // resolve true — the call being accepted for processing is not the
+            // same as the radio actually sending it. Now the promise only
+            // resolves once every part's sentIntent broadcast confirms RESULT_OK,
+            // a distinguishable reason on failure, or a timeout if the broadcast
+            // never arrives.
+            val outcome = withTimeoutOrNull(SMS_SEND_TIMEOUT_MS) {
+                awaitSmsSendOutcome(context, smsManager, address, parts)
+            } ?: SmsResultMapper.Outcome(success = false, reason = "timeout")
+
+            if (!outcome.success) {
+                throw Exception("SMS não enviado: ${outcome.reason ?: "unknown_error"}")
             }
             true
         }
@@ -1702,6 +1958,88 @@ class LauncherModule : Module() {
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * Registers a one-shot [BroadcastReceiver] as the `sentIntent` for every
+     * part of an SMS send (one PendingIntent per part — the OS fires each
+     * one separately, once its part is handed to the radio) and suspends
+     * until all parts have reported, aggregating via [SmsResultMapper]. The
+     * receiver always unregisters exactly once: on the normal completion
+     * path, or via `invokeOnCancellation` when the caller (the
+     * withTimeoutOrNull in AsyncFunction("sendSms")) cancels this coroutine.
+     */
+    private suspend fun awaitSmsSendOutcome(
+        context: Context,
+        smsManager: android.telephony.SmsManager,
+        address: String,
+        parts: ArrayList<String>,
+    ): SmsResultMapper.Outcome = suspendCancellableCoroutine { continuation ->
+        val requestId = smsSendRequestId.incrementAndGet()
+        val action = "$SMS_SENT_ACTION_PREFIX.$requestId"
+        val results = IntArray(parts.size) { Int.MIN_VALUE }
+        var remaining = parts.size
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                val partIndex = intent?.getIntExtra(EXTRA_SMS_PART_INDEX, -1) ?: -1
+                // Ignore a part we've already recorded: onReceive can fire
+                // again for the same PendingIntent (e.g. a stray redelivery),
+                // and double-counting it would let `remaining` reach zero
+                // before every real part has reported.
+                if (partIndex < 0 || partIndex >= results.size || results[partIndex] != Int.MIN_VALUE) {
+                    return
+                }
+                results[partIndex] = resultCode
+                remaining--
+                if (remaining == 0) {
+                    try { context.unregisterReceiver(this) } catch (_: Exception) {}
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.success(SmsResultMapper.aggregate(results.toList())))
+                    }
+                }
+            }
+        }
+
+        androidx.core.content.ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(action),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        continuation.invokeOnCancellation {
+            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+        }
+
+        val sentIntents = ArrayList<PendingIntent>(parts.size)
+        for (i in parts.indices) {
+            val intent = Intent(action).putExtra(EXTRA_SMS_PART_INDEX, i).setPackage(context.packageName)
+            sentIntents.add(
+                PendingIntent.getBroadcast(
+                    context,
+                    requestId * 1000 + i,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            )
+        }
+
+        // The SmsManager calls below can throw synchronously (e.g. an invalid
+        // address, or a permission revoked between hasPermission() and here)
+        // before any sentIntent broadcast is ever scheduled. That throw isn't
+        // a coroutine cancellation, so invokeOnCancellation above would never
+        // run — without this catch the receiver registered a few lines up
+        // would leak.
+        try {
+            if (parts.size > 1) {
+                smsManager.sendMultipartTextMessage(address, null, parts, sentIntents, null)
+            } else {
+                smsManager.sendTextMessage(address, null, parts[0], sentIntents[0], null)
+            }
+        } catch (e: Exception) {
+            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+            throw e
+        }
+    }
+
     private fun resolveContactName(phoneNumber: String): String? {
         try {
             val uri = Uri.withAppendedPath(
@@ -1858,8 +2196,9 @@ class LauncherModule : Module() {
      *    anti-aliased by drawPath (unlike clipPath, which is not), so the edge
      *    stays smooth at 60pt instead of serrated.
      *  - A circular source icon will still show empty (transparent) corners
-     *    after masking; that is the known-incomplete "dominant color" item of
-     *    epic #465 and is explicitly out of scope here (#480 does not fix it).
+     *    after masking; those are backfilled with [KMeansColorPicker]'s
+     *    dominant colour before the mask is even applied (§4.1.3 of epic
+     *    #466), see [backfillTransparentCorners].
      */
     /**
      * Applies [mask] to [src]: the superellipse mask at the requested exponent,
@@ -1882,11 +2221,11 @@ class LauncherModule : Module() {
     }
 
     /**
-     * Average the four edge-midpoint pixels of [src] — a cheap "dominant colour"
-     * for backfilling transparent mask corners on circular/banner icons so they
-     * don't show holes (the known-incomplete item of #465 / #480). Good enough
-     * because the mask only clips the four squircle corners, which sit on the
-     * icon's own edge colour.
+     * Average the four edge-midpoint pixels of [src]. Fallback used by
+     * [backfillTransparentCorners] only when [KMeansColorPicker] finds no
+     * usable cluster (e.g. an icon that is itself almost entirely white or
+     * black, so every cluster gets discarded) — kept because it is still
+     * better than an arbitrary fixed colour in that degenerate case.
      */
     private fun edgeMidpointColor(src: Bitmap): Int {
         val w = src.width
@@ -1907,9 +2246,15 @@ class LauncherModule : Module() {
     }
 
     /**
-     * Backfill transparent corners of [src] with the edge-midpoint colour so a
-     * circular/banner icon keeps a solid silhouette after masking. Returns the
-     * original bitmap when it already fills its bounds.
+     * Backfill transparent corners of [src] with its k-means dominant colour
+     * (§4.1.3 of epic #466) so a circular/banner icon keeps a solid
+     * silhouette after masking, instead of a hole that shows through to
+     * whatever sits under the launcher grid. Falls back to
+     * [edgeMidpointColor] when [KMeansColorPicker] finds no usable cluster.
+     * Returns the original bitmap when it already fills its bounds. Runs once
+     * per icon at cache-write time (called only from [writeIconToFile], which
+     * itself only runs when the cached PNG doesn't exist yet) — a cache hit
+     * never re-enters this function.
      */
     private fun backfillTransparentCorners(src: Bitmap): Bitmap {
         val w = src.width
@@ -1917,7 +2262,9 @@ class LauncherModule : Module() {
         // Quick reject: if the centre pixel is opaque, the icon fills its box
         // (square/adaptive) and masking can't expose a hole.
         if (Color.alpha(src.getPixel(w / 2, h / 2)) != 0) return src
-        val fill = edgeMidpointColor(src)
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        val fill = KMeansColorPicker.dominantColor(pixels) ?: edgeMidpointColor(src)
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawColor(fill)

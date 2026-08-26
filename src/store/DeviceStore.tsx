@@ -8,12 +8,7 @@ import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import { syncAlarmsWithDeviceTimezone } from '../utils/alarmTimezone';
 import { useSettings } from './SettingsStore';
-import {
-  addSentMessage as persistSentMessage,
-  loadSentMessages,
-  mergeSentWithProvider,
-  sentMessageToDeviceSms,
-} from './SentMessagesStore';
+import { loadSentMessages, mergeSentWithProvider } from './SentMessagesStore';
 
 export interface DeviceWifi {
   enabled: boolean;
@@ -104,13 +99,6 @@ interface DeviceContextValue extends DeviceState {
   openSystemPanel: (panel: string) => Promise<void>;
   requestContactsPermission: () => Promise<boolean>;
   requestSmsPermission: () => Promise<boolean>;
-  /**
-   * Record a message this app just sent (#929). Persists it locally and
-   * appends it to `messages` immediately, so the sender sees it without
-   * waiting on `refresh()` — the provider will never carry it (see DeviceSms
-   * merge in loadMessages).
-   */
-  addSentMessage: (address: string, body: string) => Promise<DeviceSms>;
   /** Whether OS ambient-light auto-brightness is engaged (#612). Mirrors SettingsStore.autoBrightness. */
   autoBrightness: boolean;
   /**
@@ -495,16 +483,6 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     return messages.length > 0;
   }, [loadMessages]);
 
-  const addSentMessage = useCallback(async (address: string, body: string) => {
-    const saved = await persistSentMessage(address, body);
-    const asSms = sentMessageToDeviceSms(saved);
-    setState((prev) => ({
-      ...prev,
-      messages: [asSms, ...prev.messages].sort((a, b) => (b.date ?? 0) - (a.date ?? 0)),
-    }));
-    return asSms;
-  }, []);
-
   const value = useMemo<DeviceContextValue>(() => ({
     ...state,
     refresh,
@@ -515,10 +493,9 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     openSystemPanel,
     requestContactsPermission,
     requestSmsPermission,
-    addSentMessage,
     autoBrightness,
     setAutoBrightness: setAutoBrightnessValue,
-  }), [state, refresh, setBrightnessValue, setVolumeValue, toggleWifi, toggleBluetooth, openSystemPanel, requestContactsPermission, requestSmsPermission, addSentMessage, autoBrightness, setAutoBrightnessValue]);
+  }), [state, refresh, setBrightnessValue, setVolumeValue, toggleWifi, toggleBluetooth, openSystemPanel, requestContactsPermission, requestSmsPermission, autoBrightness, setAutoBrightnessValue]);
 
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;
 }

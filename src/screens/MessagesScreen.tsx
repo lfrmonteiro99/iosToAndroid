@@ -22,7 +22,7 @@ import { useDevice, DeviceSms, DeviceContact } from '../store/DeviceStore';
 import { useSettings } from '../store/SettingsStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow, CupertinoNavigationBar } from '../components';
-import { findContactByPhone } from '../utils/contacts';
+import { findContactByPhone, normalizePhoneKey } from '../utils/contacts';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
 import { avatarColorForName } from '../utils/avatarColor';
@@ -37,22 +37,24 @@ interface Conversation {
   unreadCount: number;
 }
 
-function groupConversations(messages: DeviceSms[]): Conversation[] {
+export function groupConversations(messages: DeviceSms[]): Conversation[] {
   const groups: Record<string, DeviceSms[]> = {};
   for (const msg of messages) {
-    const key = msg.address || 'unknown';
+    const key = msg.address ? (normalizePhoneKey(msg.address) || 'unknown') : 'unknown';
     if (!groups[key]) groups[key] = [];
     groups[key].push(msg);
   }
   return Object.entries(groups)
-    .map(([address, msgs]) => {
+    .map(([, msgs]) => {
       const sorted = [...msgs].sort((a, b) => {
         const aTime = (a as DeviceSms & { date?: number }).date ?? 0;
         const bTime = (b as DeviceSms & { date?: number }).date ?? 0;
         return bTime - aTime;
       });
+      // The most recent message's address is the canonical one shown and
+      // used for sending — not the first format that happened to appear.
       return {
-        address,
+        address: sorted[0].address || 'unknown',
         messages: sorted,
         lastMessage: sorted[0],
         unreadCount: msgs.filter((m) => !m.isRead).length,
