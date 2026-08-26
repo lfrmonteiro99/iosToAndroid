@@ -48,13 +48,17 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   screenTime: 'Screen Time',
 };
 
+// Filled glyphs, matching the widget bodies below (which already draw `server`,
+// `calendar`, `chatbubble-ellipses`, `hourglass`) and the iOS reference, where
+// widget glyphs are solid rather than thin line art (#934). The only consumer is
+// the "Edit Widgets" panel row (`TodayViewScreen.tsx`).
 export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = {
   battery: 'battery-full',
-  storage: 'server-outline',
-  weather: 'partly-sunny-outline',
-  upNext: 'calendar-outline',
-  messages: 'chatbubble-ellipses-outline',
-  screenTime: 'hourglass-outline',
+  storage: 'server',
+  weather: 'partly-sunny',
+  upNext: 'calendar',
+  messages: 'chatbubble-ellipses',
+  screenTime: 'hourglass',
 };
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
