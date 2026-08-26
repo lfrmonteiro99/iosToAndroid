@@ -365,19 +365,109 @@ fi
 # O critério é REGRESSÃO, não perfeição (ver baseline_block em lib.sh): o main
 # já está vermelho por uma causa conhecida, logo exigir jest=0 bloquearia TUDO.
 # O portão compara com a baseline do repo e só BLOQUEIA se o PR introduzir
-# regressão — mais testes a falhar do que a baseline, lint/tsc a piorar, ou
-# falhas novas fora dos ficheiros que o PR toca. Sem baseline, o portão é
+# regressão — falhas NOVAS, ou lint/tsc a piorar. Sem baseline, o portão é
 # estrito (exige os três verdes). O agente pode mentir à vontade — o main fica
 # protegido contra regressões reais.
+#
+# COMPARA-SE O CONJUNTO, NÃO A CONTAGEM.
+#
+# Isto media `ft > b_ft` — o número de testes a falhar contra o número da
+# baseline. Uma contagem não identifica nada, e o resultado foi visível em
+# 2026-08-26: a baseline tinha orçamento ≥1, o #945 deixou o
+# `ConversationScreen` a falhar, e os quatro PRs seguintes (#950, #951, #952,
+# #944) integraram todos com a shard 4 vermelha no GitHub — cada um
+# legitimamente, pela regra escrita. O total nunca subiu, portanto para o
+# portão nada tinha acontecido.
+#
+# Pior no caso geral: um PR que arranje um teste e parta outro fica com
+# contagem igual e passa. A identidade da falha nunca era olhada — apesar de a
+# `baseline.json` já gravar `failed_tests` como um array ordenado de
+# "ancestor › title" exactamente para isto (ver baseline.sh). O portão escrevia
+# a informação certa e depois lia o número.
+#
+# Agora: qualquer falha cuja identidade não esteja na baseline BLOQUEIA, e a
+# mensagem diz quais são. Uma baseline velha deixa de dar orçamento cego.
+GATE_FAILING=""
+GATE_REASON=""
+
+# ── A BASELINE TEM DE ENCOLHER SOZINHA ────────────────────────────────────
+#
+# O portão bloqueia falhas novas, mas uma baseline velha continua a carregar
+# falhas que já foram arranjadas — e cada uma dessas entradas perdoa um
+# RE-partir do mesmo teste. A `baseline.sh` diz isto no cabeçalho ("or the
+# baseline goes stale and starts forgiving real regressions") e conta com
+# alguém a re-correr à mão. Ninguém corre. Em 2026-08-26 a baseline tinha
+# orçamento de sobra e foi o que deixou passar quatro merges com a shard 4
+# vermelha.
+#
+# Isto usa a prova que o portão já produziu — `GATE_FAILING`, o conjunto de
+# falhas na suite completa do código que acabou de integrar — e retira da
+# baseline tudo o que já não falha. Sem correr nada outra vez: o orçamento só
+# desce, nunca sobe, e a `baseline.sh` continua a ser a forma de o refazer de
+# raiz.
+#
+# Quando a baseline fica vazia, o ficheiro é APAGADO, e não deixado com uma
+# lista vazia: é assim que o portão volta ao modo estrito, como a baseline.sh
+# documenta.
+prune_baseline_after_merge() {
+  [ -s "$BASELINE_FILE" ] || return 0
+
+  local kept
+  kept=$(printf '%s\n' "${GATE_FAILING:-}" | sed '/^$/d')
+
+  local before after tmp
+  before=$(jq -r '(.failed_tests // []) | length' "$BASELINE_FILE" 2>/dev/null || echo 0)
+  tmp="$BASELINE_FILE.tmp"
+
+  # Interseção: mantém-se só o que a baseline tinha E continua a falhar.
+  if ! jq --rawfile still "/dev/stdin" '
+        ($still | split("\n") | map(select(length > 0))) as $s
+        | .failed_tests = ((.failed_tests // []) | map(select(. as $t | $s | index($t))))
+        | .totals.failed_tests = (.failed_tests | length)
+      ' "$BASELINE_FILE" <<< "$kept" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    warn "não consegui podar a baseline — fica como estava"
+    return 0
+  fi
+  mv "$tmp" "$BASELINE_FILE"
+
+  after=$(jq -r '(.failed_tests // []) | length' "$BASELINE_FILE" 2>/dev/null || echo 0)
+  if [ "$after" = "0" ]; then
+    rm -f "$BASELINE_FILE"
+    log "baseline vazia depois do merge — apagada, o portão volta ao modo ESTRITO"
+  elif [ "$after" != "$before" ]; then
+    log "baseline podada: $before -> $after falhas conhecidas"
+  fi
+}
+
 gate_independent() {
-  local wt="$1" le tsc ft
+  local wt="$1" le tsc ft new_failures="" jest_json
   [ -d "$wt" ] || return 1
   log "PORTÃO: a correr lint + tsc + jest no worktree (independente do agente)"
   ( cd "$wt" && npm run lint --silent >/dev/null 2>&1 ); le=$?
   ( cd "$wt" && npx tsc --noEmit >/dev/null 2>&1 ); tsc=$?
-  ft=$( ( cd "$wt" && $(test_cmd) --json 2>/dev/null \
-          | jq -r '([.testResults[]?.assertionResults[]? | select(.status=="failed")] | length) // 0' \
-        ) 2>/dev/null ) || ft=0
+
+  # --json para FICHEIRO, não para stdout: o jest escreve o progresso em stderr
+  # e o sumário em stdout, e misturá-los torna o JSON não-parseável exactamente
+  # quando importa. É a mesma razão documentada na baseline.sh.
+  jest_json="$STATE_DIR/gate-jest-$PR.json"
+  rm -f "$jest_json"
+  ( cd "$wt" && $(test_cmd) -- --json --outputFile="$jest_json" >/dev/null 2>&1 ) || true
+
+  if [ -s "$jest_json" ]; then
+    ft=$(jq -r '[.testResults[]?.assertionResults[]? | select(.status=="failed")] | length' "$jest_json" 2>/dev/null || echo 0)
+    GATE_FAILING=$(jq -r '
+      [ .testResults[].assertionResults[]? | select(.status == "failed")
+        | ((.ancestorTitles // []) + [.title]) | join(" › ") ] | sort | .[]' "$jest_json" 2>/dev/null || true)
+  else
+    # Sem JSON não se sabe nada. Tratar isso como "zero falhas" seria autorizar
+    # o merge por ignorância, que é o oposto do que este portão existe para
+    # fazer.
+    warn "PORTÃO: o jest não produziu JSON — trato como REPROVADO"
+    rm -f "$jest_json"
+    return 1
+  fi
+  rm -f "$jest_json"
   ft=${ft:-0}
 
   # Sem baseline: portão estrito.
@@ -397,16 +487,43 @@ gate_independent() {
   b_ft=$(jqv "$BASELINE_FILE" '.totals.failed_tests' '0')
   b_le=${b_le:-0}; b_ft=${b_ft:-0}
 
+  # As falhas que a baseline conhece, uma por linha, para comparar por identidade.
+  local b_list
+  b_list=$(jq -r '(.failed_tests // []) | .[]' "$BASELINE_FILE" 2>/dev/null || true)
+
+  # Falhas NOVAS = as deste worktree que a baseline não tem. `comm -13` sobre
+  # duas listas ordenadas; ambos os lados já vêm de `| sort`.
+  new_failures=$(comm -13 \
+    <(printf '%s\n' "$b_list" | sed '/^$/d') \
+    <(printf '%s\n' "${GATE_FAILING:-}" | sed '/^$/d') 2>/dev/null || true)
+
   local regr=0 motivo=""
   if [ "$tsc" != "0" ] && [ "$b_tsc" = "true" ]; then regr=1; motivo="tsc limpo na baseline, agora falha"; fi
   if [ "$le" != "0" ] && [ "${b_le:-0}" = "0" ]; then regr=1; motivo="lint limpo na baseline, agora falha"; fi
-  if [ "$ft" -gt "$b_ft" ]; then regr=1; motivo="testes a falhar subiram ($ft > $b_ft baseline)"; fi
+  if [ -n "${new_failures//[[:space:]]/}" ]; then
+    regr=1
+    motivo="falhas NOVAS que a baseline não tem:
+$(printf '%s\n' "$new_failures" | sed 's/^/    - /')"
+  fi
+  # Mantido além da comparação de conjuntos: o mesmo título a falhar em duas
+  # suites diferentes colapsa numa só linha, portanto a contagem pode subir com
+  # o conjunto inalterado.
+  if [ "$ft" -gt "$b_ft" ]; then regr=1; motivo="${motivo:+$motivo
+}testes a falhar subiram ($ft > $b_ft baseline)"; fi
 
   if [ "$regr" = "1" ]; then
     log "PORTÃO: REPROVADO por REGRESSÃO ($motivo) — PR NÃO integrado"
+    GATE_REASON="$motivo"
     return 1
   fi
-  log "PORTÃO: OK (sem regressão vs baseline le=$le tsc=$tsc falhas=$ft vs b_le=$b_le b_tsc=$b_tsc b_ft=$b_ft) — merge autorizado"
+
+  # O PR arranjou coisas que a baseline tinha por falhar. Vale dizê-lo: a
+  # baseline só desce quando alguém corre a baseline.sh outra vez, e uma
+  # desactualizada é o que dá orçamento a mais ao portão.
+  if [ "$ft" -lt "$b_ft" ]; then
+    log "PORTÃO: este PR baixa as falhas de $b_ft para $ft — vale re-correr a baseline.sh"
+  fi
+  log "PORTÃO: OK (sem falhas novas vs baseline le=$le tsc=$tsc falhas=$ft vs b_le=$b_le b_tsc=$b_tsc b_ft=$b_ft) — merge autorizado"
   return 0
 }
 
@@ -454,12 +571,27 @@ corridos pelo orquestrador, não pelo agente) falhou. Por regra, um PR só
 integra em \`$BASE\` se o portão passar — um veredicto favorável do agente não
 chega.
 
+**O que o portão detetou:**
+\`\`\`
+${GATE_REASON:-(sem detalhe)}
+\`\`\`
+
+O critério é regressão, não perfeição: uma falha que a baseline já tinha não
+bloqueia. O que bloqueia é uma falha **nova** — comparada por identidade, não
+por contagem, porque uma contagem igual esconde um teste arranjado e outro
+partido.
+
 Devolvido ao implementador para corrigir o que o portão detetou." >/dev/null 2>&1 || true
       [ -n "$ISSUE" ] && {
         comment_issue "$ISSUE" "## Reviewer: portão independente reprovou
 
-O agente aprovou, mas lint/tsc/jest corridos pelo orquestrador falharam. O
-trabalho volta para correção."
+O agente aprovou, mas lint/tsc/jest corridos pelo orquestrador falharam:
+
+\`\`\`
+${GATE_REASON:-(sem detalhe)}
+\`\`\`
+
+O trabalho volta para correção."
         set_state "$ISSUE" "$L_BLOCKED_IMPL"
       }
       # Não marcamos como revisto: o portão pode passar numa próxima passagem se
@@ -509,6 +641,7 @@ completa e reenvia." >/dev/null 2>&1 || true
 
     if [ "$MERGE_OK" = "1" ]; then
       log "PR #$PR integrado em $BASE"
+      prune_baseline_after_merge
       if [ -n "$ISSUE" ]; then
         # No verifier behind this. The reviewer ran lint, tsc and the suite against
         # this exact code and approved it; that is the whole gate, so the issue is
