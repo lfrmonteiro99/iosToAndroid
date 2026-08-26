@@ -1,4 +1,4 @@
-import { computeDragTargetIndex, computeEdgeScrollDirection } from '../launcherDrag';
+import { computeDragTargetIndex, computeEdgeScrollDirection, computeWidgetDragTargetCell } from '../launcherDrag';
 
 // #761: jiggle-mode drag-to-reorder. These are the pure functions the pan
 // gesture in LauncherHomeScreen/AppIcon delegates to for (a) which grid cell
@@ -74,5 +74,47 @@ describe('computeEdgeScrollDirection', () => {
   it('one dp outside the threshold does not trigger', () => {
     expect(computeEdgeScrollDirection(41, SCREEN_WIDTH, THRESHOLD)).toBeNull();
     expect(computeEdgeScrollDirection(359, SCREEN_WIDTH, THRESHOLD)).toBeNull();
+  });
+});
+
+// #938: widget drag lands by its TOP-LEFT CORNER, not the finger — a 4x4
+// widget dropped from wherever inside it the user grabbed must not jump to a
+// cell the finger's own position would imply.
+describe('computeWidgetDragTargetCell', () => {
+  const base = { originCol: 0, originRow: 0, cellWidth: 80, cellHeight: 88, cols: 4, rows: 6, colSpan: 2, rowSpan: 2 };
+
+  it('one cell right moves the corner column by 1', () => {
+    expect(computeWidgetDragTargetCell({ ...base, translationX: 80, translationY: 0 })).toEqual({ col: 1, row: 0 });
+  });
+
+  it('one cell down moves the corner row by 1', () => {
+    expect(computeWidgetDragTargetCell({ ...base, translationX: 0, translationY: 88 })).toEqual({ col: 0, row: 1 });
+  });
+
+  it('no movement returns the origin unchanged', () => {
+    expect(computeWidgetDragTargetCell({ ...base, translationX: 0, translationY: 0 })).toEqual({ col: 0, row: 0 });
+  });
+
+  it('rounds a partial-cell drag to the nearest cell', () => {
+    expect(computeWidgetDragTargetCell({ ...base, translationX: 45, translationY: 0 })).toEqual({ col: 1, row: 0 });
+  });
+
+  it('clamps the column so the FULL footprint stays on the grid, not just the corner', () => {
+    // cols=4, colSpan=2 -> max corner col is 2. A drag past that would let a
+    // 2-wide widget hang off the right edge if only the corner were clamped.
+    expect(computeWidgetDragTargetCell({ ...base, translationX: 800, translationY: 0 })).toEqual({ col: 2, row: 0 });
+  });
+
+  it('clamps the row so the FULL footprint stays on the grid', () => {
+    // rows=6, rowSpan=2 -> max corner row is 4.
+    expect(computeWidgetDragTargetCell({ ...base, translationX: 0, translationY: 880 })).toEqual({ col: 0, row: 4 });
+  });
+
+  it('never drags into negative cells', () => {
+    expect(computeWidgetDragTargetCell({ ...base, originCol: 1, originRow: 1, translationX: -300, translationY: -300 })).toEqual({ col: 0, row: 0 });
+  });
+
+  it('a widget wider than the grid clamps to column 0 (maxCol floors at 0)', () => {
+    expect(computeWidgetDragTargetCell({ ...base, colSpan: 4, cols: 4, translationX: 200, translationY: 0 })).toEqual({ col: 0, row: 0 });
   });
 });
