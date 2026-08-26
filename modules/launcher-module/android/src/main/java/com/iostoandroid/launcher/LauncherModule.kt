@@ -1895,8 +1895,9 @@ class LauncherModule : Module() {
      *    anti-aliased by drawPath (unlike clipPath, which is not), so the edge
      *    stays smooth at 60pt instead of serrated.
      *  - A circular source icon will still show empty (transparent) corners
-     *    after masking; that is the known-incomplete "dominant color" item of
-     *    epic #465 and is explicitly out of scope here (#480 does not fix it).
+     *    after masking; those are backfilled with [KMeansColorPicker]'s
+     *    dominant colour before the mask is even applied (§4.1.3 of epic
+     *    #466), see [backfillTransparentCorners].
      */
     /**
      * Applies [mask] to [src]: the superellipse mask at the requested exponent,
@@ -1919,11 +1920,11 @@ class LauncherModule : Module() {
     }
 
     /**
-     * Average the four edge-midpoint pixels of [src] — a cheap "dominant colour"
-     * for backfilling transparent mask corners on circular/banner icons so they
-     * don't show holes (the known-incomplete item of #465 / #480). Good enough
-     * because the mask only clips the four squircle corners, which sit on the
-     * icon's own edge colour.
+     * Average the four edge-midpoint pixels of [src]. Fallback used by
+     * [backfillTransparentCorners] only when [KMeansColorPicker] finds no
+     * usable cluster (e.g. an icon that is itself almost entirely white or
+     * black, so every cluster gets discarded) — kept because it is still
+     * better than an arbitrary fixed colour in that degenerate case.
      */
     private fun edgeMidpointColor(src: Bitmap): Int {
         val w = src.width
@@ -1944,9 +1945,15 @@ class LauncherModule : Module() {
     }
 
     /**
-     * Backfill transparent corners of [src] with the edge-midpoint colour so a
-     * circular/banner icon keeps a solid silhouette after masking. Returns the
-     * original bitmap when it already fills its bounds.
+     * Backfill transparent corners of [src] with its k-means dominant colour
+     * (§4.1.3 of epic #466) so a circular/banner icon keeps a solid
+     * silhouette after masking, instead of a hole that shows through to
+     * whatever sits under the launcher grid. Falls back to
+     * [edgeMidpointColor] when [KMeansColorPicker] finds no usable cluster.
+     * Returns the original bitmap when it already fills its bounds. Runs once
+     * per icon at cache-write time (called only from [writeIconToFile], which
+     * itself only runs when the cached PNG doesn't exist yet) — a cache hit
+     * never re-enters this function.
      */
     private fun backfillTransparentCorners(src: Bitmap): Bitmap {
         val w = src.width
@@ -1954,7 +1961,9 @@ class LauncherModule : Module() {
         // Quick reject: if the centre pixel is opaque, the icon fills its box
         // (square/adaptive) and masking can't expose a hole.
         if (Color.alpha(src.getPixel(w / 2, h / 2)) != 0) return src
-        val fill = edgeMidpointColor(src)
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        val fill = KMeansColorPicker.dominantColor(pixels) ?: edgeMidpointColor(src)
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawColor(fill)
