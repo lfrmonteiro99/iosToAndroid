@@ -333,6 +333,14 @@ interface LauncherModuleType {
   // requestAllPermissions' fire-and-forget contract.
   isDefaultDialer(): Promise<boolean>;
   requestDefaultDialer(): Promise<boolean>;
+  // Incoming calls (#921): answer/reject the Call the InCallService is
+  // currently holding a reference to (LauncherInCallService.kt). [message],
+  // when non-empty, rejects with a "decline with message" SMS instead of a
+  // plain reject — cheap to pass through since Call.reject already takes it.
+  // false when there is no ringing call to act on (already answered/ended,
+  // or this app isn't the InCallService bound to Telecom).
+  answerCall(): Promise<boolean>;
+  rejectCall(message?: string): Promise<boolean>;
   // Notifications
   getNotifications(): Promise<DeviceNotification[]>;
   clearNotification(key: string): Promise<boolean>;
@@ -476,6 +484,8 @@ const stub: LauncherModuleType = {
   makeCall: async () => false,
   isDefaultDialer: async () => false,
   requestDefaultDialer: async () => false,
+  answerCall: async () => false,
+  rejectCall: async () => false,
   getNotifications: async () => [],
   clearNotification: async () => false,
   clearAllNotifications: async () => false,
@@ -769,6 +779,14 @@ function createBridgedModule(): LauncherModuleType {
     requestDefaultDialer: async () => {
       try { return await nativeModule.requestDefaultDialer(); }
       catch (e) { console.error('LauncherModule.requestDefaultDialer failed:', e); reportBridgeError('requestDefaultDialer', e); return false; }
+    },
+    answerCall: async () => {
+      try { return await nativeModule.answerCall(); }
+      catch (e) { console.error('LauncherModule.answerCall failed:', e); reportBridgeError('answerCall', e); return false; }
+    },
+    rejectCall: async (message?: string) => {
+      try { return await nativeModule.rejectCall(message ?? null); }
+      catch (e) { console.error('LauncherModule.rejectCall failed:', e); reportBridgeError('rejectCall', e); return false; }
     },
     getNotifications: async () => {
       try { return await nativeModule.getNotifications(); }
@@ -1163,6 +1181,36 @@ export function addForegroundAppListener(
 ): () => void {
   const sub = addModuleListener<{ packageName: string }>('onForegroundAppChanged', (n: { packageName: string }) => {
     listener(n.packageName);
+  });
+  return () => sub.remove();
+}
+
+/**
+ * A Telecom call state transition, emitted by LauncherInCallService (#919).
+ * `state` mirrors android.telecom.Call's constants as lowercase strings —
+ * 'ringing' is the one that means "incoming call, not yet answered" (an
+ * outgoing call placed via makeCall goes dialing → active, never ringing on
+ * our side). `number` is the raw dialable string from the call's handle;
+ * empty when Telecom didn't attach one.
+ */
+export interface CallStateEvent {
+  state: string;
+  number: string;
+}
+
+/**
+ * Subscribe to Telecom call-state transitions (#921). This only fires while
+ * this app is bound as the system's InCallService, which Telecom only does
+ * once the app is the default dialer — so on a device where this app isn't
+ * the dialer, the listener is registered but simply never called, and
+ * nothing about incoming-call handling changes.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addCallStateListener(
+  listener: (event: CallStateEvent) => void,
+): () => void {
+  const sub = addModuleListener<Partial<CallStateEvent>>('onCallStateChanged', (n) => {
+    listener({ state: n.state ?? '', number: n.number ?? '' });
   });
   return () => sub.remove();
 }

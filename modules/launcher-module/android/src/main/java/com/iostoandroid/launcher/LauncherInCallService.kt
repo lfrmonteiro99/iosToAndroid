@@ -16,14 +16,45 @@ import android.telecom.InCallService
  * for the lifetime of the call, instead of disappearing under the installed
  * dialer's screen once Telecom takes over (the symptom in the issue).
  *
- * Scope for #919 is deliberately narrow: forward call state so JS can react,
- * nothing more. Audio routing (mute/speaker/hold) and incoming calls are out
- * of scope (separate issues) — onCallAdded/onStateChanged still fire for a
- * ringing (incoming) call because Telecom does not let a bound InCallService
- * opt out of that, but no UI or answer/reject action is wired to it here, so
- * behaviour for incoming calls is unchanged by this file.
+ * Scope for #919 was deliberately narrow: forward call state so JS can react,
+ * nothing more. #921 (incoming calls, passo 6 de #378) builds on top of that:
+ * [currentCall] keeps the ringing/active Call reference so JS's Accept/Decline
+ * actions (LauncherModule.answerCall/rejectCall) have something to act on —
+ * Telecom hands calls to this service regardless of what CallScreen shows,
+ * so answer/reject here is the only way to actually affect the call.
  */
 class LauncherInCallService : InCallService() {
+
+    companion object {
+        @Volatile private var currentCall: Call? = null
+
+        /** True (call answered) when there is a call to answer; false otherwise. */
+        fun answerCurrentCall(): Boolean {
+            val call = currentCall ?: return false
+            return try {
+                call.answer(0) // VideoProfile.STATE_AUDIO_ONLY
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        /**
+         * Rejects the current call. [message], when non-empty, sends the Telecom
+         * "reject with message" SMS variant — Call.reject already takes that
+         * pair of arguments, so this is a direct, cheap pass-through rather than
+         * a separate feature.
+         */
+        fun rejectCurrentCall(message: String?): Boolean {
+            val call = currentCall ?: return false
+            return try {
+                call.reject(!message.isNullOrEmpty(), message)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
 
     private val callback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
@@ -33,12 +64,14 @@ class LauncherInCallService : InCallService() {
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
+        currentCall = call
         call.registerCallback(callback)
         emitState(call, call.state)
     }
 
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
+        if (currentCall === call) currentCall = null
         call.unregisterCallback(callback)
         LauncherModule.emitEvent("onCallEnded", Bundle())
     }

@@ -978,6 +978,21 @@ class LauncherModule : Module() {
             }
         }
 
+        // ── Incoming calls (#921, passo 6 de #378) ─────────────────────────
+        // LauncherInCallService (#919) holds the ringing/active Call reference;
+        // these just forward to it. false when there is no call to act on
+        // (already answered/ended, or Telecom never bound this service — i.e.
+        // this app isn't the default dialer, matching the "nothing changes
+        // when we're not the Dialer" acceptance criterion).
+
+        AsyncFunction("answerCall") {
+            LauncherInCallService.answerCurrentCall()
+        }
+
+        AsyncFunction("rejectCall") { message: String? ->
+            LauncherInCallService.rejectCurrentCall(message)
+        }
+
         // ── Notifications ────────────────────────────────────────────────
 
         AsyncFunction("getNotifications") {
