@@ -202,7 +202,8 @@ import {
   builtInAppName,
 } from '../utils/builtInAppRoutes';
 import { computeHomeGridLayout } from '../widgets/homeGridLayout';
-import { isOnHomePage } from '../widgets/widgetInstances';
+import { ALLOWED_WIDGET_SIZES, isOnHomePage, type WidgetInstance, type WidgetSize } from '../widgets/widgetInstances';
+import { WIDGET_LABELS, type WidgetType } from '../widgets/TodayWidgets';
 import { logger } from '../utils/logger';
 import {
   IOS_FACADE_BY_PACKAGE,
@@ -704,6 +705,103 @@ export function layoutHomeAppsWithGaps(eligibleApps: InstalledApp[], homeApps: H
 }
 
 // ---------------------------------------------------------------------------
+// HomeWidgetSlot — a placed widget's own box on the home grid (#937)
+// ---------------------------------------------------------------------------
+
+interface HomeWidgetSlotProps {
+  instance: WidgetInstance;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  isJiggling: boolean;
+  reduceMotion: boolean;
+  onLongPress: (instance: WidgetInstance) => void;
+  children: React.ReactNode;
+}
+
+// React.memo (#518, same convention as AppIcon/FolderIcon above): a page
+// re-render (e.g. paging) must not re-run this component's animated-style
+// wiring for every widget on every other page.
+const HomeWidgetSlot = React.memo(function HomeWidgetSlot({
+  instance,
+  left,
+  top,
+  width,
+  height,
+  isJiggling,
+  reduceMotion,
+  onLongPress,
+  children,
+}: HomeWidgetSlotProps) {
+  // Geometry as shared values so a resize — or any other reflow that moves
+  // this widget, e.g. an icon added ahead of it pushing it to a new cell —
+  // TRANSITIONS instead of snapping, with the same spring presets already
+  // established for the rest of the launcher (#487/#492) rather than a
+  // bespoke animation. `mounted` guards the very first render: without it the
+  // widget would spring in from (0,0)/0x0 the first time it appears.
+  const animLeft = useSharedValue(left);
+  const animTop = useSharedValue(top);
+  const animWidth = useSharedValue(width);
+  const animHeight = useSharedValue(height);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      animLeft.value = left;
+      animTop.value = top;
+      animWidth.value = width;
+      animHeight.value = height;
+      return;
+    }
+    // eslint-disable-next-line react-hooks/immutability
+    animLeft.value = settle(left, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animTop.value = settle(top, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animWidth.value = settle(width, 'mediumSettle', reduceMotion);
+    // eslint-disable-next-line react-hooks/immutability
+    animHeight.value = settle(height, 'mediumSettle', reduceMotion);
+  }, [left, top, width, height, reduceMotion]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    left: animLeft.value,
+    top: animTop.value,
+    width: animWidth.value,
+    height: animHeight.value,
+  }));
+
+  const handleLongPress = useCallback(() => {
+    onLongPress(instance);
+  }, [onLongPress, instance]);
+
+  return (
+    <Animated.View
+      testID={`launcher-home-widget-${instance.type}`}
+      style={[styles.homeWidgetSlot, animatedStyle]}
+    >
+      {/* Jiggling swallows the widget's own taps (pointerEvents="none") so a
+          long press over it can only reach the resize Pressable below —
+          without this, tapping a jiggling Battery/Storage/Messages widget
+          would still navigate away, same bug #518 fixed for icons via
+          `onPress={isJiggling ? undefined : handlePress}`. */}
+      <View pointerEvents={isJiggling ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
+        {children}
+      </View>
+      {isJiggling && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onLongPress={handleLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Resize ${WIDGET_LABELS[instance.type]} widget`}
+        />
+      )}
+    </Animated.View>
+  );
+});
+
+// ---------------------------------------------------------------------------
 // FolderIcon
 // ---------------------------------------------------------------------------
 
@@ -1003,8 +1101,23 @@ export function LauncherHomeScreen() {
   // widgetMap/config the Today View sheet reads/writes, so a widget looks and
   // behaves identically whether it's reached by swiping right into Today View
   // or seen directly on the home page.
-  const { instances: homeWidgetInstances, loaded: homeWidgetsLoaded } = useWidgetConfig();
-  const homeWidgetMap = useWidgetMap();
+  const { instances: homeWidgetInstances, loaded: homeWidgetsLoaded, resizeWidget: resizeWidgetInstance } = useWidgetConfig();
+  // Content-by-size (#937 AC 8): useWidgetMap renders one node per TYPE, so a
+  // per-instance size can only flow into it as "the size of whichever placed
+  // instance of this type we pick" — the last one wins for a type with two
+  // differently-sized instances on the SAME page. That is an accepted, narrow
+  // edge case (documented in the PR): the underlying data for a type (one
+  // battery level, one weather reading) is already a single device-wide
+  // value shared by every instance of it, so this only affects how much of
+  // that shared value a second same-type widget shows, never what it shows.
+  const homeWidgetSizes = useMemo(() => {
+    const sizes: Partial<Record<WidgetType, WidgetSize>> = {};
+    for (const instance of homeWidgetInstances) {
+      if (isOnHomePage(instance)) sizes[instance.type] = instance.size;
+    }
+    return sizes;
+  }, [homeWidgetInstances]);
+  const homeWidgetMap = useWidgetMap(homeWidgetSizes);
 
   // Tap to Wake (#608): the HOME-press effect below is registered with deps
   // [openFolder, currentPage] (it must not re-subscribe on every render), so
@@ -1368,6 +1481,38 @@ export function LauncherHomeScreen() {
     hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     openActionSheet(app);
   }, [isJiggling, openActionSheet]);
+
+  // Widget resize (#937) — long-press a placed widget while jiggling opens a
+  // "Small / Medium / Large" menu instead of the app action sheet above; a
+  // widget instance isn't an InstalledApp so it needs its own sheet state
+  // rather than overloading `actionSheet.app`.
+  const [widgetActionSheet, setWidgetActionSheet] = useState<{
+    visible: boolean;
+    instance: WidgetInstance | null;
+  }>({ visible: false, instance: null });
+
+  const closeWidgetActionSheet = useCallback(() => {
+    setWidgetActionSheet({ visible: false, instance: null });
+  }, []);
+
+  const handleWidgetLongPress = useCallback((instance: WidgetInstance) => {
+    if (!isJiggling) return;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setWidgetActionSheet({ visible: true, instance });
+  }, [isJiggling]);
+
+  const widgetActionSheetOptions = useMemo(() => {
+    const instance = widgetActionSheet.instance;
+    if (!instance) return [];
+    const sizeLabels: Record<WidgetSize, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
+    return ALLOWED_WIDGET_SIZES[instance.type].map((size) => ({
+      label: size === instance.size ? `${sizeLabels[size]} (current)` : sizeLabels[size],
+      onPress: () => {
+        closeWidgetActionSheet();
+        resizeWidgetInstance(instance.id, size);
+      },
+    }));
+  }, [widgetActionSheet.instance, closeWidgetActionSheet, resizeWidgetInstance]);
 
   // Stable across renders (#518) — passadas directamente a AppIcon/FolderIcon
   // em vez de uma arrow function nova por ícone a cada render, para que
@@ -2230,19 +2375,19 @@ export function LauncherHomeScreen() {
               {homeWidgetsLoaded && homeLayout[pageIndex]?.widgets.length > 0 && (
                 <View testID={`launcher-home-widgets-${pageIndex}`} style={StyleSheet.absoluteFill} pointerEvents="box-none">
                   {homeLayout[pageIndex].widgets.map((placed) => (
-                    <View
+                    <HomeWidgetSlot
                       key={placed.id}
-                      testID={`launcher-home-widget-${placed.instance.type}`}
-                      style={{
-                        position: 'absolute',
-                        left: placed.col * gridGeometry.cellWidth,
-                        top: placed.row * cellHeight,
-                        width: placed.colSpan * gridGeometry.cellWidth - HOME_WIDGET_GAP,
-                        height: placed.rowSpan * cellHeight - HOME_WIDGET_GAP,
-                      }}
+                      instance={placed.instance}
+                      left={placed.col * gridGeometry.cellWidth}
+                      top={placed.row * cellHeight}
+                      width={placed.colSpan * gridGeometry.cellWidth - HOME_WIDGET_GAP}
+                      height={placed.rowSpan * cellHeight - HOME_WIDGET_GAP}
+                      isJiggling={isJiggling}
+                      reduceMotion={reduceMotion}
+                      onLongPress={handleWidgetLongPress}
                     >
                       {homeWidgetMap[placed.instance.type]}
-                    </View>
+                    </HomeWidgetSlot>
                   ))}
                 </View>
               )}
@@ -2343,6 +2488,16 @@ export function LauncherHomeScreen() {
         options={actionSheetOptions}
       />
 
+      {/* Widget resize sheet (#937) — long-press a placed widget in jiggle
+          mode. Only the sizes ALLOWED_WIDGET_SIZES declares for this widget's
+          type are offered (AC 7). */}
+      <CupertinoActionSheet
+        visible={widgetActionSheet.visible}
+        onClose={closeWidgetActionSheet}
+        title={widgetActionSheet.instance ? `Resize ${WIDGET_LABELS[widgetActionSheet.instance.type]}` : undefined}
+        options={widgetActionSheetOptions}
+      />
+
       {/* Home indicator is rendered globally from App.tsx (HomeIndicator). */}
 
       {/* ---------------------------------------------------------------- */}
@@ -2413,6 +2568,12 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // A placed home-screen widget's own box (#937) — position/size come from
+  // the animated style HomeWidgetSlot drives; this only fixes it `absolute`.
+  homeWidgetSlot: {
+    position: 'absolute',
   },
 
   // Default launcher banner

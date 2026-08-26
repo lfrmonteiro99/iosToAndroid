@@ -45,6 +45,30 @@ export const DEFAULT_WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
   screenTime: 'small',
 };
 
+/**
+ * Sizes a type may actually be resized to (#937, AC 5).
+ *
+ * A size only belongs here when the widget has DIFFERENT content to show at
+ * it — offering a size that just stretches the small layout is what the issue
+ * calls out as reading like a bug. Battery/Storage/Messages/ScreenTime are a
+ * single stat each (a percentage, a count) with nothing in the rest of the app
+ * state to fill a bigger card without inventing data, so they stay
+ * single-size. Weather already carries city + high/low that only `small`
+ * hides; Up Next already caps its event list — `medium` shows the very next
+ * one, `large` the same up-to-3 it always has. Every entry's own
+ * `DEFAULT_WIDGET_SIZES` value is included, so a freshly-placed widget is
+ * always resizable to at least its own starting size (a no-op, but never a
+ * rejected one).
+ */
+export const ALLOWED_WIDGET_SIZES: Record<WidgetType, readonly WidgetSize[]> = {
+  battery: ['small'],
+  storage: ['small'],
+  weather: ['small', 'medium', 'large'],
+  upNext: ['medium', 'large'],
+  messages: ['small'],
+  screenTime: ['small'],
+};
+
 /** A widget the user has placed, as opposed to a type that is switched on. */
 export interface WidgetInstance {
   /** Stable across restarts — it is the key everything else refers to. */
@@ -236,8 +260,20 @@ export function moveWidget(
   );
 }
 
+/**
+ * Resize an instance, refusing a size its type does not declare (#937 AC 7).
+ *
+ * A silent no-op rather than throwing: the only caller is the UI, which
+ * already only offers `ALLOWED_WIDGET_SIZES[type]` — this is the backstop for
+ * a stale menu or a corrupt/hand-edited request, not the normal path, so
+ * crashing the reducer over it would be worse than ignoring it.
+ */
 export function resizeWidget(instances: WidgetInstance[], id: string, size: WidgetSize): WidgetInstance[] {
-  return instances.map((i) => (i.id === id ? { ...i, size } : i));
+  return instances.map((i) => {
+    if (i.id !== id) return i;
+    if (!ALLOWED_WIDGET_SIZES[i.type].includes(size)) return i;
+    return { ...i, size };
+  });
 }
 
 /**

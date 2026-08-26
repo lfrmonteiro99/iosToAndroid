@@ -1,4 +1,5 @@
 import {
+  ALLOWED_WIDGET_SIZES,
   DEFAULT_WIDGET_SIZES,
   addWidget,
   instanceTypes,
@@ -220,6 +221,30 @@ describe('CRUD', () => {
     let list = addWidget(addWidget([], 'weather'), 'weather');
     list = resizeWidget(list, list[0].id, 'large');
     expect(list.map((i) => i.size)).toEqual(['large', 'medium']);
+  });
+
+  // #937 AC 7: a size not declared for the type is refused, not silently
+  // accepted. Battery only declares 'small' — nothing else has content to
+  // show at a bigger footprint (see ALLOWED_WIDGET_SIZES's own comment).
+  it('resizeWidget refuses a size the type does not declare, leaving the instance untouched', () => {
+    const list = addWidget([], 'battery');
+    const [resized] = resizeWidget(list, list[0].id, 'large');
+    expect(resized.size).toBe('small');
+    expect(resized).toEqual(list[0]);
+  });
+
+  it('resizeWidget still applies a size the type DOES declare', () => {
+    const list = addWidget([], 'weather');
+    const [resized] = resizeWidget(list, list[0].id, 'small');
+    expect(resized.size).toBe('small');
+  });
+
+  it("every type's own DEFAULT_WIDGET_SIZES entry is one of its ALLOWED_WIDGET_SIZES", () => {
+    // A freshly-placed widget must always be resizable back to the size it
+    // started at — otherwise its own default would be an invalid state.
+    for (const type of ALL_WIDGET_TYPES) {
+      expect(ALLOWED_WIDGET_SIZES[type]).toContain(DEFAULT_WIDGET_SIZES[type]);
+    }
   });
 });
 
