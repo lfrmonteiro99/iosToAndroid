@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import { Text, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { render, act, fireEvent } from '../../test-utils';
 import { useTheme } from '../../theme/ThemeContext';
 import { useSettings } from '../../store/SettingsStore';
@@ -323,6 +324,144 @@ describe('Weather gradient contrast (#934 WCAG AA)', () => {
         contrastRatio(WidgetGlassText.primary, darker),
       );
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Weather: the RENDERED nodes actually use the opaque tone (#934 reviewer r2)
+//
+// The block above only proves the *token* WidgetGlassText.primary clears AA on
+// every gradient stop — it says nothing about which tone each node picks. The
+// translucent tones are still exported and still baked into the shared
+// `styles.widgetTitle` / `styles.widgetSubtext` / `styles.weatherDesc` bases,
+// so a dropped inline override would silently put `title` (3.81:1) or
+// `secondary` (2.78:1) back on a gradient stop. These tests read the resolved
+// `color` off the real rendered nodes and then push that resolved value
+// through the same WCAG formula, so the guard is end-to-end.
+// ---------------------------------------------------------------------------
+
+describe('Weather text tone on the gradient surface (#934 reviewer r2)', () => {
+  const WCAG_AA_NORMAL_TEXT = 4.5;
+
+  /** Resolved `color` of a rendered host node, after style-array flattening. */
+  function resolvedColor(node: { props: { style?: unknown } }): unknown {
+    return flattenStyle(node.props.style).color;
+  }
+
+  it('renders title, city, condition, temperature and H:/L: in the opaque primary tone', () => {
+    const view = render(
+      <WeatherWidget temp={24} condition="Sunny" icon="sunny" city="Lisbon" maxTemp={27} minTemp={19} />,
+    );
+
+    for (const label of ['Weather', 'Lisbon', 'Sunny', '24°', 'H:27°  L:19°']) {
+      expect(resolvedColor(view.getByText(label))).toBe(WidgetGlassText.primary);
+    }
+    const icons = view.UNSAFE_getAllByType(Ionicons);
+    expect(icons).toHaveLength(1);
+    expect(icons[0].props.color).toBe(WidgetGlassText.primary);
+  });
+
+  it('renders the "Unable to load weather" path in the opaque primary tone too', () => {
+    const view = render(<WeatherWidget temp={0} condition="" icon="" city="Lisbon" />);
+
+    for (const label of ['Weather', 'Unable to load weather']) {
+      expect(resolvedColor(view.getByText(label))).toBe(WidgetGlassText.primary);
+    }
+    const icons = view.UNSAFE_getAllByType(Ionicons);
+    expect(icons).toHaveLength(1);
+    expect(icons[0].props.name).toBe('cloud-offline');
+    expect(icons[0].props.color).toBe(WidgetGlassText.primary);
+  });
+
+  it.each([
+    ['sunny', 'clear'],
+    ['cloud', 'cloudy'],
+    ['rainy', 'rain'],
+    ['snow', 'snow'],
+  ] as const)(
+    'icon "%s" (%s gradient): every resolved text color clears 4.5:1 on both stops of the gradient it is actually painted on',
+    (icon, condition) => {
+      const view = render(
+        <WeatherWidget temp={24} condition="Sunny" icon={icon} city="Lisbon" maxTemp={27} minTemp={19} />,
+      );
+
+      // The surface this widget really rendered — not an assumed one.
+      const gradients = collectByType(view.toJSON() as TestJsonNode, 'LinearGradient');
+      expect(gradients[0].props.colors).toEqual(WidgetWeatherGradients[condition]);
+
+      const colors = ['Weather', 'Lisbon', 'Sunny', '24°', 'H:27°  L:19°'].map((label) =>
+        String(resolvedColor(view.getByText(label))),
+      );
+      colors.push(String(view.UNSAFE_getAllByType(Ionicons)[0].props.color));
+
+      for (const color of colors) {
+        for (const stop of WidgetWeatherGradients[condition]) {
+          expect(contrastRatio(color, stop)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+        }
+      }
+    },
+  );
+
+  it('keeps the opaque tone in light theme (the widget owns its surface, so it must not follow the app tint)', () => {
+    const view = render(
+      <>
+        <Controls />
+        <WeatherWidget temp={24} condition="Sunny" icon="sunny" city="Lisbon" maxTemp={27} minTemp={19} />
+      </>,
+    );
+    act(() => { fireEvent.press(view.getByTestId('set-light')); });
+
+    for (const label of ['Weather', 'Lisbon', 'Sunny', '24°', 'H:27°  L:19°']) {
+      expect(resolvedColor(view.getByText(label))).toBe(WidgetGlassText.primary);
+    }
+  });
+
+  it('keeps the opaque tone with Reduce Transparency on, where the flat fill is the gradient\'s darker stop', () => {
+    const view = render(
+      <>
+        <Controls />
+        <WeatherWidget temp={24} condition="Sunny" icon="sunny" city="Lisbon" maxTemp={27} minTemp={19} />
+      </>,
+    );
+    act(() => { fireEvent.press(view.getByTestId('enable-reduce-transparency')); });
+
+    expect(collectByType(view.toJSON() as TestJsonNode, 'LinearGradient')).toHaveLength(0);
+    for (const label of ['Weather', 'Lisbon', 'Sunny', '24°', 'H:27°  L:19°']) {
+      expect(resolvedColor(view.getByText(label))).toBe(WidgetGlassText.primary);
+    }
+  });
+
+  it('keeps the opaque tone at the largest textScale (inline fontSize must not clobber the inline color)', () => {
+    const view = render(
+      <>
+        <Controls />
+        <WeatherWidget temp={24} condition="Sunny" icon="sunny" city="Lisbon" maxTemp={27} minTemp={19} />
+      </>,
+    );
+    act(() => { fireEvent.press(view.getByTestId('set-text-large')); });
+
+    for (const label of ['Weather', 'Lisbon', 'Sunny', '24°', 'H:27°  L:19°']) {
+      expect(resolvedColor(view.getByText(label))).toBe(WidgetGlassText.primary);
+    }
+  });
+
+  it('keeps the remaining nodes opaque when the city is empty (no city node is rendered at all)', () => {
+    const view = render(
+      <WeatherWidget temp={24} condition="Sunny" icon="sunny" city="" maxTemp={27} minTemp={19} />,
+    );
+
+    expect(view.queryByText('Lisbon')).toBeNull();
+    for (const label of ['Weather', 'Sunny', '24°', 'H:27°  L:19°']) {
+      expect(resolvedColor(view.getByText(label))).toBe(WidgetGlassText.primary);
+    }
+  });
+
+  it('leaves the translucent tones in place for the unmigrated glass widgets (the inverse of the fix)', () => {
+    // Battery still renders on the fixed-dark glass frame, where
+    // WidgetGlassText.title/.secondary were tuned and still read fine — the
+    // Weather fix must not have been applied across the board.
+    const view = render(<BatteryWidget level={0.5} isCharging={false} />);
+    expect(resolvedColor(view.getByText('Battery'))).toBe(WidgetGlassText.title);
   });
 });
 
