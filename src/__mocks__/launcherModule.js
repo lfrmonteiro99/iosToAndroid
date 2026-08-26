@@ -23,6 +23,7 @@ module.exports = {
     setBluetoothEnabled: jest.fn(() => Promise.resolve(true)),
     getStorageInfo: jest.fn(() => Promise.resolve({ totalGB: '128.0', usedGB: '89.3', freeGB: '38.7', usedPercentage: 70 })),
     getRecentMessages: jest.fn(() => Promise.resolve([])),
+    getMessagesForThread: jest.fn(() => Promise.resolve([])),
     getVolume: jest.fn(() => Promise.resolve(0.5)),
     setVolume: jest.fn(() => Promise.resolve(true)),
     openSystemSettings: jest.fn(() => Promise.resolve(true)),
