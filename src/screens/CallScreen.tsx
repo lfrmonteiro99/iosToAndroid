@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { hapticImpact } from '../utils/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettings } from '../store/SettingsStore';
 import { runDefaultDialerFlow } from '../utils/defaultDialerFlow';
+import LauncherModule, { addCallAudioStateListener, type CallAudioState } from '../../modules/launcher-module/src';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,6 +96,20 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
   const insets = useSafeAreaInsets();
   const { number, name } = route.params;
   const displayName = name || number || 'Unknown';
+
+  // CallAudioState reported by LauncherInCallService (#920). null means no
+  // event has ever been observed for this call — either the InCallService
+  // hasn't reported yet, or (the common case) this app isn't the current
+  // default dialer and the call is routed through another app's dialer UI
+  // (ACTION_CALL path, #379). Mute/Speaker stay disabled until this is
+  // non-null, and always reflect this system-reported state, never a local
+  // toggle.
+  const [audioState, setAudioState] = useState<CallAudioState | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = addCallAudioStateListener(setAudioState);
+    return unsubscribe;
+  }, []);
 
   // Pulsing animation while the call is being placed
   const pulseScale = useSharedValue(1);
@@ -174,6 +189,32 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
     navigation.goBack();
   }, [navigation]);
 
+  // Only reachable while audioState is non-null — ControlButton's disabled
+  // prop makes onPress undefined otherwise — but the audioState guard is kept
+  // so a stray call (e.g. a queued press resolving after the InCallService
+  // unbinds) cannot fire a command with nothing to reflect it back.
+  //
+  // Calls LauncherModule directly (the statically-imported default, same as
+  // useLiveActivity.ts) rather than through the makeCall/isDefaultDialer
+  // effect's getLauncher() dynamic import above — that indirection exists to
+  // dodge an import-time crash on mount, which doesn't apply to a press
+  // handler, and a static import is what makes this path exercisable by RTL.
+  const handleToggleMute = useCallback(async () => {
+    if (!audioState) return;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      await LauncherModule.setMuted(!audioState.isMuted);
+    } catch (e) { logger.error('CallScreen', 'setMuted failed', e); }
+  }, [audioState]);
+
+  const handleToggleSpeaker = useCallback(async () => {
+    if (!audioState) return;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    try {
+      await LauncherModule.setAudioRoute(audioState.route === 'speaker' ? 'earpiece' : 'speaker');
+    } catch (e) { logger.error('CallScreen', 'setAudioRoute failed', e); }
+  }, [audioState]);
+
   return (
     <LinearGradient
       colors={['#1a1a2e', '#16213e']}
@@ -198,10 +239,13 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
         {/* Status — honest label: native dialer handles the actual call */}
         <Text style={[styles.callStatus, { fontSize: 14 * textScale }]}>Call Initiated</Text>
 
-        {/* Disclosure — call and audio controls are managed by the system */}
-        <Text style={[typography.caption2, styles.systemDisclosure]}>
-          Call managed by system phone — audio controls unavailable
-        </Text>
+        {/* Disclosure — shown only on the ACTION_CALL path, where this app is
+            not the default dialer and audio controls stay genuinely inert (#379) */}
+        {!audioState && (
+          <Text style={[typography.caption2, styles.systemDisclosure]}>
+            Call managed by system phone — audio controls unavailable
+          </Text>
+        )}
       </View>
 
       {/* ------------------------------------------------------------------ */}
@@ -210,19 +254,23 @@ export function CallScreen({ navigation, route }: CallScreenProps) {
       <View style={styles.controlsGrid}>
         <View style={styles.controlsRow}>
           <ControlButton
-            icon="mic"
+            icon={audioState?.isMuted ? 'mic-off' : 'mic'}
             label="Mute"
-            onPress={() => {}}
-            disabled
+            onPress={handleToggleMute}
+            active={audioState?.isMuted}
+            disabled={!audioState}
           />
           <ControlButton
-            icon="volume-medium"
+            icon={audioState?.route === 'speaker' ? 'volume-high' : 'volume-medium'}
             label="Speaker"
-            onPress={() => {}}
-            disabled
+            onPress={handleToggleSpeaker}
+            active={audioState?.route === 'speaker'}
+            disabled={!audioState}
           />
         </View>
-        <Text style={[typography.caption2, styles.audioHint]}>Audio controlled by system dialer</Text>
+        {!audioState && (
+          <Text style={[typography.caption2, styles.audioHint]}>Audio controlled by system dialer</Text>
+        )}
       </View>
 
       {/* ------------------------------------------------------------------ */}

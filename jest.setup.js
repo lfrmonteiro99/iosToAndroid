@@ -362,6 +362,8 @@ jest.mock('./modules/launcher-module/src', () => ({
   // Return a no-op unsubscribe; individual tests override with mockReturnValue.
   addNotificationListener: jest.fn(() => jest.fn()),
   addNotificationRemovedListener: jest.fn(() => jest.fn()),
+  // CallScreen subscribes to this on mount (#920) — see src/__mocks__/launcherModule.js.
+  addCallAudioStateListener: jest.fn(() => jest.fn()),
   default: {
     getInstalledApps: jest.fn(() => Promise.resolve([])),
     launchApp: jest.fn(() => Promise.resolve(true)),
@@ -387,6 +389,9 @@ jest.mock('./modules/launcher-module/src', () => ({
     isFlashlightOn: jest.fn(() => Promise.resolve(false)),
     getCallLog: jest.fn(() => Promise.resolve([])),
     makeCall: jest.fn(() => Promise.resolve(true)),
+    // #920 Call audio routing
+    setMuted: jest.fn(() => Promise.resolve(true)),
+    setAudioRoute: jest.fn(() => Promise.resolve(true)),
     getNotifications: jest.fn(() => Promise.resolve([])),
     clearNotification: jest.fn(() => Promise.resolve(true)),
     clearAllNotifications: jest.fn(() => Promise.resolve(true)),

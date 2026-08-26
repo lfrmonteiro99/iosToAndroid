@@ -333,6 +333,13 @@ interface LauncherModuleType {
   // requestAllPermissions' fire-and-forget contract.
   isDefaultDialer(): Promise<boolean>;
   requestDefaultDialer(): Promise<boolean>;
+  // Call audio routing (#920): commands LauncherInCallService's Telecom-bound
+  // CallAudioState. Both are no-ops (resolve false) while no InCallService is
+  // bound — i.e. this app is not the current default dialer — mirroring the
+  // "only meaningful once a real CallAudioState event was observed" contract
+  // CallScreen relies on (see addCallAudioStateListener).
+  setMuted(muted: boolean): Promise<boolean>;
+  setAudioRoute(route: CallAudioRoute): Promise<boolean>;
   // Notifications
   getNotifications(): Promise<DeviceNotification[]>;
   clearNotification(key: string): Promise<boolean>;
@@ -476,6 +483,8 @@ const stub: LauncherModuleType = {
   makeCall: async () => false,
   isDefaultDialer: async () => false,
   requestDefaultDialer: async () => false,
+  setMuted: async () => false,
+  setAudioRoute: async () => false,
   getNotifications: async () => [],
   clearNotification: async () => false,
   clearAllNotifications: async () => false,
@@ -769,6 +778,14 @@ function createBridgedModule(): LauncherModuleType {
     requestDefaultDialer: async () => {
       try { return await nativeModule.requestDefaultDialer(); }
       catch (e) { console.error('LauncherModule.requestDefaultDialer failed:', e); reportBridgeError('requestDefaultDialer', e); return false; }
+    },
+    setMuted: async (muted: boolean) => {
+      try { return await nativeModule.setMuted(muted); }
+      catch (e) { console.error('LauncherModule.setMuted failed:', e); reportBridgeError('setMuted', e); return false; }
+    },
+    setAudioRoute: async (route: CallAudioRoute) => {
+      try { return await nativeModule.setAudioRoute(route); }
+      catch (e) { console.error('LauncherModule.setAudioRoute failed:', e); reportBridgeError('setAudioRoute', e); return false; }
     },
     getNotifications: async () => {
       try { return await nativeModule.getNotifications(); }
@@ -1110,6 +1127,26 @@ export interface BackTapEvent {
 }
 
 /**
+ * CallAudioState route names (#920), mirroring android.telecom.CallAudioState's
+ * ROUTE_* flags (see CallAudioRouteMapper.kt) — one active route at a time.
+ */
+export type CallAudioRoute = 'earpiece' | 'bluetooth' | 'wired_headset' | 'speaker';
+
+/**
+ * Mic-mute + active audio route reported by LauncherInCallService's
+ * onCallAudioStateChanged (#920). Surfaced to JS via
+ * `addCallAudioStateListener` — only emitted while that InCallService is
+ * actually bound for the active call (this app is the current default
+ * dialer). CallScreen uses "has an event ever been observed" as the signal
+ * that the self-managed/Dialer path is active, since a call routed through
+ * ACTION_CALL to a different app's dialer UI never fires this event.
+ */
+export interface CallAudioState {
+  isMuted: boolean;
+  route: CallAudioRoute;
+}
+
+/**
  * Subscribe to apps being installed, uninstalled or updated on the device.
  * Backed by a dynamically registered BroadcastReceiver on the Kotlin side
  * (PackageChangeReceiver) — implicit package broadcasts are not delivered to
@@ -1133,6 +1170,31 @@ export function addBackTapListener(
   listener: (event: BackTapEvent) => void,
 ): () => void {
   const sub = addModuleListener<BackTapEvent>('onBackTap', listener);
+  return () => sub.remove();
+}
+
+const CALL_AUDIO_ROUTES: CallAudioRoute[] = ['earpiece', 'bluetooth', 'wired_headset', 'speaker'];
+
+/**
+ * Subscribe to CallAudioState changes reported by LauncherInCallService
+ * (#920) — mic-mute state and the active audio route. Only fires while that
+ * InCallService is bound for the active call (this app is the current
+ * default dialer); CallScreen treats "no event observed yet" as the signal
+ * that audio controls stay disabled (ACTION_CALL routed to a different app's
+ * dialer UI, #379). An unrecognized/combined native route ("unknown", see
+ * CallAudioRouteMapper.kt) is normalized to 'earpiece' so callers never have
+ * to special-case it.
+ * Returns an unsubscribe function — call it in the useEffect cleanup.
+ */
+export function addCallAudioStateListener(
+  listener: (state: CallAudioState) => void,
+): () => void {
+  const sub = addModuleListener<{ isMuted?: boolean; route?: string }>('onCallAudioStateChanged', (raw) => {
+    const route = CALL_AUDIO_ROUTES.includes(raw.route as CallAudioRoute)
+      ? (raw.route as CallAudioRoute)
+      : 'earpiece';
+    listener({ isMuted: raw.isMuted ?? false, route });
+  });
   return () => sub.remove();
 }
 
