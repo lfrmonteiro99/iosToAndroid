@@ -5,6 +5,7 @@ import { render, fireEvent, waitFor } from '../../test-utils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConversationScreen } from '../ConversationScreen';
 import { DeviceContext, type DeviceContextValue, type DeviceContact, type DeviceSms } from '../../store/DeviceStore';
+import { addSentMessage } from '../../store/SentMessagesStore';
 
 // useAlert() resolves to a no-op in AllProviders (test-utils does not mount
 // AlertProvider), so alert() calls are invisible to assertions by default.
@@ -269,6 +270,77 @@ describe('ConversationScreen', () => {
     // Sanity: input value reflects the last keystroke.
     const input = getByPlaceholderText('Message') as unknown as { props: { value: string } };
     expect(input.props.value).toBe('Hel');
+  });
+});
+
+describe('ConversationScreen — sent message reappears in the thread (#929)', () => {
+  it('shows the just-sent message immediately, even though the provider never gets it', async () => {
+    // Real behaviour being reproduced: SmsManager sends the SMS but does not
+    // write it to content://sms (only the default SMS app may), so every
+    // getRecentMessages() call — before AND after the send — returns the
+    // exact same (empty) list. If the screen relies on that read to show the
+    // message, it never appears.
+    launcherMock.getRecentMessages.mockResolvedValueOnce([]);
+    activeLauncher.getRecentMessages.mockResolvedValueOnce([]);
+    // Once-only: a persistent mockResolvedValue would leak into the #930 test
+    // below, which relies on the default (unconfirmed) send result.
+    launcherMock.sendSms.mockResolvedValueOnce(true);
+    activeLauncher.sendSms.mockResolvedValueOnce(true);
+
+    const { getByPlaceholderText, getByLabelText, findByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    fireEvent.changeText(getByPlaceholderText('Message'), 'Hello from me');
+    fireEvent.press(getByLabelText('Send message'));
+
+    expect(await findByText('Hello from me')).toBeTruthy();
+  });
+
+  it('still shows the sent message after the screen is remounted (persisted, not just in memory)', async () => {
+    setupMemoryAsyncStorage();
+    await addSentMessage('+15551234567', 'Survives a remount', 1_700_000_000_000);
+    activeLauncher.getMessagesForThread.mockResolvedValueOnce([]);
+
+    const { findByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    expect(await findByText('Survives a remount')).toBeTruthy();
+  });
+
+  it('does not duplicate the message once the provider carries it too (same address/body/instant)', async () => {
+    setupMemoryAsyncStorage();
+    const when = 1_700_000_000_000;
+    await addSentMessage('+15551234567', 'Only once', when);
+    // The same message as the provider would report it (different _ID, a
+    // slightly different timestamp inside the dedupe window).
+    activeLauncher.getMessagesForThread.mockResolvedValueOnce([
+      { id: '4711', address: '+1 (555) 123-4567', body: 'Only once', date: when + 1_000, dateFormatted: 'Today', type: 2, isRead: true },
+    ]);
+
+    const { findAllByText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    const rows = await findAllByText('Only once');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('keeps another thread\u2019s sent message out of this conversation', async () => {
+    setupMemoryAsyncStorage();
+    await addSentMessage('+15559999999', 'Wrong thread', 1_700_000_000_000);
+    activeLauncher.getMessagesForThread.mockResolvedValueOnce([]);
+
+    const { queryByText, findByLabelText } = render(
+      <ConversationScreen navigation={mockNavigation as never} route={mockRoute as never} />
+    );
+
+    await findByLabelText('Back to Messages');
+    await waitFor(() => {
+      expect(activeLauncher.getMessagesForThread).toHaveBeenCalled();
+    });
+    expect(queryByText('Wrong thread')).toBeNull();
   });
 });
 

@@ -8,6 +8,7 @@ import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import { syncAlarmsWithDeviceTimezone } from '../utils/alarmTimezone';
 import { useSettings } from './SettingsStore';
+import { loadSentMessages, mergeSentWithProvider } from './SentMessagesStore';
 
 export interface DeviceWifi {
   enabled: boolean;
@@ -36,6 +37,8 @@ export interface DeviceSms {
   id: string;
   address: string;
   body: string;
+  /** Epoch millis. Optional: local/legacy callers may omit it (falls back to 0 for sorting). */
+  date?: number;
   dateFormatted: string;
   type: number;
   isRead: boolean;
@@ -257,10 +260,14 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
   const loadMessages = useCallback(async () => {
     const mod = await getLauncherModule();
-    if (!mod) return [];
-    try {
-      return await mod.getRecentMessages(50);
-    } catch { return []; }
+    let providerMessages: DeviceSms[] = [];
+    if (mod) {
+      try { providerMessages = await mod.getRecentMessages(50); } catch { providerMessages = []; }
+    }
+    // The provider never contains what this app sent (#929: only the default
+    // SMS app may write to content://sms) — merge in the local record.
+    const sent = await loadSentMessages();
+    return mergeSentWithProvider(sent, providerMessages);
   }, [getLauncherModule]);
 
   const loadContacts = useCallback(async () => {
