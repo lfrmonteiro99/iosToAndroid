@@ -71,6 +71,7 @@ export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = 
 // widgetGrid.ts — same six entries in two files, free to drift (#933).
 export type { WidgetSize, WidgetInstance } from './widgetInstances';
 export {
+  ALLOWED_WIDGET_SIZES,
   DEFAULT_WIDGET_SIZES,
   WIDGET_INSTANCES_KEY,
   migrateTypesToInstances,
@@ -372,6 +373,7 @@ export function WeatherWidget({
   city,
   maxTemp,
   minTemp,
+  size,
 }: {
   temp: number;
   condition: string;
@@ -379,9 +381,20 @@ export function WeatherWidget({
   city: string;
   maxTemp?: number;
   minTemp?: number;
+  /**
+   * Placement size (#937). Omitted = today's full content, so every existing
+   * caller (Today View grid, the widget gallery preview) is unaffected — only
+   * a caller that knows about per-instance sizing opts in. 'small' is the only
+   * size that trims anything: the city label and the H/L range are what the
+   * reference shows growing in as the card gets taller, so 'small' is where
+   * they come out rather than the small card just being a smaller rectangle of
+   * the same content.
+   */
+  size?: WidgetSize;
 }) {
   const { textScale } = useTheme();
   const isUnavailable = !condition;
+  const isCompact = size === 'small';
   const gradientColors = WidgetWeatherGradients[weatherGradientCondition(icon)];
   // Own colored surface regardless of app theme (like the reference widget); the
   // Reduce Transparency fallback uses the gradient's darker stop as a flat fill.
@@ -411,14 +424,15 @@ export function WeatherWidget({
   }
 
   const iconName = icon as keyof typeof Ionicons.glyphMap;
-  const hasRange = maxTemp !== undefined && minTemp !== undefined;
+  const hasRange = !isCompact && maxTemp !== undefined && minTemp !== undefined;
+  const showCity = !isCompact && !!city;
 
   return (
     <WidgetCard testID="widget-card-weather" appearance={appearance}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color={WidgetGlassText.primary} />
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
-        {city ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>{city}</Text> : null}
+        {showCity ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>{city}</Text> : null}
       </View>
       <View style={styles.weatherRow}>
         <Text style={[styles.weatherTemp, { fontSize: 40 * textScale }]}>{temp}°</Text>
@@ -462,8 +476,23 @@ function formatEventRange(ev: CalendarEventItem): string {
 
 const UP_NEXT_BAR_COLORS = [SystemColors.dark.systemOrange, SystemColors.dark.systemBlue, SystemColors.dark.systemGreen];
 
-export function UpNextWidget({ events, now = new Date() }: { events: CalendarEventItem[]; now?: Date }) {
+export function UpNextWidget({
+  events,
+  now = new Date(),
+  size,
+}: {
+  events: CalendarEventItem[];
+  now?: Date;
+  /**
+   * Placement size (#937). Omitted = today's full content (up to 3 events),
+   * for the same reason as WeatherWidget's `size` above. 'medium' is the only
+   * size that trims: it shows just the next event, matching the smaller
+   * footprint instead of squeezing 3 rows into it.
+   */
+  size?: WidgetSize;
+}) {
   const { theme, textScale } = useTheme();
+  const maxEvents = size === 'medium' ? 1 : 3;
   const appearance: WidgetAppearance = {
     surface: 'solid',
     solidColor: {
@@ -488,7 +517,7 @@ export function UpNextWidget({ events, now = new Date() }: { events: CalendarEve
           <Text style={[styles.upNextText, { color: cardSecondaryColor, fontSize: 15 * textScale }]}>No upcoming events</Text>
         </View>
       ) : (
-        events.slice(0, 3).map((ev, index) => (
+        events.slice(0, maxEvents).map((ev, index) => (
           <View key={ev.id} style={styles.eventRow}>
             <View style={[styles.eventBar, { backgroundColor: UP_NEXT_BAR_COLORS[index % UP_NEXT_BAR_COLORS.length] }]} />
             <View style={styles.eventMeta}>
@@ -579,7 +608,15 @@ export function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
 // looks and behaves identically regardless of which surface hosts it.
 // ---------------------------------------------------------------------------
 
-export function useWidgetMap(): Record<WidgetType, React.ReactNode> {
+/**
+ * @param sizeFor Per-type size to render content for (#937 AC 8) — omitted
+ * types, and every caller that omits the argument entirely, keep the full
+ * content this always rendered. Keyed by TYPE rather than instance id because
+ * this map is shared by callers (Today View, the widget gallery preview) that
+ * have no notion of a placed instance; the home screen (which does) resolves
+ * one size per type from whichever of its placed instances the caller picks.
+ */
+export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>): Record<WidgetType, React.ReactNode> {
   const device = useDevice();
   const nav = useNavigation<AppNavigationProp>();
 
@@ -630,9 +667,10 @@ export function useWidgetMap(): Record<WidgetType, React.ReactNode> {
           city={device.weather.city}
           maxTemp={device.weather.maxTemp}
           minTemp={device.weather.minTemp}
+          size={sizeFor?.weather}
         />
       ),
-      upNext: <UpNextWidget key="upNext" events={calendarEvents} />,
+      upNext: <UpNextWidget key="upNext" events={calendarEvents} size={sizeFor?.upNext} />,
       messages: (
         <MessagesWidget
           key="messages"
@@ -647,7 +685,7 @@ export function useWidgetMap(): Record<WidgetType, React.ReactNode> {
         />
       ),
     }),
-    [device, calendarEvents, unreadCount, nav],
+    [device, calendarEvents, unreadCount, nav, sizeFor?.weather, sizeFor?.upNext],
   );
 }
 

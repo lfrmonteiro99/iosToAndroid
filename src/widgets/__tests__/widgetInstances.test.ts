@@ -1,4 +1,5 @@
 import {
+  ALLOWED_WIDGET_SIZES,
   DEFAULT_WIDGET_SIZES,
   addWidget,
   instanceTypes,
@@ -103,6 +104,47 @@ describe('normalizeInstances', () => {
   it('rejects a size that is not one of the three', () => {
     const parsed = normalizeInstances([{ id: 'w', type: 'weather', size: 'enormous' }], KNOWN);
     expect(parsed[0].size).toBe('medium');
+  });
+
+  // #937 AC 7 has TWO doors into `size`, not one. `resizeWidget` refuses a size
+  // the type does not declare, but the stored blob is the other way in — a
+  // build from before ALLOWED_WIDGET_SIZES existed, a hand-edited value, or a
+  // future build that narrows a type's list. Left unchecked, a persisted
+  // `{type:'battery', size:'large'}` renders Battery at 4x4 and eats 16 cells:
+  // exactly the empty oversized card point 5 of the issue forbids, reached
+  // without the UI ever offering it.
+  it('clamps a persisted size the type does not declare back to that type\'s default', () => {
+    const parsed = normalizeInstances([{ id: 'b', type: 'battery', size: 'large', page: 0 }], KNOWN);
+    expect(parsed[0].size).toBe('small');
+    expect(ALLOWED_WIDGET_SIZES.battery).not.toContain('large');
+  });
+
+  it('clamps upNext\'s disallowed \'small\' too — the default is not always the smallest size', () => {
+    // upNext allows medium|large and defaults to large: a clamp that reached
+    // for "the smallest allowed" instead of the type default would land on
+    // medium here and silently shrink every migrated Up Next widget.
+    const parsed = normalizeInstances([{ id: 'u', type: 'upNext', size: 'small', page: 0 }], KNOWN);
+    expect(parsed[0].size).toBe('large');
+  });
+
+  it('leaves a persisted size the type DOES declare untouched', () => {
+    // The inverse of the clamp: it must not flatten every widget to its
+    // default. Weather declares all three, so a stored 'large' survives.
+    const parsed = normalizeInstances([{ id: 'w', type: 'weather', size: 'large', page: 0 }], KNOWN);
+    expect(parsed[0].size).toBe('large');
+  });
+
+  it('clamps on the read path for every type, for its own disallowed sizes', () => {
+    // Table-driven so a type added later without an ALLOWED entry, or with a
+    // narrowed one, cannot slip through with only battery/upNext covered.
+    const ALL_SIZES = ['small', 'medium', 'large'] as const;
+    for (const type of KNOWN) {
+      for (const size of ALL_SIZES) {
+        const parsed = normalizeInstances([{ id: `${type}-x`, type, size, page: 0 }], KNOWN);
+        const expected = ALLOWED_WIDGET_SIZES[type].includes(size) ? size : DEFAULT_WIDGET_SIZES[type];
+        expect({ type, size, got: parsed[0].size }).toEqual({ type, size, got: expected });
+      }
+    }
   });
 
   it('replaces a duplicate id instead of keeping two widgets that address the same thing', () => {
@@ -220,6 +262,30 @@ describe('CRUD', () => {
     let list = addWidget(addWidget([], 'weather'), 'weather');
     list = resizeWidget(list, list[0].id, 'large');
     expect(list.map((i) => i.size)).toEqual(['large', 'medium']);
+  });
+
+  // #937 AC 7: a size not declared for the type is refused, not silently
+  // accepted. Battery only declares 'small' — nothing else has content to
+  // show at a bigger footprint (see ALLOWED_WIDGET_SIZES's own comment).
+  it('resizeWidget refuses a size the type does not declare, leaving the instance untouched', () => {
+    const list = addWidget([], 'battery');
+    const [resized] = resizeWidget(list, list[0].id, 'large');
+    expect(resized.size).toBe('small');
+    expect(resized).toEqual(list[0]);
+  });
+
+  it('resizeWidget still applies a size the type DOES declare', () => {
+    const list = addWidget([], 'weather');
+    const [resized] = resizeWidget(list, list[0].id, 'small');
+    expect(resized.size).toBe('small');
+  });
+
+  it("every type's own DEFAULT_WIDGET_SIZES entry is one of its ALLOWED_WIDGET_SIZES", () => {
+    // A freshly-placed widget must always be resizable back to the size it
+    // started at — otherwise its own default would be an invalid state.
+    for (const type of ALL_WIDGET_TYPES) {
+      expect(ALLOWED_WIDGET_SIZES[type]).toContain(DEFAULT_WIDGET_SIZES[type]);
+    }
   });
 });
 

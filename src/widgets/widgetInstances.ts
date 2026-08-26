@@ -45,6 +45,30 @@ export const DEFAULT_WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
   screenTime: 'small',
 };
 
+/**
+ * Sizes a type may actually be resized to (#937, AC 5).
+ *
+ * A size only belongs here when the widget has DIFFERENT content to show at
+ * it — offering a size that just stretches the small layout is what the issue
+ * calls out as reading like a bug. Battery/Storage/Messages/ScreenTime are a
+ * single stat each (a percentage, a count) with nothing in the rest of the app
+ * state to fill a bigger card without inventing data, so they stay
+ * single-size. Weather already carries city + high/low that only `small`
+ * hides; Up Next already caps its event list — `medium` shows the very next
+ * one, `large` the same up-to-3 it always has. Every entry's own
+ * `DEFAULT_WIDGET_SIZES` value is included, so a freshly-placed widget is
+ * always resizable to at least its own starting size (a no-op, but never a
+ * rejected one).
+ */
+export const ALLOWED_WIDGET_SIZES: Record<WidgetType, readonly WidgetSize[]> = {
+  battery: ['small'],
+  storage: ['small'],
+  weather: ['small', 'medium', 'large'],
+  upNext: ['medium', 'large'],
+  messages: ['small'],
+  screenTime: ['small'],
+};
+
 /** A widget the user has placed, as opposed to a type that is switched on. */
 export interface WidgetInstance {
   /** Stable across restarts — it is the key everything else refers to. */
@@ -115,6 +139,27 @@ function isWidgetSize(v: unknown): v is WidgetSize {
   return v === 'small' || v === 'medium' || v === 'large';
 }
 
+/**
+ * The size to render a stored entry at (#937).
+ *
+ * `resizeWidget` guards the WRITE path against a size a type does not declare;
+ * this guards the READ path, which is the other way the field is reached — a
+ * blob written before ALLOWED_WIDGET_SIZES existed, a hand-edited value, or a
+ * later build that narrows a type's list. Without it, a stored
+ * `{type:'battery', size:'large'}` lays out at 4x4 and eats 16 of a page's 24
+ * cells to draw one percentage, which is the empty oversized card AC 5 exists
+ * to prevent — reached without the UI ever offering it.
+ *
+ * Falls back to the type's own DEFAULT_WIDGET_SIZES entry (guaranteed to be in
+ * its allowed list by that table's own test), NOT to `'small'`: `upNext`
+ * allows medium|large, so a blanket smallest-size clamp would invent a size no
+ * type declares.
+ */
+function allowedSize(type: WidgetType, v: unknown): WidgetSize {
+  if (isWidgetSize(v) && ALLOWED_WIDGET_SIZES[type].includes(v)) return v;
+  return DEFAULT_WIDGET_SIZES[type];
+}
+
 /** A finite, non-negative integer, or the given fallback. */
 function coord(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fallback;
@@ -159,7 +204,7 @@ export function normalizeInstances(raw: unknown, knownTypes: readonly WidgetType
     out.push({
       id,
       type,
-      size: isWidgetSize(e.size) ? e.size : DEFAULT_WIDGET_SIZES[type],
+      size: allowedSize(type, e.size),
       page: pageCoord(e.page, PAGE_UNPLACED),
       col: coord(e.col, 0),
       row: coord(e.row, 0),
@@ -236,8 +281,20 @@ export function moveWidget(
   );
 }
 
+/**
+ * Resize an instance, refusing a size its type does not declare (#937 AC 7).
+ *
+ * A silent no-op rather than throwing: the only caller is the UI, which
+ * already only offers `ALLOWED_WIDGET_SIZES[type]` — this is the backstop for
+ * a stale menu or a corrupt/hand-edited request, not the normal path, so
+ * crashing the reducer over it would be worse than ignoring it.
+ */
 export function resizeWidget(instances: WidgetInstance[], id: string, size: WidgetSize): WidgetInstance[] {
-  return instances.map((i) => (i.id === id ? { ...i, size } : i));
+  return instances.map((i) => {
+    if (i.id !== id) return i;
+    if (!ALLOWED_WIDGET_SIZES[i.type].includes(size)) return i;
+    return { ...i, size };
+  });
 }
 
 /**
