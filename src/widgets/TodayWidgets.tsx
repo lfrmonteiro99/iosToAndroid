@@ -4,7 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WidgetCard, type WidgetAppearance } from './WidgetCard';
+import { ClockWidget } from './ClockWidget';
+import { CalendarDateWidget } from './CalendarDateWidget';
+import { NowPlayingWidget, type NowPlayingTrack } from './NowPlayingWidget';
+import { ActivityWidget } from './ActivityWidget';
+import { QuickDialWidget, type QuickDialContact } from './QuickDialWidget';
 import { useDevice } from '../store/DeviceStore';
+import { useContacts } from '../store/ContactsStore';
+import { useHealth, localDateKey } from '../store/HealthStore';
+import { logger } from '../utils/logger';
 import { useTheme } from '../theme/ThemeContext';
 import { SystemColors, WidgetWeatherGradients, WidgetGlassText, type WidgetWeatherCondition } from '../theme/CupertinoTheme';
 import type { AppNavigationProp } from '../navigation/types';
@@ -33,11 +41,31 @@ import {
 // that could drift (#654).
 // ---------------------------------------------------------------------------
 
-export type WidgetType = 'battery' | 'storage' | 'weather' | 'upNext' | 'messages' | 'screenTime';
+/**
+ * #963 added five: the set was six cards each showing a glyph, a number and a
+ * progress bar, and "more variety" is not six more numbers. These five each
+ * show something the others cannot — a face whose hands move, today's date, what
+ * is playing, the day's steps, the people you call.
+ */
+export type WidgetType =
+  | 'battery' | 'storage' | 'weather' | 'upNext' | 'messages' | 'screenTime'
+  | 'clock' | 'calendar' | 'nowPlaying' | 'activity' | 'quickDial';
 
-export const ALL_WIDGET_TYPES: WidgetType[] = ['battery', 'storage', 'weather', 'upNext', 'messages', 'screenTime'];
+export const ALL_WIDGET_TYPES: WidgetType[] = [
+  'battery', 'storage', 'weather', 'upNext', 'messages', 'screenTime',
+  'clock', 'calendar', 'nowPlaying', 'activity', 'quickDial',
+];
 export const DEFAULT_ENABLED: WidgetType[] = ['battery', 'weather', 'storage', 'upNext', 'messages'];
 export const WIDGET_CONFIG_KEY = '@iostoandroid/widget_config';
+
+/**
+ * How often Now Playing re-reads the media session (#963).
+ *
+ * The bridge exposes a getter, not an event, so this is a poll. Five seconds is
+ * slow enough to cost nothing and fast enough that a track change shows up
+ * before the user wonders; a control press re-reads immediately regardless.
+ */
+export const NOW_PLAYING_POLL_MS = 5000;
 
 export const WIDGET_LABELS: Record<WidgetType, string> = {
   battery: 'Battery',
@@ -46,6 +74,11 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   upNext: 'Up Next',
   messages: 'Messages',
   screenTime: 'Screen Time',
+  clock: 'Clock',
+  calendar: 'Calendar',
+  nowPlaying: 'Now Playing',
+  activity: 'Activity',
+  quickDial: 'Favourites',
 };
 
 // Filled glyphs, matching the widget bodies below (which already draw `server`,
@@ -59,6 +92,11 @@ export const WIDGET_ICONS: Record<WidgetType, keyof typeof Ionicons.glyphMap> = 
   upNext: 'calendar',
   messages: 'chatbubble-ellipses',
   screenTime: 'hourglass',
+  clock: 'time',
+  calendar: 'calendar-number',
+  nowPlaying: 'musical-notes',
+  activity: 'flame',
+  quickDial: 'people-circle',
 };
 
 // iOS-style Today View grid: 2 columns. 'small' widgets take one column
@@ -639,6 +677,53 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
     })();
   }, []);
 
+  // ── Now Playing (#963) ───────────────────────────────────────────────────
+  // Polled rather than pushed: the bridge exposes a getter, not an event, and
+  // the media session changes on a human timescale. The interval is cleared on
+  // unmount so a Today View that is closed stops asking.
+  const [track, setTrack] = useState<NowPlayingTrack | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const read = async () => {
+      try {
+        const mod = (await import('../../modules/launcher-module/src')).default;
+        const now = await mod.getNowPlaying();
+        if (alive) setTrack(now as NowPlayingTrack);
+      } catch {
+        // No notification-listener access, or no session — leave it empty; the
+        // widget renders "Nothing playing" and keeps its controls.
+      }
+    };
+    read();
+    const id = setInterval(read, NOW_PLAYING_POLL_MS);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const media = useCallback(async (action: 'prev' | 'playPause' | 'next') => {
+    try {
+      const mod = (await import('../../modules/launcher-module/src')).default;
+      if (action === 'prev') await mod.mediaPrev();
+      else if (action === 'next') await mod.mediaNext();
+      else await mod.mediaPlayPause();
+      // Read straight back: the widget's play/pause glyph is the state, and
+      // waiting for the next poll would leave it wrong for up to the interval.
+      setTrack((await mod.getNowPlaying()) as NowPlayingTrack);
+    } catch (e) {
+      logger.warn('TodayWidgets', 'media control failed', e);
+    }
+  }, []);
+
+  const { favorites } = useContacts();
+  const { todaySteps, stepHistory } = useHealth();
+  const todayKey = useMemo(() => localDateKey(new Date()), []);
+  const quickDialContacts = useMemo<QuickDialContact[]>(
+    () => favorites.map((c) => ({
+      id: c.id, firstName: c.firstName, lastName: c.lastName, phone: c.phone,
+    })),
+    [favorites],
+  );
+
   return useMemo(
     () => ({
       battery: (
@@ -684,8 +769,57 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
           onPress={() => nav.navigate('ScreenTime')}
         />
       ),
+      clock: (
+        <ClockWidget
+          key="clock"
+          size={sizeFor?.clock}
+          onPress={() => nav.navigate('Clock')}
+        />
+      ),
+      calendar: (
+        <CalendarDateWidget
+          key="calendar"
+          events={calendarEvents}
+          size={sizeFor?.calendar}
+          onPress={() => nav.navigate('Calendar')}
+        />
+      ),
+      nowPlaying: (
+        <NowPlayingWidget
+          key="nowPlaying"
+          track={track}
+          onPrev={() => { void media('prev'); }}
+          onPlayPause={() => { void media('playPause'); }}
+          onNext={() => { void media('next'); }}
+        />
+      ),
+      activity: (
+        <ActivityWidget
+          key="activity"
+          steps={todaySteps}
+          history={stepHistory}
+          today={todayKey}
+          size={sizeFor?.activity}
+          onPress={() => nav.navigate('Health')}
+        />
+      ),
+      quickDial: (
+        <QuickDialWidget
+          key="quickDial"
+          contacts={quickDialContacts}
+          onCall={(contact) => nav.navigate('CallScreen', {
+            name: `${contact.firstName} ${contact.lastName}`.trim(),
+            number: contact.phone,
+          })}
+          onPress={() => nav.navigate('Contacts')}
+        />
+      ),
     }),
-    [device, calendarEvents, unreadCount, nav, sizeFor?.weather, sizeFor?.upNext],
+    [
+      device, calendarEvents, unreadCount, nav, sizeFor?.weather, sizeFor?.upNext,
+      sizeFor?.clock, sizeFor?.calendar, sizeFor?.activity,
+      track, media, todaySteps, stepHistory, todayKey, quickDialContacts,
+    ],
   );
 }
 

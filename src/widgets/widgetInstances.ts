@@ -43,6 +43,14 @@ export const DEFAULT_WIDGET_SIZES: Record<WidgetType, WidgetSize> = {
   upNext: 'large',
   messages: 'small',
   screenTime: 'small',
+  clock: 'small',
+  calendar: 'small',
+  // Transport controls and a title need the width; a small card would be the
+  // glyph and a truncated word.
+  nowPlaying: 'medium',
+  activity: 'small',
+  // Four faces in a row, which is what makes it a dial pad rather than a link.
+  quickDial: 'medium',
 };
 
 /**
@@ -67,6 +75,14 @@ export const ALLOWED_WIDGET_SIZES: Record<WidgetType, readonly WidgetSize[]> = {
   upNext: ['medium', 'large'],
   messages: ['small'],
   screenTime: ['small'],
+  // The face fills a small card; a medium one adds the digital time under it.
+  clock: ['small', 'medium'],
+  // Small is the date alone; medium adds the next event beside it.
+  calendar: ['small', 'medium'],
+  nowPlaying: ['medium'],
+  // Small is the ring; medium adds the seven-day bars.
+  activity: ['small', 'medium'],
+  quickDial: ['medium'],
 };
 
 /** A widget the user has placed, as opposed to a type that is switched on. */
