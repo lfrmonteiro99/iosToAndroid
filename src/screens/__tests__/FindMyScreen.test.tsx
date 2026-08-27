@@ -67,13 +67,36 @@ describe('FindMyScreen', () => {
     await waitFor(() => expect(getAllByText('Find My').length).toBeGreaterThan(0));
   });
 
-  it('renders a "This Device" row with coordinates when permission is granted', async () => {
+  // The row carries the DEVICE'S OWN NAME — FindMyScreen.tsx:123 is
+  // `bluetooth.name?.trim() ? bluetooth.name : 'This Device'`, matching how iOS
+  // labels the current device. 'This Device' is the fallback for a phone with no
+  // Bluetooth name.
+  //
+  // These assertions used to read 'This Device' and passed for the wrong reason:
+  // DeviceStore resolved the native bridge with a bare `await import(...)`, which
+  // Jest's VM rejects, so `bluetooth.name` was always undefined and the fallback
+  // was the only branch a test could ever see. With the bridge reachable (the
+  // require fallback AppsStore already had) the mock reports 'TestDevice', which
+  // is the real case.
+  it('renders the device row with coordinates when permission is granted', async () => {
     const { getByText, getAllByText } = renderFindMy();
-    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+    await waitFor(() => expect(getByText('TestDevice')).toBeTruthy());
     // Mocked coords from jest.setup.js: 37.7749, -122.4194
     await waitFor(() => expect(getAllByText(/37\.7749, -122\.4194/).length).toBeGreaterThan(0));
     // Updated relative label should be present.
     await waitFor(() => expect(getByText(/Updated .* ago/)).toBeTruthy());
+  });
+
+  it('falls back to "This Device" for a phone with no Bluetooth name', async () => {
+    // The branch every assertion above used to take by accident, now covered
+    // deliberately: a device whose Bluetooth adapter reports no name still has
+    // to be labelled something.
+    const launcher = jest.requireMock('../../../modules/launcher-module/src').default;
+    launcher.getBluetoothInfo.mockResolvedValueOnce({
+      enabled: true, name: '', address: '', pairedDevices: [],
+    });
+    const { getByText } = renderFindMy();
+    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
   });
 
   it('renders the "Grant Location Permission" button when permission is undetermined', async () => {
@@ -84,7 +107,7 @@ describe('FindMyScreen', () => {
     const button = await waitFor(() => getByText('Grant Location Permission'));
     expect(button).toBeTruthy();
     // The device row should not be shown while permission is not granted.
-    expect(() => getByText('This Device')).toThrow();
+    expect(() => getByText('TestDevice')).toThrow();
   });
 
   it('pressing the grant button calls requestPermission', async () => {
@@ -101,7 +124,7 @@ describe('FindMyScreen', () => {
   it('renders a "Location History" entry point in the Devices tab that navigates', async () => {
     const { getByText } = renderFindMy();
     // Defaults to the Devices tab, where permission is granted (mock).
-    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+    await waitFor(() => expect(getByText('TestDevice')).toBeTruthy());
 
     const tile = await waitFor(() => getByText('Location History'));
     expect(tile).toBeTruthy();
@@ -131,7 +154,7 @@ describe('FindMyScreen', () => {
     );
 
     const { queryByText } = renderFindMy();
-    await waitFor(() => expect(queryByText('This Device')).toBeTruthy());
+    await waitFor(() => expect(queryByText('TestDevice')).toBeTruthy());
     // Overlay copy must be absent while inactive.
     expect(queryByText('This Device Is Marked as Lost')).toBeNull();
   });
@@ -250,7 +273,7 @@ describe('FindMyScreen tabs (issue #264)', () => {
     expect(getByText('Items')).toBeTruthy();
 
     // Default tab is Devices: device row is visible, People content is not.
-    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+    await waitFor(() => expect(getByText('TestDevice')).toBeTruthy());
     expect(() => getByText('Location Sharing Unavailable')).toThrow();
   });
 
@@ -332,7 +355,7 @@ describe('FindMyScreen tabs (issue #264)', () => {
 
     // Back to Devices: device row + coordinates return, People content gone.
     fireEvent.press(getByText('Devices'));
-    await waitFor(() => expect(getByText('This Device')).toBeTruthy());
+    await waitFor(() => expect(getByText('TestDevice')).toBeTruthy());
     await waitFor(() => expect(getAllByText(/37\.7749, -122\.4194/).length).toBeGreaterThan(0));
     expect(() => getByText('Location Sharing Unavailable')).toThrow();
   });
