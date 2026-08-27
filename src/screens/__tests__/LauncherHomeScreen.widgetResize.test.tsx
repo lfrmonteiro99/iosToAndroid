@@ -156,7 +156,10 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
     // convention as AppIcon, whose jiggle-only "✕" delete button is likewise
     // absent (not just disabled) until isJiggling is true.
     expect(within(utils.getByTestId('launcher-home-widget-battery')).queryByLabelText('Resize Battery widget')).toBeNull();
-    expect(utils.queryByText(/Resize/)).toBeNull();
+    // Asserted on the sheet's CONTENT, not on its title: the title changed to
+    // "Edit …" when the sheet gained colour and goal rows (#963), and matching
+    // /Edit/ would also match the long-press menu's "Edit Home Screen".
+    expect(utils.queryByText('Small (current)')).toBeNull();
   });
 
   it('offers only the ALLOWED_WIDGET_SIZES for the widget\'s type — Battery is small-only', async () => {
@@ -170,7 +173,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
 
     fireEvent(within(utils.getByTestId('launcher-home-widget-battery')).getByLabelText('Resize Battery widget'), 'longPress');
 
-    await waitFor(() => expect(utils.getByText('Resize Battery')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Battery')).toBeTruthy());
     expect(utils.getByText('Small (current)')).toBeTruthy();
     expect(utils.queryByText('Medium')).toBeNull();
     expect(utils.queryByText('Large')).toBeNull();
@@ -186,7 +189,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
     await enterJiggleMode(utils, 'Open Chess');
 
     fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Weather')).toBeTruthy());
     expect(utils.getByText('Small (current)')).toBeTruthy();
     expect(utils.getByText('Medium')).toBeTruthy();
     expect(utils.getByText('Large')).toBeTruthy();
@@ -195,7 +198,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
     fireEvent.press(utils.getByText('Medium'));
 
     // Sheet closes.
-    await waitFor(() => expect(utils.queryByText('Resize Weather')).toBeNull());
+    await waitFor(() => expect(utils.queryByText('Edit Weather')).toBeNull());
     // Persisted through the same @iostoandroid/widget_instances key the rest
     // of the widget epic (#933/#935) writes.
     await waitFor(() => {
@@ -227,7 +230,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
 
     await enterJiggleMode(utils, 'Open Phone');
     fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Weather')).toBeTruthy());
     fireEvent.press(utils.getByText('Large'));
 
     // Reflow: a second page appears, holding exactly the 12 icons that no
@@ -251,7 +254,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
 
     await enterJiggleMode(utils, 'Open Phone');
     fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Weather')).toBeTruthy());
     fireEvent.press(utils.getByText('Small'));
 
     // Back to 4 cells used by the widget — all 20 built-ins fit on page 0 again.
@@ -280,7 +283,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
 
     const [first] = utils.getAllByTestId('launcher-home-widget-weather');
     fireEvent(within(first).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Weather')).toBeTruthy());
     fireEvent.press(utils.getByText('Large'));
 
     await waitFor(() => {
@@ -301,7 +304,7 @@ describe('LauncherHomeScreen widget resize (#937)', () => {
     await waitFor(() => expect(first.getByTestId('launcher-home-widget-weather')).toBeTruthy());
     await enterJiggleMode(first, 'Open Chess');
     fireEvent(within(first.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(first.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(first.getByText('Edit Weather')).toBeTruthy());
     fireEvent.press(first.getByText('Medium'));
     await waitFor(() => expect(lastPersistedWidgets()).toBeTruthy());
 
@@ -398,7 +401,7 @@ describe('LauncherHomeScreen widget resize — icon reflow animates too (#937 Ar
     const before = settleSpy.mock.calls.length;
 
     fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Weather')).toBeTruthy());
     fireEvent.press(utils.getByText('Large'));
     await waitFor(() => expect(utils.getByTestId('launcher-page-grid-1')).toBeTruthy());
 
@@ -432,7 +435,7 @@ describe('LauncherHomeScreen widget resize — icon reflow animates too (#937 Ar
     const before = settleSpy.mock.calls.length;
 
     fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
-    await waitFor(() => expect(utils.getByText('Resize Weather')).toBeTruthy());
+    await waitFor(() => expect(utils.getByText('Edit Weather')).toBeTruthy());
     fireEvent.press(utils.getByText('Large'));
     await waitFor(() => expect(utils.getByTestId('launcher-page-grid-1')).toBeTruthy());
 
@@ -473,7 +476,7 @@ describe('LauncherHomeScreen widget resize — icon reflow animates too (#937 Ar
       fireEvent(within(utils.getByTestId('launcher-home-widget-weather')).getByLabelText('Resize Weather widget'), 'longPress');
       await waitFor(() => expect(utils.getByText('Small (current)')).toBeTruthy());
       fireEvent.press(utils.getByText('Small (current)'));
-      await waitFor(() => expect(utils.queryByText('Resize Weather')).toBeNull());
+      await waitFor(() => expect(utils.queryByText('Edit Weather')).toBeNull());
     }
 
     expect(settleSpy.mock.calls.slice(before)).toHaveLength(0);

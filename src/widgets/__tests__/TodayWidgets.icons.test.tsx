@@ -17,14 +17,20 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { render, fireEvent } from '../../test-utils';
-import { ALL_WIDGET_TYPES, WIDGET_ICONS, type WidgetType } from '../TodayWidgets';
+import { ALL_WIDGET_TYPES, WIDGET_ICONS } from '../TodayWidgets';
 import { TodayViewScreen } from '../../screens/TodayViewScreen';
 import type { AppNavigationProp } from '../../navigation/types';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), push: jest.fn() } as unknown as AppNavigationProp;
 
-/** The outline glyphs shipped before this issue — none may come back. */
-const LEGACY_OUTLINE_ICONS: Record<Exclude<WidgetType, 'battery'>, string> = {
+/**
+ * The outline glyphs shipped before this issue — none may come back.
+ *
+ * Only the six types that existed then: a type added later never had an outline
+ * glyph to regress to, and listing one here would assert against a string the
+ * repo has never contained.
+ */
+const LEGACY_OUTLINE_ICONS: Record<string, string> = {
   storage: 'server-outline',
   weather: 'partly-sunny-outline',
   upNext: 'calendar-outline',

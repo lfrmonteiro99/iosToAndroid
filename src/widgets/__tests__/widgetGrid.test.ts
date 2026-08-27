@@ -31,6 +31,13 @@ describe('widgetGrid — pure 2-column packing algorithm', () => {
       upNext: 'large',
       messages: 'small',
       screenTime: 'small',
+      // #963's five. Each starts at the size its content needs: a face fits a
+      // small card, transport controls and a row of faces do not.
+      clock: 'small',
+      calendar: 'small',
+      nowPlaying: 'medium',
+      activity: 'small',
+      quickDial: 'medium',
     };
     expect(DEFAULT_WIDGET_SIZES).toEqual(expected);
     // every known type has a default
