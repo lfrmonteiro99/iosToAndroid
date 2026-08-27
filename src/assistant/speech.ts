@@ -12,9 +12,14 @@ const TAG = 'speech';
  * `onError` option callback, but a synchronous throw from the mock or the
  * native bridge is still possible and is handled here.)
  */
-export function speak(text: string): void {
+export function speak(text: string, language?: string): void {
   try {
-    Speech.speak(text);
+    // The voice has to be told the language. expo-speech otherwise picks the
+    // engine default, which reads a Portuguese reply with an English voice —
+    // intelligible at best, and the assistant now answers in the phone's
+    // language (see assistant/replies.ts).
+    if (language) Speech.speak(text, { language });
+    else Speech.speak(text);
   } catch (e) {
     logger.warn(TAG, 'speak failed', e);
   }

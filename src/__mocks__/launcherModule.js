@@ -53,7 +53,7 @@ module.exports = {
     checkPermissions: jest.fn(() => Promise.resolve({})),
     // #624 Privacy Monitor
     getPrivacyReport: jest.fn(() => Promise.resolve({ generatedAt: Date.now(), sensors: [] })),
-    startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    startSpeechRecognition: jest.fn((_language) => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
     // #634 App access (sensor usage)

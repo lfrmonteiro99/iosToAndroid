@@ -1834,7 +1834,7 @@ class LauncherModule : Module() {
         // Reference to the in-flight recognizer so stopSpeechRecognition can
         // tear it down. Guarded with @Volatile + synchronized because the
         // recognition listener callbacks arrive on the main looper thread.
-        AsyncFunction("startSpeechRecognition") {
+        AsyncFunction("startSpeechRecognition") { language: String? ->
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
                 val bundle = Bundle().apply {
                     putString("error", "Speech recognition unavailable on this device")
@@ -1878,10 +1878,19 @@ class LauncherModule : Module() {
                     }
                 })
             }
+            // The language has to be stated. Without EXTRA_LANGUAGE the recognizer
+            // transcribes in whatever the speech service happens to default to,
+            // which on a Portuguese phone could hand the parser English text (or
+            // the reverse) — and a mismatch there means every request lands on
+            // "not supported". The caller passes the same tag it parses and
+            // speaks in, so all three agree; null keeps the service default.
+            val tag = language?.takeIf { it.isNotBlank() } ?: Locale.getDefault().toLanguageTag()
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, tag)
             }
             // startListening must run on the main looper; the bridge call may
             // arrive on a different thread.
