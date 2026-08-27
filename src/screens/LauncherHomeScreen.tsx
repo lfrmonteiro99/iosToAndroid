@@ -204,7 +204,15 @@ import {
   builtInAppName,
 } from '../utils/builtInAppRoutes';
 import { computeHomeGridLayout, resolveWidgetDragTarget, spanFor, type PageLayout } from '../widgets/homeGridLayout';
-import { ALLOWED_WIDGET_SIZES, isOnHomePage, type WidgetInstance, type WidgetSize } from '../widgets/widgetInstances';
+import {
+  ALLOWED_WIDGET_SIZES,
+  STEP_GOAL_CHOICES,
+  isOnHomePage,
+  type WidgetInstance,
+  type WidgetOptions,
+  type WidgetSize,
+} from '../widgets/widgetInstances';
+import { WIDGET_TINTS, WIDGET_TINT_IDS } from '../widgets/widgetPalettes';
 import { WIDGET_LABELS, type WidgetType } from '../widgets/TodayWidgets';
 import { logger } from '../utils/logger';
 import {
@@ -1258,6 +1266,7 @@ export function LauncherHomeScreen() {
     instances: homeWidgetInstances,
     loaded: homeWidgetsLoaded,
     resizeWidget: resizeWidgetInstance,
+    configureWidget: configureWidgetInstance,
     moveWidget,
   } = useWidgetConfig();
   // Content-by-size (#937 AC 8): useWidgetMap renders one node per TYPE, so a
@@ -1275,7 +1284,16 @@ export function LauncherHomeScreen() {
     }
     return sizes;
   }, [homeWidgetInstances]);
-  const homeWidgetMap = useWidgetMap(homeWidgetSizes);
+  // Options are collapsed by type for the same reason and with the same caveat
+  // as the sizes above.
+  const homeWidgetOptions = useMemo(() => {
+    const options: Partial<Record<WidgetType, WidgetOptions>> = {};
+    for (const instance of homeWidgetInstances) {
+      if (isOnHomePage(instance) && instance.options) options[instance.type] = instance.options;
+    }
+    return options;
+  }, [homeWidgetInstances]);
+  const homeWidgetMap = useWidgetMap(homeWidgetSizes, homeWidgetOptions);
 
   // Tap to Wake (#608): the HOME-press effect below is registered with deps
   // [openFolder, currentPage] (it must not re-subscribe on every render), so
@@ -1663,14 +1681,53 @@ export function LauncherHomeScreen() {
     const instance = widgetActionSheet.instance;
     if (!instance) return [];
     const sizeLabels: Record<WidgetSize, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
-    return ALLOWED_WIDGET_SIZES[instance.type].map((size) => ({
+    const rows: { label: string; onPress: () => void }[] = ALLOWED_WIDGET_SIZES[instance.type].map((size) => ({
       label: size === instance.size ? `${sizeLabels[size]} (current)` : sizeLabels[size],
       onPress: () => {
         closeWidgetActionSheet();
         resizeWidgetInstance(instance.id, size);
       },
     }));
-  }, [widgetActionSheet.instance, closeWidgetActionSheet, resizeWidgetInstance]);
+
+    // Colour (#963). The type's own palette is offered first as "Default", so a
+    // tint can be undone — a picker that can only set a colour is a trap.
+    const currentTint = instance.options?.tint;
+    rows.push({
+      label: currentTint ? 'Colour: Default' : 'Colour: Default (current)',
+      onPress: () => {
+        closeWidgetActionSheet();
+        configureWidgetInstance(instance.id, { tint: undefined });
+      },
+    });
+    for (const id of WIDGET_TINT_IDS) {
+      const label = WIDGET_TINTS[id].label;
+      rows.push({
+        label: id === currentTint ? `Colour: ${label} (current)` : `Colour: ${label}`,
+        onPress: () => {
+          closeWidgetActionSheet();
+          configureWidgetInstance(instance.id, { tint: id });
+        },
+      });
+    }
+
+    // Activity is the one type with a target to choose; offering a "goal" row on
+    // a battery widget would be a setting that changes nothing.
+    if (instance.type === 'activity') {
+      const currentGoal = instance.options?.stepGoal;
+      for (const goal of STEP_GOAL_CHOICES) {
+        const label = `Goal: ${goal.toLocaleString()} steps`;
+        rows.push({
+          label: goal === currentGoal ? `${label} (current)` : label,
+          onPress: () => {
+            closeWidgetActionSheet();
+            configureWidgetInstance(instance.id, { stepGoal: goal });
+          },
+        });
+      }
+    }
+
+    return rows;
+  }, [widgetActionSheet.instance, closeWidgetActionSheet, resizeWidgetInstance, configureWidgetInstance]);
 
   // Stable across renders (#518) — passadas directamente a AppIcon/FolderIcon
   // em vez de uma arrow function nova por ícone a cada render, para que
@@ -2792,7 +2849,7 @@ export function LauncherHomeScreen() {
       <CupertinoActionSheet
         visible={widgetActionSheet.visible}
         onClose={closeWidgetActionSheet}
-        title={widgetActionSheet.instance ? `Resize ${WIDGET_LABELS[widgetActionSheet.instance.type]}` : undefined}
+        title={widgetActionSheet.instance ? `Edit ${WIDGET_LABELS[widgetActionSheet.instance.type]}` : undefined}
         options={widgetActionSheetOptions}
       />
 

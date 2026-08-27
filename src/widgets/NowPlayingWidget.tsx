@@ -12,7 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { widgetInk, widgetPalette } from './widgetPalettes';
+import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import type { WidgetOptions } from './widgetInstances';
 
 export interface NowPlayingTrack {
   title: string;
@@ -27,16 +28,17 @@ export function hasTrack(track: NowPlayingTrack | null | undefined): boolean {
   return !!track && typeof track.title === 'string' && track.title.trim().length > 0;
 }
 
-export function NowPlayingWidget({ track, onPrev, onPlayPause, onNext, onPress }: {
+export function NowPlayingWidget({ track, options, onPrev, onPlayPause, onNext, onPress }: {
   track?: NowPlayingTrack | null;
+  options?: WidgetOptions;
   onPrev?: () => void;
   onPlayPause?: () => void;
   onNext?: () => void;
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
-  const palette = widgetPalette('nowPlaying');
-  const ink = widgetInk('nowPlaying');
+  const palette = resolveWidgetPalette('nowPlaying', options);
+  const ink = resolveWidgetInk('nowPlaying', options);
   const playing = hasTrack(track);
 
   return (

@@ -112,3 +112,50 @@ export function widgetInk(type: WidgetType): typeof WIDGET_INK[WidgetInkTone] {
   const palette = widgetPalette(type);
   return WIDGET_INK[palette?.ink ?? 'onDark'];
 }
+
+/**
+ * The tints a widget can be set to (#963), on top of its type's own palette.
+ *
+ * Why a fixed set and not a colour picker: every entry has to pair a ground with
+ * an ink tone that stays legible on it, and a free colour cannot promise that.
+ * These are the iOS system colours at widget weight, each with the tone its
+ * ground needs — which is the same contract WIDGET_PALETTES keeps.
+ */
+export const WIDGET_TINTS: Record<string, { label: string; palette: WidgetPalette }> = {
+  graphite: { label: 'Graphite', palette: gradient('#3A3A3E', '#101012', '#FFFFFF') },
+  blue: { label: 'Blue', palette: gradient('#2F6FD0', '#10294F', '#FFFFFF') },
+  green: { label: 'Green', palette: gradient('#2E7D46', '#12331F', '#FFFFFF') },
+  indigo: { label: 'Indigo', palette: gradient('#4B4BA8', '#1B1B3A', '#FFFFFF') },
+  pink: { label: 'Pink', palette: gradient('#D8497A', '#4A1229', '#FFFFFF') },
+  orange: { label: 'Orange', palette: gradient('#D2801E', '#3E2408', '#FFFFFF') },
+  // The one light ground, so a widget can be the white card iOS uses for
+  // Calendar and Notes. Its ink tone is what makes it safe to offer.
+  paper: { label: 'Paper', palette: solid('#FFFFFF', '#F2F2F7', '#FF3B30', 'onLight') },
+};
+
+/** The tint ids, in the order a picker should show them. */
+export const WIDGET_TINT_IDS: readonly string[] = Object.keys(WIDGET_TINTS);
+
+/**
+ * The palette a widget renders with: its tint if it has one, else its type's.
+ *
+ * An unknown tint id falls back to the type's palette instead of throwing —
+ * options come off disk, and a value written by a later version must degrade
+ * rather than blank the widget.
+ */
+export function resolveWidgetPalette(
+  type: WidgetType,
+  options?: { tint?: string },
+): WidgetPalette | null {
+  const tint = options?.tint ? WIDGET_TINTS[options.tint] : undefined;
+  return tint?.palette ?? widgetPalette(type);
+}
+
+/** The ink tones for whatever ground `resolveWidgetPalette` settled on. */
+export function resolveWidgetInk(
+  type: WidgetType,
+  options?: { tint?: string },
+): typeof WIDGET_INK[WidgetInkTone] {
+  const palette = resolveWidgetPalette(type, options);
+  return WIDGET_INK[palette?.ink ?? 'onDark'];
+}

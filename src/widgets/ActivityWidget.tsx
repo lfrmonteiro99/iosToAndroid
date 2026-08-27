@@ -11,8 +11,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { widgetInk, widgetPalette } from './widgetPalettes';
-import type { WidgetSize } from './widgetInstances';
+import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import type { WidgetOptions, WidgetSize } from './widgetInstances';
 
 /** The step target the ring closes at. iOS's own default move goal. */
 export const DEFAULT_STEP_GOAL = 10_000;
@@ -75,28 +75,34 @@ function Ring({ size, progress, accent, track }: {
   );
 }
 
-export function ActivityWidget({ steps, history = [], today, size, goal = DEFAULT_STEP_GOAL, onPress }: {
+export function ActivityWidget({ steps, history = [], today, size, goal, options, onPress }: {
   steps: number;
   history?: readonly ActivityDay[];
   /** Local `YYYY-MM-DD`; injected so the bars are deterministic under test. */
   today: string;
   size?: WidgetSize;
+  /** Explicit goal, for tests and previews. The user's own choice lives in `options`. */
   goal?: number;
+  options?: WidgetOptions;
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
-  const palette = widgetPalette('activity');
-  const ink = widgetInk('activity');
-  const progress = ringProgress(steps, goal);
+  const palette = resolveWidgetPalette('activity', options);
+  const ink = resolveWidgetInk('activity', options);
+  // An explicit prop wins (previews, tests), then the user's option, then the
+  // default — so a goal the user set is never overridden by a caller that
+  // simply did not pass one.
+  const activeGoal = goal ?? options?.stepGoal ?? DEFAULT_STEP_GOAL;
+  const progress = ringProgress(steps, activeGoal);
   const week = size === 'small' ? [] : lastDays(history, today);
-  const peak = Math.max(goal, ...week.map((d) => d.steps));
+  const peak = Math.max(activeGoal, ...week.map((d) => d.steps));
 
   return (
     <WidgetCard
       testID="widget-card-activity"
       onPress={onPress}
       appearance={palette?.appearance}
-      accessibilityLabel={`Activity, ${steps} steps of ${goal}`}
+      accessibilityLabel={`Activity, ${steps} steps of ${activeGoal}`}
     >
       <View style={styles.row}>
         <View style={styles.ringSlot}>

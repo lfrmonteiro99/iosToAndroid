@@ -85,6 +85,25 @@ export const ALLOWED_WIDGET_SIZES: Record<WidgetType, readonly WidgetSize[]> = {
   quickDial: ['medium'],
 };
 
+/**
+ * The per-widget settings a user can change beyond size (#963).
+ *
+ * Deliberately a CLOSED shape rather than an open bag: an unknown key persisted
+ * from a future version would survive normalisation and then be read by nothing,
+ * and a typo in a call site would look like a working option. Every field is
+ * optional — an absent option means "the type's own default", which is what
+ * every widget rendered before this existed.
+ */
+export interface WidgetOptions {
+  /** Ground and accent override, from WIDGET_TINTS. Absent = the type's palette. */
+  tint?: string;
+  /** Activity's step goal. Absent = DEFAULT_STEP_GOAL. */
+  stepGoal?: number;
+}
+
+/** The step goals the widget offers. Kept here so the model can validate them. */
+export const STEP_GOAL_CHOICES: readonly number[] = [5000, 8000, 10_000, 12_000, 15_000, 20_000];
+
 /** A widget the user has placed, as opposed to a type that is switched on. */
 export interface WidgetInstance {
   /** Stable across restarts — it is the key everything else refers to. */
@@ -97,6 +116,8 @@ export interface WidgetInstance {
   /** Top-left corner, in icon-grid cells. Consumed by #935; stored from now. */
   col: number;
   row: number;
+  /** Per-instance settings (#963). Absent for every widget placed before it. */
+  options?: WidgetOptions;
 }
 
 export const WIDGET_INSTANCES_KEY = '@iostoandroid/widget_instances';
@@ -217,6 +238,7 @@ export function normalizeInstances(raw: unknown, knownTypes: readonly WidgetType
     if (seen.has(id)) id = makeWidgetId(type, nextSeq(out, type));
     seen.add(id);
 
+    const options = normalizeOptions(e.options);
     out.push({
       id,
       type,
@@ -224,6 +246,9 @@ export function normalizeInstances(raw: unknown, knownTypes: readonly WidgetType
       page: pageCoord(e.page, PAGE_UNPLACED),
       col: coord(e.col, 0),
       row: coord(e.row, 0),
+      // Omitted rather than stored empty, so an instance that has never been
+      // customised is byte-identical to what earlier versions wrote.
+      ...(options ? { options } : {}),
     });
   }
 
@@ -342,4 +367,55 @@ export function reconcileWithTypes(
 /** The types currently placed, in order — what callers that still think in types read. */
 export function instanceTypes(instances: readonly WidgetInstance[]): WidgetType[] {
   return instances.map((i) => i.type);
+}
+
+/**
+ * Keep only options this version understands, with usable values.
+ *
+ * Returns undefined for "nothing to store": an empty object would be written to
+ * disk on every save for every widget that has no options, and would make an
+ * un-customised instance look customised.
+ *
+ * The tint is NOT validated against the tint table here — that table lives with
+ * the palettes, and importing it would tie this pure model file to the theme. An
+ * unknown tint id falls back to the type's palette at render time, which is the
+ * same outcome as dropping it and cannot crash.
+ */
+export function normalizeOptions(raw: unknown): WidgetOptions | undefined {
+  if (raw == null || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: WidgetOptions = {};
+
+  if (typeof r.tint === 'string' && r.tint.trim().length > 0) out.tint = r.tint.trim();
+  if (typeof r.stepGoal === 'number' && Number.isFinite(r.stepGoal) && r.stepGoal > 0) {
+    out.stepGoal = Math.round(r.stepGoal);
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Merge a patch into one instance's options.
+ *
+ * A field set to undefined CLEARS it (back to the type's default), which is how
+ * "no tint" is expressed — a sheet needs a way to undo a choice, not only to
+ * make one. An unknown id is a no-op rather than an error: the sheet's instance
+ * may have been removed on another surface between opening and tapping.
+ */
+export function setWidgetOptions(
+  instances: readonly WidgetInstance[],
+  id: string,
+  patch: WidgetOptions,
+): WidgetInstance[] {
+  return instances.map((instance) => {
+    if (instance.id !== id) return instance;
+    const merged = normalizeOptions({ ...instance.options, ...patch });
+    if (!merged) {
+      // Drop the key entirely rather than leaving `options: {}` behind.
+      const rest = { ...instance };
+      delete rest.options;
+      return rest;
+    }
+    return { ...instance, options: merged };
+  });
 }

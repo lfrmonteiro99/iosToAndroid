@@ -10,8 +10,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { widgetInk, widgetPalette } from './widgetPalettes';
-import type { WidgetSize } from './widgetInstances';
+import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import type { WidgetOptions, WidgetSize } from './widgetInstances';
 
 /**
  * The subset of `CalendarEventItem` this card reads, with the same field names
@@ -55,16 +55,17 @@ export function nextEvent(
     .sort((a, b) => a.start - b.start)[0];
 }
 
-export function CalendarDateWidget({ events = [], size, now, onPress }: {
+export function CalendarDateWidget({ events = [], size, now, options, onPress }: {
   events?: readonly CalendarWidgetEvent[];
   size?: WidgetSize;
   now?: Date;
+  options?: WidgetOptions;
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
   const date = now ?? new Date();
-  const palette = widgetPalette('calendar');
-  const ink = widgetInk('calendar');
+  const palette = resolveWidgetPalette('calendar', options);
+  const ink = resolveWidgetInk('calendar', options);
   const upcoming = nextEvent(events, date.getTime());
 
   return (

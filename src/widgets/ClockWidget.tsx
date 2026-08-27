@@ -13,8 +13,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Line } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { widgetInk, widgetPalette } from './widgetPalettes';
-import type { WidgetSize } from './widgetInstances';
+import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import type { WidgetOptions, WidgetSize } from './widgetInstances';
 
 /** How often the hands move. One second, so the sweep is a sweep. */
 export const CLOCK_TICK_MS = 1000;
@@ -94,9 +94,10 @@ export function ClockFace({ size, angles, accent, ink }: {
  * @param now Injected only by tests and by the gallery preview, which needs a
  * fixed time to stay comparable between snapshots. Live when omitted.
  */
-export function ClockWidget({ size, now, onPress }: {
+export function ClockWidget({ size, now, options, onPress }: {
   size?: WidgetSize;
   now?: Date;
+  options?: WidgetOptions;
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
@@ -110,8 +111,8 @@ export function ClockWidget({ size, now, onPress }: {
 
   const date = now ?? tick;
   const angles = useMemo(() => clockHandAngles(date), [date]);
-  const palette = widgetPalette('clock');
-  const ink = widgetInk('clock');
+  const palette = resolveWidgetPalette('clock', options);
+  const ink = resolveWidgetInk('clock', options);
   const label = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   return (

@@ -27,7 +27,9 @@ import {
   reconcileWithTypes,
   removeWidget as removeWidgetFrom,
   resizeWidget as resizeWidgetIn,
+  setWidgetOptions as setWidgetOptionsIn,
   type WidgetInstance,
+  type WidgetOptions,
   type WidgetSize,
 } from './widgetInstances';
 
@@ -297,6 +299,20 @@ export function useWidgetConfig() {
     });
   }, []);
 
+  /**
+   * Change one widget's options (#963).
+   *
+   * A patch, not a replacement: the tint sheet must not clear a step goal it
+   * knows nothing about. `undefined` for a field clears that field.
+   */
+  const configureWidget = useCallback((id: string, patch: WidgetOptions) => {
+    setInstances((prev) => {
+      const next = setWidgetOptionsIn(prev, id, patch);
+      saveWidgetInstances(next);
+      return next;
+    });
+  }, []);
+
   const resizeWidget = useCallback((id: string, size: WidgetSize) => {
     setInstances((prev) => {
       const next = resizeWidgetIn(prev, id, size);
@@ -312,6 +328,7 @@ export function useWidgetConfig() {
     removeWidget,
     moveWidget,
     resizeWidget,
+    configureWidget,
     enabled,
     setEnabled,
     loaded,
@@ -654,7 +671,16 @@ export function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
  * have no notion of a placed instance; the home screen (which does) resolves
  * one size per type from whichever of its placed instances the caller picks.
  */
-export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>): Record<WidgetType, React.ReactNode> {
+/**
+ * @param optionsFor Per-instance options, collapsed by TYPE — the same shape and
+ * the same limitation as `sizeFor`: this map is keyed by type, so two widgets of
+ * one type cannot yet render differently (the render path has been type-keyed
+ * since #935, and making it instance-keyed is its own change).
+ */
+export function useWidgetMap(
+  sizeFor?: Partial<Record<WidgetType, WidgetSize>>,
+  optionsFor?: Partial<Record<WidgetType, WidgetOptions>>,
+): Record<WidgetType, React.ReactNode> {
   const device = useDevice();
   const nav = useNavigation<AppNavigationProp>();
 
@@ -773,6 +799,7 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
         <ClockWidget
           key="clock"
           size={sizeFor?.clock}
+          options={optionsFor?.clock}
           onPress={() => nav.navigate('Clock')}
         />
       ),
@@ -781,6 +808,7 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
           key="calendar"
           events={calendarEvents}
           size={sizeFor?.calendar}
+          options={optionsFor?.calendar}
           onPress={() => nav.navigate('Calendar')}
         />
       ),
@@ -788,6 +816,7 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
         <NowPlayingWidget
           key="nowPlaying"
           track={track}
+          options={optionsFor?.nowPlaying}
           onPrev={() => { void media('prev'); }}
           onPlayPause={() => { void media('playPause'); }}
           onNext={() => { void media('next'); }}
@@ -800,6 +829,7 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
           history={stepHistory}
           today={todayKey}
           size={sizeFor?.activity}
+          options={optionsFor?.activity}
           onPress={() => nav.navigate('Health')}
         />
       ),
@@ -807,6 +837,7 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
         <QuickDialWidget
           key="quickDial"
           contacts={quickDialContacts}
+          options={optionsFor?.quickDial}
           onCall={(contact) => nav.navigate('CallScreen', {
             name: `${contact.firstName} ${contact.lastName}`.trim(),
             number: contact.phone,
@@ -818,6 +849,8 @@ export function useWidgetMap(sizeFor?: Partial<Record<WidgetType, WidgetSize>>):
     [
       device, calendarEvents, unreadCount, nav, sizeFor?.weather, sizeFor?.upNext,
       sizeFor?.clock, sizeFor?.calendar, sizeFor?.activity,
+      optionsFor?.clock, optionsFor?.calendar, optionsFor?.nowPlaying,
+      optionsFor?.activity, optionsFor?.quickDial,
       track, media, todaySteps, stepHistory, todayKey, quickDialContacts,
     ],
   );

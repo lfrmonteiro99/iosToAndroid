@@ -17,8 +17,22 @@ import { ActivityWidget, DEFAULT_STEP_GOAL, lastDays, ringProgress } from '../Ac
 import { NowPlayingWidget, hasTrack } from '../NowPlayingWidget';
 import { QuickDialWidget, dialableFavourites, initials } from '../QuickDialWidget';
 import { ALL_WIDGET_TYPES, WIDGET_ICONS, WIDGET_LABELS, type WidgetType } from '../TodayWidgets';
-import { ALLOWED_WIDGET_SIZES, DEFAULT_WIDGET_SIZES } from '../widgetInstances';
-import { WIDGET_INK, widgetInk, widgetPalette } from '../widgetPalettes';
+import {
+  ALLOWED_WIDGET_SIZES,
+  DEFAULT_WIDGET_SIZES,
+  normalizeInstances,
+  normalizeOptions,
+  setWidgetOptions,
+} from '../widgetInstances';
+import {
+  WIDGET_INK,
+  WIDGET_TINTS,
+  WIDGET_TINT_IDS,
+  resolveWidgetInk,
+  resolveWidgetPalette,
+  widgetInk,
+  widgetPalette,
+} from '../widgetPalettes';
 
 describe('clock hands', () => {
   it('the hour hand moves with the minutes, instead of jumping hour to hour', () => {
@@ -265,5 +279,98 @@ describe('the widget set stays consistent', () => {
       .map((t) => widgetPalette(t)?.appearance.solidColor.dark)
       .filter(Boolean);
     expect(new Set(grounds).size).toBeGreaterThanOrEqual(6);
+  });
+});
+
+// ─── Customisation (#963) ──────────────────────────────────────────────────
+
+describe('per-widget options', () => {
+  it('a tint replaces the type palette, and clearing it restores the type palette', () => {
+    const tinted = resolveWidgetPalette('battery', { tint: 'pink' });
+    expect(tinted).toBe(WIDGET_TINTS.pink.palette);
+    expect(resolveWidgetPalette('battery', {})).toBe(widgetPalette('battery'));
+    expect(resolveWidgetPalette('battery', undefined)).toBe(widgetPalette('battery'));
+  });
+
+  it('an unknown tint falls back instead of blanking the widget', () => {
+    // Options come off disk: a value written by a later version must degrade.
+    expect(resolveWidgetPalette('battery', { tint: 'chartreuse' })).toBe(widgetPalette('battery'));
+  });
+
+  it('the light tint carries the dark ink with it, wherever it is applied', () => {
+    expect(resolveWidgetInk('battery', { tint: 'paper' })).toBe(WIDGET_INK.onLight);
+    expect(resolveWidgetInk('calendar', { tint: 'graphite' })).toBe(WIDGET_INK.onDark);
+  });
+
+  it('Weather can be tinted even though it has no palette of its own', () => {
+    expect(resolveWidgetPalette('weather', {})).toBeNull();
+    expect(resolveWidgetPalette('weather', { tint: 'blue' })).toBe(WIDGET_TINTS.blue.palette);
+  });
+
+  it('every offered tint exists and pairs a ground with an ink tone', () => {
+    for (const id of WIDGET_TINT_IDS) {
+      const entry = WIDGET_TINTS[id];
+      expect(entry?.label).toBeTruthy();
+      expect(WIDGET_INK[entry.palette.ink]).toBeTruthy();
+      expect(entry.palette.appearance.solidColor.dark).toMatch(/^#/);
+    }
+  });
+
+  it('normalizeOptions drops what this version does not understand', () => {
+    expect(normalizeOptions({ tint: 'blue', bogus: 1 })).toEqual({ tint: 'blue' });
+    expect(normalizeOptions({ stepGoal: 12000 })).toEqual({ stepGoal: 12000 });
+    expect(normalizeOptions({ stepGoal: -5 })).toBeUndefined();
+    expect(normalizeOptions({ stepGoal: 'lots' })).toBeUndefined();
+    expect(normalizeOptions({ tint: '   ' })).toBeUndefined();
+  });
+
+  it('an un-customised widget stores no options key at all', () => {
+    // An empty object would be written on every save and would make an
+    // untouched widget look customised.
+    expect(normalizeOptions({})).toBeUndefined();
+    expect(normalizeOptions(null)).toBeUndefined();
+  });
+
+  it('setWidgetOptions patches rather than replaces', () => {
+    const before = [{ id: 'activity-0', type: 'activity' as WidgetType, size: 'small' as const, page: 0, col: 0, row: 0, options: { stepGoal: 12000 } }];
+    const after = setWidgetOptions(before, 'activity-0', { tint: 'green' });
+    expect(after[0].options).toEqual({ stepGoal: 12000, tint: 'green' });
+  });
+
+  it('clearing the last option removes the key, not leaves it empty', () => {
+    const before = [{ id: 'clock-0', type: 'clock' as WidgetType, size: 'small' as const, page: 0, col: 0, row: 0, options: { tint: 'pink' } }];
+    const after = setWidgetOptions(before, 'clock-0', { tint: undefined });
+    expect(after[0].options).toBeUndefined();
+    expect('options' in after[0]).toBe(false);
+  });
+
+  it('an unknown id is a no-op — the sheet may outlive its widget', () => {
+    const before = [{ id: 'clock-0', type: 'clock' as WidgetType, size: 'small' as const, page: 0, col: 0, row: 0 }];
+    expect(setWidgetOptions(before, 'gone-9', { tint: 'blue' })).toEqual(before);
+  });
+
+  it('options survive a round trip through normalizeInstances', () => {
+    const stored = [{ id: 'activity-0', type: 'activity', size: 'small', page: 0, col: 0, row: 0, options: { tint: 'green', stepGoal: 8000, junk: true } }];
+    const [instance] = normalizeInstances(stored, ALL_WIDGET_TYPES);
+    expect(instance.options).toEqual({ tint: 'green', stepGoal: 8000 });
+  });
+
+  it('the activity goal comes from the option, and an explicit prop still wins', () => {
+    const withOption = render(
+      <ActivityWidget steps={4000} today="2026-01-07" options={{ stepGoal: 8000 }} />,
+    );
+    // 4000 of 8000 is half the ring.
+    expect(withOption.getByText('50%')).toBeTruthy();
+    const withProp = render(
+      <ActivityWidget steps={4000} today="2026-01-07" goal={4000} options={{ stepGoal: 8000 }} />,
+    );
+    expect(withProp.getByText('100%')).toBeTruthy();
+  });
+
+  it('a tinted widget still renders its own content', () => {
+    const { getByTestId } = render(
+      <ClockWidget now={new Date(2026, 0, 1, 10, 9)} options={{ tint: 'paper' }} />,
+    );
+    expect(getByTestId('clock-face')).toBeTruthy();
   });
 });
