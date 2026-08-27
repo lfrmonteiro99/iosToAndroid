@@ -1,12 +1,13 @@
 /**
  * Drawing primitives for the built-in app icons.
  *
- * Why Views and not SVG: this repo has no `react-native-svg` (see the note in
- * PassCodeVisual.tsx, which draws its own bars for the same reason), and adding
- * a native library to draw icons would mean a new prebuild for a purely visual
- * change. Every shape real iOS stock icons are made of — discs, rings, rounded
- * bars, gradient grounds, rotated strokes — is expressible as a positioned View,
- * so the artwork below is built from these helpers instead.
+ * Views or SVG: these helpers cover every shape that IS a disc, a ring, a
+ * rounded bar or a rotated stroke — keypads, note lines, index tabs, clock
+ * hands, card stacks — and for those a positioned View is cheaper than an Svg
+ * root and needs no path to maintain. Shapes that are curves of any other kind
+ * (a heart's cusp, a cloud's scalloped top, an arc, a tapered blade) are in
+ * svgShapes.tsx instead: composed out of discs and bars they came out as
+ * recognisable-but-wrong lumps, with visible notches where the pieces met.
  *
  * Everything is expressed as a FRACTION of the tile side, never in absolute dp,
  * so one definition renders correctly at every icon size the launcher uses
