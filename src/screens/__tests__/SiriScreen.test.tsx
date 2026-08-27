@@ -102,7 +102,7 @@ describe('SiriScreen', () => {
     await waitFor(() => {
       expect(getByText(/It's/)).toBeTruthy();
     });
-    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /));
+    expect(Speech.speak).toHaveBeenCalledWith(expect.stringMatching(/^It's /), { language: expect.any(String) });
   });
 
   it('unrecognized command speaks the not-supported reply', async () => {
@@ -114,7 +114,7 @@ describe('SiriScreen', () => {
     fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
-      expect(getByText(/not supported yet|didn't catch/i)).toBeTruthy();
+      expect(getByText(/can't do that yet|didn't catch/i)).toBeTruthy();
     });
     expect(Speech.speak).toHaveBeenCalled();
   });
@@ -180,14 +180,14 @@ describe('SiriScreen', () => {
   it('does not create an alarm for an unparseable time (stays unrecognized)', () => {
     const { getByText } = submit('Set alarm for banana');
     expect(mockCreateQuickAlarm).not.toHaveBeenCalled();
-    expect(getByText(/not supported yet|didn't catch/i)).toBeTruthy();
+    expect(getByText(/can't do that yet|didn't catch/i)).toBeTruthy();
   });
 
   // ── UNRECOGNIZED ─────────────────────────────────────────────────────────
 
   it('responds to an unrecognized command without throwing or navigating', () => {
     const { getByText, nav } = submit('Make me a sandwich');
-    expect(getByText(/not supported yet|didn't catch/i)).toBeTruthy();
+    expect(getByText(/can't do that yet|didn't catch/i)).toBeTruthy();
     expect(nav.navigate).not.toHaveBeenCalled();
     expect(mockLaunchApp).not.toHaveBeenCalled();
   });
@@ -261,7 +261,7 @@ describe('SiriScreen', () => {
   it('speaks the response exactly once when a command yields a response', () => {
     submit('Open Calculator');
     expect(Speech.speak).toHaveBeenCalledTimes(1);
-    expect(Speech.speak).toHaveBeenCalledWith('Opening Calculator.');
+    expect(Speech.speak).toHaveBeenCalledWith('Opening Calculator.', { language: expect.any(String) });
   });
 
   it('does not speak the greeting on initial mount', () => {
@@ -276,9 +276,9 @@ describe('SiriScreen', () => {
     fireEvent(field, 'submitEditing');
     // Success response set synchronously, failure response once the launch
     // settles (rejected here; a `false` result takes the same corrective path).
-    expect(Speech.speak).toHaveBeenCalledWith('Opening Spotify.');
+    expect(Speech.speak).toHaveBeenCalledWith('Opening Spotify.', { language: expect.any(String) });
     await waitFor(() =>
-      expect(Speech.speak).toHaveBeenCalledWith("Couldn't open Spotify."),
+      expect(Speech.speak).toHaveBeenCalledWith("Couldn't open Spotify.", { language: expect.any(String) }),
     );
     expect(Speech.speak).toHaveBeenCalledTimes(2);
   });

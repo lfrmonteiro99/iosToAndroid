@@ -444,7 +444,12 @@ interface LauncherModuleType {
   openWriteSettingsAccess(): Promise<boolean>;
   setRingtone(uri: string): Promise<boolean>;
   // Speech recognition (Siri / voice-to-text)
-  startSpeechRecognition(): Promise<boolean>;
+  /**
+   * Start listening. `language` is a BCP-47 tag (e.g. `pt-PT`) — pass the
+   * language the caller also parses and speaks in, so the transcription and the
+   * parser cannot disagree. Null falls back to the device default.
+   */
+  startSpeechRecognition(language?: string | null): Promise<boolean>;
   stopSpeechRecognition(): Promise<boolean>;
   isSpeechRecognitionAvailable(): Promise<boolean>;
   // App access (sensor usage, #634): a foreground service observes camera /
@@ -574,7 +579,7 @@ const stub: LauncherModuleType = {
   canWriteSystemSettings: async () => false,
   openWriteSettingsAccess: async () => false,
   setRingtone: async () => false,
-  startSpeechRecognition: async () => false,
+  startSpeechRecognition: async (_language?: string | null) => false,
   stopSpeechRecognition: async () => false,
   isSpeechRecognitionAvailable: async () => false,
   getRecentAccessEvents: async () => [],
@@ -970,8 +975,8 @@ function createBridgedModule(): LauncherModuleType {
       try { return await nativeModule.setRingtone(uri); }
       catch (e) { console.error('LauncherModule.setRingtone failed:', e); reportBridgeError('setRingtone', e); return false; }
     },
-    startSpeechRecognition: async () => {
-      try { return await nativeModule.startSpeechRecognition(); }
+    startSpeechRecognition: async (language?: string | null) => {
+      try { return await nativeModule.startSpeechRecognition(language ?? null); }
       catch (e) { console.error('LauncherModule.startSpeechRecognition failed:', e); reportBridgeError('startSpeechRecognition', e); return false; }
     },
     stopSpeechRecognition: async () => {

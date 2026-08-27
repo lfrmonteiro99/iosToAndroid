@@ -20,16 +20,15 @@ import { useContacts, Contact } from '../store/ContactsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { parseCommand } from '../assistant/commandParser';
 import { speak, stopSpeaking } from '../assistant/speech';
-import { BUILT_IN_APPS } from './LauncherHomeScreen';
+import { assistantLocale, deviceLanguageTag } from '../assistant/locale';
+import { assistantStrings } from '../assistant/replies';
+import { builtInLabelForSpokenName, builtInRouteForSpokenName } from '../assistant/builtInAppNames';
 import type { AppNavigationProp } from '../navigation/types';
 import { logger } from '../utils/logger';
 import { createQuickAlarm } from '../utils/alarmScheduling';
 import { useAlert, SiriWaveform } from '../components';
 import { withAutoLockSuppressed } from '../utils/permissions';
 
-const GREETING = 'What can I help you with?';
-const LISTENING = 'Listening…';
-const NOT_SUPPORTED = "That's not supported yet.";
 
 // Built-in apps are virtual screens of this app, not real Android packages:
 // their `packageName` (com.iostoandroid.*) is absent from the PackageManager
@@ -38,12 +37,10 @@ const NOT_SUPPORTED = "That's not supported yet.";
 // the Android home screen (#697 class of bug). The home grid and the Control
 // Center already open them via navigation; the assistant must do the same.
 //
-// BUILT_IN_APPS maps packageName -> route, and its route names (Calculator,
-// Notes, Weather, …) are exactly the spoken app names Siri matches, so we
-// invert it into a display-name -> route lookup.
-const BUILT_IN_APP_BY_NAME: Record<string, keyof typeof BUILT_IN_APPS> = Object.fromEntries(
-  Object.entries(BUILT_IN_APPS).map(([, route]) => [String(route).toLowerCase(), route]),
-);
+// Which name resolves to which screen lives in assistant/builtInAppNames.ts:
+// this screen used to invert the ROUTE table, and a route name is not what the
+// user says — "Safari", "Find My" and "App Store" all failed while "Browser"
+// worked, and no Portuguese name resolved at all.
 
 /** Format a Date the way the assistant speaks a clock time ("2:05 PM"). */
 export function formatAssistantTime(date: Date): string {
@@ -99,6 +96,12 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
   const { contacts } = useContacts();
   const alert = useAlert();
 
+  // The assistant listens, parses and answers in ONE language — the phone's.
+  // Resolved once per mount: a locale change restarts the app anyway, and
+  // re-reading it per render would rebuild every callback below.
+  const languageTag = useMemo(() => deviceLanguageTag(), []);
+  const strings = useMemo(() => assistantStrings(assistantLocale(languageTag)), [languageTag]);
+
   const [text, setText] = useState('');
   const [response, setResponse] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -129,19 +132,22 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         // this app, not real Android packages — route them through the in-app
         // navigator so they open internally instead of falling back to the
         // Android home screen (issue #700; same class of bug as #697).
-        const builtInRoute = BUILT_IN_APP_BY_NAME[command.appName.trim().toLowerCase()];
+        const spoken = command.appName.trim();
+        const builtInRoute = builtInRouteForSpokenName(spoken);
         if (builtInRoute) {
-          reply = `Opening ${command.appName.trim()}.`;
+          // The label, not what was said: "A abrir Safari" reads back the app
+          // the user will see, and confirms the assistant understood which one.
+          reply = strings.opening(builtInLabelForSpokenName(spoken) ?? spoken);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- built-in routes all have undefined params; navigate overloads require params spec
           navigation.navigate(builtInRoute as any);
           break;
         }
         const app = findApp(command.appName);
         if (!app) {
-          reply = `Couldn't find an app called "${command.appName}".`;
+          reply = strings.appNotFound(command.appName);
           break;
         }
-        reply = `Opening ${app.name}.`;
+        reply = strings.opening(app.name);
         // The optimistic "Opening …" is already on screen, so both failure
         // shapes have to correct it through setResponse: `reply` is long out
         // of scope by the time this settles. A failed native launch resolves
@@ -151,36 +157,36 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         // opened an app it never opened.
         launchApp(app.packageName)
           .then((ok) => {
-            if (!ok) setResponse(`Couldn't open ${app.name}.`);
+            if (!ok) setResponse(strings.openFailed(app.name));
           })
           .catch((e) => {
             logger.warn('SiriScreen', 'launchApp failed', e);
-            setResponse(`Couldn't open ${app.name}.`);
+            setResponse(strings.openFailed(app.name));
           });
         break;
       }
       case 'CALL_CONTACT': {
         const contact = findContact(contacts, command.contactName);
         if (!contact) {
-          reply = `Couldn't find a contact called "${command.contactName}".`;
+          reply = strings.contactNotFound(command.contactName);
           break;
         }
-        reply = `Calling ${fullName(contact) || contact.phone}.`;
+        reply = strings.calling(fullName(contact) || contact.phone);
         navigation.navigate('CallScreen', { name: fullName(contact), number: contact.phone });
         break;
       }
       case 'SEND_MESSAGE': {
         const contact = findContact(contacts, command.contactName);
         if (!contact) {
-          reply = `Couldn't find a contact called "${command.contactName}".`;
+          reply = strings.contactNotFound(command.contactName);
           break;
         }
-        reply = `Messaging ${fullName(contact) || contact.phone}.`;
+        reply = strings.messaging(fullName(contact) || contact.phone);
         navigation.navigate('Conversation', { address: contact.phone });
         break;
       }
       case 'WHAT_TIME':
-        setResponse(`It's ${formatAssistantTime(new Date())}`);
+        setResponse(strings.timeIs(formatAssistantTime(new Date())));
         return;
       case 'SET_ALARM': {
         const when = new Date();
@@ -189,17 +195,20 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         // and the confirmation only claims success once the alarm is stored.
         createQuickAlarm(command.hour, command.minute)
           .then(() => {
-            setResponse(`Alarm set for ${formatAssistantTime(when)}`);
+            setResponse(strings.alarmSet(formatAssistantTime(when)));
           })
           .catch((e) => {
             logger.warn('SiriScreen', 'createQuickAlarm failed', e);
-            setResponse("Couldn't set that alarm.");
+            setResponse(strings.alarmFailed);
           });
         return;
       }
       case 'UNRECOGNIZED':
       default:
-        reply = NOT_SUPPORTED;
+        // Names what the assistant CAN do, in the phone's language: the old
+        // "That's not supported yet." was the reply almost every spoken
+        // request got, and it told the user nothing they could act on.
+        reply = strings.notSupported;
         break;
     }
 
@@ -207,7 +216,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
     // `response`, so setting it is what both shows and says the answer — the
     // WHAT_TIME / SET_ALARM branches return early because they set it themselves.
     setResponse(reply);
-  }, [findApp, contacts, launchApp, navigation]);
+  }, [findApp, contacts, launchApp, navigation, strings]);
 
   const handleSubmit = useCallback(() => {
     const input = text;
@@ -252,7 +261,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
       });
       unsubError = mod.addSpeechErrorListener?.((err) => {
         setListening(false);
-        setResponse(`Couldn't hear you (${err}).`);
+        setResponse(strings.didNotHear(err));
       });
     });
 
@@ -262,7 +271,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
       unsubPartial?.();
       unsubError?.();
     };
-  }, [listening, runCommand]);
+  }, [listening, runCommand, strings]);
 
   const stopListening = useCallback(async () => {
     setListening(false);
@@ -272,7 +281,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
 
   const startListening = useCallback(async () => {
     if (voiceAvailable === false) {
-      alert('Voice Not Available', 'Speech recognition is not available on this device.');
+      alert(strings.voiceUnavailableTitle, strings.voiceUnavailableBody);
       return;
     }
 
@@ -295,15 +304,15 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           ));
           if (result !== PermissionsAndroid.RESULTS.GRANTED) {
             alert(
-              'Microphone Needed',
+              strings.micNeededTitle,
               result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-                ? 'Microphone access is disabled. Enable it in system settings to talk to the assistant.'
-                : 'Microphone access was denied. Voice commands need it to work.',
+                ? strings.micBlockedBody
+                : strings.micDeniedBody,
               [
                 ...(result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-                  ? [{ text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } }]
+                  ? [{ text: strings.openSettings, onPress: () => { Linking.openSettings().catch(() => {}); } }]
                   : []),
-                { text: 'OK' },
+                { text: strings.ok },
               ],
             );
             return;
@@ -315,18 +324,20 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
     }
 
     setText('');
-    setResponse(LISTENING);
+    setResponse(strings.listening);
     setListening(true);
 
     const mod = await getLauncherModuleExports();
-    const started = await mod?.default?.startSpeechRecognition().catch(() => false);
+    // Same tag the parser and the voice use, so the transcription cannot
+    // arrive in a language the parser does not know.
+    const started = await mod?.default?.startSpeechRecognition(languageTag).catch(() => false);
     if (!started) {
       // Native side already emitted an error; but if the module was missing
       // entirely, clear the listening state so the mic is tappable again.
       setListening(false);
-      setResponse('Voice input is unavailable right now.');
+      setResponse(strings.voiceUnavailableNow);
     }
-  }, [voiceAvailable, alert]);
+  }, [voiceAvailable, alert, strings, languageTag]);
 
   const toggleListening = useCallback(() => {
     if (listening) {
@@ -350,8 +361,8 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
   // so the same text submitted twice doesn't double-speak. The `response`
   // guard skips the initial `null` (the greeting shows via `GREETING`).
   useEffect(() => {
-    if (response) speak(response);
-  }, [response]);
+    if (response) speak(response, languageTag);
+  }, [response, languageTag]);
 
   useEffect(() => () => stopSpeaking(), []);
 
@@ -363,7 +374,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
       ? colors.tertiaryLabel
       : colors.systemBlue;
 
-  const displayText = listening ? (partial || 'Listening…') : (response ?? GREETING);
+  const displayText = listening ? (partial || strings.listening) : (response ?? strings.greeting);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.systemBackground }]}>
@@ -376,7 +387,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
           style={styles.backButton}
         >
           <Ionicons name="chevron-back" size={26} color={colors.systemBlue} />
-          <Text style={[typography.body, { color: colors.systemBlue }]}>Back</Text>
+          <Text style={[typography.body, { color: colors.systemBlue }]}>{strings.back}</Text>
         </Pressable>
       </View>
 
@@ -420,7 +431,7 @@ export function SiriScreen({ navigation }: SiriScreenProps) {
         <TextInput
           ref={inputRef}
           style={[typography.body, styles.input, { color: colors.label, backgroundColor: colors.systemBackground }]}
-          placeholder="Type a request"
+          placeholder={strings.inputPlaceholder}
           placeholderTextColor={colors.systemGray}
           value={text}
           onChangeText={setText}

@@ -423,7 +423,7 @@ jest.mock('./modules/launcher-module/src', () => ({
     canWriteSystemSettings: jest.fn(() => Promise.resolve(false)),
     openWriteSettingsAccess: jest.fn(() => Promise.resolve(true)),
     setRingtone: jest.fn(() => Promise.resolve(false)),
-    startSpeechRecognition: jest.fn(() => Promise.resolve(true)),
+    startSpeechRecognition: jest.fn((_language) => Promise.resolve(true)),
     stopSpeechRecognition: jest.fn(() => Promise.resolve(true)),
     isSpeechRecognitionAvailable: jest.fn(() => Promise.resolve(true)),
     // #627 child issue: push the protected set to the foreground monitor.
