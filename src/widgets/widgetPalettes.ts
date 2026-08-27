@@ -159,3 +159,76 @@ export function resolveWidgetInk(
   const palette = resolveWidgetPalette(type, options);
   return WIDGET_INK[palette?.ink ?? 'onDark'];
 }
+
+/**
+ * The system tint applied to a widget, the way iOS applies it (#965).
+ *
+ * On iOS 18 and later, choosing the Tinted home-screen appearance recolours the
+ * whole screen: "The color you pick using the Tinted option shows up virtually
+ * everywhere on the Home Screen", widgets included, and the widget is rendered
+ * in the ACCENTED mode — desaturated, with the system compositing its own
+ * gradient over the result. Our launcher already has that setting for icons
+ * (`iconTintEnabled` / `iconTintColor`) and the widgets ignored it, so a tinted
+ * home screen had monochrome icons above full-colour widgets.
+ *
+ * The tint replaces the ground rather than being blended over it: a translucent
+ * overlay on ten different palettes gives ten different results, which is the
+ * opposite of what the setting is for.
+ */
+export function systemTintPalette(color: string): WidgetPalette {
+  return {
+    appearance: {
+      surface: 'gradient',
+      // The system's own treatment is a gradient over the flat tint, which is
+      // what keeps a tinted screen from looking like paper cut-outs.
+      gradientColors: [color, shadeHex(color, 0.55)],
+      solidColor: { light: shadeHex(color, 0.55), dark: shadeHex(color, 0.55) },
+    },
+    // Accented rendering tints primary content white on iPhone, iPad and Mac.
+    ink: 'onDark',
+    accent: '#FFFFFF',
+  };
+}
+
+/**
+ * Multiply a `#rrggbb` by `factor`, for the gradient's darker stop.
+ *
+ * Non-hex input is returned unchanged: the tint colour comes from settings, and
+ * a malformed value must degrade to a flat ground rather than throw inside a
+ * render.
+ */
+export function shadeHex(hex: string, factor: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = Number.parseInt(m[1], 16);
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v * factor)));
+  const r = clamp((n >> 16) & 0xff);
+  const g = clamp((n >> 8) & 0xff);
+  const b = clamp(n & 0xff);
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Everything that decides a widget's ground, in the order iOS resolves it:
+ * the system tint wins over a per-widget tint, which wins over the type's own
+ * palette. The system setting is a statement about the WHOLE home screen, so a
+ * widget keeping its own colour through it would read as a bug.
+ */
+export function widgetSurface(
+  type: WidgetType,
+  options?: { tint?: string },
+  systemTint?: string | null,
+): WidgetPalette | null {
+  if (systemTint) return systemTintPalette(systemTint);
+  return resolveWidgetPalette(type, options);
+}
+
+/** The ink tones for whatever `widgetSurface` settled on. */
+export function widgetSurfaceInk(
+  type: WidgetType,
+  options?: { tint?: string },
+  systemTint?: string | null,
+): typeof WIDGET_INK[WidgetInkTone] {
+  const palette = widgetSurface(type, options, systemTint);
+  return WIDGET_INK[palette?.ink ?? 'onDark'];
+}

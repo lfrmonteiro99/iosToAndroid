@@ -13,7 +13,7 @@ import { CupertinoPressable } from '../components/CupertinoPressable';
 import { useTheme } from '../theme/ThemeContext';
 import { avatarColorForName } from '../utils/avatarColor';
 import { WidgetCard } from './WidgetCard';
-import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import { useWidgetSurface } from './useWidgetSurface';
 import type { WidgetOptions } from './widgetInstances';
 
 export interface QuickDialContact {
@@ -58,8 +58,7 @@ export function QuickDialWidget({ contacts = [], options, onCall, onPress }: {
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
-  const palette = resolveWidgetPalette('quickDial', options);
-  const ink = resolveWidgetInk('quickDial', options);
+  const { palette, ink } = useWidgetSurface('quickDial', options);
   const shown = dialableFavourites(contacts);
 
   return (

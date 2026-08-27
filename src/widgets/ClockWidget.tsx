@@ -13,7 +13,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Line } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import { useWidgetSurface } from './useWidgetSurface';
 import type { WidgetOptions, WidgetSize } from './widgetInstances';
 
 /** How often the hands move. One second, so the sweep is a sweep. */
@@ -111,8 +111,7 @@ export function ClockWidget({ size, now, options, onPress }: {
 
   const date = now ?? tick;
   const angles = useMemo(() => clockHandAngles(date), [date]);
-  const palette = resolveWidgetPalette('clock', options);
-  const ink = resolveWidgetInk('clock', options);
+  const { palette, ink } = useWidgetSurface('clock', options);
   const label = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   return (

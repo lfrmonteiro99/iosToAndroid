@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CupertinoPressable } from '../components/CupertinoPressable';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import { useWidgetSurface } from './useWidgetSurface';
 import type { WidgetOptions } from './widgetInstances';
 
 export interface NowPlayingTrack {
@@ -37,8 +37,7 @@ export function NowPlayingWidget({ track, options, onPrev, onPlayPause, onNext, 
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
-  const palette = resolveWidgetPalette('nowPlaying', options);
-  const ink = resolveWidgetInk('nowPlaying', options);
+  const { palette, ink } = useWidgetSurface('nowPlaying', options);
   const playing = hasTrack(track);
 
   return (

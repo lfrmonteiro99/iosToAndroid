@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WidgetCard, type WidgetAppearance } from './WidgetCard';
+import { WidgetRing } from './WidgetRing';
+import { useWidgetSurface } from './useWidgetSurface';
 import { ClockWidget } from './ClockWidget';
 import { CalendarDateWidget } from './CalendarDateWidget';
 import { NowPlayingWidget, type NowPlayingTrack } from './NowPlayingWidget';
@@ -336,40 +338,49 @@ export function useWidgetConfig() {
 }
 
 // ---------------------------------------------------------------------------
-// Progress bar (minimal, no external dep)
-// ---------------------------------------------------------------------------
-
-function ProgressBar({ value, color }: { value: number; color?: string }) {
-  const { theme } = useTheme();
-  const barColor = color ?? theme.colors.accent;
-  return (
-    <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.round(value * 100)}%` as `${number}%`, backgroundColor: barColor }]} />
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Battery Widget
 // ---------------------------------------------------------------------------
 
+/**
+ * #965: a RING, like the stock Batteries widget, not a bar.
+ *
+ * "Small widgets use their limited space to typically show a single piece of
+ * information while larger sizes support additional layers of information and
+ * actions" (HIG, Widgets). This card was a glyph, a title, a 36-point number, a
+ * progress bar and a caption — five pieces in a 2x2 cell, which is also what
+ * made every small widget look like every other one.
+ *
+ * The percentage stays inside the ring. The stock small Batteries widget drops
+ * it entirely and shows rings alone, but it is charting up to four devices,
+ * where a bare ring is unambiguous; ours charts one, and a launcher whose
+ * battery widget cannot tell you the number is worse, not more faithful.
+ */
 export function BatteryWidget({ level, isCharging, onPress }: { level: number; isCharging: boolean; onPress?: () => void }) {
   const { textScale } = useTheme();
   const pct = Math.round(level * 100);
-  const color = pct > 20 ? SystemColors.dark.systemGreen : SystemColors.dark.systemRed;
-  const iconName: keyof typeof Ionicons.glyphMap = isCharging ? 'battery-charging' : (pct > 50 ? 'battery-full' : pct > 20 ? 'battery-half' : 'battery-dead');
+  const { palette, ink } = useWidgetSurface('battery');
+  const color = pct > 20 ? (palette?.accent ?? SystemColors.dark.systemGreen) : SystemColors.dark.systemRed;
 
   return (
-    <WidgetCard testID="widget-card-battery" onPress={onPress} accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}>
-      <View style={styles.widgetRow}>
-        <Ionicons name={iconName} size={28} color={color} />
-        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Battery</Text>
+    <WidgetCard
+      testID="widget-card-battery"
+      onPress={onPress}
+      appearance={palette?.appearance}
+      accessibilityLabel={`Battery ${pct}%${isCharging ? ', charging' : ''}`}
+    >
+      <View style={styles.ringBody}>
+        <WidgetRing size={84} progress={level} color={color} trackColor={ink.track} testID="battery-ring">
+          <Text style={[styles.ringValue, { color: ink.primary, fontSize: 20 * textScale }]}>{pct}%</Text>
+          {isCharging && (
+            // The bolt is wrapped so the state is addressable in a test: the
+            // icon font component does not forward a testID of its own.
+            <View testID="battery-charging-bolt">
+              <Ionicons name="flash" size={14} color={color} />
+            </View>
+          )}
+        </WidgetRing>
+        <Text style={[styles.ringCaption, { color: ink.title, fontSize: 13 * textScale }]}>Battery</Text>
       </View>
-      <Text style={[styles.widgetBigNumber, { color, fontSize: 36 * textScale }]}>{pct}%</Text>
-      <ProgressBar value={level} color={color} />
-      <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>
-        {isCharging ? 'Charging' : 'On battery'}
-      </Text>
     </WidgetCard>
   );
 }
@@ -389,22 +400,30 @@ export function StorageWidget({
   usedPercentage: number;
   onPress?: () => void;
 }) {
-  const { theme, textScale } = useTheme();
+  const { textScale } = useTheme();
   const pct = usedPercentage / 100;
-  const color = pct > 0.85 ? SystemColors.dark.systemRed : pct > 0.65 ? SystemColors.dark.systemOrange : theme.colors.accent;
+  const { palette, ink } = useWidgetSurface('storage');
+  const color = pct > 0.85 ? SystemColors.dark.systemRed : pct > 0.65 ? SystemColors.dark.systemOrange : (palette?.accent ?? SystemColors.dark.systemBlue);
 
   return (
-    <WidgetCard testID="widget-card-storage" onPress={onPress} accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}>
-      <View style={styles.widgetRow}>
-        <Ionicons name="server" size={22} color={color} />
-        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Storage</Text>
+    <WidgetCard
+      testID="widget-card-storage"
+      onPress={onPress}
+      appearance={palette?.appearance}
+      accessibilityLabel={`Storage: ${usedGB} GB of ${totalGB} GB used`}
+    >
+      <View style={styles.ringBody}>
+        <WidgetRing size={84} progress={pct} color={color} trackColor={ink.track} testID="storage-ring">
+          <Text style={[styles.ringValue, { color: ink.primary, fontSize: 20 * textScale }]}>
+            {Math.round(usedPercentage)}%
+          </Text>
+        </WidgetRing>
+        {/* The caption names the widget, as Battery's does: a bare ring with a
+            percentage in it does not say WHAT is 70% — and the two widgets sit
+            side by side on the same page. The GB figures stay in the
+            accessibility label and on the Storage screen the card opens. */}
+        <Text style={[styles.ringCaption, { color: ink.title, fontSize: 13 * textScale }]}>Storage</Text>
       </View>
-      <View style={styles.storageRow}>
-        <Text style={[styles.widgetBigNumber, { fontSize: 36 * textScale }]}>{usedGB} GB</Text>
-        <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}> / {totalGB} GB used</Text>
-      </View>
-      <ProgressBar value={pct} color={color} />
-      <Text style={[styles.widgetSubtext, { fontSize: 13 * textScale }]}>{Math.round(usedPercentage)}% full</Text>
     </WidgetCard>
   );
 }
@@ -479,15 +498,36 @@ export function WeatherWidget({
   }
 
   const iconName = icon as keyof typeof Ionicons.glyphMap;
-  const hasRange = !isCompact && maxTemp !== undefined && minTemp !== undefined;
-  const showCity = !isCompact && !!city;
+  // #965: the SMALL card keeps the city and the high/low.
+  //
+  // #937 trimmed both, reasoning that a small card should show less. The stock
+  // widget disagrees: the small Forecast widget shows "current temperature,
+  // daily high/low, and current conditions" for its location — the high/low is
+  // not detail, it is half of why anyone looks at a weather widget. What `small`
+  // drops instead is the "Weather" title row, which the temperature and the
+  // condition glyph already make redundant.
+  const hasRange = maxTemp !== undefined && minTemp !== undefined;
+  const showCity = !!city;
 
   return (
     <WidgetCard testID="widget-card-weather" appearance={appearance}>
       <View style={styles.widgetRow}>
         <Ionicons name={iconName} size={22} color={WidgetGlassText.primary} />
-        <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
-        {showCity ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>{city}</Text> : null}
+        {isCompact ? (
+          showCity ? (
+            <Text
+              style={[styles.widgetTitle, { textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}
+              numberOfLines={1}
+            >
+              {city}
+            </Text>
+          ) : null
+        ) : (
+          <>
+            <Text style={[styles.widgetTitle, { fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>Weather</Text>
+            {showCity ? <Text style={[styles.widgetTitle, { marginLeft: 'auto' as const, textTransform: 'none', fontSize: 14 * textScale, color: WidgetGlassText.primary }]}>{city}</Text> : null}
+          </>
+        )}
       </View>
       <View style={styles.weatherRow}>
         <Text style={[styles.weatherTemp, { fontSize: 40 * textScale }]}>{temp}°</Text>
@@ -644,6 +684,9 @@ export function ScreenTimeWidget({ onPress }: { onPress?: () => void }) {
         <Text style={[styles.widgetTitle, { fontSize: 14 * textScale }]}>Screen Time</Text>
       </View>
       {totalMinutes !== null ? (
+        // No ring here: a duration is not a proportion, and drawing one would
+        // need a daily budget the app has no source for. The figure and the
+        // label it needs, and nothing else.
         <>
           <Text style={[styles.widgetBigNumber, { color: SystemColors.dark.systemPurple, fontSize: 36 * textScale }]}>
             {formatScreenTime(totalMinutes)}
@@ -863,6 +906,9 @@ export function useWidgetMap(
 const styles = StyleSheet.create({
   // Widget card chrome (radius/padding/glass) lives in the shared
   // components/WidgetCard; these widget styles only cover internals.
+  ringBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  ringValue: { fontWeight: '700', fontVariant: ['tabular-nums'] },
+  ringCaption: { fontWeight: '600' },
 
   // Widget internals
   widgetRow: {

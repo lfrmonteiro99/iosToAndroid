@@ -24,10 +24,16 @@ const WEATHER_PROPS = {
 };
 
 describe('WeatherWidget content by size (#937)', () => {
-  it('small hides the city and the H/L range', () => {
-    const { queryByText } = render(<WeatherWidget {...WEATHER_PROPS} size="small" />);
-    expect(queryByText('Lisbon')).toBeNull();
-    expect(queryByText('H:25°  L:15°')).toBeNull();
+  // Reversed by #965, against a source rather than a preference: the stock small
+  // Forecast widget shows "current temperature, daily high/low, and current
+  // conditions" for its location. The high/low is not detail — it is half of
+  // why anyone looks at a weather widget. What small drops instead is the
+  // "Weather" title row, which the temperature and the glyph make redundant.
+  it('small keeps the city and the H/L range, and drops the title row instead', () => {
+    const { queryByText, getByText } = render(<WeatherWidget {...WEATHER_PROPS} size="small" />);
+    expect(getByText('Lisbon')).toBeTruthy();
+    expect(getByText('H:25°  L:15°')).toBeTruthy();
+    expect(queryByText('Weather')).toBeNull();
   });
 
   it('medium shows the city and the H/L range', () => {
