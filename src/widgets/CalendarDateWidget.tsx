@@ -10,7 +10,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import { useWidgetSurface } from './useWidgetSurface';
 import type { WidgetOptions, WidgetSize } from './widgetInstances';
 
 /**
@@ -64,8 +64,7 @@ export function CalendarDateWidget({ events = [], size, now, options, onPress }:
 }) {
   const { textScale } = useTheme();
   const date = now ?? new Date();
-  const palette = resolveWidgetPalette('calendar', options);
-  const ink = resolveWidgetInk('calendar', options);
+  const { palette, ink } = useWidgetSurface('calendar', options);
   const upcoming = nextEvent(events, date.getTime());
 
   return (

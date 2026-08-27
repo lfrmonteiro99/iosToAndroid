@@ -76,7 +76,15 @@ export function WidgetCard({ children, style, onPress, accessibilityLabel, testI
     );
   }
   return (
-    <View testID={testID} style={[cardStyle, style]}>
+    // The label is applied here too. It used to be set only on the pressable
+    // branch, so a widget without an onPress — Weather, and any widget rendered
+    // in the gallery preview — announced nothing to VoiceOver but its contents.
+    <View
+      testID={testID}
+      style={[cardStyle, style]}
+      accessibilityLabel={accessibilityLabel}
+      accessible={accessibilityLabel != null}
+    >
       <WidgetBackground appearance={appearance} isDark={isDark} reduceTransparency={settings.reduceTransparency} />
       <View style={styles.widgetContent}>{children}</View>
     </View>

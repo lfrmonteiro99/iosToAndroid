@@ -8,10 +8,10 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, G } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { WidgetCard } from './WidgetCard';
-import { resolveWidgetInk, resolveWidgetPalette } from './widgetPalettes';
+import { WidgetRing } from './WidgetRing';
+import { useWidgetSurface } from './useWidgetSurface';
 import type { WidgetOptions, WidgetSize } from './widgetInstances';
 
 /** The step target the ring closes at. iOS's own default move goal. */
@@ -53,28 +53,6 @@ export function lastDays(
   return out;
 }
 
-function Ring({ size, progress, accent, track }: {
-  size: number; progress: number; accent: string; track: string;
-}) {
-  const r = 38;
-  const circumference = 2 * Math.PI * r;
-  return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" pointerEvents="none" testID="activity-ring">
-      {/* Rotated so the ring starts at 12 o'clock rather than at 3. */}
-      <G transform="rotate(-90 50 50)">
-        <Circle cx={50} cy={50} r={r} stroke={track} strokeWidth={11} fill="none" />
-        <Circle
-          cx={50} cy={50} r={r}
-          stroke={accent} strokeWidth={11} fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={circumference * (1 - progress)}
-        />
-      </G>
-    </Svg>
-  );
-}
-
 export function ActivityWidget({ steps, history = [], today, size, goal, options, onPress }: {
   steps: number;
   history?: readonly ActivityDay[];
@@ -87,8 +65,7 @@ export function ActivityWidget({ steps, history = [], today, size, goal, options
   onPress?: () => void;
 }) {
   const { textScale } = useTheme();
-  const palette = resolveWidgetPalette('activity', options);
-  const ink = resolveWidgetInk('activity', options);
+  const { palette, ink } = useWidgetSurface('activity', options);
   // An explicit prop wins (previews, tests), then the user's option, then the
   // default — so a goal the user set is never overridden by a caller that
   // simply did not pass one.
@@ -106,17 +83,17 @@ export function ActivityWidget({ steps, history = [], today, size, goal, options
     >
       <View style={styles.row}>
         <View style={styles.ringSlot}>
-          <Ring
-            size={size === 'small' ? 72 : 84}
+          <WidgetRing
+            testID="activity-ring"
+            size={size === 'small' ? 78 : 84}
             progress={progress}
-            accent={palette?.accent ?? ink.primary}
-            track={ink.track}
-          />
-          <View style={styles.ringCenter} pointerEvents="none">
+            color={palette?.accent ?? ink.primary}
+            trackColor={ink.track}
+          >
             <Text style={[styles.steps, { color: ink.primary, fontSize: 15 * textScale }]}>
               {Math.round(progress * 100)}%
             </Text>
-          </View>
+          </WidgetRing>
         </View>
         {size !== 'small' && (
           <View style={styles.weekSlot}>

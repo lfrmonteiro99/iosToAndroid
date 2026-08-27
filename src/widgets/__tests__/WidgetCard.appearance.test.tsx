@@ -209,8 +209,12 @@ describe('Widget visual identity (#934)', () => {
 // Unmigrated widgets keep today's fixed-dark glass frame (no regression)
 // ---------------------------------------------------------------------------
 
-describe('Unmigrated widgets keep the default glass frame (#934 scope)', () => {
-  it('Battery keeps tint="dark" fixed in both light and dark theme', () => {
+// #963 gave every type a palette and #965 rebuilt Battery around a ring, so
+// Battery is no longer one of the "unmigrated" widgets this described. What it
+// asserted — that a migrated widget owns an opaque surface instead of the shared
+// glass, in either theme — is still worth holding, so it is asserted directly.
+describe('Battery owns its surface (#963), rather than the shared glass frame', () => {
+  it('paints no blur in either theme — the palette gradient is its ground', () => {
     const { getByTestId, toJSON } = render(
       <>
         <Controls />
@@ -219,16 +223,13 @@ describe('Unmigrated widgets keep the default glass frame (#934 scope)', () => {
     );
 
     act(() => { fireEvent.press(getByTestId('set-light')); });
-    let blurs = collectByType(toJSON() as TestJsonNode, 'BlurView');
-    expect(blurs).toHaveLength(1);
-    expect(blurs[0].props.tint).toBe('dark');
+    expect(collectByType(toJSON() as TestJsonNode, 'BlurView')).toHaveLength(0);
 
     act(() => { fireEvent.press(getByTestId('set-dark')); });
-    blurs = collectByType(toJSON() as TestJsonNode, 'BlurView');
-    expect(blurs[0].props.tint).toBe('dark');
+    expect(collectByType(toJSON() as TestJsonNode, 'BlurView')).toHaveLength(0);
   });
 
-  it('falls back to the solid glass tone (no blur) when Reduce Transparency is on', () => {
+  it('falls back to a flat fill when Reduce Transparency is on', () => {
     const { getByTestId, toJSON } = render(
       <>
         <Controls />
@@ -238,6 +239,9 @@ describe('Unmigrated widgets keep the default glass frame (#934 scope)', () => {
     act(() => { fireEvent.press(getByTestId('enable-reduce-transparency')); });
 
     expect(collectByType(toJSON() as TestJsonNode, 'BlurView')).toHaveLength(0);
+    const views = collectByType(toJSON() as TestJsonNode, 'View');
+    const solid = views.find((v) => flattenStyle(v.props.style).backgroundColor === '#12331F');
+    expect(solid).toBeTruthy();
   });
 });
 
