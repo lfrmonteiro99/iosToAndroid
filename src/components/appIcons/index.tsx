@@ -25,7 +25,16 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  AppStoreMark,
+  CompassNeedle,
+  DoubleNote,
+  Heart,
+  PhotosFlower,
+  PodcastsMark,
+  SpeechBubble,
+  SunBehindCloud,
+} from './svgShapes';
 import {
   Ground,
   Disc,
@@ -33,7 +42,6 @@ import {
   Bar,
   Hand,
   Stroke,
-  Needle,
   Glyph,
   PolarGlyph,
   type ArtworkProps,
@@ -118,19 +126,8 @@ function MessagesIcon({ size }: ArtworkProps) {
   return (
     <>
       <Ground size={size} gradient={[IOS.phoneTop, IOS.phoneBottom]} />
-      <Bar size={size} x={0.235} y={0.325} w={0.53} h={0.2} color="#FFFFFF" radius={0.1} />
-      <Bar
-        size={size}
-        x={0.155}
-        y={0.545}
-        w={0.13}
-        h={0.13}
-        color="#FFFFFF"
-        radius={0.03}
-        rotate={45}
-      />
-      {/* The body sits above the tail so the tail reads as attached, not stuck on. */}
-      <Bar size={size} x={0.185} y={0.29} w={0.63} h={0.42} color="#FFFFFF" radius={0.19} />
+      {/* Body and tail are one outline, so there is no seam between them. */}
+      <SpeechBubble size={size} />
     </>
   );
 }
@@ -192,10 +189,9 @@ function SafariIcon({ size }: ArtworkProps) {
           read as a plus sign with one red arm.
           Red points north-east and white south-west, which is the orientation
           on the real icon; this had them the other way round. */}
-      <Needle size={size} cx={0.5} cy={0.5} length={0.3} base={0.155} angle={45} color={IOS.red} />
-      <Needle size={size} cx={0.5} cy={0.5} length={0.3} base={0.155} angle={225} color="#FFFFFF" />
-      {/* Hides the seam where the two bases meet. */}
-      <Disc size={size} cx={0.5} cy={0.5} d={0.05} color="#FFFFFF" />
+      {/* One vector needle: four blades that taper symmetrically from the hub,
+          so there is no seam to hide and no border trick to keep square. */}
+      <CompassNeedle size={size} colorNE={IOS.red} colorSW="#FFFFFF" />
     </>
   );
 }
@@ -217,21 +213,9 @@ function PhotosIcon({ size }: ArtworkProps) {
   return (
     <>
       <Ground size={size} color="#FFFFFF" />
-      {PHOTO_PETALS.map((color, i) => (
-        <Hand
-          key={color}
-          size={size}
-          cx={0.5}
-          cy={0.5}
-          length={0.34}
-          thickness={0.235}
-          angle={i * 45}
-          // radius = half the thickness: a full pill, so each petal is a
-          // rounded lobe instead of the rectangular starburst this first drew.
-          radius={0.1175}
-          color={color}
-        />
-      ))}
+      {/* Lens-shaped petals — pointed at both ends, as the real flower's are.
+          A pill can only give a rounded lobe. */}
+      <PhotosFlower size={size} petals={PHOTO_PETALS} />
     </>
   );
 }
@@ -324,28 +308,13 @@ function makeCalendarIcon(weekday: string, day: string) {
 
 // ─── Weather ────────────────────────────────────────────────────────────────
 function WeatherIcon({ size }: ArtworkProps) {
-  const rays = [0, 45, 90, 135];
+  // The cloud is one path now. Three discs on a bar have a silhouette that
+  // crosses itself at every join, and those crossings show as notches along the
+  // top edge once the icon is drawn at grid size.
   return (
     <>
       <Ground size={size} gradient={[IOS.weatherTop, IOS.weatherBottom]} />
-      {rays.map((a) => (
-        <Bar
-          key={a}
-          size={size}
-          x={0.16}
-          y={0.335}
-          w={0.42}
-          h={0.035}
-          color="#FFD426"
-          rotate={a}
-        />
-      ))}
-      <Disc size={size} cx={0.37} cy={0.35} d={0.28} color="#FFD426" />
-      {/* Cloud: three discs plus a base bar, the classic iOS cloud silhouette. */}
-      <Disc size={size} cx={0.46} cy={0.63} d={0.26} color="#FFFFFF" />
-      <Disc size={size} cx={0.65} cy={0.6} d={0.32} color="#FFFFFF" />
-      <Disc size={size} cx={0.8} cy={0.67} d={0.22} color="#FFFFFF" />
-      <Bar size={size} x={0.34} y={0.63} w={0.56} h={0.15} color="#FFFFFF" radius={0.075} />
+      <SunBehindCloud size={size} />
     </>
   );
 }
@@ -520,25 +489,13 @@ function WalletIcon({ size }: ArtworkProps) {
 // White ground, pink heart. Two rotated squares plus two discs make the heart
 // silhouette without needing a path.
 function HealthIcon({ size }: ArtworkProps) {
+  // One vector heart. It was a rotated rounded square with a disc on each
+  // shoulder, which has no cusp at the top and no point at the bottom — the two
+  // features that make a heart read as a heart.
   return (
     <>
       <Ground size={size} color="#FFFFFF" />
-      <LinearGradient
-        colors={[IOS.heartTop, IOS.heartBottom]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={{
-          position: 'absolute',
-          left: size * 0.28,
-          top: size * 0.33,
-          width: size * 0.44,
-          height: size * 0.44,
-          borderRadius: size * 0.06,
-          transform: [{ rotate: '45deg' }],
-        }}
-      />
-      <Disc size={size} cx={0.36} cy={0.41} d={0.315} color={IOS.heartTop} />
-      <Disc size={size} cx={0.64} cy={0.41} d={0.315} color={IOS.heartTop} />
+      <Heart size={size} from={IOS.heartTop} to={IOS.heartBottom} />
     </>
   );
 }
@@ -616,13 +573,12 @@ function AppStoreIcon({ size }: ArtworkProps) {
   // little BELOW their tips so each pokes out past the apex, and the crossbar
   // runs past both legs. Drawn as four mismatched pieces (two pivoted hands, a
   // bar, and a stray rotated stub) it came out as a filled triangle instead.
-  const stick = 0.085;
   return (
     <>
       <Ground size={size} gradient={['#2CC0FE', '#0A6CF5']} />
-      <Stroke size={size} x1={0.295} y1={0.775} x2={0.534} y2={0.308} thickness={stick} color="#FFFFFF" />
-      <Stroke size={size} x1={0.705} y1={0.775} x2={0.466} y2={0.308} thickness={stick} color="#FFFFFF" />
-      <Stroke size={size} x1={0.305} y1={0.6} x2={0.695} y2={0.6} thickness={stick} color="#FFFFFF" />
+      {/* Round-capped strokes. As pills the three sticks met at mitred corners,
+          which is the one thing the real mark does not have. */}
+      <AppStoreMark size={size} />
     </>
   );
 }
@@ -634,11 +590,9 @@ function MusicIcon({ size }: ArtworkProps) {
   return (
     <>
       <Ground size={size} gradient={['#FB5C74', '#F62C4B']} />
-      <Disc size={size} cx={0.36} cy={0.68} d={0.2} color="#FFFFFF" />
-      <Disc size={size} cx={0.66} cy={0.62} d={0.2} color="#FFFFFF" />
-      <Bar size={size} x={0.435} y={0.3} w={0.055} h={0.4} color="#FFFFFF" radius={0.02} />
-      <Bar size={size} x={0.735} y={0.24} w={0.055} h={0.4} color="#FFFFFF" radius={0.02} />
-      <Bar size={size} x={0.435} y={0.24} w={0.355} h={0.09} color="#FFFFFF" radius={0.03} rotate={-9} />
+      {/* Slanted heads and a curved beam: circles read as lollipops and a
+          rotated bar cannot follow the beam's curve. */}
+      <DoubleNote size={size} />
     </>
   );
 }
@@ -709,10 +663,9 @@ function PodcastsIcon({ size }: ArtworkProps) {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.72} color="#FFFFFF" opacity={0.22} />
-      <Disc size={size} cx={0.5} cy={0.5} d={0.5} color="#FFFFFF" opacity={0.3} />
-      <Disc size={size} cx={0.5} cy={0.36} d={0.2} color="#FFFFFF" />
-      <Bar size={size} x={0.4} y={0.5} w={0.2} h={0.3} color="#FFFFFF" radius={0.1} />
+      {/* Arcs, not discs: a disc behind the mic is a pale blob, and the two
+          radiating arcs are what identify the icon. */}
+      <PodcastsMark size={size} />
     </>
   );
 }
