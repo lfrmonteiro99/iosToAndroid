@@ -1,5 +1,6 @@
 import {
   appendConversationPage,
+  withSearchBodies,
   conversationToRow,
   conversationsToRows,
   oldestConversationDate,
@@ -135,5 +136,84 @@ describe('oldestConversationDate', () => {
 
   it('is null for an empty list, which means "fetch the newest page"', () => {
     expect(oldestConversationDate([])).toBeNull();
+  });
+});
+
+describe('withSearchBodies', () => {
+  // The list comes from the threads table, which is complete but only carries a
+  // snippet per thread. Search matched message BODIES before, so the bodies the
+  // recent slice holds are lent to the rows for the search predicate to read.
+  // That slice was always the limit of body search, so nothing gets worse — and
+  // matching the full history would mean fetching every thread's messages to
+  // render a list, which is the cost the thread query exists to avoid.
+  const keyOf = (a: string) => {
+    const d = a.replace(/\D/g, '');
+    return d.length > 9 ? d.slice(-9) : d;
+  };
+
+  it('lends bodies to the matching thread', () => {
+    const rows = conversationsToRows([conv({ threadId: '1', snippet: 'newest' })]);
+    const merged = withSearchBodies(
+      rows,
+      [{ address: '912345678', body: 'an older one' }],
+      keyOf,
+    );
+    expect(merged[0].messages.map((m) => m.body)).toEqual(['newest', 'an older one']);
+  });
+
+  it('matches across the two formats the same number is stored in', () => {
+    // The whole reason the key is injected: the row's address and the recent
+    // slice's address can be `+351912345678` and `912345678`.
+    const rows = conversationsToRows([conv({ address: '+351912345678' })]);
+    const merged = withSearchBodies(rows, [{ address: '912345678', body: 'older' }], keyOf);
+    expect(merged[0].messages).toHaveLength(2);
+  });
+
+  it('keeps the snippet first, and as lastMessage', () => {
+    // The row renders lastMessage; the lent bodies must never displace it.
+    const rows = conversationsToRows([conv({ snippet: 'newest' })]);
+    const merged = withSearchBodies(rows, [{ address: '912345678', body: 'older' }], keyOf);
+    expect(merged[0].messages[0].body).toBe('newest');
+    expect(merged[0].lastMessage.body).toBe('newest');
+  });
+
+  it('does not duplicate a body already equal to the snippet', () => {
+    const rows = conversationsToRows([conv({ snippet: 'same' })]);
+    const merged = withSearchBodies(rows, [{ address: '912345678', body: 'same' }], keyOf);
+    expect(merged[0].messages).toHaveLength(1);
+  });
+
+  it('leaves a thread with nothing in the recent slice untouched', () => {
+    const rows = conversationsToRows([conv({ threadId: '1', address: '+351911111111' })]);
+    const merged = withSearchBodies(rows, [{ address: '922222222', body: 'other' }], keyOf);
+    expect(merged[0]).toBe(rows[0]);
+  });
+
+  it('is a no-op with an empty recent slice', () => {
+    const rows = conversationsToRows([conv()]);
+    expect(withSearchBodies(rows, [], keyOf)).toEqual(rows);
+  });
+
+  it('survives a malformed entry in the recent slice', () => {
+    const rows = conversationsToRows([conv()]);
+    const merged = withSearchBodies(
+      rows,
+      [null as unknown as { address: string; body: string }, { address: '912345678', body: 'ok' }],
+      keyOf,
+    );
+    expect(merged[0].messages).toHaveLength(2);
+  });
+
+  it('gives every lent entry a distinct id', () => {
+    // They land in a FlatList-rendered array; duplicate keys are a React
+    // warning at best and a mis-render at worst.
+    const rows = conversationsToRows([conv({ snippet: 'newest' })]);
+    const merged = withSearchBodies(
+      rows,
+      [{ address: '912345678', body: 'a' }, { address: '912345678', body: 'b' }],
+      keyOf,
+    );
+    const ids = merged[0].messages.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

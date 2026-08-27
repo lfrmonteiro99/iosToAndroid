@@ -508,23 +508,28 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [loadContacts]);
 
   const requestSmsPermission = useCallback(async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await withAutoLockSuppressed(() => PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_SMS,
-          {
-            title: 'SMS Access',
-            message: 'Allow this app to read your SMS messages?',
-            buttonPositive: 'Allow',
-            buttonNegative: 'Deny',
-          },
-        ));
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
-      } catch { return false; }
-    }
+    // There is no SMS provider to read off Android — say so rather than
+    // reporting a permission that cannot exist.
+    if (Platform.OS !== 'android') return false;
+    try {
+      const granted = await withAutoLockSuppressed(() => PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+        {
+          title: 'SMS Access',
+          message: 'Allow this app to read your SMS messages?',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        },
+      ));
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
+    } catch { return false; }
     const messages = await loadMessages();
     setState(prev => ({ ...prev, messages }));
-    return messages.length > 0;
+    // Granted is granted. This used to return `messages.length > 0`, which put
+    // MessagesScreen behind a "SMS Permission Required" wall whenever the
+    // recent-messages query came back empty — including on a device whose
+    // conversations are readable from the threads table (#926).
+    return true;
   }, [loadMessages]);
 
   const value = useMemo<DeviceContextValue>(() => ({

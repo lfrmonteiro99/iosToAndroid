@@ -261,6 +261,11 @@ class LauncherModule : Module() {
                     rows.add(mapOf(
                         "threadId" to it.getLong(it.getColumnIndexOrThrow(Telephony.Threads._ID)).toString(),
                         "date" to it.getLong(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.DATE)),
+                        // Same shape the message queries emit, so a row's date reads
+                        // the same whether the list came from threads or from the
+                        // recent-messages fallback.
+                        "dateFormatted" to SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
+                            .format(Date(it.getLong(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.DATE)))),
                         "messageCount" to it.getInt(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.MESSAGE_COUNT)),
                         "snippet" to (it.getString(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.SNIPPET)) ?: ""),
                         "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.READ)) == 1),

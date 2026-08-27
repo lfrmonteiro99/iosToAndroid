@@ -24,8 +24,27 @@ export interface ConversationPreview {
   address: string;
   body: string;
   date: number;
+  dateFormatted: string;
   type: number;
   isRead: boolean;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * `MMM d, HH:mm` — the shape the native message queries already emit, so a row
+ * looks the same whichever source filled the list.
+ *
+ * Only used when the native side did not send `dateFormatted`, which happens
+ * when a JS bundle runs against a native build older than that field. Without
+ * this the row would render an empty date column.
+ */
+export function formatConversationDate(date: number): string {
+  if (!Number.isFinite(date) || date <= 0) return '';
+  const d = new Date(date);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${hh}:${mm}`;
 }
 
 export interface ConversationRowModel {
@@ -53,6 +72,7 @@ export function conversationToRow(conv: SmsConversation): ConversationRowModel {
     address: conv.address,
     body: conv.snippet ?? '',
     date: conv.date,
+    dateFormatted: conv.dateFormatted || formatConversationDate(conv.date),
     // 1 = inbox. The threads table does not say who sent the newest message,
     // and the list does not show it — the preview is the snippet either way.
     type: 1,
@@ -112,4 +132,49 @@ export function appendConversationPage(
 export function oldestConversationDate(rows: readonly ConversationRowModel[]): number | null {
   if (rows.length === 0) return null;
   return rows.reduce((min, r) => Math.min(min, r.lastMessage.date), Number.POSITIVE_INFINITY);
+}
+
+/**
+ * Lends each thread row the message bodies the recent slice happens to hold, so
+ * searching still matches on text and not only on the snippet.
+ *
+ * The list's identity, order and pagination come from the threads table, which
+ * is complete. The bodies come from DeviceStore's recent-message slice, which is
+ * not — but search over bodies was ALREADY limited to that slice before any of
+ * this, so nothing gets worse and the list stops hiding conversations. Matching
+ * the whole history would mean fetching every thread's messages to render a
+ * list, which is the cost the thread query exists to avoid.
+ *
+ * `keyOf` is injected rather than imported so this file stays free of the phone
+ * normalisation rules — those live in utils/contacts.ts, and having two copies
+ * of them is what broke opening a conversation in the first place.
+ */
+export function withSearchBodies<M extends { address: string; body: string }>(
+  rows: readonly ConversationRowModel[],
+  recent: readonly M[],
+  keyOf: (address: string) => string,
+): ConversationRowModel[] {
+  if (recent.length === 0) return [...rows];
+
+  const bodiesByKey = new Map<string, string[]>();
+  for (const m of recent) {
+    if (!m || typeof m.address !== 'string') continue;
+    const key = keyOf(m.address);
+    if (!key) continue;
+    const list = bodiesByKey.get(key);
+    if (list) list.push(m.body ?? '');
+    else bodiesByKey.set(key, [m.body ?? '']);
+  }
+
+  return rows.map((row) => {
+    const bodies = bodiesByKey.get(keyOf(row.address));
+    if (!bodies || bodies.length === 0) return row;
+    // The snippet stays FIRST and stays `lastMessage`: it is what the row
+    // renders, and it is the provider's own answer for the newest message.
+    // These extra entries exist only for the search predicate to read.
+    const extra = bodies
+      .filter((body) => body !== row.lastMessage.body)
+      .map((body, i) => ({ ...row.lastMessage, id: `${row.lastMessage.id}-s${i}`, body }));
+    return extra.length === 0 ? row : { ...row, messages: [row.lastMessage, ...extra] };
+  });
 }

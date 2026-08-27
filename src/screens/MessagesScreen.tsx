@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   PermissionsAndroid,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,8 @@ import { useSettings } from '../store/SettingsStore';
 import { migrateAsyncStorageKey, draftStorageKey, draftLegacyStorageKey } from '../store/storage';
 import { CupertinoButton, CupertinoSwipeableRow, useAlert, SkeletonListRow, CupertinoNavigationBar } from '../components';
 import { findContactByPhone, normalizePhoneKey } from '../utils/contacts';
+import { withSearchBodies } from '../utils/conversationList';
+import { useConversationPages } from '../hooks/useConversationPages';
 import { logger } from '../utils/logger';
 import { hapticImpact } from '../utils/haptics';
 import { avatarColorForName } from '../utils/avatarColor';
@@ -35,6 +38,8 @@ interface Conversation {
   messages: DeviceSms[];
   lastMessage: DeviceSms;
   unreadCount: number;
+  /** Set on rows that came from the provider's threads table (#926). */
+  threadId?: string;
 }
 
 export function groupConversations(messages: DeviceSms[]): Conversation[] {
@@ -309,26 +314,51 @@ export function MessagesScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const conversations = useMemo(
-    () => groupConversations(device.messages).filter(
-      (conv) => !deletedAddresses.has(conv.address),
-    ),
-    [device.messages, deletedAddresses],
+  // #926: the list is paged from the provider's threads table — one row per
+  // conversation — so scrolling to the end fetches the next page instead of
+  // the whole list being whatever conversations happened to appear in the N
+  // newest messages of the device. `threadRows` is null when that query is
+  // unusable (no permission yet, no native module, an OEM without a threads
+  // table), and then the old grouped list still fills the screen.
+  const {
+    rows: threadRows,
+    hasMore: hasMoreConversations,
+    isLoadingMore: isLoadingMoreConversations,
+    loadMore: loadMoreConversations,
+    reload: reloadConversations,
+  } = useConversationPages(hasSmsPermission);
+
+  const conversations = useMemo<Conversation[]>(() => {
+    const base: Conversation[] = threadRows
+      // The rows carry only the thread's snippet. Lending them the bodies the
+      // recent slice holds keeps search matching message text, which it did
+      // before — over that same slice, so nothing about search gets worse.
+      ? withSearchBodies(threadRows, device.messages, (a) => normalizePhoneKey(a) || 'unknown')
+      : groupConversations(device.messages);
+    return base.filter((conv) => !deletedAddresses.has(conv.address));
+  }, [threadRows, device.messages, deletedAddresses]);
+
+  // The addresses currently listed, as one stable value: drafts are reloaded
+  // when the SET of conversations changes (a new page arrived), not on every
+  // message change, which would re-read every draft on each provider refresh.
+  const conversationAddressKey = useMemo(
+    () => conversations.map((c) => c.address).join('\u0000'),
+    [conversations],
   );
 
-  // Load drafts for all conversation addresses
+  // Load drafts for the addresses on screen
   useEffect(() => {
+    const addresses = conversationAddressKey ? conversationAddressKey.split('\u0000') : [];
+    if (addresses.length === 0) return;
     const loadDrafts = async () => {
-      const allConvs = groupConversations(device.messages);
-      if (allConvs.length === 0) return;
       try {
         const loaded: Record<string, string> = {};
         await Promise.all(
-          allConvs.map(async (c) => {
+          addresses.map(async (address) => {
             // Migrate the legacy draft key before reading so existing drafts survive
-            await migrateAsyncStorageKey(draftLegacyStorageKey(c.address), draftStorageKey(c.address));
-            const value = await AsyncStorage.getItem(draftStorageKey(c.address));
-            if (value) loaded[c.address] = value;
+            await migrateAsyncStorageKey(draftLegacyStorageKey(address), draftStorageKey(address));
+            const value = await AsyncStorage.getItem(draftStorageKey(address));
+            if (value) loaded[address] = value;
           }),
         );
         setDrafts(loaded);
@@ -337,7 +367,7 @@ export function MessagesScreen() {
       }
     };
     loadDrafts();
-  }, [device.messages]);
+  }, [conversationAddressKey]);
 
   const persistReadOverrides = useCallback((overrides: Record<string, boolean>) => {
     AsyncStorage.setItem('@iostoandroid/read_overrides', JSON.stringify(overrides)).catch(() => {});
@@ -494,7 +524,34 @@ export function MessagesScreen() {
     ],
   );
 
-  const keyExtractor = useCallback((item: Conversation) => item.address, []);
+  // Keyed by thread when the row came from the threads table: the same person
+  // can be in a one-to-one thread AND in a group thread, and keying both by
+  // address would collide.
+  const keyExtractor = useCallback(
+    (item: Conversation) => item.threadId ?? item.address,
+    [],
+  );
+
+  // A newer message than anything the thread page holds means the list itself
+  // changed (a conversation moved to the top, or a new one appeared), so the
+  // first page is re-fetched. Keyed on the timestamp, not on the messages
+  // array, so DeviceStore's periodic refresh does not re-fetch on every tick.
+  const newestMessageDate = useMemo(
+    () => device.messages.reduce((max, m) => Math.max(max, m.date ?? 0), 0),
+    [device.messages],
+  );
+  useEffect(() => {
+    if (newestMessageDate === 0) return;
+    reloadConversations();
+  }, [newestMessageDate, reloadConversations]);
+
+  // Paging is suppressed while searching: the end of a filtered list is not
+  // the end of the data, and fetching more would append rows the query hides.
+  const handleEndReached = useCallback(() => {
+    if (searchQuery.trim()) return;
+    if (!hasMoreConversations) return;
+    loadMoreConversations();
+  }, [searchQuery, hasMoreConversations, loadMoreConversations]);
 
   const handleGrantPermission = useCallback(async () => {
     const granted = await device.requestSmsPermission();
@@ -628,6 +685,7 @@ export function MessagesScreen() {
         </View>
       ) : (
         <FlatList
+          testID="conversation-list"
           data={filtered}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
@@ -638,6 +696,15 @@ export function MessagesScreen() {
             filtered.length === 0
               ? styles.emptyList
               : { paddingBottom: editMode ? insets.bottom + 60 : insets.bottom + 20 }
+          }
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isLoadingMoreConversations ? (
+              <View style={styles.footerLoading}>
+                <ActivityIndicator size="small" color={colors.systemGray} />
+              </View>
+            ) : null
           }
         />
       )}
@@ -690,6 +757,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: -8,
+  },
+  footerLoading: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   searchBarWrap: {
     paddingHorizontal: 16,

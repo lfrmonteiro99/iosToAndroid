@@ -99,6 +99,13 @@ export interface SmsConversation {
   threadId: string;
   /** Newest message's timestamp, in MILLISECONDS (the threads table's unit). */
   date: number;
+  /**
+   * The date as the list renders it, formatted natively in the device locale —
+   * the same shape the message queries emit. Optional because a JS bundle can
+   * run against an older native build that predates this field; the JS side
+   * formats from `date` when it is missing.
+   */
+  dateFormatted?: string;
   messageCount: number;
   snippet: string;
   isRead: boolean;
