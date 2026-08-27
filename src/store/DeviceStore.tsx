@@ -153,11 +153,33 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
       autoBrightness ? Brightness.BrightnessMode.AUTOMATIC : Brightness.BrightnessMode.MANUAL,
     ).catch(() => { /* needs SYSTEM_BRIGHTNESS permission on Android */ });
   }, [autoBrightness]);
+  // Dynamic import first, with a synchronous require as fallback.
+  //
+  // The bare `await import(...)` alone is why nothing in this store that touches
+  // the native module has ever been covered by a test: Jest's VM rejects dynamic
+  // import without --experimental-vm-modules, so this resolved to null in every
+  // test run and loadMessages/loadContacts/loadWifi/loadStorage all returned
+  // their empty defaults without ever calling the bridge. A test could not fail,
+  // whatever the bridge did.
+  //
+  // That is not a hypothetical: the conversation list asked the provider for 50
+  // messages IN TOTAL — so most conversations on the device were simply absent —
+  // and no test could have caught it, because no test could reach the call.
+  //
+  // AppsStore.tsx hit the same wall and solved it this way (see the note on its
+  // getLauncherModule); the require path goes through moduleNameMapper, so the
+  // mock applies. Copied here rather than shared because the two differ in the
+  // Platform guard above.
   const getLauncherModule = useCallback(async () => {
     if (Platform.OS !== 'android') return null;
     try {
       return (await import('../../modules/launcher-module/src')).default;
-    } catch { return null; }
+    } catch {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro supports require; fallback for environments without dynamic import
+        return require('../../modules/launcher-module/src').default;
+      } catch { return null; }
+    }
   }, []);
 
   const loadBattery = useCallback(async () => {
@@ -262,7 +284,23 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     const mod = await getLauncherModule();
     let providerMessages: DeviceSms[] = [];
     if (mod) {
-      try { providerMessages = await mod.getRecentMessages(50); } catch { providerMessages = []; }
+      // #926: this list is what MessagesScreen groups into CONVERSATIONS, and
+      // it was capped at the 50 newest messages IN THE WHOLE PROVIDER. So a
+      // phone with a few hundred SMS showed only the conversations that
+      // happened to appear in those 50 — "it doesn't show all the device's
+      // messages", reported from a device. #927 raised the cap inside one
+      // thread (getMessagesForThread pages properly); the list still asked for
+      // 50.
+      //
+      // The shape is still wrong and worth saying so: enumerating conversations
+      // by taking N messages and grouping them cannot be correct at any N —
+      // one chatty thread can bury every other. The right query is the
+      // conversations table (Telephony.Threads / MmsSms.CONTENT_CONVERSATIONS_URI),
+      // which returns one row per thread with its latest message, and that is
+      // its own issue. Until then the cap is high enough that grouping sees
+      // every real conversation: the query LIMITs in SQL over seven columns,
+      // so the cost is the rows themselves.
+      try { providerMessages = await mod.getRecentMessages(500); } catch { providerMessages = []; }
     }
     // The provider never contains what this app sent (#929: only the default
     // SMS app may write to content://sms) — merge in the local record.
@@ -470,23 +508,28 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, [loadContacts]);
 
   const requestSmsPermission = useCallback(async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await withAutoLockSuppressed(() => PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_SMS,
-          {
-            title: 'SMS Access',
-            message: 'Allow this app to read your SMS messages?',
-            buttonPositive: 'Allow',
-            buttonNegative: 'Deny',
-          },
-        ));
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
-      } catch { return false; }
-    }
+    // There is no SMS provider to read off Android — say so rather than
+    // reporting a permission that cannot exist.
+    if (Platform.OS !== 'android') return false;
+    try {
+      const granted = await withAutoLockSuppressed(() => PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+        {
+          title: 'SMS Access',
+          message: 'Allow this app to read your SMS messages?',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        },
+      ));
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) return false;
+    } catch { return false; }
     const messages = await loadMessages();
     setState(prev => ({ ...prev, messages }));
-    return messages.length > 0;
+    // Granted is granted. This used to return `messages.length > 0`, which put
+    // MessagesScreen behind a "SMS Permission Required" wall whenever the
+    // recent-messages query came back empty — including on a device whose
+    // conversations are readable from the threads table (#926).
+    return true;
   }, [loadMessages]);
 
   const value = useMemo<DeviceContextValue>(() => ({
