@@ -94,6 +94,25 @@ export interface SmsMessage {
   kind: 'sms' | 'mms';
 }
 
+/** One row of the conversation list — a thread, not a message (#926). */
+export interface SmsConversation {
+  threadId: string;
+  /** Newest message's timestamp, in MILLISECONDS (the threads table's unit). */
+  date: number;
+  messageCount: number;
+  snippet: string;
+  isRead: boolean;
+  /** Every participant. A group MMS thread has more than one. */
+  addresses: string[];
+  /**
+   * The participant a one-to-one thread is keyed by, and what opening the
+   * conversation passes to getMessagesForThread. Empty when the provider gave
+   * no resolvable recipient.
+   */
+  address: string;
+}
+
+
 export interface NetworkInfo {
   isConnected: boolean;
   isWifi: boolean;
@@ -320,6 +339,20 @@ interface LauncherModuleType {
   // SMS
   getRecentMessages(limit: number): Promise<SmsMessage[]>;
   /**
+   * The conversation LIST, one row per thread, paged by keyset (#926).
+   *
+   * Replaces building the list from `getRecentMessages`: grouping the N newest
+   * messages of the WHOLE provider cannot enumerate threads at any N, because
+   * one chatty thread buries every other — a phone with a few hundred SMS
+   * showed only the conversations that happened to fall inside those N.
+   *
+   * `beforeDate` null fetches the newest page; a value fetches the page of
+   * threads strictly older than it. Keyset, not offset, for the same reason
+   * getMessagesForThread is: an offset shifts the page boundary the moment a
+   * message arrives mid-scroll, so a thread gets shown twice or skipped.
+   */
+  getConversations(limit: number, beforeDate: number | null): Promise<SmsConversation[]>;
+  /**
    * One conversation's history, paged (#927) — ConversationScreen's own
    * source of truth, instead of filtering the `getRecentMessages` global
    * list (which only ever holds the N most recent SMS across every thread).
@@ -501,6 +534,7 @@ const stub: LauncherModuleType = {
   unpairBluetoothDevice: async () => false,
   getStorageInfo: async () => ({ totalBytes: 0, freeBytes: 0, usedBytes: 0, totalGB: '0', freeGB: '0', usedGB: '0', usedPercentage: 0 }),
   getRecentMessages: async () => [],
+  getConversations: async () => [],
   getMessagesForThread: async () => [],
   getVolume: async () => 0.5,
   setVolume: async () => false,
@@ -760,6 +794,10 @@ function createBridgedModule(): LauncherModuleType {
     getRecentMessages: async (limit: number) => {
       try { return await nativeModule.getRecentMessages(limit); }
       catch (e) { console.error('LauncherModule.getRecentMessages failed:', e); reportBridgeError('getRecentMessages', e); return []; }
+    },
+    getConversations: async (limit: number, beforeDate: number | null) => {
+      try { return await nativeModule.getConversations(limit, beforeDate); }
+      catch (e) { console.error('LauncherModule.getConversations failed:', e); reportBridgeError('getConversations', e); return []; }
     },
     getMessagesForThread: async (address: string, limit: number, beforeDate: number | null) => {
       try { return await nativeModule.getMessagesForThread(address, limit, beforeDate); }

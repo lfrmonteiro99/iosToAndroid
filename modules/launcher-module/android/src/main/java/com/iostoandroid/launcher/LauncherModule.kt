@@ -209,6 +209,97 @@ class LauncherModule : Module() {
         }
     }
 
+    /**
+     * One row PER THREAD, newest first, paged by keyset.
+     *
+     * This is what the conversation LIST needs. It was being built by fetching
+     * the N newest messages across the whole provider and grouping them in JS,
+     * which cannot be correct for any N: one chatty thread buries every other,
+     * so most conversations on a busy phone were simply absent.
+     *
+     * `content://mms-sms/conversations?simple=true` is the threads table — id,
+     * date, message count, snippet, read flag and the recipient ids — and it
+     * already merges SMS and MMS, so unlike getRecentMessages there is no
+     * second query to fuse.
+     *
+     * Recipients are ids into `content://mms-sms/canonical-address/{id}`, not
+     * addresses, so they are resolved per thread. Resolved lazily and cached
+     * for the call: a thread list is small, but the same participant recurs
+     * across threads and each lookup is its own provider round-trip.
+     */
+    private fun queryConversations(limit: Int, beforeDate: Double?): List<Map<String, Any?>> {
+        return try {
+            val (selection, selectionArgs) = ConversationsQueryBuilder.buildSelection(
+                Telephony.ThreadsColumns.DATE, beforeDate
+            )
+            val uri = Telephony.Threads.CONTENT_URI.buildUpon()
+                .appendQueryParameter("simple", "true")
+                .build()
+            val cursor: Cursor? = context.contentResolver.query(
+                uri,
+                arrayOf(
+                    Telephony.Threads._ID,
+                    Telephony.ThreadsColumns.DATE,
+                    Telephony.ThreadsColumns.MESSAGE_COUNT,
+                    Telephony.ThreadsColumns.RECIPIENT_IDS,
+                    Telephony.ThreadsColumns.SNIPPET,
+                    Telephony.ThreadsColumns.READ
+                ),
+                selection, selectionArgs,
+                ConversationsQueryBuilder.buildSortOrder(Telephony.ThreadsColumns.DATE, limit)
+            )
+
+            val addressCache = mutableMapOf<String, String>()
+            val rows = mutableListOf<Map<String, Any?>>()
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val recipientIds = it.getString(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.RECIPIENT_IDS)) ?: ""
+                    val addresses = recipientIds.split(" ")
+                        .filter { id -> id.isNotBlank() }
+                        .mapNotNull { id -> canonicalAddress(id, addressCache) }
+
+                    rows.add(mapOf(
+                        "threadId" to it.getLong(it.getColumnIndexOrThrow(Telephony.Threads._ID)).toString(),
+                        "date" to it.getLong(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.DATE)),
+                        "messageCount" to it.getInt(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.MESSAGE_COUNT)),
+                        "snippet" to (it.getString(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.SNIPPET)) ?: ""),
+                        "isRead" to (it.getInt(it.getColumnIndexOrThrow(Telephony.ThreadsColumns.READ)) == 1),
+                        // A group MMS thread has several; the JS side shows them all.
+                        "addresses" to addresses,
+                        // The first is what a one-to-one thread is keyed by, and
+                        // what opening the conversation passes to
+                        // getMessagesForThread.
+                        "address" to (addresses.firstOrNull() ?: "")
+                    ))
+                }
+            }
+            rows
+        } catch (e: Exception) {
+            Log.w("LauncherModule", "could not read the conversation list", e)
+            emptyList()
+        }
+    }
+
+    /** Resolves one recipient id to its address, memoised for the call. */
+    private fun canonicalAddress(id: String, cache: MutableMap<String, String>): String? {
+        cache[id]?.let { return it }
+        return try {
+            val uri = Uri.parse("content://mms-sms/canonical-address/$id")
+            context.contentResolver.query(uri, null, null, null, null)?.use {
+                if (it.moveToFirst()) {
+                    val address = it.getString(0)
+                    if (!address.isNullOrBlank()) {
+                        cache[id] = address
+                        return address
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** `content://mms/{id}/addr` — the FROM/TO/CC/BCC rows for one MMS. */
     private fun queryMmsAddresses(mmsId: Long): List<MmsMessageMapper.MmsAddress> {
         val uri = Uri.withAppendedPath(ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, mmsId), "addr")
@@ -829,6 +920,15 @@ class LauncherModule : Module() {
             }.take(limit)
 
             mergeMessagesByDate(sms, mms, limit)
+        }
+
+        // #926: the conversation LIST, one row per thread, paged by keyset the
+        // same way getMessagesForThread pages within a thread. `beforeDate`
+        // null = newest page; otherwise the page of threads strictly older.
+        // Replaces grouping the N newest messages of the whole provider, which
+        // hid most conversations on a busy phone whatever N was.
+        AsyncFunction("getConversations") { limit: Int, beforeDate: Double? ->
+            queryConversations(ConversationsQueryBuilder.sanitizeLimit(limit), beforeDate)
         }
 
         // ── System Settings Panels ───────────────────────────────────────
